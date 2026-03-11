@@ -1,0 +1,106 @@
+"""
+Endpoints de administración — ETL manual, estado del sistema, scraping runs.
+Solo accesibles para el rol admin.
+"""
+import asyncio
+from fastapi import APIRouter, Depends, BackgroundTasks
+from sqlalchemy.orm import Session
+from pydantic import BaseModel
+from typing import Optional
+from datetime import datetime
+
+from ..database import get_db
+from ..models.scraping_run import ScrapingRun
+from ..auth.jwt import require_admin, get_current_user
+from ..models.user import User
+from ..etl.pipeline import ETLPipeline
+
+router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+class ScrapingRunOut(BaseModel):
+    id: int
+    tipo: str
+    status: str
+    cursos_procesados: Optional[int]
+    registros_insertados: Optional[int]
+    cursos_error: Optional[int]
+    triggered_by: Optional[str]
+    started_at: Optional[datetime]
+    finished_at: Optional[datetime]
+
+    class Config:
+        from_attributes = True
+
+
+def _run_etl_background(triggered_by: str):
+    """Función para correr ETL en background thread."""
+    from ..database import SessionLocal
+    db = SessionLocal()
+    try:
+        pipeline = ETLPipeline(db)
+        pipeline.run_full(triggered_by=triggered_by)
+    finally:
+        db.close()
+
+
+@router.post("/etl/run")
+def trigger_etl(
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """
+    Dispara el pipeline ETL completo en background.
+    Equivalente a hacer "Actualizar Todo" en Power Query + ejecutar macros.
+    """
+    background_tasks.add_task(_run_etl_background, triggered_by=current_user.email)
+    return {"message": "ETL iniciado en background. Consulta /admin/etl/runs para ver el progreso."}
+
+
+@router.get("/etl/runs", response_model=list[ScrapingRunOut])
+def get_etl_runs(
+    limit: int = 20,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Historial de ejecuciones del ETL."""
+    return (
+        db.query(ScrapingRun)
+        .order_by(ScrapingRun.started_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+
+@router.get("/etl/runs/{run_id}/log")
+def get_etl_log(
+    run_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Log detallado de una ejecución ETL."""
+    run = db.query(ScrapingRun).filter(ScrapingRun.id == run_id).first()
+    if not run:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Run no encontrado")
+    return {"log": run.log_output, "errores": run.errores}
+
+
+@router.get("/system/status")
+def system_status(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Estado general del sistema: última actualización, total estudiantes, etc."""
+    from ..models import Student
+    from sqlalchemy import func
+
+    last_run = db.query(ScrapingRun).filter(ScrapingRun.status == "success").order_by(ScrapingRun.finished_at.desc()).first()
+    total_students = db.query(func.count(Student.id)).scalar()
+
+    return {
+        "total_estudiantes": total_students,
+        "ultima_actualizacion": last_run.finished_at.isoformat() if last_run else None,
+        "estado_pipeline": last_run.status if last_run else "nunca_ejecutado",
+    }
