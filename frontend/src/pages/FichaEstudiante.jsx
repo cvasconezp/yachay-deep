@@ -145,7 +145,9 @@ function AvacCursoRow({ acceso, tareas }) {
                   {t.calificacion != null ? `${t.calificacion}/${t.calificacion_maxima ?? "?"}` : "—"}
                 </td>
                 <td className="px-3 py-2 text-center">{t.retrasada ? "⚠️" : "—"}</td>
-                <td className="px-3 py-2 text-gray-400 max-w-[180px] truncate">{t.estado || "—"}</td>
+                <td className="px-3 py-2 text-gray-400 max-w-[180px] truncate">
+                  {(t.estado && t.estado !== "NaN" && t.estado !== "nan") ? t.estado : "—"}
+                </td>
               </tr>
             ))}
           </tbody>
