@@ -1,7 +1,7 @@
 import json
-from pydantic import field_validator
+from typing import Any, Optional
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
-from typing import Optional
 
 
 class Settings(BaseSettings):
@@ -27,24 +27,28 @@ class Settings(BaseSettings):
     # App
     APP_NAME: str = "Yachay Deep"
     DEBUG: bool = False
+    # CORS_ORIGINS: set via env as JSON array ["url"] or comma-separated "url1,url2"
+    # Default covers local dev + Vercel production
     CORS_ORIGINS: list[str] = ["http://localhost:3000", "https://yachay-deep.vercel.app"]
 
-    @field_validator("CORS_ORIGINS", mode="before")
+    @model_validator(mode="before")
     @classmethod
-    def parse_cors_origins(cls, v):
-        """Accept JSON array, comma-separated string, or plain URL string."""
-        if isinstance(v, list):
-            return v
-        if isinstance(v, str):
-            v = v.strip()
-            try:
-                parsed = json.loads(v)
-                if isinstance(parsed, list):
-                    return parsed
-                return [str(parsed)]
-            except json.JSONDecodeError:
-                return [origin.strip() for origin in v.split(",") if origin.strip()]
-        return v
+    def parse_cors_origins_from_env(cls, values: Any) -> Any:
+        """
+        pydantic-settings raises SettingsError before field_validators run when
+        a list[str] field receives a non-JSON string.  model_validator(mode='before')
+        fires first, so we pre-process the raw env string here.
+        """
+        if isinstance(values, dict):
+            cors = values.get("CORS_ORIGINS")
+            if isinstance(cors, str):
+                cors = cors.strip()
+                try:
+                    parsed = json.loads(cors)
+                    values["CORS_ORIGINS"] = parsed if isinstance(parsed, list) else [str(parsed)]
+                except json.JSONDecodeError:
+                    values["CORS_ORIGINS"] = [o.strip() for o in cors.split(",") if o.strip()]
+        return values
 
     class Config:
         env_file = ".env"
