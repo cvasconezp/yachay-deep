@@ -11,8 +11,9 @@ class ApiClient {
 
   async request(path, options = {}) {
     const token = this.getToken();
+    const isFormData = options.body instanceof FormData;
     const headers = {
-      "Content-Type": "application/json",
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     };
@@ -30,7 +31,11 @@ class ApiClient {
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: "Error desconocido" }));
-      throw new Error(error.detail || `HTTP ${response.status}`);
+      const detail = error.detail;
+      const message = Array.isArray(detail)
+        ? "Credenciales incorrectas"
+        : (typeof detail === "string" ? detail : `HTTP ${response.status}`);
+      throw new Error(message);
     }
 
     if (response.headers.get("content-type")?.includes("application/pdf")) {
