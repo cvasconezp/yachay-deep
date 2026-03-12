@@ -2,9 +2,10 @@
 Yachay Deep — API Backend
 FastAPI application entry point
 """
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+from sqlalchemy.orm import Session
 import logging
 
 from .config import settings
@@ -86,3 +87,39 @@ app.include_router(courses_router)
 @app.get("/health")
 def health_check():
     return {"status": "ok", "app": settings.APP_NAME}
+
+
+@app.get("/debug/auth-check")
+def debug_auth_check(request: Request):
+    """Temporal: diagnostica la verificación JWT. Remover después."""
+    from jose import jwt, JWTError
+    from .models.user import User
+    from .database import SessionLocal
+
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return {"error": "No bearer token provided"}
+
+    token = auth_header[7:]
+    db = SessionLocal()
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        user_id = payload.get("sub")
+        user_raw = db.query(User).filter(User.id == user_id).first()
+        user_active = db.query(User).filter(User.id == user_id, User.is_active == True).first()
+        return {
+            "jwt_ok": True,
+            "user_id": user_id,
+            "user_id_type": type(user_id).__name__,
+            "user_found_no_filter": user_raw is not None,
+            "user_found_with_active": user_active is not None,
+            "is_active_value": str(user_raw.is_active) if user_raw else "NOT_FOUND",
+            "role": str(user_raw.role) if user_raw else "NOT_FOUND",
+            "secret_prefix": settings.SECRET_KEY[:12],
+        }
+    except JWTError as e:
+        return {"jwt_ok": False, "jwt_error": str(e), "secret_prefix": settings.SECRET_KEY[:12]}
+    except Exception as e:
+        return {"jwt_ok": False, "other_error": str(e), "error_type": type(e).__name__}
+    finally:
+        db.close()

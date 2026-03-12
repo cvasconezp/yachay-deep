@@ -24,9 +24,12 @@ class ApiClient {
     });
 
     if (response.status === 401) {
-      localStorage.removeItem("yd_token");
-      window.location.href = "/login";
-      return;
+      const currentToken = this.getToken();
+      if (currentToken && currentToken === token) {
+        localStorage.removeItem("yd_token");
+      }
+      window.dispatchEvent(new CustomEvent("yd:unauthorized"));
+      throw new Error("No autenticado");
     }
 
     if (!response.ok) {

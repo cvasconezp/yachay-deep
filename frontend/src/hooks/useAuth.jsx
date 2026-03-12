@@ -19,6 +19,16 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      if (!localStorage.getItem("yd_token")) {
+        setUser(null);
+      }
+    };
+    window.addEventListener("yd:unauthorized", handleUnauthorized);
+    return () => window.removeEventListener("yd:unauthorized", handleUnauthorized);
+  }, []);
+
   const login = async (email, password) => {
     const data = await api.login(email, password);
     localStorage.setItem("yd_token", data.access_token);
