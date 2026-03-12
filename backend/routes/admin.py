@@ -3,7 +3,10 @@ Endpoints de administración — ETL manual, estado del sistema, scraping runs.
 Solo accesibles para el rol admin.
 """
 import asyncio
-from fastapi import APIRouter, Depends, BackgroundTasks
+import io
+import os
+import zipfile
+from fastapi import APIRouter, Depends, BackgroundTasks, File, UploadFile, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
@@ -85,6 +88,51 @@ def get_etl_log(
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Run no encontrado")
     return {"log": run.log_output, "errores": run.errores}
+
+
+@router.post("/etl/upload-and-run")
+async def upload_data_and_run_etl(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_admin),
+):
+    """
+    Sube un ZIP con los CSV de datos y dispara el ETL.
+    Estructura esperada del ZIP:
+      IngresosAVAC/ingresosAVAC_XXXXX.csv
+      Tareas/estado_XXXXX.csv
+      (opcional) calificaciones.csv   → se copia a ./data/calificaciones.csv
+    """
+    if not file.filename.lower().endswith(".zip"):
+        raise HTTPException(status_code=400, detail="Solo se aceptan archivos .zip")
+
+    content = await file.read()
+    data_root = os.path.abspath("./data")
+
+    try:
+        with zipfile.ZipFile(io.BytesIO(content)) as zf:
+            extracted = 0
+            for member in zf.namelist():
+                # Ignorar directorios vacíos y archivos ocultos/sistema
+                if member.endswith("/") or os.path.basename(member).startswith("."):
+                    continue
+                dest_path = os.path.join(data_root, member)
+                # Sanitize: no salir del data_root (path traversal protection)
+                if not os.path.abspath(dest_path).startswith(data_root):
+                    continue
+                os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+                with zf.open(member) as src, open(dest_path, "wb") as dst:
+                    dst.write(src.read())
+                extracted += 1
+    except zipfile.BadZipFile:
+        raise HTTPException(status_code=400, detail="El archivo no es un ZIP válido")
+
+    background_tasks.add_task(_run_etl_background, triggered_by=current_user.email)
+    return {
+        "message": f"ZIP extraído ({extracted} archivos). ETL iniciado en background.",
+        "archivos_extraidos": extracted,
+        "etl": "iniciado",
+    }
 
 
 @router.get("/system/status")
