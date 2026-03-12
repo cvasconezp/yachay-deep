@@ -103,3 +103,20 @@ app.include_router(courses_router)
 @app.get("/health")
 def health_check():
     return {"status": "ok", "app": settings.APP_NAME}
+
+
+@app.get("/debug/fs")
+def debug_filesystem():
+    """Temporal: diagnóstico de rutas de datos en Railway."""
+    import os
+    cwd = os.getcwd()
+    data_path = os.path.abspath("./data")
+    result = {"cwd": cwd, "data_abs": data_path, "dirs": {}}
+    for subdir in ["IngresosAVAC", "Tareas"]:
+        p = os.path.join(data_path, subdir)
+        if os.path.isdir(p):
+            files = os.listdir(p)
+            result["dirs"][subdir] = {"count": len(files), "sample": files[:3]}
+        else:
+            result["dirs"][subdir] = {"count": 0, "exists": False}
+    return result
