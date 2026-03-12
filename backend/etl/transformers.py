@@ -66,11 +66,15 @@ def parse_calificacion(texto: Optional[str]) -> tuple[Optional[float], Optional[
     if not texto or pd.isna(texto) or str(texto).strip() in ("-", ""):
         return None, None
     texto = str(texto).replace(",", ".").strip()
-    partes = re.findall(r"[\d.]+", texto)
-    if len(partes) >= 2:
-        return float(partes[0]), float(partes[1])
-    elif len(partes) == 1:
-        return float(partes[0]), None
+    # Use a regex that only matches valid numbers (not a bare '.')
+    partes = re.findall(r"\d+\.?\d*|\.\d+", texto)
+    try:
+        if len(partes) >= 2:
+            return float(partes[0]), float(partes[1])
+        elif len(partes) == 1:
+            return float(partes[0]), None
+    except (ValueError, TypeError):
+        pass
     return None, None
 
 
@@ -463,10 +467,15 @@ def calcular_indicadores_estudiantes(
     # Calcular índice de compromiso para cada estudiante
     indicadores = []
     for _, row in df_master.iterrows():
+        def _safe_int(val):
+            try:
+                return int(val) if val is not None and not pd.isna(val) else 0
+            except (ValueError, TypeError):
+                return 0
         ind = calcular_indice_compromiso(
             dias_sin_acceso=row.get("dias_sin_acceso_max"),
-            tareas_entregadas=int(row.get("total_entregas", 0) or 0),
-            tareas_totales=int(row.get("total_tareas", 0) or 0),
+            tareas_entregadas=_safe_int(row.get("total_entregas", 0)),
+            tareas_totales=_safe_int(row.get("total_tareas", 0)),
             notas=[],  # se pasan notas individuales si se quiere el bonus
         )
         indicadores.append(ind)

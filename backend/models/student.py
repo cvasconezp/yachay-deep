@@ -8,8 +8,8 @@ class Student(Base):
     __tablename__ = "students"
 
     id = Column(Integer, primary_key=True, index=True)
-    cedula = Column(String, unique=True, index=True, nullable=False)
-    nombre = Column(String, index=True, nullable=False)
+    cedula = Column(String, unique=True, index=True, nullable=True)
+    nombre = Column(String, index=True, nullable=True)
     correo = Column(String, index=True, nullable=True)
     correo_institucional = Column(String, index=True, nullable=True)
     telefono = Column(String, nullable=True)

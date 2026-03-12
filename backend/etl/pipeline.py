@@ -194,10 +194,21 @@ class ETLPipeline:
             if nombre_avac and not student.nombre:
                 student.nombre = nombre_avac
 
-            student.dias_sin_acceso = row.get("dias_sin_acceso_max")
-            student.indice_compromiso = row.get("indice_compromiso")
+            def _nan_to_none(val):
+                """Convert pandas NaN/inf to None for safe DB insertion."""
+                if val is None:
+                    return None
+                try:
+                    import math
+                    return None if math.isnan(float(val)) or math.isinf(float(val)) else val
+                except (TypeError, ValueError):
+                    return val
+
+            dias = _nan_to_none(row.get("dias_sin_acceso_max"))
+            student.dias_sin_acceso = int(dias) if dias is not None else None
+            student.indice_compromiso = _nan_to_none(row.get("indice_compromiso"))
             student.nivel_riesgo = row.get("nivel_riesgo")
-            student.porcentaje_tareas = row.get("porcentaje_tareas")
+            student.porcentaje_tareas = _nan_to_none(row.get("porcentaje_tareas"))
 
             if nombre_avac in cal_map:
                 cal_row = cal_map[nombre_avac]
