@@ -51,7 +51,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     user.last_login = datetime.utcnow()
     db.commit()
 
-    token = create_access_token({"sub": user.id})
+    token = create_access_token({"sub": str(user.id)})
     return {
         "access_token": token,
         "token_type": "bearer",

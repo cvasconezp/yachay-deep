@@ -2,10 +2,9 @@
 Yachay Deep — API Backend
 FastAPI application entry point
 """
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from sqlalchemy.orm import Session
 import logging
 
 from .config import settings
@@ -34,24 +33,41 @@ async def lifespan(app: FastAPI):
 
 
 def _create_default_admin():
-    """Crea usuario admin por defecto si no existe ningún usuario."""
+    """Crea o actualiza el usuario admin según las variables de entorno."""
     from .database import SessionLocal
     from .models.user import User, UserRole
     from .auth.jwt import hash_password
     import os
 
+    admin_email = os.environ.get("ADMIN_EMAIL", "admin@yachay.edu.ec")
+    admin_pass = os.environ.get("ADMIN_PASSWORD", "YachayDeep2024!")
+
     db = SessionLocal()
     try:
-        if db.query(User).count() == 0:
-            admin_email = os.environ.get("ADMIN_EMAIL", "admin@yachay.edu.ec")
-            admin_pass = os.environ.get("ADMIN_PASSWORD", "YachayDeep2024!")
-            admin = User(
+        # Si ya existe el usuario con ese email, no hacer nada
+        existing = db.query(User).filter(User.email == admin_email).first()
+        if existing:
+            logger.info(f"✅ Usuario admin ya existe: {admin_email}")
+            return
+
+        # Si existe algún admin (con email diferente), actualizar sus credenciales
+        admin = db.query(User).filter(User.role == UserRole.admin).first()
+        if admin:
+            admin.email = admin_email
+            admin.hashed_password = hash_password(admin_pass)
+            admin.is_active = True
+            db.commit()
+            logger.info(f"✅ Usuario admin actualizado: {admin_email}")
+        else:
+            # No existe ningún admin → crear uno nuevo
+            new_admin = User(
                 email=admin_email,
                 nombre="Administrador",
                 hashed_password=hash_password(admin_pass),
                 role=UserRole.admin,
+                is_active=True,
             )
-            db.add(admin)
+            db.add(new_admin)
             db.commit()
             logger.info(f"✅ Usuario admin creado: {admin_email}")
     finally:
@@ -87,39 +103,3 @@ app.include_router(courses_router)
 @app.get("/health")
 def health_check():
     return {"status": "ok", "app": settings.APP_NAME}
-
-
-@app.get("/debug/auth-check")
-def debug_auth_check(request: Request):
-    """Temporal: diagnostica la verificación JWT. Remover después."""
-    from jose import jwt, JWTError
-    from .models.user import User
-    from .database import SessionLocal
-
-    auth_header = request.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer "):
-        return {"error": "No bearer token provided"}
-
-    token = auth_header[7:]
-    db = SessionLocal()
-    try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        user_id = payload.get("sub")
-        user_raw = db.query(User).filter(User.id == user_id).first()
-        user_active = db.query(User).filter(User.id == user_id, User.is_active == True).first()
-        return {
-            "jwt_ok": True,
-            "user_id": user_id,
-            "user_id_type": type(user_id).__name__,
-            "user_found_no_filter": user_raw is not None,
-            "user_found_with_active": user_active is not None,
-            "is_active_value": str(user_raw.is_active) if user_raw else "NOT_FOUND",
-            "role": str(user_raw.role) if user_raw else "NOT_FOUND",
-            "secret_prefix": settings.SECRET_KEY[:12],
-        }
-    except JWTError as e:
-        return {"jwt_ok": False, "jwt_error": str(e), "secret_prefix": settings.SECRET_KEY[:12]}
-    except Exception as e:
-        return {"jwt_ok": False, "other_error": str(e), "error_type": type(e).__name__}
-    finally:
-        db.close()
