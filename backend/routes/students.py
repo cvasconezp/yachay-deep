@@ -21,14 +21,14 @@ router = APIRouter(prefix="/students", tags=["students"])
 
 class StudentSummary(BaseModel):
     id: int
-    cedula: Optional[str]
-    nombre: str
-    correo_institucional: Optional[str]
-    carrera: Optional[str]
-    nivel_riesgo: Optional[str]
-    indice_compromiso: Optional[float]
-    dias_sin_acceso: Optional[int]
-    porcentaje_tareas: Optional[float]
+    cedula: Optional[str] = None
+    nombre: Optional[str] = None
+    correo_institucional: Optional[str] = None
+    carrera: Optional[str] = None
+    nivel_riesgo: Optional[str] = None
+    indice_compromiso: Optional[float] = None
+    dias_sin_acceso: Optional[int] = None
+    porcentaje_tareas: Optional[float] = None
 
     class Config:
         from_attributes = True
@@ -37,14 +37,14 @@ class StudentSummary(BaseModel):
 class TaskSubmissionOut(BaseModel):
     codigo_curso: str
     unidad: str
-    estado: Optional[str]
-    calificacion: Optional[float]
-    calificacion_maxima: Optional[float]
-    calificacion_final: Optional[float]
-    entregada: bool
-    calificada: bool
-    retrasada: bool
-    fecha_entrega_texto: Optional[str]
+    estado: Optional[str] = None
+    calificacion: Optional[float] = None
+    calificacion_maxima: Optional[float] = None
+    calificacion_final: Optional[float] = None
+    entregada: bool = False
+    calificada: bool = False
+    retrasada: bool = False
+    # fecha_entrega_texto no existe en DB; se omite
 
     class Config:
         from_attributes = True
@@ -52,10 +52,10 @@ class TaskSubmissionOut(BaseModel):
 
 class AvacAccessOut(BaseModel):
     codigo_curso: str
-    ultimo_acceso_texto: Optional[str]
-    dias_sin_acceso: Optional[float]
-    estado_avac: Optional[str]
-    fecha_extraccion: Optional[datetime]
+    ultimo_acceso_texto: Optional[str] = None
+    dias_sin_acceso: Optional[float] = None
+    estado_avac: Optional[str] = None
+    fecha_extraccion: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -63,9 +63,9 @@ class AvacAccessOut(BaseModel):
 
 class GradeOut(BaseModel):
     asignatura: str
-    nota_final: Optional[float]
-    docente: Optional[str]
-    grupo: Optional[str]
+    nota_final: Optional[float] = None
+    docente: Optional[str] = None
+    grupo: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -73,14 +73,14 @@ class GradeOut(BaseModel):
 
 class InterventionOut(BaseModel):
     id: int
-    monitor_nombre: Optional[str]
-    medio: Optional[str]
-    motivo: Optional[str]
-    estado: Optional[str]
-    asignatura: Optional[str]
-    observacion: Optional[str]
-    resultado: Optional[str]
-    created_at: Optional[datetime]
+    monitor_nombre: Optional[str] = None
+    medio: Optional[str] = None
+    motivo: Optional[str] = None
+    estado: Optional[str] = None
+    asignatura: Optional[str] = None
+    observacion: Optional[str] = None
+    resultado: Optional[str] = None
+    created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -89,31 +89,31 @@ class InterventionOut(BaseModel):
 class FichaEstudiante(BaseModel):
     # Datos del estudiante
     id: int
-    cedula: Optional[str]
-    nombre: str
-    correo_institucional: Optional[str]
-    correo: Optional[str]
-    telefono: Optional[str]
-    carrera: Optional[str]
-    sede: Optional[str]
-    estado_matricula: Optional[str]
+    cedula: Optional[str] = None
+    nombre: Optional[str] = None
+    correo_institucional: Optional[str] = None
+    correo: Optional[str] = None
+    telefono: Optional[str] = None
+    carrera: Optional[str] = None
+    sede: Optional[str] = None
+    estado_matricula: Optional[str] = None
 
     # Indicadores de riesgo
-    nivel_riesgo: Optional[str]
-    indice_compromiso: Optional[float]
-    dias_sin_acceso: Optional[int]
-    porcentaje_tareas: Optional[float]
-    promedio_calificaciones: Optional[float]
+    nivel_riesgo: Optional[str] = None
+    indice_compromiso: Optional[float] = None
+    dias_sin_acceso: Optional[int] = None
+    porcentaje_tareas: Optional[float] = None
+    promedio_calificaciones: Optional[float] = None
 
     # Datos relacionados
-    accesos_avac: list[AvacAccessOut]
-    tareas: list[TaskSubmissionOut]
-    calificaciones: list[GradeOut]
-    intervenciones: list[InterventionOut]
+    accesos_avac: list[AvacAccessOut] = []
+    tareas: list[TaskSubmissionOut] = []
+    calificaciones: list[GradeOut] = []
+    intervenciones: list[InterventionOut] = []
 
     # Resumen
-    total_intervenciones: int
-    ultima_intervencion: Optional[datetime]
+    total_intervenciones: int = 0
+    ultima_intervencion: Optional[datetime] = None
 
     class Config:
         from_attributes = True
