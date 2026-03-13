@@ -149,44 +149,72 @@ class ETLPipeline:
 
             logs.append(f"  → {len(df_calificaciones)} registros de calificaciones{' (fallback TableauHistorico)' if used_historico_fallback else ''}")
 
-            # Enriquecer calificaciones con NIVEL del reporte si falta
-            # (P67 CSV no tiene columna NIVEL; el reporte.xlsx sí)
-            if (
-                not df_calificaciones.empty
-                and not df_personales.empty
-                and ("nivel" not in df_calificaciones.columns or df_calificaciones["nivel"].isna().all())
-            ):
-                # Construir mapa nombre→nivel desde el reporte original (antes de dedup)
+            # Enriquecer calificaciones con NIVEL y NUMERO_REPITENCIAS del reporte si falta
+            # (P67 CSV no tiene estas columnas; el reporte.xlsx sí)
+            _need_nivel = ("nivel" not in df_calificaciones.columns or df_calificaciones["nivel"].isna().all())
+            _need_repitencias = ("numero_repitencias" not in df_calificaciones.columns or df_calificaciones["numero_repitencias"].isna().all())
+
+            if not df_calificaciones.empty and (_need_nivel or _need_repitencias):
+                # Construir mapas (nombre, asignatura) → nivel / repitencias desde el reporte
                 reporte_path = Path(settings.DATA_PATH_REPORTE)
                 _nivel_map = {}
+                _rep_map = {}
                 if reporte_path.is_dir():
                     for _rf in sorted(reporte_path.glob("*_reporte.xlsx")):
                         try:
                             _rdf = pd.read_excel(_rf, engine="openpyxl")
                             _rdf.columns = [c.strip().upper() for c in _rdf.columns]
-                            if "ESTUDIANTES" in _rdf.columns and "NIVEL" in _rdf.columns and "ASIGNATURA" in _rdf.columns:
-                                for _, _rr in _rdf.iterrows():
-                                    _nom = re.sub(r"\s+", " ", str(_rr.get("ESTUDIANTES", "")).strip().upper())
-                                    _asig = str(_rr.get("ASIGNATURA", "")).strip().upper()
+                            if "ESTUDIANTES" not in _rdf.columns or "ASIGNATURA" not in _rdf.columns:
+                                continue
+                            _has_nivel = "NIVEL" in _rdf.columns
+                            # NUMERO_REPITENCIAS puede venir con o sin guion bajo
+                            _rep_col = next(
+                                (c for c in _rdf.columns if "REPITENCIA" in c),
+                                None,
+                            )
+                            for _, _rr in _rdf.iterrows():
+                                _nom = re.sub(r"\s+", " ", str(_rr.get("ESTUDIANTES", "")).strip().upper())
+                                _asig = str(_rr.get("ASIGNATURA", "")).strip().upper()
+                                if not _nom or not _asig:
+                                    continue
+                                key = (_nom, _asig)
+                                if _has_nivel and _need_nivel:
                                     _niv = _rr.get("NIVEL")
-                                    if _nom and _asig and pd.notna(_niv):
+                                    if pd.notna(_niv):
                                         try:
-                                            _nivel_map[(_nom, _asig)] = int(_niv)
+                                            _nivel_map[key] = int(_niv)
+                                        except (ValueError, TypeError):
+                                            pass
+                                if _rep_col and _need_repitencias:
+                                    _rep = _rr.get(_rep_col)
+                                    if pd.notna(_rep):
+                                        try:
+                                            _rep_map[key] = int(_rep)
                                         except (ValueError, TypeError):
                                             pass
                         except Exception:
                             pass
 
-                if _nivel_map:
-                    def _get_nivel(row):
-                        nom = re.sub(r"\s+", " ", str(row.get("nombre_estudiante", "")).strip().upper())
-                        asig = str(row.get("asignatura", "")).strip().upper()
-                        return _nivel_map.get((nom, asig))
+                def _enrich_key(row):
+                    nom = re.sub(r"\s+", " ", str(row.get("nombre_estudiante", "")).strip().upper())
+                    asig = str(row.get("asignatura", "")).strip().upper()
+                    return (nom, asig)
 
-                    df_calificaciones["nivel"] = df_calificaciones.apply(_get_nivel, axis=1)
+                if _nivel_map and _need_nivel:
+                    df_calificaciones["nivel"] = df_calificaciones.apply(
+                        lambda r: _nivel_map.get(_enrich_key(r)), axis=1
+                    )
                     df_calificaciones["nivel"] = pd.to_numeric(df_calificaciones["nivel"], errors="coerce").astype("Int64")
                     _filled = df_calificaciones["nivel"].notna().sum()
                     logs.append(f"  → Enriquecido {_filled}/{len(df_calificaciones)} calificaciones con NIVEL del reporte")
+
+                if _rep_map and _need_repitencias:
+                    df_calificaciones["numero_repitencias"] = df_calificaciones.apply(
+                        lambda r: _rep_map.get(_enrich_key(r)), axis=1
+                    )
+                    df_calificaciones["numero_repitencias"] = pd.to_numeric(df_calificaciones["numero_repitencias"], errors="coerce").astype("Int64")
+                    _filled_rep = df_calificaciones["numero_repitencias"].notna().sum()
+                    logs.append(f"  → Enriquecido {_filled_rep}/{len(df_calificaciones)} calificaciones con NUMERO_REPITENCIAS del reporte")
 
             # 2. Calcular indicadores
             logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Calculando indicadores de riesgo...")
