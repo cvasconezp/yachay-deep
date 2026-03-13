@@ -404,6 +404,9 @@ def transform_calificaciones(ruta_csv: str) -> pd.DataFrame:
     if "nota final" in col_lower: rename_map[col_lower["nota final"]] = "nota_final"
     if "numero_repitencias" in col_lower: rename_map[col_lower["numero_repitencias"]] = "numero_repitencias"
     if "numero repitencias" in col_lower: rename_map[col_lower["numero repitencias"]] = "numero_repitencias"
+    if "nivel" in col_lower: rename_map[col_lower["nivel"]] = "nivel"
+    if "nombre_grupo" in col_lower: rename_map[col_lower["nombre_grupo"]] = "nombre_grupo"
+    if "nombre grupo" in col_lower: rename_map[col_lower["nombre grupo"]] = "nombre_grupo"
     df = df.rename(columns=rename_map)
 
     # Limpiar carrera
@@ -417,6 +420,18 @@ def transform_calificaciones(ruta_csv: str) -> pd.DataFrame:
     # Número de repitencias a int
     if "numero_repitencias" in df.columns:
         df["numero_repitencias"] = pd.to_numeric(df["numero_repitencias"], errors="coerce").astype("Int64")
+
+    # Nivel académico de la asignatura a int
+    if "nivel" in df.columns:
+        df["nivel"] = pd.to_numeric(df["nivel"], errors="coerce").astype("Int64")
+
+    # NOMBRE_GRUPO → extraer número de grupo para estandarizar
+    if "nombre_grupo" in df.columns:
+        extracted = df["nombre_grupo"].apply(extraer_grupo_numero)
+        if "grupo" in df.columns:
+            df["grupo"] = extracted.fillna(df["grupo"])
+        else:
+            df["grupo"] = extracted
 
     # Eliminar filas sin estudiante
     if "nombre_estudiante" in df.columns:

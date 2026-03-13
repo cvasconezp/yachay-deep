@@ -638,6 +638,10 @@ class ETLPipeline:
             _repitencias = row.get("numero_repitencias")
             repitencias_val = int(_repitencias) if _repitencias is not None and not (hasattr(_repitencias, '__class__') and str(_repitencias) == '<NA>') else None
 
+            # nivel: nivel académico de la asignatura (Int64 nullable)
+            _nivel = row.get("nivel")
+            nivel_val = int(_nivel) if _nivel is not None and not (hasattr(_nivel, '__class__') and str(_nivel) == '<NA>') else None
+
             grade = Grade(
                 student_id=student.id,
                 asignatura=str(row.get("asignatura", "")).strip(),
@@ -647,6 +651,7 @@ class ETLPipeline:
                 nota_final=row.get("nota_final"),
                 sede=str(row.get("sede", "")).strip() or None,
                 numero_repitencias=repitencias_val,
+                nivel=nivel_val,
                 periodo=None,  # sin período = semestre actual
             )
             self.db.add(grade)

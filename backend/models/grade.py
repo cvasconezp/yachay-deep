@@ -17,6 +17,7 @@ class Grade(Base):
     periodo = Column(String, nullable=True)
     sede = Column(String, nullable=True)
     numero_repitencias = Column(Integer, nullable=True)
+    nivel = Column(Integer, nullable=True)          # academic level of the subject (1-8)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     student = relationship("Student", back_populates="grades")

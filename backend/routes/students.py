@@ -179,6 +179,7 @@ class GradeOut(BaseModel):
     grupo: Optional[str] = None
     periodo: Optional[str] = None   # None = semestre actual; "P60"–"P67" = histórico
     numero_repitencias: Optional[int] = None
+    nivel: Optional[int] = None     # academic level of the subject (1-8)
 
     class Config:
         from_attributes = True

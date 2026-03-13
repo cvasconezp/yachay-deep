@@ -173,20 +173,29 @@ function toTitleCase(str) {
   }).join(" ");
 }
 
+/** Abrevia el grupo: "3" → "G3", "Grupo - 3" → "G3", ya formateado "G6" → "G6" */
+function abbreviateGrupo(grupo) {
+  if (!grupo) return null;
+  const s = String(grupo).trim();
+  if (/^G\d+$/i.test(s)) return s.toUpperCase(); // ya abreviado
+  const m = s.match(/(\d+)/);
+  return m ? `G${m[1]}` : s;
+}
+
 // ── Fila de dato personal ─────────────────────────────────────────────────────
 function PersonalRow({ label, value, href, warning }) {
   if (!value || value === "—") {
     return (
       <tr>
-        <td className="text-right text-[10px] text-gray-500 font-semibold px-2 py-0.5 border border-gray-200 bg-[#F2F2F2] whitespace-nowrap w-28">{label}</td>
-        <td className="text-[10px] px-2 py-0.5 border border-gray-200 text-gray-300 italic">—</td>
+        <td className="text-right text-[11px] text-gray-500 font-semibold px-2 py-0.5 border border-gray-200 bg-[#F2F2F2] whitespace-nowrap w-28">{label}</td>
+        <td className="text-[11px] px-2 py-0.5 border border-gray-200 text-gray-300 italic">—</td>
       </tr>
     );
   }
   return (
     <tr className={warning ? "bg-red-50" : ""}>
-      <td className="text-right text-[10px] text-gray-500 font-semibold px-2 py-0.5 border border-gray-200 bg-[#F2F2F2] whitespace-nowrap w-28">{label}</td>
-      <td className="text-[10px] px-2 py-0.5 border border-gray-200">
+      <td className="text-right text-[11px] text-gray-500 font-semibold px-2 py-0.5 border border-gray-200 bg-[#F2F2F2] whitespace-nowrap w-28">{label}</td>
+      <td className="text-[11px] px-2 py-0.5 border border-gray-200">
         {href
           ? <a href={href} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline break-all">{value}</a>
           : <span className={warning ? "text-red-600 font-semibold" : "text-gray-800"}>{value}</span>
@@ -498,13 +507,13 @@ export default function FichaEstudiante() {
                 </thead>
                 <tbody>
                   <tr>
-                    <td className="text-[10px] text-center px-1 py-0.5 border border-gray-200 text-gray-700 font-medium">
+                    <td className="text-[11px] text-center px-1 py-0.5 border border-gray-200 text-gray-700 font-medium">
                       {ficha.provincia || <span className="text-gray-300 italic">—</span>}
                     </td>
-                    <td className="text-[10px] text-center px-1 py-0.5 border border-gray-200 text-gray-700">
+                    <td className="text-[11px] text-center px-1 py-0.5 border border-gray-200 text-gray-700">
                       {ficha.ciudad || <span className="text-gray-300 italic">—</span>}
                     </td>
-                    <td className="text-[10px] text-center px-1 py-0.5 border border-gray-200 text-gray-700">
+                    <td className="text-[11px] text-center px-1 py-0.5 border border-gray-200 text-gray-700">
                       {ficha.parroquia || <span className="text-gray-300 italic">—</span>}
                     </td>
                   </tr>
@@ -541,7 +550,7 @@ export default function FichaEstudiante() {
                       <path d="M38 5 L50 8 L60 15 L65 25 L62 38 L70 45 L72 55 L65 65 L55 72 L42 78 L30 75 L20 68 L15 55 L18 42 L12 32 L18 20 L28 12 Z" />
                       <circle cx="38" cy="40" r="5" fill="#F0B000" opacity="1"/>
                     </svg>
-                    <div className="text-[10px] text-gray-400 -mt-1">Sin datos geográficos</div>
+                    <div className="text-[11px] text-gray-400 -mt-1">Sin datos geográficos</div>
                   </div>
                 );
               })()}
@@ -558,8 +567,8 @@ export default function FichaEstudiante() {
                 <tbody>
                   <PersonalRow label="Nivel de beca" value="—" />
                   <tr className={ficha.estado_matricula === "Matriculado" ? "bg-green-50" : "bg-red-50"}>
-                    <td className="text-right text-[10px] text-gray-500 font-semibold px-2 py-0.5 border border-gray-200 bg-[#F2F2F2] whitespace-nowrap w-28">Pago matrícula</td>
-                    <td className={`text-[10px] px-2 py-0.5 border border-gray-200 font-semibold ${ficha.estado_matricula === "Matriculado" ? "text-green-700" : "text-red-600"}`}>
+                    <td className="text-right text-[11px] text-gray-500 font-semibold px-2 py-0.5 border border-gray-200 bg-[#F2F2F2] whitespace-nowrap w-28">Pago matrícula</td>
+                    <td className={`text-[11px] px-2 py-0.5 border border-gray-200 font-semibold ${ficha.estado_matricula === "Matriculado" ? "text-green-700" : "text-red-600"}`}>
                       {ficha.estado_matricula || "—"}
                     </td>
                   </tr>
@@ -581,7 +590,7 @@ export default function FichaEstudiante() {
                   </div>
                 )}
                 <div className="px-3 py-1.5 text-center flex-1">
-                  <div className="text-[9px] opacity-50 uppercase tracking-wider">Semestre activo</div>
+                  <div className="text-[9px] opacity-50 uppercase tracking-wider">Nivel</div>
                   <div className="text-xs font-semibold mt-0.5">
                     {ficha.nivel_academico
                       ? `${ficha.nivel_academico}° Nivel`
@@ -592,10 +601,6 @@ export default function FichaEstudiante() {
                           : "Sin cursos"}
                   </div>
                 </div>
-                <div className="px-3 py-1.5 text-center flex-1">
-                  <div className="text-[9px] opacity-50 uppercase tracking-wider">Carrera</div>
-                  <div className="text-xs font-semibold mt-0.5 leading-tight">{ficha.carrera || "—"}</div>
-                </div>
               </div>
 
               {/* Tabla de cursos AVAC activos */}
@@ -604,7 +609,7 @@ export default function FichaEstudiante() {
                   <table className="w-full border-collapse text-xs">
                     <thead>
                       <tr className="bg-[#BDD7EE]">
-                        <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 whitespace-nowrap text-[10px]">Grupo</th>
+                        <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 whitespace-nowrap text-[10px]">Nivel y grupo</th>
                         <th className="text-left px-2 py-1 border border-gray-300 font-semibold text-gray-700 text-[10px]" style={{ minWidth: "180px" }}>Asignaturas matriculadas</th>
                         <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 w-14 text-[10px]">Nota</th>
                         <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 w-10 text-[10px]">Mat</th>
@@ -636,9 +641,16 @@ export default function FichaEstudiante() {
 
                         return (
                           <tr key={codigo} className={idx % 2 === 0 ? "bg-white" : "bg-[#F9F9F9]"}>
-                            {/* Grupo */}
-                            <td className="px-2 py-1 border border-gray-200 text-center text-[10px] text-gray-500 whitespace-nowrap">
-                              {matchedCal?.grupo || acceso?.grupo || ts[0]?.grupo || <span className="text-gray-300">—</span>}
+                            {/* Nivel y grupo */}
+                            <td className="px-2 py-1 border border-gray-200 text-center text-[11px] text-gray-500 whitespace-nowrap">
+                              {(() => {
+                                const niv = matchedCal?.nivel;
+                                const grp = abbreviateGrupo(matchedCal?.grupo || acceso?.grupo || ts[0]?.grupo);
+                                if (niv && grp) return <>{niv}° | {grp}</>;
+                                if (niv) return <>{niv}°</>;
+                                if (grp) return grp;
+                                return <span className="text-gray-300">—</span>;
+                              })()}
                             </td>
                             {/* Asignatura */}
                             <td className="px-2 py-1 border border-gray-200 font-medium text-gray-800">
@@ -649,9 +661,9 @@ export default function FichaEstudiante() {
                               {nota != null ? nota : <span className="text-gray-300">—</span>}
                             </td>
                             {/* Mat (número de repitencias) */}
-                            <td className="px-2 py-1 border border-gray-200 text-center text-[10px] text-gray-500">
+                            <td className="px-2 py-1 border border-gray-200 text-center text-[11px] text-gray-500">
                               {matchedCal?.numero_repitencias != null
-                                ? <span className={`px-1 rounded text-[9px] font-semibold ${matchedCal.numero_repitencias > 1 ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-gray-700"}`}>
+                                ? <span className={`px-1 rounded text-[10px] font-semibold ${matchedCal.numero_repitencias > 1 ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-gray-700"}`}>
                                     {matchedCal.numero_repitencias}
                                   </span>
                                 : "—"}
@@ -662,7 +674,7 @@ export default function FichaEstudiante() {
                                 {diasInt != null ? `${diasInt}d` : "—"}
                               </span>
                               {acceso?.ultimo_acceso_texto && (
-                                <div className="text-[9px] text-gray-400 leading-tight whitespace-nowrap">
+                                <div className="text-[10px] text-gray-400 leading-tight whitespace-nowrap">
                                   {compactarAcceso(acceso.ultimo_acceso_texto)}
                                 </div>
                               )}
@@ -679,10 +691,10 @@ export default function FichaEstudiante() {
                                   />
                                 ))}
                                 {sortedTasks.length > 8 && (
-                                  <span className="text-[9px] text-gray-400 self-center">+{sortedTasks.length - 8}</span>
+                                  <span className="text-[10px] text-gray-400 self-center">+{sortedTasks.length - 8}</span>
                                 )}
                                 {sortedTasks.length === 0 && (
-                                  <span className="text-[9px] text-gray-300 italic">Sin tareas</span>
+                                  <span className="text-[10px] text-gray-300 italic">Sin tareas</span>
                                 )}
                               </div>
                             </td>
@@ -690,12 +702,12 @@ export default function FichaEstudiante() {
                             <td className="px-2 py-1 border border-gray-200 text-center">
                               <a href={`https://avac.ups.edu.ec/grado67/course/search.php?search=${codigo}`}
                                  target="_blank" rel="noreferrer"
-                                 className="text-blue-500 hover:text-blue-700 font-mono text-[10px]">
+                                 className="text-blue-500 hover:text-blue-700 font-mono text-[11px]">
                                 {codigo}
                               </a>
                             </td>
                             {/* Docente */}
-                            <td className="px-2 py-1 border border-gray-200 text-gray-600 text-[10px]">
+                            <td className="px-2 py-1 border border-gray-200 text-gray-600 text-[11px]">
                               {toTitleCase(acceso?.docente || ts[0]?.docente || matchedCal?.docente)
                                 || <span className="text-gray-300 italic">—</span>}
                             </td>
@@ -714,8 +726,15 @@ export default function FichaEstudiante() {
                         const rowIdx = Object.keys(cursos).length + idx;
                         return (
                           <tr key={`cal-${idx}`} className={rowIdx % 2 === 0 ? "bg-white" : "bg-[#F9F9F9]"}>
-                            <td className="px-2 py-1 border border-gray-200 text-center text-[10px] text-gray-500 whitespace-nowrap">
-                              {cal.grupo || <span className="text-gray-300">—</span>}
+                            <td className="px-2 py-1 border border-gray-200 text-center text-[11px] text-gray-500 whitespace-nowrap">
+                              {(() => {
+                                const niv = cal.nivel;
+                                const grp = abbreviateGrupo(cal.grupo);
+                                if (niv && grp) return <>{niv}° | {grp}</>;
+                                if (niv) return <>{niv}°</>;
+                                if (grp) return grp;
+                                return <span className="text-gray-300">—</span>;
+                              })()}
                             </td>
                             <td className="px-2 py-1 border border-gray-200 font-medium text-gray-800">
                               {toTitleCase(cal.asignatura)}
@@ -723,23 +742,23 @@ export default function FichaEstudiante() {
                             <td className={`px-2 py-1 border border-gray-200 text-center font-bold ${noteStyle.bg} ${noteStyle.text}`}>
                               {cal.nota_final != null ? cal.nota_final : <span className="text-gray-300">—</span>}
                             </td>
-                            <td className="px-2 py-1 border border-gray-200 text-center text-[10px] text-gray-500">
+                            <td className="px-2 py-1 border border-gray-200 text-center text-[11px] text-gray-500">
                               {cal.numero_repitencias != null
-                                ? <span className={`px-1 rounded text-[9px] font-semibold ${cal.numero_repitencias > 1 ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-gray-700"}`}>
+                                ? <span className={`px-1 rounded text-[10px] font-semibold ${cal.numero_repitencias > 1 ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-gray-700"}`}>
                                     {cal.numero_repitencias}
                                   </span>
                                 : "—"}
                             </td>
                             <td className="px-2 py-1 border border-gray-200 text-center">
-                              <span className="text-[9px] text-gray-300 italic">Sin AVAC</span>
+                              <span className="text-[10px] text-gray-300 italic">Sin AVAC</span>
                             </td>
                             <td className="px-2 py-1 border border-gray-200">
-                              <span className="text-[9px] text-gray-300 italic">—</span>
+                              <span className="text-[10px] text-gray-300 italic">—</span>
                             </td>
                             <td className="px-2 py-1 border border-gray-200 text-center">
                               <span className="text-gray-300">—</span>
                             </td>
-                            <td className="px-2 py-1 border border-gray-200 text-gray-600 text-[10px]">
+                            <td className="px-2 py-1 border border-gray-200 text-gray-600 text-[11px]">
                               {toTitleCase(cal.docente) || <span className="text-gray-300 italic">—</span>}
                             </td>
                           </tr>
@@ -756,7 +775,7 @@ export default function FichaEstudiante() {
                   <table className="w-full border-collapse text-xs">
                     <thead>
                       <tr className="bg-[#BDD7EE]">
-                        <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 whitespace-nowrap text-[10px]">Grupo</th>
+                        <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 whitespace-nowrap text-[10px]">Nivel y grupo</th>
                         <th className="text-left px-2 py-1 border border-gray-300 font-semibold text-gray-700 text-[10px]" style={{ minWidth: "180px" }}>Asignaturas matriculadas</th>
                         <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 w-14 text-[10px]">Nota</th>
                         <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 w-10 text-[10px]">Mat</th>
@@ -771,16 +790,25 @@ export default function FichaEstudiante() {
                         const noteStyle = getNoteStyleHistorico(cal.nota_final);
                         return (
                           <tr key={idx} className={idx % 2 === 0 ? "bg-white" : "bg-[#F9F9F9]"}>
-                            <td className="px-2 py-1 border border-gray-200 text-center text-[10px] text-gray-500">{cal.grupo || "—"}</td>
+                            <td className="px-2 py-1 border border-gray-200 text-center text-[11px] text-gray-500">
+                              {(() => {
+                                const niv = cal.nivel;
+                                const grp = abbreviateGrupo(cal.grupo);
+                                if (niv && grp) return <>{niv}° | {grp}</>;
+                                if (niv) return <>{niv}°</>;
+                                if (grp) return grp;
+                                return "—";
+                              })()}
+                            </td>
                             <td className="px-2 py-1 border border-gray-200 font-medium text-gray-800">{toTitleCase(cal.asignatura)}</td>
                             <td className={`px-2 py-1 border border-gray-200 text-center font-bold ${noteStyle.bg} ${noteStyle.text}`}>{cal.nota_final ?? "—"}</td>
-                            <td className="px-2 py-1 border border-gray-200 text-center text-[10px] text-gray-500">
+                            <td className="px-2 py-1 border border-gray-200 text-center text-[11px] text-gray-500">
                               {cal.numero_repitencias != null ? cal.numero_repitencias : "—"}
                             </td>
-                            <td className="px-2 py-1 border border-gray-200 text-center"><span className="text-[9px] text-gray-300 italic">Sin AVAC</span></td>
-                            <td className="px-2 py-1 border border-gray-200"><span className="text-[9px] text-gray-300 italic">—</span></td>
+                            <td className="px-2 py-1 border border-gray-200 text-center"><span className="text-[10px] text-gray-300 italic">Sin AVAC</span></td>
+                            <td className="px-2 py-1 border border-gray-200"><span className="text-[10px] text-gray-300 italic">—</span></td>
                             <td className="px-2 py-1 border border-gray-200 text-center"><span className="text-gray-300">—</span></td>
-                            <td className="px-2 py-1 border border-gray-200 text-gray-600 text-[10px]">{toTitleCase(cal.docente) || "—"}</td>
+                            <td className="px-2 py-1 border border-gray-200 text-gray-600 text-[11px]">{toTitleCase(cal.docente) || "—"}</td>
                           </tr>
                         );
                       })}
@@ -870,7 +898,7 @@ export default function FichaEstudiante() {
                           return (
                             <div className="flex-shrink-0 flex flex-col" style={{ minWidth: "80px" }}>
                               <div className="bg-[#F0B000] text-white text-center rounded-t px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider">
-                                Actual
+                                {ficha.nivel_academico ? `${ficha.nivel_academico}° Nivel` : "Actual"}
                               </div>
                               <div className="border border-t-0 border-[#F0B000] rounded-b bg-[#FFFDF5] px-1 pt-1 pb-0.5 flex flex-col gap-0.5">
                                 {ficha.calificaciones.map((c, i) => (
@@ -922,7 +950,7 @@ export default function FichaEstudiante() {
                       <div className="flex gap-2" style={{ minWidth: "max-content" }}>
                         <div className="flex-shrink-0 flex flex-col" style={{ minWidth: "80px" }}>
                           <div className="bg-[#F0B000] text-white text-center rounded-t px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider">
-                            Actual
+                            {ficha.nivel_academico ? `${ficha.nivel_academico}° Nivel` : "Actual"}
                           </div>
                           <div className="border border-t-0 border-[#F0B000] rounded-b bg-[#FFFDF5] px-1 pt-1 pb-0.5 flex flex-col gap-0.5">
                             {ficha.calificaciones.map((c, i) => (
@@ -970,14 +998,14 @@ export default function FichaEstudiante() {
                     ["Celular", "—"],
                   ].map(([label, val]) => (
                     <tr key={label}>
-                      <td className="bg-[#F2F2F2] border border-gray-200 text-right text-[10px] font-semibold text-gray-500 px-2 py-0.5 w-32 whitespace-nowrap">{label}</td>
-                      <td className="border border-gray-200 text-[10px] px-2 py-0.5 text-gray-300 italic">{val}</td>
+                      <td className="bg-[#F2F2F2] border border-gray-200 text-right text-[11px] font-semibold text-gray-500 px-2 py-0.5 w-32 whitespace-nowrap">{label}</td>
+                      <td className="border border-gray-200 text-[11px] px-2 py-0.5 text-gray-300 italic">{val}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
               <div className="p-3">
-                <div className="grid grid-cols-2 gap-2 text-[10px]">
+                <div className="grid grid-cols-2 gap-2 text-[11px]">
                   <div>
                     <div className="bg-[#F2F2F2] text-center py-0.5 font-bold text-gray-600 border border-gray-200 mb-1">Sin membrete</div>
                     <div className="text-center text-[#BF8F00] border border-gray-200 py-0.5 cursor-pointer hover:bg-yellow-50">Carta de solicitud</div>
@@ -1007,7 +1035,7 @@ export default function FichaEstudiante() {
             </div>
             <div className="bg-white">
               {ficha.intervenciones?.length === 0 ? (
-                <div className="py-5 text-center text-[10px] text-gray-300 italic">
+                <div className="py-5 text-center text-[11px] text-gray-300 italic">
                   Sin intervenciones registradas
                 </div>
               ) : (
@@ -1017,24 +1045,24 @@ export default function FichaEstudiante() {
                       <div className="flex-1">
                         <div className="flex flex-wrap items-center gap-1 mb-0.5">
                           {inv.medio && (
-                            <span className="bg-blue-100 text-blue-700 text-[9px] font-medium px-1.5 py-0.5 rounded-full">
+                            <span className="bg-blue-100 text-blue-700 text-[10px] font-medium px-1.5 py-0.5 rounded-full">
                               {inv.medio}
                             </span>
                           )}
-                          {inv.motivo && <span className="text-[10px] text-gray-500">{inv.motivo}</span>}
+                          {inv.motivo && <span className="text-[11px] text-gray-500">{inv.motivo}</span>}
                         </div>
                         {inv.observacion && <p className="text-xs text-gray-700 leading-relaxed">{inv.observacion}</p>}
-                        <div className="flex flex-wrap gap-2 mt-0.5 text-[9px] text-gray-400">
+                        <div className="flex flex-wrap gap-2 mt-0.5 text-[10px] text-gray-400">
                           {inv.estado && <span>Estado: <strong className="text-gray-600">{inv.estado}</strong></span>}
                           {inv.asignatura && <span>· {inv.asignatura}</span>}
                         </div>
                       </div>
                       <div className="text-right flex-shrink-0">
-                        <div className="text-[9px] text-gray-400">
+                        <div className="text-[10px] text-gray-400">
                           {inv.created_at ? new Date(inv.created_at).toLocaleDateString("es-EC") : ""}
                         </div>
                         {inv.monitor_nombre && (
-                          <div className="text-[9px] text-gray-400 truncate max-w-[90px]">{inv.monitor_nombre}</div>
+                          <div className="text-[10px] text-gray-400 truncate max-w-[90px]">{inv.monitor_nombre}</div>
                         )}
                       </div>
                     </div>
