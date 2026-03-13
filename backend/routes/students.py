@@ -137,6 +137,7 @@ class TaskSubmissionOut(BaseModel):
     calificacion: Optional[float] = None
     calificacion_maxima: Optional[float] = None
     calificacion_final: Optional[float] = None
+    total_curso: Optional[float] = None  # nota total del curso (desde Tareas CSV "Total del Curso")
     entregada: bool = False
     calificada: bool = False
     retrasada: bool = False
@@ -151,6 +152,7 @@ class AvacAccessOut(BaseModel):
     docente: Optional[str] = None         # enriquecido desde Course.docente
     nivel: Optional[int] = None           # nivel académico del curso (1-8) desde CourseConfig
     grupo: Optional[str] = None           # grupo/sección extraído de NOMBRE_GRUPO
+    bloque: Optional[str] = None          # bloque del curso: "1", "2" o "ambos"
     ultimo_acceso_texto: Optional[str] = None
     dias_sin_acceso: Optional[float] = None
     estado_avac: Optional[str] = None
@@ -333,7 +335,9 @@ def get_ficha(
             course_map[c.codigo_avac] = c
 
     # ── Detectar sede y nivel por votación mayoritaria (Framework_FichaEst §3.3) ──
-    sede_detectada = detectar_sede(all_courses)
+    # sede_detectada solo aplica para carrera EIB (el SEDE_MAPPING es exclusivo de EIB/UPS)
+    is_eib = bool(student.carrera and "INTERCULTURAL" in student.carrera.upper())
+    sede_detectada = detectar_sede(all_courses) if is_eib else None
     nivel_detectado = detectar_nivel(all_courses)
 
     # ── Diagnóstico de riesgo computado (Framework_FichaEst §3.5) ──
@@ -351,6 +355,7 @@ def get_ficha(
             docente=course_map[a.codigo_curso].docente if a.codigo_curso in course_map else None,
             nivel=course_map[a.codigo_curso].nivel if a.codigo_curso in course_map else None,
             grupo=course_map[a.codigo_curso].grupo if a.codigo_curso in course_map else None,
+            bloque=course_map[a.codigo_curso].bloque if a.codigo_curso in course_map else None,
             ultimo_acceso_texto=a.ultimo_acceso_texto,
             dias_sin_acceso=a.dias_sin_acceso,
             estado_avac=a.estado_avac,
@@ -369,6 +374,7 @@ def get_ficha(
             calificacion=t.calificacion,
             calificacion_maxima=t.calificacion_maxima,
             calificacion_final=t.calificacion_final,
+            total_curso=t.total_curso,
             entregada=t.entregada or False,
             calificada=t.calificada or False,
             retrasada=t.retrasada or False,

@@ -47,6 +47,12 @@ function getCompromisoLabel(val) {
   return "Alto";
 }
 
+/** Convierte número de nivel a ordinal en español: 1→"1er", 2→"2do", etc. */
+function ordinalNivel(n) {
+  const map = { 1: "1er", 2: "2do", 3: "3er", 4: "4to", 5: "5to", 6: "6to", 7: "7mo", 8: "8vo" };
+  return map[n] || `${n}°`;
+}
+
 /** Compactar texto de acceso AVAC: "3 días 15 horas 20 minutos" → "3d 15h 20m" */
 function compactarAcceso(texto) {
   if (!texto) return null;
@@ -227,6 +233,9 @@ export default function FichaEstudiante() {
   const diagStyle = ficha ? getDiagnosticoStyle(ficha.diagnostico_riesgo) : getDiagnosticoStyle(null);
   const riesgoStyle = ficha ? getRiesgoStyle(ficha.nivel_riesgo) : {};
 
+  // Carrera EIB: sedes, centro de apoyo y SEDE_MAPPING solo aplican para EIB
+  const isEIB = Boolean(ficha?.carrera?.toUpperCase().includes("INTERCULTURAL"));
+
   // Sede: usar la detectada por grupo si existe, si no la almacenada en BD
   const sedeDisplay = ficha?.sede_detectada || ficha?.sede || "—";
 
@@ -249,7 +258,7 @@ export default function FichaEstudiante() {
       {/* ── Título + buscador ─────────────────────────────────────────── */}
       <div className="mb-4">
         <h1 className="text-2xl font-bold text-gray-900">Ficha del Estudiante</h1>
-        <p className="text-gray-400 text-sm">Carrera EIB — Monitoreo académico individual</p>
+        <p className="text-gray-400 text-sm">Monitoreo académico individual</p>
       </div>
 
       <div className="relative mb-5">
@@ -284,9 +293,7 @@ export default function FichaEstudiante() {
           {/* ═══ FILA 1: ENCABEZADO PRINCIPAL ═══ */}
           <div className="bg-[#1B3A6B] text-white flex items-center justify-between px-4 py-2">
             <div className="flex items-center gap-3">
-              <span className="text-sm font-bold tracking-tight">Educación Intercultural Bilingüe</span>
-              <span className="opacity-40">|</span>
-              <span className="text-xs opacity-60 italic">CARRERA: Educación Intercultural Bilingüe</span>
+              <span className="text-sm font-bold tracking-tight">{ficha.carrera || "Monitoreo Estudiantil"}</span>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
               <button onClick={handleExportPDF}
@@ -342,15 +349,21 @@ export default function FichaEstudiante() {
               <SectionHeader>Datos personales</SectionHeader>
               <table className="w-full border-collapse">
                 <tbody>
-                  <PersonalRow
-                    label="Whatsapp"
-                    value={ficha.whatsapp || ficha.telefono}
-                    href={
-                      (ficha.whatsapp || ficha.telefono)
-                        ? `https://wa.me/593${(ficha.whatsapp || ficha.telefono).replace(/\D/g, "").replace(/^0/, "")}`
-                        : null
-                    }
-                  />
+                  {(() => {
+                    // Filtrar valores "nan" que vienen del ETL cuando no hay dato
+                    const wa = (ficha.whatsapp && ficha.whatsapp !== "nan") ? ficha.whatsapp : null;
+                    const tel = (ficha.telefono && ficha.telefono !== "nan") ? ficha.telefono : null;
+                    const num = wa || tel;
+                    return (
+                      <PersonalRow
+                        label="Whatsapp"
+                        value={num}
+                        href={num
+                          ? `https://wa.me/593${num.replace(/\D/g, "").replace(/^0/, "")}`
+                          : null}
+                      />
+                    );
+                  })()}
                   <PersonalRow label="Correo" value={ficha.correo} />
                   <PersonalRow label="Correo Ins." value={ficha.correo_institucional} />
                   <PersonalRow label="Discapacidad" value="—" />
@@ -423,13 +436,15 @@ export default function FichaEstudiante() {
             {/* ─── SECCIÓN DERECHA ─── */}
             <div className="flex-1 overflow-hidden flex flex-col">
 
-              {/* Barra de info: sede / nivel / compromiso / diagnóstico */}
-              <div className="grid grid-cols-4 divide-x divide-white/20 bg-[#1B3A6B] text-white">
-                <div className="px-3 py-1.5 text-center">
-                  <div className="text-[9px] opacity-50 uppercase tracking-wider">Centro de Apoyo</div>
-                  <div className="text-xs font-semibold mt-0.5">{sedeDisplay}</div>
-                </div>
-                <div className="px-3 py-1.5 text-center">
+              {/* Barra de info: sede (solo EIB) / nivel / carrera */}
+              <div className="flex divide-x divide-white/20 bg-[#1B3A6B] text-white">
+                {isEIB && (
+                  <div className="px-3 py-1.5 text-center flex-1">
+                    <div className="text-[9px] opacity-50 uppercase tracking-wider">Centro de Apoyo</div>
+                    <div className="text-xs font-semibold mt-0.5">{sedeDisplay}</div>
+                  </div>
+                )}
+                <div className="px-3 py-1.5 text-center flex-1">
                   <div className="text-[9px] opacity-50 uppercase tracking-wider">Semestre activo</div>
                   <div className="text-xs font-semibold mt-0.5">
                     {ficha.nivel_academico
@@ -437,25 +452,13 @@ export default function FichaEstudiante() {
                       : ficha.nivel_detectado
                         ? ficha.nivel_detectado
                         : Object.keys(cursos).length > 0
-                          ? `${Object.keys(cursos).length} cursos`
+                          ? `${Object.keys(cursos).length} cursos activos`
                           : "Sin cursos"}
                   </div>
                 </div>
-                <div className="px-3 py-1.5 text-center">
-                  <div className="text-[9px] opacity-50 uppercase tracking-wider">Compromiso</div>
-                  <div className={`text-xs font-bold mt-0.5 ${
-                    ficha.indice_compromiso == null ? "text-gray-300"
-                    : ficha.indice_compromiso < 0.3 ? "text-red-300"
-                    : ficha.indice_compromiso < 0.6 ? "text-yellow-300"
-                    : "text-green-300"
-                  }`}>
-                    {compromisoLabel} {compromisoStr}
-                  </div>
-                </div>
-                {/* Diagnóstico con color de fondo según estado (Framework §3.5) */}
-                <div className={`px-3 py-1.5 text-center ${diagStyle.bg}`}>
-                  <div className="text-[9px] opacity-70 uppercase tracking-wider text-gray-700">Diagnóstico</div>
-                  <div className={`text-xs font-bold mt-0.5 ${diagStyle.text}`}>{diagStyle.label}</div>
+                <div className="px-3 py-1.5 text-center flex-1">
+                  <div className="text-[9px] opacity-50 uppercase tracking-wider">Carrera</div>
+                  <div className="text-xs font-semibold mt-0.5 leading-tight">{ficha.carrera || "—"}</div>
                 </div>
               </div>
 
@@ -479,8 +482,13 @@ export default function FichaEstudiante() {
                       {Object.entries(cursos).map(([codigo, { acceso, tareas: ts }], idx) => {
                         const courseName = acceso?.nombre_curso || ts[0]?.nombre_curso || codigo;
                         const matchedCal = matchNota(courseName, ficha.calificaciones);
-                        const nota = matchedCal?.nota_final ?? null;
-                        const noteStyle = getNoteStyle(nota);
+                        const notaTableau = matchedCal?.nota_final ?? null;
+                        // Fallback: nota total del curso desde TaskSubmission (total_curso, escala 0-100)
+                        const totalCurso = ts.find(t => t.total_curso != null)?.total_curso ?? null;
+                        const nota = notaTableau ?? totalCurso;
+                        // Escala: Tableau = 0-40, total_curso = 0-100
+                        const notaMax = notaTableau != null ? 40 : 100;
+                        const noteStyle = getNoteStyle(nota, notaMax);
                         const sortedTasks = [...ts].sort((a, b) =>
                           String(a.unidad).localeCompare(String(b.unidad), undefined, { numeric: true })
                         );
@@ -498,11 +506,13 @@ export default function FichaEstudiante() {
                                 const niv = acceso?.nivel ?? null;
                                 const grp = acceso?.grupo || ts[0]?.grupo || null;
                                 if (!niv && !grp) return <span className="text-gray-300">—</span>;
+                                const nivStr = niv ? `${ordinalNivel(niv)} nivel` : "";
+                                const grpStr = grp ? `Grupo ${grp}` : "";
                                 return (
-                                  <span className="font-mono">
-                                    {niv ? `N${niv}` : ""}
-                                    {niv && grp ? " · " : ""}
-                                    {grp ? `G${grp}` : ""}
+                                  <span>
+                                    {nivStr}
+                                    {nivStr && grpStr ? " | " : ""}
+                                    {grpStr}
                                   </span>
                                 );
                               })()}
@@ -515,11 +525,11 @@ export default function FichaEstudiante() {
                             <td className={`px-2 py-1 border border-gray-200 text-center font-bold ${noteStyle.bg} ${noteStyle.text}`}>
                               {nota != null ? nota : <span className="text-gray-300">—</span>}
                             </td>
-                            {/* Mat (estado matrícula AVAC) */}
+                            {/* Mat (bloque del curso: 1°, 2° o 1°2°) */}
                             <td className="px-2 py-1 border border-gray-200 text-center text-[10px] text-gray-500">
-                              {acceso?.estado_avac
-                                ? <span className="bg-blue-100 text-blue-700 px-1 rounded text-[9px]">
-                                    {acceso.estado_avac.slice(0, 3)}
+                              {acceso?.bloque
+                                ? <span className="bg-gray-100 text-gray-700 px-1 rounded text-[9px] font-semibold">
+                                    {acceso.bloque === "ambos" ? "1°2°" : `${acceso.bloque}°`}
                                   </span>
                                 : "—"}
                             </td>
@@ -555,7 +565,7 @@ export default function FichaEstudiante() {
                             </td>
                             {/* Link AVAC */}
                             <td className="px-2 py-1 border border-gray-200 text-center">
-                              <a href={`https://avac.ups.edu.ec/course/view.php?id=${codigo}`}
+                              <a href={`https://avac.ups.edu.ec/grado67/course/search.php?search=${codigo}`}
                                  target="_blank" rel="noreferrer"
                                  className="text-blue-500 hover:text-blue-700 font-mono text-[10px]">
                                 {codigo}

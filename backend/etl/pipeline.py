@@ -26,6 +26,12 @@ from ..config import settings
 logger = logging.getLogger(__name__)
 
 
+def _clean_str(val) -> str:
+    """Convierte a string limpio; retorna '' si el valor es NaN/None/nan."""
+    s = str(val or "").strip()
+    return "" if s.lower() in ("nan", "none", "null") else s
+
+
 class ETLPipeline:
     def __init__(self, db: Session):
         self.db = db
@@ -127,6 +133,11 @@ class ETLPipeline:
 
             # 3a. Crear registros base para todos los estudiantes del reporte
             #     (aunque aún no tengan actividad AVAC)
+            # Limpiar cédulas 'nan' heredadas de corridas anteriores con el bug
+            from sqlalchemy import text as _sa_text
+            self.db.execute(_sa_text("UPDATE students SET cedula = NULL WHERE cedula = 'nan'"))
+            self.db.flush()
+
             if not df_personales.empty:
                 logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Sembrando estudiantes desde reporte.xlsx...")
                 n_seed = self._seed_students_from_personales(df_personales)
@@ -218,7 +229,7 @@ class ETLPipeline:
                 self.db.add(student)
 
             # Solo poblar campos vacíos (no sobreescribir los ya calculados)
-            cedula = str(pr.get("cedula", "") or "").strip()
+            cedula = _clean_str(pr.get("cedula"))
             if cedula and not student.cedula:
                 student.cedula = cedula
 
@@ -322,7 +333,7 @@ class ETLPipeline:
             pr = personales_map.get(correo)
             if pr is not None:
                 # Cedula: solo sobreescribir si aún no está en BD
-                cedula = str(pr.get("cedula", "") or "").strip()
+                cedula = _clean_str(pr.get("cedula"))
                 if cedula and not student.cedula:
                     student.cedula = cedula
 
@@ -400,7 +411,7 @@ class ETLPipeline:
                     student.nombre = nombre_de
 
                 # Cédula (si no vino del reporte)
-                cedula_de = str(de.get("cedula", "") or "").strip()
+                cedula_de = _clean_str(de.get("cedula"))
                 if cedula_de and not student.cedula:
                     student.cedula = cedula_de
 
