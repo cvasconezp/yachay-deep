@@ -165,6 +165,7 @@ class GradeOut(BaseModel):
     nota_final: Optional[float] = None
     docente: Optional[str] = None
     grupo: Optional[str] = None
+    periodo: Optional[str] = None   # None = semestre actual; "P60"–"P67" = histórico
 
     class Config:
         from_attributes = True
@@ -219,7 +220,8 @@ class FichaEstudiante(BaseModel):
     # Datos relacionados
     accesos_avac: list[AvacAccessOut] = []
     tareas: list[TaskSubmissionOut] = []
-    calificaciones: list[GradeOut] = []
+    calificaciones: list[GradeOut] = []          # semestre actual (periodo IS NULL)
+    calificaciones_historicas: list[GradeOut] = []  # histórico (periodo IS NOT NULL), ordenado por periodo
     intervenciones: list[InterventionOut] = []
 
     # Resumen
@@ -290,10 +292,19 @@ def get_ficha(
         .all()
     )
 
+    # Calificaciones del semestre actual (sin período asignado)
     calificaciones = (
         db.query(Grade)
-        .filter(Grade.student_id == student_id)
+        .filter(Grade.student_id == student_id, Grade.periodo.is_(None))
         .order_by(Grade.asignatura)
+        .all()
+    )
+
+    # Calificaciones históricas (con período: P60, P61, … P67+)
+    calificaciones_historicas = (
+        db.query(Grade)
+        .filter(Grade.student_id == student_id, Grade.periodo.isnot(None))
+        .order_by(Grade.periodo, Grade.asignatura)
         .all()
     )
 
@@ -395,6 +406,7 @@ def get_ficha(
         accesos_avac=accesos_out,
         tareas=tareas_out,
         calificaciones=calificaciones,
+        calificaciones_historicas=calificaciones_historicas,
         intervenciones=intervenciones,
         total_intervenciones=len(intervenciones),
         ultima_intervencion=ultima_intervencion,

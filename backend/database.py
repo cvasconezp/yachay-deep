@@ -47,6 +47,9 @@ def upgrade_tables():
         "course_configs": [
             ("nivel", "INTEGER"),
         ],
+        "grades": [
+            ("periodo", "VARCHAR"),
+        ],
     }
 
     inspector = inspect(engine)

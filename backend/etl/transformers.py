@@ -813,6 +813,98 @@ def transform_datos_especificos(carpeta_o_archivos) -> pd.DataFrame:
     return result.reset_index(drop=True)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# TRANSFORMER 3b: Calificaciones históricas — TableauHistorico (P60–P67+)
+# Reemplaza la lectura manual de la carpeta "Tableau Histórico" del Excel.
+# Cada CSV cubre un período académico; el período se extrae del nombre de archivo.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def transform_calificaciones_historico(carpeta: str) -> pd.DataFrame:
+    """
+    Lee todos los CSVs de la carpeta TableauHistorico y devuelve un DataFrame
+    unificado con el campo 'periodo' extraído del nombre de cada archivo.
+
+    Nombre esperado: "Detalle de Calificaciones _data(P67).csv"
+    Separador: semicolon (;)
+    Columnas: Sede, Campus, Carrera, Asignatura, Grupo, Estudiante, Docente, Nota Final
+    Escala de Nota Final: 0–100
+
+    Filtra por Carrera que contenga 'INTERCULTURAL' para quedarse solo con EIB.
+    """
+    carpeta_path = Path(carpeta)
+
+    # Buscar todos los CSVs en la carpeta (independiente del nombre exacto)
+    archivos = sorted(carpeta_path.glob("*.csv"))
+
+    if not archivos:
+        logger.warning(f"transform_calificaciones_historico: no se encontraron CSVs en {carpeta}")
+        return pd.DataFrame()
+
+    dfs = []
+    for archivo in archivos:
+        try:
+            # Extraer período del nombre: "...(P67).csv" → "P67"
+            m = re.search(r'\(P(\d+)\)', archivo.name, re.IGNORECASE)
+            periodo = f"P{m.group(1)}" if m else archivo.stem
+
+            df = pd.read_csv(archivo, sep=";", encoding="utf-8-sig", low_memory=False)
+            df.columns = [c.strip() for c in df.columns]
+
+            # Renombrar columnas al estándar interno (case-insensitive)
+            rename_map = {}
+            col_lower = {c.lower(): c for c in df.columns}
+            if "sede"        in col_lower: rename_map[col_lower["sede"]]        = "sede"
+            if "campus"      in col_lower: rename_map[col_lower["campus"]]      = "campus"
+            if "carrera"     in col_lower: rename_map[col_lower["carrera"]]     = "carrera"
+            if "asignatura"  in col_lower: rename_map[col_lower["asignatura"]]  = "asignatura"
+            if "grupo"       in col_lower: rename_map[col_lower["grupo"]]       = "grupo"
+            if "estudiante"  in col_lower: rename_map[col_lower["estudiante"]]  = "nombre_estudiante"
+            if "docente"     in col_lower: rename_map[col_lower["docente"]]     = "docente"
+            if "nota final"  in col_lower: rename_map[col_lower["nota final"]]  = "nota_final"
+            df = df.rename(columns=rename_map)
+
+            # Filtrar solo EIB (carrera contiene 'INTERCULTURAL')
+            if "carrera" in df.columns:
+                df = df[df["carrera"].str.contains("INTERCULTURAL", case=False, na=False)].copy()
+            else:
+                logger.warning(f"  {archivo.name}: columna 'Carrera' no encontrada")
+                continue
+
+            # Limpiar carrera
+            df["carrera"] = df["carrera"].apply(normalizar_carrera)
+
+            # Nota final a float (escala 0–100)
+            if "nota_final" in df.columns:
+                df["nota_final"] = pd.to_numeric(df["nota_final"], errors="coerce")
+
+            # Eliminar filas sin estudiante o sin asignatura
+            if "nombre_estudiante" in df.columns:
+                df = df[df["nombre_estudiante"].notna() & (df["nombre_estudiante"].str.strip() != "")]
+
+            # Normalizar nombre estudiante a mayúsculas para consistencia
+            if "nombre_estudiante" in df.columns:
+                df["nombre_estudiante"] = df["nombre_estudiante"].str.strip().str.upper()
+
+            # Añadir campo período
+            df["periodo"] = periodo
+
+            dfs.append(df)
+            logger.info(f"  TableauHistorico {periodo}: {len(df)} registros EIB ({archivo.name})")
+
+        except Exception as e:
+            logger.error(f"Error leyendo {archivo.name}: {e}")
+
+    if not dfs:
+        return pd.DataFrame()
+
+    df_all = pd.concat(dfs, ignore_index=True)
+    logger.info(
+        f"Calificaciones históricas: {len(archivos)} archivos → {len(df_all)} registros EIB "
+        f"({df_all['periodo'].nunique() if 'periodo' in df_all.columns else 0} períodos)"
+    )
+    return df_all.reset_index(drop=True)
+
+
 def calcular_indicadores_estudiantes(
     df_ingresos: pd.DataFrame,
     df_tareas: pd.DataFrame,

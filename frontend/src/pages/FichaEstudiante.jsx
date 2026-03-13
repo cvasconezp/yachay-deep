@@ -90,6 +90,15 @@ function TaskCell({ entregada, retrasada, title }) {
   return                              <span className={`${cls} bg-gray-300`}  title={title}>·</span>;
 }
 
+// ── Estilo de nota para escala 0–100 (TableauHistorico)
+// Umbral EIB: ≥70 aprobado, 60–69 en proceso, <60 reprobado
+function getNoteStyleHistorico(nota) {
+  if (nota == null) return { bg: "", text: "text-gray-400", border: "border-gray-200" };
+  if (nota >= 70) return { bg: "bg-green-100",  text: "text-green-800",  border: "border-green-300" };
+  if (nota >= 60) return { bg: "bg-yellow-100", text: "text-yellow-800", border: "border-yellow-300" };
+  return               { bg: "bg-red-100",    text: "text-red-700",   border: "border-red-300" };
+}
+
 // ── Chip de calificación histórica ────────────────────────────────────────────
 function GradeChip({ asignatura, nota_final, docente }) {
   const s = getNoteStyle(nota_final);
@@ -102,6 +111,28 @@ function GradeChip({ asignatura, nota_final, docente }) {
         {asignatura}
       </div>
       <div className={`text-xs font-bold ${s.text}`}>{nota_final ?? "—"}</div>
+    </div>
+  );
+}
+
+// ── Chip de calificación en malla histórica ────────────────────────────────────
+function MallaChip({ asignatura, nota_final, docente }) {
+  const s = getNoteStyleHistorico(nota_final);
+  // Abreviar nombre: máx 18 chars, eliminar palabras comunes
+  const abrev = (asignatura || "")
+    .replace(/\b(de|la|las|los|el|y|en|del|para|con|por)\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 18);
+  return (
+    <div className={`border ${s.border} ${s.bg} rounded px-1.5 py-1 text-center cursor-default`}
+         style={{ minWidth: "70px", maxWidth: "88px" }}
+         title={`${asignatura}${docente ? " · " + docente : ""}${nota_final != null ? " · " + nota_final + "/100" : ""}`}>
+      <div className="text-[8px] text-gray-500 leading-tight mb-0.5 overflow-hidden whitespace-nowrap"
+           style={{ overflow: "hidden", textOverflow: "ellipsis", maxWidth: "84px" }}>
+        {abrev}
+      </div>
+      <div className={`text-[11px] font-bold ${s.text}`}>{nota_final ?? "—"}</div>
     </div>
   );
 }
@@ -580,11 +611,78 @@ export default function FichaEstudiante() {
                 </div>
               </div>
 
-              {/* Historial de calificaciones institucionales */}
+              {/* ══ MALLA CURRICULAR HISTÓRICA (TableauHistorico P60–P67+) ══ */}
+              {ficha.calificaciones_historicas?.length > 0 && (() => {
+                // Agrupar por período
+                const porPeriodo = {};
+                ficha.calificaciones_historicas.forEach(c => {
+                  const p = c.periodo || "Sin período";
+                  if (!porPeriodo[p]) porPeriodo[p] = [];
+                  porPeriodo[p].push(c);
+                });
+                const periodos = Object.keys(porPeriodo).sort();
+
+                return (
+                  <div className="border-t border-gray-200">
+                    <SectionHeader>
+                      Malla curricular — {periodos.length} semestres · {ficha.calificaciones_historicas.length} asignaturas
+                      <span className="text-gray-400 font-normal ml-2 text-[9px] normal-case tracking-normal">
+                        escala 0–100 · ≥70 aprobado
+                      </span>
+                    </SectionHeader>
+                    <div className="overflow-x-auto bg-[#FAFAFA] px-2 py-2">
+                      <div className="flex gap-2" style={{ minWidth: "max-content" }}>
+                        {periodos.map(periodo => {
+                          const asigs = porPeriodo[periodo];
+                          const promedio = asigs.reduce((s, c) => s + (c.nota_final ?? 0), 0) / asigs.length;
+                          const promedioStyle = getNoteStyleHistorico(Math.round(promedio));
+                          return (
+                            <div key={periodo} className="flex-shrink-0 flex flex-col" style={{ minWidth: "80px" }}>
+                              {/* Encabezado de período */}
+                              <div className="bg-[#1B3A6B] text-white text-center rounded-t px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider">
+                                {periodo}
+                              </div>
+                              {/* Chips de asignaturas */}
+                              <div className="border border-t-0 border-gray-200 rounded-b bg-white px-1 pt-1 pb-0.5 flex flex-col gap-0.5">
+                                {asigs.map((c, i) => (
+                                  <MallaChip
+                                    key={i}
+                                    asignatura={c.asignatura}
+                                    nota_final={c.nota_final}
+                                    docente={c.docente}
+                                  />
+                                ))}
+                                {/* Promedio del período */}
+                                <div className={`mt-0.5 text-center text-[9px] font-bold border-t border-gray-100 pt-0.5 ${promedioStyle.text}`}>
+                                  x̄ {isNaN(promedio) ? "—" : promedio.toFixed(1)}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    {/* Leyenda */}
+                    <div className="flex gap-3 px-2 pb-1 bg-[#FAFAFA] border-t border-gray-100">
+                      <span className="flex items-center gap-1 text-[9px] text-gray-400">
+                        <span className="inline-block w-2 h-2 rounded-sm bg-green-200 border border-green-300"></span>≥70 Aprobado
+                      </span>
+                      <span className="flex items-center gap-1 text-[9px] text-gray-400">
+                        <span className="inline-block w-2 h-2 rounded-sm bg-yellow-200 border border-yellow-300"></span>60–69 En proceso
+                      </span>
+                      <span className="flex items-center gap-1 text-[9px] text-gray-400">
+                        <span className="inline-block w-2 h-2 rounded-sm bg-red-200 border border-red-300"></span>&lt;60 Reprobado
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Calificaciones del semestre actual (fallback chips si no hay histórico) */}
               {ficha.calificaciones?.length > 0 && (
                 <div className="border-t border-gray-200">
                   <SectionHeader>
-                    Historial de calificaciones ({ficha.calificaciones.length} asignaturas)
+                    Calificaciones semestre actual ({ficha.calificaciones.length} asignaturas)
                   </SectionHeader>
                   <div className="p-2 flex flex-wrap gap-1.5 bg-white">
                     {ficha.calificaciones.map((c, i) => (

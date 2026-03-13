@@ -14,6 +14,7 @@ from .transformers import (
     transform_ingresos_avac,
     transform_estado_tareas,
     transform_calificaciones,
+    transform_calificaciones_historico,
     transform_personales,
     transform_datos_especificos,
     calcular_indicadores_estudiantes,
@@ -153,12 +154,22 @@ class ETLPipeline:
                 total_registros += n
                 logs.append(f"  → {n} submissions de tareas")
 
-            # 6. Upsert calificaciones
+            # 6. Upsert calificaciones (semestre actual, sin período)
             if not df_calificaciones.empty:
                 logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Cargando calificaciones...")
                 n = self._upsert_grades(df_calificaciones)
                 total_registros += n
                 logs.append(f"  → {n} registros de calificaciones")
+
+            # 7. Upsert calificaciones históricas (TableauHistorico P60–P67+)
+            logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Leyendo calificaciones históricas (TableauHistorico)...")
+            df_cal_historico = transform_calificaciones_historico(settings.DATA_PATH_CALIFICACIONES_HISTORICO)
+            logs.append(f"  → {len(df_cal_historico)} registros históricos EIB ({df_cal_historico['periodo'].nunique() if not df_cal_historico.empty and 'periodo' in df_cal_historico.columns else 0} períodos)")
+            if not df_cal_historico.empty:
+                logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Cargando calificaciones históricas...")
+                n = self._upsert_grades_historico(df_cal_historico)
+                total_registros += n
+                logs.append(f"  → {n} registros históricos cargados")
 
             run.status = "success"
 
@@ -506,7 +517,7 @@ class ETLPipeline:
         return count
 
     def _upsert_grades(self, df_calificaciones: pd.DataFrame) -> int:
-        """Carga calificaciones institucionales."""
+        """Carga calificaciones institucionales del semestre actual (sin período)."""
         if df_calificaciones.empty or "nombre_estudiante" not in df_calificaciones.columns:
             return 0
 
@@ -537,9 +548,81 @@ class ETLPipeline:
                 docente=str(row.get("docente", "")).strip() or None,
                 nota_final=row.get("nota_final"),
                 sede=str(row.get("sede", "")).strip() or None,
+                periodo=None,  # sin período = semestre actual
             )
             self.db.add(grade)
             count += 1
+
+        self.db.commit()
+        return count
+
+    def _upsert_grades_historico(self, df_historico: pd.DataFrame) -> int:
+        """
+        Carga calificaciones históricas por período (P60–P67+) desde TableauHistorico.
+
+        Estrategia: por cada período en el DataFrame, elimina los registros existentes
+        de ese período y los recarga (full-refresh por período).
+
+        Join a estudiante por nombre (APELLIDOS NOMBRES, mayúsculas).
+        Escala de Nota Final: 0–100 (diferente a AVAC que usa 0–40).
+        """
+        from ..models.grade import Grade
+
+        if df_historico.empty or "nombre_estudiante" not in df_historico.columns:
+            return 0
+
+        # Períodos presentes en el DataFrame
+        periodos_presentes = df_historico["periodo"].unique().tolist()
+
+        # Full-refresh por período: eliminar calificaciones existentes de estos períodos
+        deleted = (
+            self.db.query(Grade)
+            .filter(Grade.periodo.in_(periodos_presentes))
+            .delete(synchronize_session=False)
+        )
+        if deleted:
+            logger.info(f"  Eliminados {deleted} registros históricos de {periodos_presentes}")
+        self.db.flush()
+
+        count = 0
+        for _, row in df_historico.iterrows():
+            nombre = str(row.get("nombre_estudiante", "")).strip().upper()
+            if not nombre:
+                continue
+
+            periodo = str(row.get("periodo", "")).strip() or None
+
+            # Buscar estudiante por nombre (llave de cruce disponible en Tableau)
+            student = self.db.query(Student).filter(Student.nombre == nombre).first()
+            if not student:
+                # Crear estudiante mínimo si no existe (puede enriquecerse en runs posteriores)
+                student = Student(
+                    nombre=nombre,
+                    carrera=str(row.get("carrera", "")).strip() or None,
+                )
+                self.db.add(student)
+                self.db.flush()
+
+            # Actualizar carrera si el estudiante no la tiene aún
+            if not student.carrera and row.get("carrera"):
+                student.carrera = str(row.get("carrera", "")).strip()
+
+            grade = Grade(
+                student_id=student.id,
+                asignatura=str(row.get("asignatura", "")).strip(),
+                carrera=str(row.get("carrera", "")).strip() or None,
+                grupo=str(row.get("grupo", "")).strip() or None,
+                docente=str(row.get("docente", "")).strip() or None,
+                nota_final=row.get("nota_final"),
+                sede=str(row.get("sede", "")).strip() or None,
+                periodo=periodo,
+            )
+            self.db.add(grade)
+            count += 1
+
+            # Commit en lotes para evitar transacciones enormes
+            if count % 500 == 0:
+                self.db.flush()
 
         self.db.commit()
         return count

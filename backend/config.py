@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     DATA_PATH_INGRESOS: str = "./data/IngresosAVAC"
     DATA_PATH_TAREAS: str = "./data/Tareas"
     DATA_PATH_CALIFICACIONES: str = "./data/calificaciones.csv"
+    # Carpeta con los archivos TableauHistorico (Detalle de Calificaciones _data(P6X).csv)
+    # Calificaciones institucionales históricas por período (P60–P67+)
+    DATA_PATH_CALIFICACIONES_HISTORICO: str = "./data/TableauHistorico"
     # Carpeta con los archivos *_reporte.xlsx (datos personales de estudiantes)
     DATA_PATH_REPORTE: str = "./data/Reportes"
     # Carpeta con los archivos DatosEspecificos*.xlsx (formulario Microsoft Forms EIB)
