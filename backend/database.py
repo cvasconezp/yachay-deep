@@ -54,6 +54,8 @@ def upgrade_tables():
         ],
         "grades": [
             ("periodo", "VARCHAR"),
+            ("numero_repitencias", "INTEGER"),
+            ("nivel", "INTEGER"),
         ],
     }
 

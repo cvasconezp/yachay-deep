@@ -3,17 +3,6 @@ import { useParams, useNavigate } from "react-router-dom";
 import { api } from "../services/api";
 import { RiskBadge } from "../components/RiskBadge";
 import InterventionForm from "./InterventionForm";
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
-
-// Fix Leaflet default marker icon (Vite/Webpack issue)
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-});
 
 // ── Coordenadas de Ecuador: provincias y ciudades principales ──────────────────
 const ECUADOR_COORDS = {
@@ -520,28 +509,21 @@ export default function FichaEstudiante() {
                 </tbody>
               </table>
 
-              {/* Mapa interactivo */}
+              {/* Mapa Bing Maps embed */}
               {(() => {
                 const hasGeo = ficha.provincia || ficha.ciudad || ficha.parroquia;
                 const coords = getMapCoords(ficha.provincia, ficha.ciudad, ficha.parroquia);
-                const locationLabel = [ficha.parroquia, ficha.ciudad, ficha.provincia].filter(Boolean).join(", ");
                 return hasGeo ? (
                   <div className="mx-2 my-2 rounded overflow-hidden border border-gray-200" style={{ height: "130px" }}>
-                    <MapContainer
-                      center={[coords.lat, coords.lng]}
-                      zoom={coords.zoom}
-                      style={{ height: "100%", width: "100%" }}
-                      scrollWheelZoom={false}
-                      zoomControl={false}
-                      dragging={false}
-                      doubleClickZoom={false}
-                      attributionControl={false}
-                    >
-                      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                      <Marker position={[coords.lat, coords.lng]}>
-                        <Popup>{locationLabel || "Ecuador"}</Popup>
-                      </Marker>
-                    </MapContainer>
+                    <iframe
+                      title="Ubicación del estudiante"
+                      src={`https://www.bing.com/maps/embed?h=130&w=260&cp=${coords.lat}~${coords.lng}&lvl=${coords.zoom}&typ=d&sty=r&src=SHELL&FORM=MBEDV8`}
+                      width="100%"
+                      height="130"
+                      style={{ border: 0 }}
+                      loading="lazy"
+                      referrerPolicy="no-referrer-when-downgrade"
+                    />
                   </div>
                 ) : (
                   <div className="bg-gray-50 border border-gray-200 mx-2 my-2 rounded flex flex-col items-center justify-center text-center"
@@ -646,8 +628,8 @@ export default function FichaEstudiante() {
                               {(() => {
                                 const niv = matchedCal?.nivel;
                                 const grp = abbreviateGrupo(matchedCal?.grupo || acceso?.grupo || ts[0]?.grupo);
-                                if (niv && grp) return <>{niv}° | {grp}</>;
-                                if (niv) return <>{niv}°</>;
+                                if (niv && grp) return <>{niv} nivel | {grp}</>;
+                                if (niv) return <>{niv} nivel</>;
                                 if (grp) return grp;
                                 return <span className="text-gray-300">—</span>;
                               })()}
@@ -730,8 +712,8 @@ export default function FichaEstudiante() {
                               {(() => {
                                 const niv = cal.nivel;
                                 const grp = abbreviateGrupo(cal.grupo);
-                                if (niv && grp) return <>{niv}° | {grp}</>;
-                                if (niv) return <>{niv}°</>;
+                                if (niv && grp) return <>{niv} nivel | {grp}</>;
+                                if (niv) return <>{niv} nivel</>;
                                 if (grp) return grp;
                                 return <span className="text-gray-300">—</span>;
                               })()}
@@ -794,8 +776,8 @@ export default function FichaEstudiante() {
                               {(() => {
                                 const niv = cal.nivel;
                                 const grp = abbreviateGrupo(cal.grupo);
-                                if (niv && grp) return <>{niv}° | {grp}</>;
-                                if (niv) return <>{niv}°</>;
+                                if (niv && grp) return <>{niv} nivel | {grp}</>;
+                                if (niv) return <>{niv} nivel</>;
                                 if (grp) return grp;
                                 return "—";
                               })()}
