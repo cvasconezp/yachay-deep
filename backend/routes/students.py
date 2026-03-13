@@ -31,16 +31,20 @@ SEDE_MAPPING: dict[str, str] = {
 
 def detectar_sede(course_configs: list, student_grupo: str = None) -> Optional[str]:
     """
-    Votación mayoritaria del campo 'grupo' en los CourseConfig del estudiante.
-    El grupo con más apariciones determina la sede.
+    Determina la sede (centro de apoyo) del estudiante.
 
-    Fallback: si no hay CourseConfig con grupo, usa el grupo extraído del
-    reporte institucional (Student.grupo) almacenado por el ETL.
+    Prioridad:
+      1. Student.grupo (del reporte institucional — fuente de verdad)
+      2. Votación mayoritaria de CourseConfig.grupo (AVAC, menos fiable)
     """
+    # Prioridad 1: grupo del reporte institucional (fuente de verdad)
+    if student_grupo:
+        grupo_str = str(student_grupo).strip()
+        if grupo_str and grupo_str.lower() not in ("nan", "none", ""):
+            return SEDE_MAPPING.get(grupo_str, f"Grupo-{grupo_str}")
+
+    # Prioridad 2: votación mayoritaria de CourseConfig.grupo
     grupos = [str(c.grupo).strip() for c in course_configs if c.grupo]
-    # Fallback: usar grupo del reporte almacenado en Student
-    if not grupos and student_grupo:
-        grupos = [str(student_grupo).strip()]
     if not grupos:
         return None
     mayoritario = Counter(grupos).most_common(1)[0][0]

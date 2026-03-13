@@ -507,7 +507,7 @@ def transform_personales(carpeta_o_archivos) -> pd.DataFrame:
     if isinstance(carpeta_o_archivos, (str, Path)):
         carpeta = Path(carpeta_o_archivos)
         if carpeta.is_dir():
-            archivos = list(carpeta.glob("*_reporte.xlsx"))
+            archivos = sorted(carpeta.glob("*_reporte.xlsx"))
         else:
             logger.warning(f"Carpeta de reportes no encontrada: {carpeta}")
     else:
@@ -657,7 +657,13 @@ def transform_personales(carpeta_o_archivos) -> pd.DataFrame:
         df["grupo"] = None
 
     # ── Deduplicar: una fila por estudiante ───────────────────────────────────
-    df = df.drop_duplicates(subset=["correo_institucional"], keep="first")
+    # Usamos groupby().first() en vez de drop_duplicates(keep="first") porque
+    # .first() toma el primer valor NO-NULO de cada columna, coalesce-ando datos
+    # de múltiples archivos de reporte que pueden tener columnas distintas.
+    # Esto es crucial cuando un archivo tiene FECHA_NACIMIENTO/GENERO/ETNICA
+    # y otro no: queremos conservar los valores existentes sin importar el orden
+    # de lectura de archivos (que varía entre OS — glob no garantiza orden).
+    df = df.groupby("correo_institucional", sort=False).first().reset_index()
 
     # ── Seleccionar solo columnas necesarias para el Student model ────────────
     cols_salida = [
