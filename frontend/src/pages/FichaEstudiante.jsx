@@ -407,8 +407,8 @@ export default function FichaEstudiante() {
                           <tr key={codigo} className={idx % 2 === 0 ? "bg-white" : "bg-[#F9F9F9]"}>
                             {/* Nivel y grupo */}
                             <td className="px-2 py-1 border border-gray-200 text-center text-[10px] text-gray-500 whitespace-nowrap">
-                              {acceso?.id_avac
-                                ? <span className="font-mono">{acceso.id_avac}</span>
+                              {acceso?.grupo || ts[0]?.grupo
+                                ? <span className="font-mono">{acceso?.grupo || ts[0]?.grupo}</span>
                                 : "—"}
                             </td>
                             {/* Asignatura */}
@@ -457,17 +457,16 @@ export default function FichaEstudiante() {
                             </td>
                             {/* Link AVAC */}
                             <td className="px-2 py-1 border border-gray-200 text-center">
-                              {acceso?.id_avac
-                                ? <a href={`https://avac.ups.edu.ec/course/view.php?id=${acceso.id_avac}`}
-                                     target="_blank" rel="noreferrer"
-                                     className="text-blue-500 hover:text-blue-700 font-mono text-[10px]">
-                                    {acceso.id_avac}
-                                  </a>
-                                : <span className="text-gray-300">—</span>}
+                              <a href={`https://avac.ups.edu.ec/course/view.php?id=${codigo}`}
+                                 target="_blank" rel="noreferrer"
+                                 className="text-blue-500 hover:text-blue-700 font-mono text-[10px]">
+                                {codigo}
+                              </a>
                             </td>
                             {/* Docente */}
                             <td className="px-2 py-1 border border-gray-200 text-gray-600 text-[10px]">
-                              {matchedCal?.docente || <span className="text-gray-300 italic">—</span>}
+                              {acceso?.docente || ts[0]?.docente || matchedCal?.docente
+                                || <span className="text-gray-300 italic">—</span>}
                             </td>
                           </tr>
                         );

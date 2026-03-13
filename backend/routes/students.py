@@ -11,6 +11,7 @@ from datetime import datetime
 
 from ..database import get_db
 from ..models import Student, AvacAccess, TaskSubmission, Grade, Intervention
+from ..models.course import Course
 from ..auth.jwt import get_current_user
 from ..models.user import User
 
@@ -36,7 +37,8 @@ class StudentSummary(BaseModel):
 
 class TaskSubmissionOut(BaseModel):
     codigo_curso: str
-    unidad: str
+    nombre_curso: Optional[str] = None   # enriquecido desde Course.nombre
+    unidad: Optional[str] = None
     estado: Optional[str] = None
     calificacion: Optional[float] = None
     calificacion_maxima: Optional[float] = None
@@ -44,7 +46,6 @@ class TaskSubmissionOut(BaseModel):
     entregada: bool = False
     calificada: bool = False
     retrasada: bool = False
-    # fecha_entrega_texto no existe en DB; se omite
 
     class Config:
         from_attributes = True
@@ -52,6 +53,9 @@ class TaskSubmissionOut(BaseModel):
 
 class AvacAccessOut(BaseModel):
     codigo_curso: str
+    nombre_curso: Optional[str] = None   # enriquecido desde Course.nombre
+    docente: Optional[str] = None         # enriquecido desde Course.docente
+    grupo: Optional[str] = None           # enriquecido desde Course.grupo
     ultimo_acceso_texto: Optional[str] = None
     dias_sin_acceso: Optional[float] = None
     estado_avac: Optional[str] = None
@@ -158,6 +162,8 @@ def get_ficha(
     """
     Retorna la ficha completa del estudiante con todos sus datos.
     Equivalente a la FichaEst del Excel pero para todos los cursos.
+    Enriquece accesos_avac y tareas con nombre_curso, docente y grupo
+    desde la tabla courses (codigo_avac == codigo_curso).
     """
     student = db.query(Student).filter(Student.id == student_id).first()
     if not student:
@@ -191,6 +197,51 @@ def get_ficha(
         .all()
     )
 
+    # ── Construir mapa codigo_avac → Course para enriquecer accesos y tareas ──
+    all_codigos = set(
+        [a.codigo_curso for a in accesos] + [t.codigo_curso for t in tareas]
+    )
+    course_map: dict[str, Course] = {}
+    if all_codigos:
+        courses = (
+            db.query(Course)
+            .filter(Course.codigo_avac.in_(all_codigos))
+            .all()
+        )
+        course_map = {c.codigo_avac: c for c in courses}
+
+    # Serializar accesos enriquecidos
+    accesos_out = [
+        AvacAccessOut(
+            codigo_curso=a.codigo_curso,
+            nombre_curso=course_map[a.codigo_curso].nombre if a.codigo_curso in course_map else None,
+            docente=course_map[a.codigo_curso].docente if a.codigo_curso in course_map else None,
+            grupo=course_map[a.codigo_curso].grupo if a.codigo_curso in course_map else None,
+            ultimo_acceso_texto=a.ultimo_acceso_texto,
+            dias_sin_acceso=a.dias_sin_acceso,
+            estado_avac=a.estado_avac,
+            fecha_extraccion=a.fecha_extraccion,
+        )
+        for a in accesos
+    ]
+
+    # Serializar tareas enriquecidas
+    tareas_out = [
+        TaskSubmissionOut(
+            codigo_curso=t.codigo_curso,
+            nombre_curso=course_map[t.codigo_curso].nombre if t.codigo_curso in course_map else None,
+            unidad=t.unidad,
+            estado=t.estado,
+            calificacion=t.calificacion,
+            calificacion_maxima=t.calificacion_maxima,
+            calificacion_final=t.calificacion_final,
+            entregada=t.entregada or False,
+            calificada=t.calificada or False,
+            retrasada=t.retrasada or False,
+        )
+        for t in tareas
+    ]
+
     ultima_intervencion = intervenciones[0].created_at if intervenciones else None
 
     return FichaEstudiante(
@@ -208,8 +259,8 @@ def get_ficha(
         dias_sin_acceso=student.dias_sin_acceso,
         porcentaje_tareas=student.porcentaje_tareas,
         promedio_calificaciones=student.promedio_calificaciones,
-        accesos_avac=accesos,
-        tareas=tareas,
+        accesos_avac=accesos_out,
+        tareas=tareas_out,
         calificaciones=calificaciones,
         intervenciones=intervenciones,
         total_intervenciones=len(intervenciones),
