@@ -274,6 +274,29 @@ class ETLPipeline:
             if estado and not student.estado_matricula:
                 student.estado_matricula = estado
 
+            # ── Datos personales del reporte institucional ──────────────
+            # Estos SIEMPRE se actualizan (no solo para nuevos) porque el
+            # reporte es la fuente de verdad para datos demográficos.
+            fn = pr.get("fecha_nacimiento")
+            if fn is not None and pd.notna(fn):
+                try:
+                    student.fecha_nacimiento = pd.Timestamp(fn).date()
+                except Exception:
+                    pass
+
+            for col in ("genero", "autoidentificacion_etnica"):
+                val = pr.get(col)
+                if val is not None and pd.notna(val):
+                    val_str = str(val).strip()
+                    if val_str and val_str.lower() not in ("nan", "none", ""):
+                        setattr(student, col, val_str)
+
+            grupo_val = pr.get("grupo")
+            if grupo_val is not None and pd.notna(grupo_val):
+                grupo_str = str(grupo_val).strip()
+                if grupo_str and grupo_str.lower() not in ("nan", "none", ""):
+                    student.grupo = grupo_str
+
             if is_new:
                 count += 1
 
