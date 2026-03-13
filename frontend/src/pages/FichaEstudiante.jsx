@@ -107,27 +107,31 @@ function abbreviateGrupo(grupo) {
 }
 
 /**
- * Normaliza un valor de nivel a entero 1-10.
- * "7" → 7, "67" → 7 (último dígito, código período+nivel), "Semestre 67" → 7.
+ * Formatea nivel para encabezados: "9° Nivel".
+ * Prioriza nivel_academico (entero), luego el nivel más frecuente de calificaciones.
+ * NO parsea nivel_detectado ("Semestre 67") porque es código de período, no nivel real.
  */
-function parseNivelNum(val) {
-  if (val == null || val === "") return null;
-  const n = parseInt(String(val), 10);
-  if (!isNaN(n) && n >= 1 && n <= 10) return n;
-  const m = String(val).match(/(\d+)/);
-  if (m) {
-    const num = parseInt(m[1], 10);
-    if (num >= 1 && num <= 10) return num;
-    const last = parseInt(m[1].slice(-1), 10);
-    if (last >= 1) return last;
+function formatNivel(nivelAcademico, calificaciones) {
+  if (nivelAcademico != null && nivelAcademico > 0 && nivelAcademico <= 12)
+    return `${nivelAcademico}° Nivel`;
+  // Fallback: nivel más frecuente de calificaciones del semestre actual
+  if (calificaciones?.length > 0) {
+    const niveles = calificaciones.map(c => c.nivel).filter(n => n != null && n > 0 && n <= 12);
+    if (niveles.length > 0) {
+      const counts = {};
+      niveles.forEach(n => { counts[n] = (counts[n] || 0) + 1; });
+      const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+      return `${top}° Nivel`;
+    }
   }
   return null;
 }
 
-/** Formatea nivel para encabezados: "7° Nivel". Prioriza nivel_academico sobre nivel_detectado. */
-function formatNivel(nivelAcademico, nivelDetectado) {
-  const n = parseNivelNum(nivelAcademico) || parseNivelNum(nivelDetectado);
-  return n ? `${n}° Nivel` : null;
+/** Normaliza un valor de nivel individual (de calificaciones) a entero 1-12. */
+function parseNivelNum(val) {
+  if (val == null || val === "") return null;
+  const n = parseInt(String(val), 10);
+  return (!isNaN(n) && n >= 1 && n <= 12) ? n : null;
 }
 
 // ── Fila de dato personal ─────────────────────────────────────────────────────
@@ -560,7 +564,7 @@ export default function FichaEstudiante() {
                 <div className="px-3 py-1.5 text-center flex-1">
                   <div className="text-[9px] opacity-50 uppercase tracking-wider">Nivel</div>
                   <div className="text-xs font-semibold mt-0.5">
-                    {formatNivel(ficha.nivel_academico, ficha.nivel_detectado)
+                    {formatNivel(ficha.nivel_academico, ficha.calificaciones)
                       || (Object.keys(cursos).length > 0
                           ? `${Object.keys(cursos).length} cursos activos`
                           : "Sin cursos")}
@@ -863,7 +867,7 @@ export default function FichaEstudiante() {
                           return (
                             <div className="flex-shrink-0 flex flex-col" style={{ minWidth: "80px" }}>
                               <div className="bg-[#F0B000] text-white text-center rounded-t px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider">
-                                {formatNivel(ficha.nivel_academico, ficha.nivel_detectado) || "Actual"}
+                                {formatNivel(ficha.nivel_academico, ficha.calificaciones) || "Actual"}
                               </div>
                               <div className="border border-t-0 border-[#F0B000] rounded-b bg-[#FFFDF5] px-1 pt-1 pb-0.5 flex flex-col gap-0.5">
                                 {ficha.calificaciones.map((c, i) => (
@@ -915,7 +919,7 @@ export default function FichaEstudiante() {
                       <div className="flex gap-2" style={{ minWidth: "max-content" }}>
                         <div className="flex-shrink-0 flex flex-col" style={{ minWidth: "80px" }}>
                           <div className="bg-[#F0B000] text-white text-center rounded-t px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider">
-                            {formatNivel(ficha.nivel_academico, ficha.nivel_detectado) || "Actual"}
+                            {formatNivel(ficha.nivel_academico, ficha.calificaciones) || "Actual"}
                           </div>
                           <div className="border border-t-0 border-[#F0B000] rounded-b bg-[#FFFDF5] px-1 pt-1 pb-0.5 flex flex-col gap-0.5">
                             {ficha.calificaciones.map((c, i) => (

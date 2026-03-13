@@ -1,6 +1,6 @@
 /**
- * Mapa coroplético de Ecuador continental (23 provincias).
- * Resalta la provincia del estudiante y marca la ciudad/cantón.
+ * Mapa coroplético de Ecuador – vista centrada en la provincia del estudiante.
+ * Muestra la provincia con sus límites y marca la ciudad de procedencia.
  *
  * Props:
  *   provincia  – nombre de la provincia (ej. "Imbabura")
@@ -36,8 +36,8 @@ const PROVINCE_PATHS = {
   "Zamora Chinchipe": "M98.7,368.8L104.8,354.5L111.5,354.7L117.4,348.5L118,336.9L114.3,331.2L116.3,318L112.4,308.3L121.3,299.9L122.2,287.5L127.8,286.2L133.8,298L142.6,300.3L145.7,297.1L161.2,297.1L159.6,302.2L158.6,312.1L149.5,324.2L144.2,359.1L132.4,364L129,370.6L130.2,377.6L125.6,377.4L123,384.4L108.2,381.7L98.5,369.2L98.7,368.8Z",
 };
 
-// ── Coordenadas de ciudades EIB para el marcador ─────────────────────────────
-// Proyección: x = (lng + 81.1) * 59.0, y = (1.5 - lat) * 60.6  (misma del SVG)
+// ── Coordenadas de ciudades/cantones para marcador ──────────────────────────
+// Proyección: x = (lng + 81.1) * 59.0, y = (1.5 - lat) * 60.6
 const CITY_COORDS = {
   quito:       { x: 155.4, y: 101.8 },
   cuenca:      { x: 124.2, y: 266.5 },
@@ -61,7 +61,15 @@ const CITY_COORDS = {
   salcedo:     { x: 144.8, y: 154.6 },
   saquisili:   { x: 131.8, y: 140.8 },
   pujili:      { x: 124.4, y: 148.4 },
+  sigchos:     { x: 120.0, y: 136.5 },
   loja:        { x: 107.5, y: 333.0 },
+  zamora:      { x: 126.5, y: 327.0 },
+  esmeraldas:  { x: 81.5,  y: 46.8 },
+  portoviejo:  { x: 48.5,  y: 148.0 },
+  "santo domingo": { x: 107.0, y: 106.5 },
+  babahoyo:    { x: 97.0,  y: 180.0 },
+  machala:     { x: 77.0,  y: 293.0 },
+  "santa elena": { x: 27.5, y: 220.0 },
 };
 
 // ── Normalizar nombre para matching ──────────────────────────────────────────
@@ -74,21 +82,18 @@ function norm(s) {
     .trim();
 }
 
-// Buscar provincia en los paths
 function findProvince(provincia) {
   if (!provincia) return null;
   const n = norm(provincia);
   for (const name of Object.keys(PROVINCE_PATHS)) {
     if (norm(name) === n) return name;
-    // Partial match: "Santo Domingo de los Tsáchilas" → "Santo Domingo"
     if (norm(name).startsWith(n) || n.startsWith(norm(name))) return name;
   }
   return null;
 }
 
-// Buscar ciudad en coordenadas
 function findCity(ciudad, parroquia) {
-  for (const loc of [parroquia, ciudad]) {
+  for (const loc of [ciudad, parroquia]) {
     if (!loc) continue;
     const n = norm(loc);
     if (CITY_COORDS[n]) return { name: loc, ...CITY_COORDS[n] };
@@ -96,35 +101,118 @@ function findCity(ciudad, parroquia) {
   return null;
 }
 
+/** Extrae la bounding box de un SVG path (solo M/L absolutas) */
+function getPathBBox(d) {
+  const nums = [];
+  const re = /[ML]\s*([\d.]+)\s*,\s*([\d.]+)/g;
+  let match;
+  while ((match = re.exec(d)) !== null) {
+    nums.push({ x: parseFloat(match[1]), y: parseFloat(match[2]) });
+  }
+  if (nums.length === 0) return null;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const p of nums) {
+    if (p.x < minX) minX = p.x;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.y > maxY) maxY = p.y;
+  }
+  return { minX, minY, maxX, maxY, w: maxX - minX, h: maxY - minY };
+}
+
 // ── Componente ───────────────────────────────────────────────────────────────
 export default function EcuadorMap({ provincia, ciudad, parroquia, height = 160 }) {
   const matchedProv = findProvince(provincia);
   const matchedCity = findCity(ciudad, parroquia);
+  const provPath = matchedProv ? PROVINCE_PATHS[matchedProv] : null;
+
+  // Si hay provincia: zoom a esa provincia; si no, mostrar todo Ecuador
+  const bbox = provPath ? getPathBBox(provPath) : null;
+
+  let viewBox, showAllProvinces;
+  if (bbox) {
+    // Centrar en la provincia con padding
+    const pad = Math.max(bbox.w, bbox.h) * 0.25;
+    const vx = bbox.minX - pad;
+    const vy = bbox.minY - pad;
+    const vw = bbox.w + pad * 2;
+    const vh = bbox.h + pad * 2;
+    viewBox = `${vx} ${vy} ${vw} ${vh}`;
+    showAllProvinces = false;
+  } else {
+    viewBox = "-5 -5 360 400";
+    showAllProvinces = true;
+  }
+
+  // Escalar tamaños relativos al viewbox
+  const scale = bbox ? Math.max(bbox.w, bbox.h) : 350;
+  const markerR = scale * 0.035;
+  const ringR = markerR * 2;
+  const fontSize = scale * 0.065;
+  const labelFontSize = scale * 0.05;
+  const strokeW = scale * 0.005;
 
   return (
     <div className="relative" style={{ height }}>
       <svg
-        viewBox="-5 -5 360 400"
+        viewBox={viewBox}
         className="w-full h-full"
         preserveAspectRatio="xMidYMid meet"
       >
         {/* Fondo */}
-        <rect x="-5" y="-5" width="360" height="400" fill="#F8FAFC" rx="4" />
-
-        {/* Provincias */}
-        {Object.entries(PROVINCE_PATHS).map(([name, d]) => {
-          const isHighlighted = name === matchedProv;
-          return (
+        {showAllProvinces ? (
+          // Vista completa de Ecuador
+          <>
+            <rect x="-5" y="-5" width="360" height="400" fill="#F8FAFC" rx="4" />
+            {Object.entries(PROVINCE_PATHS).map(([name, d]) => {
+              const isHighlighted = name === matchedProv;
+              return (
+                <path
+                  key={name}
+                  d={d}
+                  fill={isHighlighted ? "#1B3A6B" : "#E2E8F0"}
+                  stroke={isHighlighted ? "#0F2749" : "#94A3B8"}
+                  strokeWidth={isHighlighted ? 1.2 : 0.5}
+                  opacity={isHighlighted ? 1 : 0.85}
+                />
+              );
+            })}
+          </>
+        ) : (
+          // Vista zoom a la provincia
+          <>
+            {/* Provincia resaltada */}
             <path
-              key={name}
-              d={d}
-              fill={isHighlighted ? "#3B82F6" : "#E2E8F0"}
-              stroke={isHighlighted ? "#1E40AF" : "#94A3B8"}
-              strokeWidth={isHighlighted ? 1.2 : 0.5}
-              opacity={isHighlighted ? 1 : 0.85}
+              d={provPath}
+              fill="#1B3A6B"
+              stroke="#0F2749"
+              strokeWidth={strokeW * 1.5}
             />
-          );
-        })}
+
+            {/* Provincias vecinas como contexto, muy tenues */}
+            {Object.entries(PROVINCE_PATHS).map(([name, d]) => {
+              if (name === matchedProv) return null;
+              return (
+                <path
+                  key={name}
+                  d={d}
+                  fill="#E8ECF0"
+                  stroke="#CBD5E1"
+                  strokeWidth={strokeW * 0.5}
+                  opacity={0.5}
+                />
+              );
+            })}
+
+            {/* Re-dibujar la provincia encima para que no se tape */}
+            <path
+              d={provPath}
+              fill="#1B3A6B"
+              stroke="#0F2749"
+              strokeWidth={strokeW * 1.5}
+            />
+          </>
+        )}
 
         {/* Marcador de ciudad */}
         {matchedCity && (
@@ -133,49 +221,61 @@ export default function EcuadorMap({ provincia, ciudad, parroquia, height = 160 
             <circle
               cx={matchedCity.x}
               cy={matchedCity.y}
-              r="6"
+              r={ringR}
               fill="none"
-              stroke="#DC2626"
-              strokeWidth="1.5"
-              opacity="0.6"
+              stroke="#F0B000"
+              strokeWidth={strokeW * 1.5}
+              opacity="0.7"
             />
             {/* Punto central */}
             <circle
               cx={matchedCity.x}
               cy={matchedCity.y}
-              r="3"
-              fill="#DC2626"
+              r={markerR}
+              fill="#F0B000"
               stroke="white"
-              strokeWidth="0.8"
+              strokeWidth={strokeW}
             />
+            {/* Nombre de la ciudad */}
+            <text
+              x={matchedCity.x + ringR + scale * 0.02}
+              y={matchedCity.y + labelFontSize * 0.35}
+              fontSize={labelFontSize}
+              fontFamily="Calibri, Arial, sans-serif"
+              fill="white"
+              fontWeight="700"
+              stroke="#1B3A6B"
+              strokeWidth={labelFontSize * 0.25}
+              paintOrder="stroke"
+            >
+              {matchedCity.name}
+            </text>
           </g>
         )}
 
-        {/* Label de provincia (si está resaltada) */}
-        {matchedProv && (
+        {/* Label de provincia */}
+        {matchedProv && !showAllProvinces && bbox && (
           <text
-            x="5"
-            y="392"
-            fontSize="9"
+            x={bbox.minX + bbox.w * 0.5}
+            y={bbox.minY - Math.max(bbox.w, bbox.h) * 0.12}
+            fontSize={fontSize}
             fontFamily="Calibri, Arial, sans-serif"
-            fill="#1E40AF"
-            fontWeight="600"
+            fill="#1B3A6B"
+            fontWeight="700"
+            textAnchor="middle"
           >
             {matchedProv}
           </text>
         )}
 
-        {/* Label de ciudad (si está marcada) */}
-        {matchedCity && (
-          <text
-            x="350"
-            y="392"
-            fontSize="8"
-            fontFamily="Calibri, Arial, sans-serif"
-            fill="#DC2626"
-            fontWeight="500"
-            textAnchor="end"
-          >
+        {/* Labels para vista completa */}
+        {showAllProvinces && matchedProv && (
+          <text x="5" y="392" fontSize="9" fontFamily="Calibri, Arial, sans-serif" fill="#1B3A6B" fontWeight="600">
+            {matchedProv}
+          </text>
+        )}
+        {showAllProvinces && matchedCity && (
+          <text x="350" y="392" fontSize="8" fontFamily="Calibri, Arial, sans-serif" fill="#F0B000" fontWeight="600" textAnchor="end">
             ● {matchedCity.name}
           </text>
         )}
