@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Float, Text
+from sqlalchemy import Column, Integer, String, DateTime, Float, Text, Date
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from ..database import Base
@@ -34,6 +34,14 @@ class Student(Base):
     ciudad = Column(String, nullable=True)             # ciudad / cantón
     parroquia = Column(String, nullable=True)          # parroquia (solo DatosEspecificos)
     barrio = Column(String, nullable=True)             # barrio o comunidad
+
+    # Personal demographics (from 2505060014_reporte.xlsx)
+    fecha_nacimiento = Column(Date, nullable=True)
+    genero = Column(String, nullable=True)
+    autoidentificacion_etnica = Column(String, nullable=True)
+
+    # Academic group from institutional reporte (NOMBRE_GRUPO → "3")
+    grupo = Column(String, nullable=True)
 
     # Metadata
     periodo = Column(String, nullable=True)            # e.g. "2026-1"

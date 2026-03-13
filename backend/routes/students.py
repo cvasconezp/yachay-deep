@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, date
 
 from ..database import get_db
 from ..models import Student, AvacAccess, TaskSubmission, Grade, Intervention
@@ -29,12 +29,18 @@ SEDE_MAPPING: dict[str, str] = {
     "6": "Wasakentsa",
 }
 
-def detectar_sede(course_configs: list) -> Optional[str]:
+def detectar_sede(course_configs: list, student_grupo: str = None) -> Optional[str]:
     """
     Votación mayoritaria del campo 'grupo' en los CourseConfig del estudiante.
     El grupo con más apariciones determina la sede.
+
+    Fallback: si no hay CourseConfig con grupo, usa el grupo extraído del
+    reporte institucional (Student.grupo) almacenado por el ETL.
     """
     grupos = [str(c.grupo).strip() for c in course_configs if c.grupo]
+    # Fallback: usar grupo del reporte almacenado en Student
+    if not grupos and student_grupo:
+        grupos = [str(student_grupo).strip()]
     if not grupos:
         return None
     mayoritario = Counter(grupos).most_common(1)[0][0]
@@ -204,6 +210,12 @@ class FichaEstudiante(BaseModel):
     nivel_academico: Optional[int] = None    # nivel académico del estudiante (1-8), desde DatosEspecificos
     estado_matricula: Optional[str] = None
 
+    # Datos demográficos (desde reporte institucional)
+    fecha_nacimiento: Optional[date] = None
+    genero: Optional[str] = None
+    autoidentificacion_etnica: Optional[str] = None
+    grupo_reporte: Optional[str] = None  # grupo del reporte institucional ("3", "2", etc.)
+
     # Residencia
     pais: Optional[str] = None
     provincia: Optional[str] = None
@@ -337,7 +349,7 @@ def get_ficha(
     # ── Detectar sede y nivel por votación mayoritaria (Framework_FichaEst §3.3) ──
     # sede_detectada solo aplica para carrera EIB (el SEDE_MAPPING es exclusivo de EIB/UPS)
     is_eib = bool(student.carrera and "INTERCULTURAL" in student.carrera.upper())
-    sede_detectada = detectar_sede(all_courses) if is_eib else None
+    sede_detectada = detectar_sede(all_courses, student_grupo=student.grupo) if is_eib else None
     nivel_detectado = detectar_nivel(all_courses)
 
     # ── Diagnóstico de riesgo computado (Framework_FichaEst §3.5) ──
@@ -398,6 +410,10 @@ def get_ficha(
         nivel_detectado=nivel_detectado,
         nivel_academico=student.nivel_academico,
         estado_matricula=student.estado_matricula,
+        fecha_nacimiento=student.fecha_nacimiento,
+        genero=student.genero,
+        autoidentificacion_etnica=student.autoidentificacion_etnica,
+        grupo_reporte=student.grupo,
         pais=student.pais,
         provincia=student.provincia,
         ciudad=student.ciudad,

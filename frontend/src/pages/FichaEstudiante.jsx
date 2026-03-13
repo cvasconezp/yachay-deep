@@ -47,6 +47,17 @@ function getCompromisoLabel(val) {
   return "Alto";
 }
 
+/** Calcula la edad a partir de una fecha de nacimiento ISO */
+function calcAge(isoDate) {
+  if (!isoDate) return null;
+  const birth = new Date(isoDate);
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const m = today.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+  return age;
+}
+
 /** Convierte número de nivel a ordinal en español: 1→"1er", 2→"2do", etc. */
 function ordinalNivel(n) {
   const map = { 1: "1er", 2: "2do", 3: "3er", 4: "4to", 5: "5to", 6: "6to", 7: "7mo", 8: "8vo" };
@@ -366,10 +377,14 @@ export default function FichaEstudiante() {
                   })()}
                   <PersonalRow label="Correo" value={ficha.correo} />
                   <PersonalRow label="Correo Ins." value={ficha.correo_institucional} />
-                  <PersonalRow label="Discapacidad" value="—" />
-                  <PersonalRow label="Fecha nac. y edad" value="—" />
-                  <PersonalRow label="Autoidentificación" value="—" />
-                  <PersonalRow label="Lengua materna" value="—" />
+                  <PersonalRow label="Discapacidad" value={ficha?.discapacidad || "—"} />
+                  <PersonalRow label="Fecha nac. y edad" value={
+                    ficha?.fecha_nacimiento
+                      ? `${new Date(ficha.fecha_nacimiento).toLocaleDateString("es-EC")} (${calcAge(ficha.fecha_nacimiento)} años)`
+                      : "—"
+                  } />
+                  <PersonalRow label="Autoidentificación" value={ficha?.autoidentificacion_etnica || "—"} />
+                  <PersonalRow label="Género" value={ficha?.genero || "—"} />
                 </tbody>
               </table>
 
@@ -481,14 +496,14 @@ export default function FichaEstudiante() {
                     <tbody>
                       {Object.entries(cursos).map(([codigo, { acceso, tareas: ts }], idx) => {
                         const courseName = acceso?.nombre_curso || ts[0]?.nombre_curso || codigo;
-                        const matchedCal = matchNota(courseName, ficha.calificaciones);
+                        const matchedCal = matchNota(courseName, ficha.calificaciones)
+                          || matchNota(courseName, ficha.calificaciones_historicas);
                         const notaTableau = matchedCal?.nota_final ?? null;
                         // Fallback: nota total del curso desde TaskSubmission (total_curso, escala 0-100)
                         const totalCurso = ts.find(t => t.total_curso != null)?.total_curso ?? null;
                         const nota = notaTableau ?? totalCurso;
-                        // Escala: Tableau = 0-40, total_curso = 0-100
-                        const notaMax = notaTableau != null ? 40 : 100;
-                        const noteStyle = getNoteStyle(nota, notaMax);
+                        // Escala: calificaciones Tableau (institucionales) = 0-100
+                        const noteStyle = getNoteStyleHistorico(nota);
                         const sortedTasks = [...ts].sort((a, b) =>
                           String(a.unidad).localeCompare(String(b.unidad), undefined, { numeric: true })
                         );

@@ -627,6 +627,35 @@ def transform_personales(carpeta_o_archivos) -> pd.DataFrame:
     else:
         df["whatsapp"] = None
 
+    # ── Datos demográficos (presentes en 2505060014_reporte.xlsx) ──────────────
+    for src_col, dest_col in [
+        ("FECHA_NACIMIENTO",         "fecha_nacimiento"),
+        ("AUTOIDENTIFICACION_ETNICA", "autoidentificacion_etnica"),
+        ("GENERO",                   "genero"),
+    ]:
+        if src_col in df.columns:
+            if dest_col == "fecha_nacimiento":
+                df[dest_col] = pd.to_datetime(df[src_col], errors="coerce")
+            else:
+                df[dest_col] = df[src_col].apply(
+                    lambda v: normalizar_texto_simple(v) if pd.notna(v) else None
+                )
+        else:
+            df[dest_col] = None
+
+    # ── Grupo académico (NOMBRE_GRUPO → número) ─────────────────────────────
+    if "NOMBRE_GRUPO" in df.columns:
+        df["_grupo_num"] = df["NOMBRE_GRUPO"].apply(extraer_grupo_numero)
+        # Mayoría por estudiante (puede tener grupos distintos por materia)
+        _grupo_agg = (
+            df.dropna(subset=["_grupo_num"])
+            .groupby("correo_institucional")["_grupo_num"]
+            .agg(lambda s: s.mode().iloc[0] if not s.mode().empty else s.iloc[0])
+        )
+        df["grupo"] = df["correo_institucional"].map(_grupo_agg)
+    else:
+        df["grupo"] = None
+
     # ── Deduplicar: una fila por estudiante ───────────────────────────────────
     df = df.drop_duplicates(subset=["correo_institucional"], keep="first")
 
@@ -644,6 +673,11 @@ def transform_personales(carpeta_o_archivos) -> pd.DataFrame:
         "provincia",
         "ciudad",
         "barrio",
+        # Nuevas del reporte institucional:
+        "fecha_nacimiento",
+        "genero",
+        "autoidentificacion_etnica",
+        "grupo",
     ]
     result = df[[c for c in cols_salida if c in df.columns]].copy()
 

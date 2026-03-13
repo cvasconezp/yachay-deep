@@ -125,7 +125,28 @@ class ETLPipeline:
 
             logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Leyendo Calificaciones...")
             df_calificaciones = transform_calificaciones(settings.DATA_PATH_CALIFICACIONES)
-            logs.append(f"  → {len(df_calificaciones)} registros de calificaciones")
+
+            # Fallback: si calificaciones.csv no existe o está vacío,
+            # usar el último archivo del TableauHistorico (P67) como semestre activo
+            used_historico_fallback = False
+            if df_calificaciones.empty:
+                hist_path = Path(settings.DATA_PATH_CALIFICACIONES_HISTORICO)
+                hist_files = sorted(hist_path.glob("*.csv"))
+                if hist_files:
+                    latest_hist = hist_files[-1]  # último archivo (ej. P67)
+                    logs.append(f"  ⚠️ calificaciones.csv no encontrado/vacío, usando fallback: {latest_hist.name}")
+                    df_calificaciones = transform_calificaciones(str(latest_hist))
+                    used_historico_fallback = True
+                    # Extraer código de período del nombre para excluirlo del histórico
+                    import re as _re
+                    _m = _re.search(r'\(P(\d+)\)', latest_hist.name, _re.IGNORECASE)
+                    self._fallback_periodo = f"P{_m.group(1)}" if _m else None
+                else:
+                    self._fallback_periodo = None
+            else:
+                self._fallback_periodo = None
+
+            logs.append(f"  → {len(df_calificaciones)} registros de calificaciones{' (fallback TableauHistorico)' if used_historico_fallback else ''}")
 
             # 2. Calcular indicadores
             logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Calculando indicadores de riesgo...")
@@ -373,6 +394,30 @@ class ETLPipeline:
                     if val and val.lower() not in ("nan", "none", ""):
                         setattr(student, campo, val)
 
+                # ── Datos demográficos del reporte 2505060014 (Paso 4) ──────
+                # fecha_nacimiento (ya es datetime/NaT desde transform_personales)
+                fn = pr.get("fecha_nacimiento")
+                if fn is not None and pd.notna(fn):
+                    try:
+                        student.fecha_nacimiento = pd.Timestamp(fn).date()
+                    except Exception:
+                        pass
+
+                # genero, autoidentificacion_etnica (strings)
+                for col in ("genero", "autoidentificacion_etnica"):
+                    val = _nan_to_none(pr.get(col))
+                    if val is not None:
+                        val_str = str(val).strip()
+                        if val_str and val_str.lower() not in ("nan", "none", ""):
+                            setattr(student, col, val_str)
+
+                # grupo académico (del reporte, "3" etc.)
+                grupo_val = _nan_to_none(pr.get("grupo"))
+                if grupo_val is not None:
+                    grupo_str = str(grupo_val).strip()
+                    if grupo_str and grupo_str.lower() not in ("nan", "none", ""):
+                        student.grupo = grupo_str
+
             else:
                 # ── Fallback: nombre desde AVAC (prioridad 2) ───────────────────
                 nombre_avac = str(row.get("nombre_avac", "")).strip()
@@ -528,9 +573,24 @@ class ETLPipeline:
         return count
 
     def _upsert_grades(self, df_calificaciones: pd.DataFrame) -> int:
-        """Carga calificaciones institucionales del semestre actual (sin período)."""
+        """Carga calificaciones institucionales del semestre actual (sin período).
+
+        Estrategia full-refresh: elimina TODOS los registros con periodo=NULL
+        antes de recargar, evitando duplicados acumulativos.
+        """
         if df_calificaciones.empty or "nombre_estudiante" not in df_calificaciones.columns:
             return 0
+
+        from ..models.grade import Grade as _Grade
+        # Full-refresh: eliminar calificaciones del semestre actual antes de recargar
+        deleted = (
+            self.db.query(_Grade)
+            .filter(_Grade.periodo.is_(None))
+            .delete(synchronize_session=False)
+        )
+        if deleted:
+            logger.info(f"  Grades semestre actual: eliminados {deleted} registros previos (full-refresh)")
+        self.db.flush()
 
         count = 0
         for _, row in df_calificaciones.iterrows():
@@ -581,6 +641,15 @@ class ETLPipeline:
 
         if df_historico.empty or "nombre_estudiante" not in df_historico.columns:
             return 0
+
+        # Si el fallback del pipeline ya cargó un período como semestre actual,
+        # excluirlo del histórico para evitar duplicados
+        fallback_periodo = getattr(self, "_fallback_periodo", None)
+        if fallback_periodo and fallback_periodo in df_historico["periodo"].values:
+            logger.info(f"  Excluyendo {fallback_periodo} del histórico (ya cargado como semestre actual)")
+            df_historico = df_historico[df_historico["periodo"] != fallback_periodo].copy()
+            if df_historico.empty:
+                return 0
 
         # Períodos presentes en el DataFrame
         periodos_presentes = df_historico["periodo"].unique().tolist()
