@@ -256,19 +256,26 @@ class FichaEstudiante(BaseModel):
 
 @router.get("/search", response_model=list[StudentSummary])
 def search_students(
-    q: str = Query(..., min_length=2, description="Nombre, correo institucional, cédula o teléfono"),
+    q: str = Query("", description="Nombre, correo institucional, cédula o teléfono"),
+    carrera: str = Query("", description="Filtrar por carrera (vacío = todas)"),
     limit: int = Query(20, le=100),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
     Búsqueda triple: nombre / correo / cédula.
-    Replica el LET(resultado, UNIQUE(FILTER(...))) de FichaEst.
+    Si se pasa carrera, filtra por carrera (y permite q vacío para listar).
     """
+    query = db.query(Student)
+
+    # Filtro por carrera
+    if carrera.strip():
+        query = query.filter(func.lower(Student.carrera) == carrera.strip().lower())
+
+    # Filtro de búsqueda textual
     q_lower = q.lower().strip()
-    results = (
-        db.query(Student)
-        .filter(
+    if q_lower and len(q_lower) >= 2:
+        query = query.filter(
             or_(
                 func.lower(Student.nombre).contains(q_lower),
                 func.lower(Student.correo_institucional).contains(q_lower),
@@ -276,9 +283,11 @@ def search_students(
                 func.lower(Student.telefono).contains(q_lower),
             )
         )
-        .limit(limit)
-        .all()
-    )
+    elif not carrera.strip():
+        # Sin carrera y sin query suficiente: no retornar nada
+        return []
+
+    results = query.order_by(Student.nombre).limit(limit).all()
     return results
 
 

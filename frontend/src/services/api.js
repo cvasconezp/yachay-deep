@@ -66,7 +66,12 @@ class ApiClient {
   listUsers() { return this.get("/auth/users"); }
 
   // Students
-  searchStudents(q) { return this.get(`/students/search?q=${encodeURIComponent(q)}`); }
+  searchStudents(q, carrera = "") {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (carrera) params.set("carrera", carrera);
+    return this.get(`/students/search?${params.toString()}`);
+  }
   getFicha(studentId) { return this.get(`/students/${studentId}/ficha`); }
 
   // Interventions

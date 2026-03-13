@@ -2,73 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { api } from "../services/api";
 import { RiskBadge } from "../components/RiskBadge";
+import EcuadorMap from "../components/EcuadorMap";
 import InterventionForm from "./InterventionForm";
-
-// ── Coordenadas de Ecuador: provincias y ciudades principales ──────────────────
-const ECUADOR_COORDS = {
-  // País
-  _default: { lat: -1.8312, lng: -78.1834, zoom: 6 },
-  // Provincias
-  azuay: { lat: -2.8974, lng: -79.0045, zoom: 10 },
-  bolivar: { lat: -1.7914, lng: -79.0045, zoom: 10 },
-  canar: { lat: -2.5584, lng: -78.9386, zoom: 10 },
-  carchi: { lat: 0.8117, lng: -77.7185, zoom: 10 },
-  chimborazo: { lat: -1.6507, lng: -78.6527, zoom: 10 },
-  cotopaxi: { lat: -0.9342, lng: -78.6151, zoom: 10 },
-  "el oro": { lat: -3.2582, lng: -79.9553, zoom: 10 },
-  esmeraldas: { lat: 0.9592, lng: -79.6539, zoom: 10 },
-  guayas: { lat: -2.1894, lng: -79.8891, zoom: 10 },
-  imbabura: { lat: 0.3517, lng: -78.1223, zoom: 10 },
-  loja: { lat: -3.9931, lng: -79.2042, zoom: 10 },
-  "los rios": { lat: -1.0225, lng: -79.4607, zoom: 10 },
-  manabi: { lat: -1.0547, lng: -80.4545, zoom: 10 },
-  "morona santiago": { lat: -2.3052, lng: -78.1145, zoom: 10 },
-  napo: { lat: -0.9938, lng: -77.8139, zoom: 10 },
-  orellana: { lat: -0.4545, lng: -76.9930, zoom: 10 },
-  pastaza: { lat: -1.4884, lng: -78.0027, zoom: 10 },
-  pichincha: { lat: -0.2299, lng: -78.5249, zoom: 10 },
-  "santa elena": { lat: -2.2261, lng: -80.8593, zoom: 10 },
-  "santo domingo de los tsachilas": { lat: -0.2532, lng: -79.1719, zoom: 10 },
-  "santo domingo": { lat: -0.2532, lng: -79.1719, zoom: 10 },
-  sucumbios: { lat: 0.0862, lng: -76.8893, zoom: 10 },
-  tungurahua: { lat: -1.2491, lng: -78.6167, zoom: 10 },
-  "zamora chinchipe": { lat: -4.0688, lng: -78.9534, zoom: 10 },
-  galapagos: { lat: -0.9538, lng: -90.9656, zoom: 9 },
-  // Ciudades principales EIB
-  quito: { lat: -0.1807, lng: -78.4678, zoom: 12 },
-  cuenca: { lat: -2.9001, lng: -79.0059, zoom: 12 },
-  guayaquil: { lat: -2.1710, lng: -79.9224, zoom: 12 },
-  cayambe: { lat: 0.0392, lng: -78.1421, zoom: 13 },
-  latacunga: { lat: -0.9346, lng: -78.6143, zoom: 13 },
-  otavalo: { lat: 0.2342, lng: -78.2617, zoom: 13 },
-  riobamba: { lat: -1.6635, lng: -78.6546, zoom: 13 },
-  ambato: { lat: -1.2491, lng: -78.6167, zoom: 13 },
-  ibarra: { lat: 0.3517, lng: -78.1223, zoom: 13 },
-  tulcan: { lat: 0.8117, lng: -77.7185, zoom: 13 },
-  guaranda: { lat: -1.5962, lng: -79.0010, zoom: 13 },
-  tena: { lat: -0.9938, lng: -77.8139, zoom: 13 },
-  puyo: { lat: -1.4884, lng: -78.0027, zoom: 13 },
-  macas: { lat: -2.3052, lng: -78.1145, zoom: 13 },
-  "san gabriel": { lat: 0.6019, lng: -77.8278, zoom: 13 },
-  cotacachi: { lat: 0.3000, lng: -78.2667, zoom: 13 },
-  tabacundo: { lat: 0.0500, lng: -78.2333, zoom: 13 },
-  sangolqui: { lat: -0.3294, lng: -78.4500, zoom: 13 },
-  machachi: { lat: -0.5167, lng: -78.5667, zoom: 13 },
-  salcedo: { lat: -1.0500, lng: -78.5833, zoom: 13 },
-  saquisili: { lat: -0.8333, lng: -78.6667, zoom: 13 },
-  pujili: { lat: -0.9500, lng: -78.6833, zoom: 13 },
-};
-
-function getMapCoords(provincia, ciudad, parroquia) {
-  const norm = s => (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-  // Intentar parroquia → ciudad → provincia → default
-  for (const loc of [parroquia, ciudad, provincia]) {
-    const key = norm(loc);
-    if (key && ECUADOR_COORDS[key]) return ECUADOR_COORDS[key];
-  }
-  // Fallback: si provincia existe pero no está en el diccionario, centrar en Ecuador
-  return ECUADOR_COORDS._default;
-}
 
 // ── Helpers de color ──────────────────────────────────────────────────────────
 function getNoteStyle(nota, max = 40) {
@@ -171,6 +106,30 @@ function abbreviateGrupo(grupo) {
   return m ? `G${m[1]}` : s;
 }
 
+/**
+ * Normaliza un valor de nivel a entero 1-10.
+ * "7" → 7, "67" → 7 (último dígito, código período+nivel), "Semestre 67" → 7.
+ */
+function parseNivelNum(val) {
+  if (val == null || val === "") return null;
+  const n = parseInt(String(val), 10);
+  if (!isNaN(n) && n >= 1 && n <= 10) return n;
+  const m = String(val).match(/(\d+)/);
+  if (m) {
+    const num = parseInt(m[1], 10);
+    if (num >= 1 && num <= 10) return num;
+    const last = parseInt(m[1].slice(-1), 10);
+    if (last >= 1) return last;
+  }
+  return null;
+}
+
+/** Formatea nivel para encabezados: "7° Nivel". Prioriza nivel_academico sobre nivel_detectado. */
+function formatNivel(nivelAcademico, nivelDetectado) {
+  const n = parseNivelNum(nivelAcademico) || parseNivelNum(nivelDetectado);
+  return n ? `${n}° Nivel` : null;
+}
+
 // ── Fila de dato personal ─────────────────────────────────────────────────────
 function PersonalRow({ label, value, href, warning }) {
   if (!value || value === "—") {
@@ -268,22 +227,40 @@ export default function FichaEstudiante() {
   const [ficha, setFicha] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [carreras, setCarreras] = useState([]);
+  const [selectedCarrera, setSelectedCarrera] = useState("");
   const searchTimeout = useRef(null);
+
+  // Cargar lista de carreras al montar
+  useEffect(() => {
+    api.getCarreras().then(setCarreras).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (studentId) loadFicha(studentId);
   }, [studentId]);
 
-  const handleSearch = (value) => {
-    setQuery(value);
+  // Re-buscar cuando cambia la carrera seleccionada
+  const triggerSearch = (q, carrera) => {
     clearTimeout(searchTimeout.current);
-    if (value.length < 2) { setSearchResults([]); return; }
+    // Si hay carrera seleccionada, buscar incluso sin query (lista de carrera)
+    if (!carrera && q.length < 2) { setSearchResults([]); return; }
     searchTimeout.current = setTimeout(async () => {
       try {
-        const results = await api.searchStudents(value);
+        const results = await api.searchStudents(q, carrera);
         setSearchResults(results);
       } catch (e) { console.error(e); }
     }, 300);
+  };
+
+  const handleSearch = (value) => {
+    setQuery(value);
+    triggerSearch(value, selectedCarrera);
+  };
+
+  const handleCarreraChange = (carrera) => {
+    setSelectedCarrera(carrera);
+    triggerSearch(query, carrera);
   };
 
   const loadFicha = async (id) => {
@@ -368,29 +345,45 @@ export default function FichaEstudiante() {
         <p className="text-gray-400 text-sm">Monitoreo académico individual</p>
       </div>
 
-      <div className="relative mb-5">
-        <input
-          type="text"
-          value={query}
-          onChange={e => handleSearch(e.target.value)}
-          placeholder="🔍 Buscar por nombre, correo o cédula..."
-          className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10 bg-white shadow-sm"
-        />
-        {loading && <span className="absolute right-3 top-3.5 text-gray-400 text-sm">⏳</span>}
-        {searchResults.length > 0 && (
-          <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-xl shadow-lg mt-1 max-h-64 overflow-y-auto">
-            {searchResults.map(s => (
-              <button key={s.id} onClick={() => loadFicha(s.id)}
-                className="w-full text-left px-4 py-3 hover:bg-blue-50 flex items-center justify-between border-b border-gray-100 last:border-0">
-                <div>
-                  <div className="font-medium text-gray-900 text-sm">{s.nombre || "Sin nombre"}</div>
-                  <div className="text-xs text-gray-400">{s.correo_institucional} · {s.carrera || "EIB"}</div>
-                </div>
-                <RiskBadge nivel={s.nivel_riesgo} />
-              </button>
-            ))}
-          </div>
-        )}
+      {/* ── Filtro de carrera + buscador ────────────────────────────── */}
+      <div className="flex gap-2 mb-5">
+        {/* Dropdown de carreras */}
+        <select
+          value={selectedCarrera}
+          onChange={e => handleCarreraChange(e.target.value)}
+          className="border border-gray-300 rounded-xl px-3 py-3 text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[180px] text-gray-600"
+        >
+          <option value="">Todas las carreras</option>
+          {carreras.map(c => (
+            <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
+
+        {/* Buscador */}
+        <div className="relative flex-1">
+          <input
+            type="text"
+            value={query}
+            onChange={e => handleSearch(e.target.value)}
+            placeholder="🔍 Buscar por nombre, correo o cédula..."
+            className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10 bg-white shadow-sm"
+          />
+          {loading && <span className="absolute right-3 top-3.5 text-gray-400 text-sm">⏳</span>}
+          {searchResults.length > 0 && (
+            <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-xl shadow-lg mt-1 max-h-64 overflow-y-auto">
+              {searchResults.map(s => (
+                <button key={s.id} onClick={() => loadFicha(s.id)}
+                  className="w-full text-left px-4 py-3 hover:bg-blue-50 flex items-center justify-between border-b border-gray-100 last:border-0">
+                  <div>
+                    <div className="font-medium text-gray-900 text-sm">{s.nombre || "Sin nombre"}</div>
+                    <div className="text-xs text-gray-400">{s.correo_institucional} · {s.carrera || "EIB"}</div>
+                  </div>
+                  <RiskBadge nivel={s.nivel_riesgo} />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── FICHA COMPLETA ─────────────────────────────────────────────── */}
@@ -509,33 +502,26 @@ export default function FichaEstudiante() {
                 </tbody>
               </table>
 
-              {/* Mapa Bing Maps embed */}
-              {(() => {
-                const hasGeo = ficha.provincia || ficha.ciudad || ficha.parroquia;
-                const coords = getMapCoords(ficha.provincia, ficha.ciudad, ficha.parroquia);
-                return hasGeo ? (
-                  <div className="mx-2 my-2 rounded overflow-hidden border border-gray-200" style={{ height: "130px" }}>
-                    <iframe
-                      title="Ubicación del estudiante"
-                      src={`https://www.bing.com/maps/embed?h=130&w=260&cp=${coords.lat}~${coords.lng}&lvl=${coords.zoom}&typ=d&sty=r&src=SHELL&FORM=MBEDV8`}
-                      width="100%"
-                      height="130"
-                      style={{ border: 0 }}
-                      loading="lazy"
-                      referrerPolicy="no-referrer-when-downgrade"
-                    />
-                  </div>
-                ) : (
-                  <div className="bg-gray-50 border border-gray-200 mx-2 my-2 rounded flex flex-col items-center justify-center text-center"
-                       style={{ height: "130px" }}>
-                    <svg viewBox="0 0 80 90" className="w-16 h-16 opacity-30" fill="#1B3A6B">
-                      <path d="M38 5 L50 8 L60 15 L65 25 L62 38 L70 45 L72 55 L65 65 L55 72 L42 78 L30 75 L20 68 L15 55 L18 42 L12 32 L18 20 L28 12 Z" />
-                      <circle cx="38" cy="40" r="5" fill="#F0B000" opacity="1"/>
-                    </svg>
-                    <div className="text-[11px] text-gray-400 -mt-1">Sin datos geográficos</div>
-                  </div>
-                );
-              })()}
+              {/* Mapa coroplético de Ecuador */}
+              {(ficha.provincia || ficha.ciudad || ficha.parroquia) ? (
+                <div className="mx-2 my-2 rounded overflow-hidden border border-gray-200">
+                  <EcuadorMap
+                    provincia={ficha.provincia}
+                    ciudad={ficha.ciudad}
+                    parroquia={ficha.parroquia}
+                    height={140}
+                  />
+                </div>
+              ) : (
+                <div className="bg-gray-50 border border-gray-200 mx-2 my-2 rounded flex flex-col items-center justify-center text-center"
+                     style={{ height: "130px" }}>
+                  <svg viewBox="0 0 80 90" className="w-16 h-16 opacity-30" fill="#1B3A6B">
+                    <path d="M38 5 L50 8 L60 15 L65 25 L62 38 L70 45 L72 55 L65 65 L55 72 L42 78 L30 75 L20 68 L15 55 L18 42 L12 32 L18 20 L28 12 Z" />
+                    <circle cx="38" cy="40" r="5" fill="#F0B000" opacity="1"/>
+                  </svg>
+                  <div className="text-[11px] text-gray-400 -mt-1">Sin datos geográficos</div>
+                </div>
+              )}
 
               <table className="w-full border-collapse">
                 <tbody>
@@ -574,13 +560,10 @@ export default function FichaEstudiante() {
                 <div className="px-3 py-1.5 text-center flex-1">
                   <div className="text-[9px] opacity-50 uppercase tracking-wider">Nivel</div>
                   <div className="text-xs font-semibold mt-0.5">
-                    {ficha.nivel_academico
-                      ? `${ficha.nivel_academico}° Nivel`
-                      : ficha.nivel_detectado
-                        ? ficha.nivel_detectado
-                        : Object.keys(cursos).length > 0
+                    {formatNivel(ficha.nivel_academico, ficha.nivel_detectado)
+                      || (Object.keys(cursos).length > 0
                           ? `${Object.keys(cursos).length} cursos activos`
-                          : "Sin cursos"}
+                          : "Sin cursos")}
                   </div>
                 </div>
               </div>
@@ -626,10 +609,10 @@ export default function FichaEstudiante() {
                             {/* Nivel y grupo */}
                             <td className="px-2 py-1 border border-gray-200 text-center text-[11px] text-gray-500 whitespace-nowrap">
                               {(() => {
-                                const niv = matchedCal?.nivel;
+                                const nivNum = parseNivelNum(matchedCal?.nivel);
                                 const grp = abbreviateGrupo(matchedCal?.grupo || acceso?.grupo || ts[0]?.grupo);
-                                if (niv && grp) return <>{niv} nivel | {grp}</>;
-                                if (niv) return <>{niv} nivel</>;
+                                if (nivNum && grp) return <>{nivNum}° nivel | {grp}</>;
+                                if (nivNum) return <>{nivNum}° nivel</>;
                                 if (grp) return grp;
                                 return <span className="text-gray-300">—</span>;
                               })()}
@@ -710,10 +693,10 @@ export default function FichaEstudiante() {
                           <tr key={`cal-${idx}`} className={rowIdx % 2 === 0 ? "bg-white" : "bg-[#F9F9F9]"}>
                             <td className="px-2 py-1 border border-gray-200 text-center text-[11px] text-gray-500 whitespace-nowrap">
                               {(() => {
-                                const niv = cal.nivel;
+                                const nivNum = parseNivelNum(cal.nivel);
                                 const grp = abbreviateGrupo(cal.grupo);
-                                if (niv && grp) return <>{niv} nivel | {grp}</>;
-                                if (niv) return <>{niv} nivel</>;
+                                if (nivNum && grp) return <>{nivNum}° nivel | {grp}</>;
+                                if (nivNum) return <>{nivNum}° nivel</>;
                                 if (grp) return grp;
                                 return <span className="text-gray-300">—</span>;
                               })()}
@@ -774,10 +757,10 @@ export default function FichaEstudiante() {
                           <tr key={idx} className={idx % 2 === 0 ? "bg-white" : "bg-[#F9F9F9]"}>
                             <td className="px-2 py-1 border border-gray-200 text-center text-[11px] text-gray-500">
                               {(() => {
-                                const niv = cal.nivel;
+                                const nivNum = parseNivelNum(cal.nivel);
                                 const grp = abbreviateGrupo(cal.grupo);
-                                if (niv && grp) return <>{niv} nivel | {grp}</>;
-                                if (niv) return <>{niv} nivel</>;
+                                if (nivNum && grp) return <>{nivNum}° nivel | {grp}</>;
+                                if (nivNum) return <>{nivNum}° nivel</>;
                                 if (grp) return grp;
                                 return "—";
                               })()}
@@ -880,7 +863,7 @@ export default function FichaEstudiante() {
                           return (
                             <div className="flex-shrink-0 flex flex-col" style={{ minWidth: "80px" }}>
                               <div className="bg-[#F0B000] text-white text-center rounded-t px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider">
-                                {ficha.nivel_academico ? `${ficha.nivel_academico}° Nivel` : "Actual"}
+                                {formatNivel(ficha.nivel_academico, ficha.nivel_detectado) || "Actual"}
                               </div>
                               <div className="border border-t-0 border-[#F0B000] rounded-b bg-[#FFFDF5] px-1 pt-1 pb-0.5 flex flex-col gap-0.5">
                                 {ficha.calificaciones.map((c, i) => (
@@ -932,7 +915,7 @@ export default function FichaEstudiante() {
                       <div className="flex gap-2" style={{ minWidth: "max-content" }}>
                         <div className="flex-shrink-0 flex flex-col" style={{ minWidth: "80px" }}>
                           <div className="bg-[#F0B000] text-white text-center rounded-t px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider">
-                            {ficha.nivel_academico ? `${ficha.nivel_academico}° Nivel` : "Actual"}
+                            {formatNivel(ficha.nivel_academico, ficha.nivel_detectado) || "Actual"}
                           </div>
                           <div className="border border-t-0 border-[#F0B000] rounded-b bg-[#FFFDF5] px-1 pt-1 pb-0.5 flex flex-col gap-0.5">
                             {ficha.calificaciones.map((c, i) => (
