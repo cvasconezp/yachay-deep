@@ -11,7 +11,7 @@ from datetime import datetime
 
 from ..database import get_db
 from ..models import Student, AvacAccess, TaskSubmission, Grade, Intervention
-from ..models.course import Course
+from ..models.course_config import CourseConfig
 from ..auth.jwt import get_current_user
 from ..models.user import User
 
@@ -197,24 +197,27 @@ def get_ficha(
         .all()
     )
 
-    # ── Construir mapa codigo_avac → Course para enriquecer accesos y tareas ──
+    # ── Construir mapa codigo_avac → CourseConfig para enriquecer accesos y tareas ──
     all_codigos = set(
         [a.codigo_curso for a in accesos] + [t.codigo_curso for t in tareas]
     )
-    course_map: dict[str, Course] = {}
+    course_map: dict[str, CourseConfig] = {}
     if all_codigos:
         courses = (
-            db.query(Course)
-            .filter(Course.codigo_avac.in_(all_codigos))
+            db.query(CourseConfig)
+            .filter(CourseConfig.codigo_avac.in_(all_codigos))
             .all()
         )
-        course_map = {c.codigo_avac: c for c in courses}
+        # Si hay varias entradas por codigo_avac (distintos semestres),
+        # se queda con la primera encontrada (la más reciente por id desc)
+        for c in sorted(courses, key=lambda x: x.id):
+            course_map[c.codigo_avac] = c
 
     # Serializar accesos enriquecidos
     accesos_out = [
         AvacAccessOut(
             codigo_curso=a.codigo_curso,
-            nombre_curso=course_map[a.codigo_curso].nombre if a.codigo_curso in course_map else None,
+            nombre_curso=course_map[a.codigo_curso].asignatura if a.codigo_curso in course_map else None,
             docente=course_map[a.codigo_curso].docente if a.codigo_curso in course_map else None,
             grupo=course_map[a.codigo_curso].grupo if a.codigo_curso in course_map else None,
             ultimo_acceso_texto=a.ultimo_acceso_texto,
@@ -229,7 +232,7 @@ def get_ficha(
     tareas_out = [
         TaskSubmissionOut(
             codigo_curso=t.codigo_curso,
-            nombre_curso=course_map[t.codigo_curso].nombre if t.codigo_curso in course_map else None,
+            nombre_curso=course_map[t.codigo_curso].asignatura if t.codigo_curso in course_map else None,
             unidad=t.unidad,
             estado=t.estado,
             calificacion=t.calificacion,
