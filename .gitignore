@@ -24,6 +24,7 @@ env/
 # Data (no subir CSVs con datos reales al repo)
 data/
 !data/.gitkeep
+!frontend/src/data/
 
 # Node
 node_modules/
