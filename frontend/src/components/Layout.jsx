@@ -3,13 +3,13 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 
 const NAV_ITEMS = [
-  { path: "/dashboard",      label: "Dashboard",      icon: "\ud83d\udcca" },
-  { path: "/ficha",          label: "Ficha Estudiante", icon: "\ud83c\udf93" },
-  { path: "/intervenciones", label: "Intervenciones", icon: "\ud83d\udccb" },
+  { path: "/dashboard",      label: "Dashboard",      icon: "📊" },
+  { path: "/ficha",          label: "Ficha Estudiante", icon: "🎓" },
+  { path: "/intervenciones", label: "Intervenciones", icon: "📋" },
 ];
 
 const ADMIN_ITEMS = [
-  { path: "/admin",          label: "Administraci\u00f3n", icon: "\u2699\ufe0f" },
+  { path: "/admin",          label: "Administración", icon: "⚙️" },
 ];
 
 export function Layout({ children }) {
@@ -44,13 +44,13 @@ export function Layout({ children }) {
       <aside
         className={`${sidebarOpen ? "w-64" : "w-16"} bg-[#1B3A6B] text-white flex flex-col shadow-xl transition-all duration-300 relative flex-shrink-0`}
       >
-        {/* Bot\u00f3n toggle */}
+        {/* Botón toggle */}
         <button
           onClick={toggleSidebar}
           className="absolute -right-3 top-9 w-6 h-6 bg-[#1B3A6B] border-2 border-white rounded-full flex items-center justify-center text-white text-xs hover:bg-blue-700 transition-colors z-10 shadow-md"
           title={sidebarOpen ? "Ocultar panel" : "Mostrar panel"}
         >
-          {sidebarOpen ? "\u00ab" : "\u00bb"}
+          {sidebarOpen ? "«" : "»"}
         </button>
 
         {/* Header */}
@@ -58,7 +58,7 @@ export function Layout({ children }) {
           {sidebarOpen ? (
             <>
               <h1 className="text-xl font-bold tracking-tight">Yachay Deep</h1>
-              <p className="text-blue-300 text-xs mt-1">Monitoreo Acad\u00e9mico</p>
+              <p className="text-blue-300 text-xs mt-1">Monitoreo Académico</p>
             </>
           ) : (
             <h1 className="text-lg font-bold tracking-tight" title="Yachay Deep">YD</h1>
@@ -95,13 +95,13 @@ export function Layout({ children }) {
                 onClick={handleLogout}
                 className="w-full text-left text-xs text-blue-400 hover:text-white transition-colors"
               >
-                Cerrar sesi\u00f3n
+                Cerrar sesión
               </button>
             </>
           ) : (
             <button
               onClick={handleLogout}
-              title={`${user?.nombre || "Usuario"} \u2014 Cerrar sesi\u00f3n`}
+              title={`${user?.nombre || "Usuario"} — Cerrar sesión`}
               className="w-10 h-10 rounded-full bg-blue-800 flex items-center justify-center text-sm font-bold text-blue-200 hover:bg-blue-700 hover:text-white transition-colors"
             >
               {user?.nombre?.charAt(0)?.toUpperCase() || "U"}
