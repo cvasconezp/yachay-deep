@@ -13,6 +13,26 @@ function getNoteStyle(nota, max = 40) {
   return               { bg: "bg-red-100",    text: "text-red-700",   border: "border-red-300" };
 }
 
+/**
+ * Mapea el diagnóstico computado (Framework_FichaEst §3.5) a colores + etiqueta.
+ * 4 estados: Aprobación | Riesgo Académico | Riesgo de Deserción | En riesgo
+ */
+function getDiagnosticoStyle(diagnostico) {
+  switch (diagnostico) {
+    case "Aprobación":
+      return { bg: "bg-green-100",  text: "text-green-800",  badge: "bg-green-500",  label: "Aprobación" };
+    case "Riesgo Académico":
+      return { bg: "bg-yellow-100", text: "text-yellow-800", badge: "bg-yellow-500", label: "Riesgo Académico" };
+    case "Riesgo de Deserción":
+      return { bg: "bg-orange-100", text: "text-orange-700", badge: "bg-orange-500", label: "Riesgo de Deserción" };
+    case "En riesgo":
+      return { bg: "bg-red-100",    text: "text-red-700",    badge: "bg-red-600",    label: "En riesgo" };
+    default:
+      return { bg: "bg-gray-100",   text: "text-gray-500",   badge: "bg-gray-400",   label: "Sin datos" };
+  }
+}
+
+/** Mantener compatibilidad con nivel_riesgo (Alto/Medio/Bajo) del ETL */
 function getRiesgoStyle(nivel) {
   if (nivel === "Alto")  return { bg: "bg-red-100",    text: "text-red-700",    label: "En riesgo" };
   if (nivel === "Medio") return { bg: "bg-yellow-100", text: "text-yellow-700", label: "Riesgo moderado" };
@@ -25,6 +45,18 @@ function getCompromisoLabel(val) {
   if (val < 0.3) return "Bajo";
   if (val < 0.6) return "Medio";
   return "Alto";
+}
+
+/** Compactar texto de acceso AVAC: "3 días 15 horas 20 minutos" → "3d 15h 20m" */
+function compactarAcceso(texto) {
+  if (!texto) return null;
+  return texto
+    .replace(/(\d+)\s*días?/i,    "$1d")
+    .replace(/(\d+)\s*horas?/i,   " $1h")
+    .replace(/(\d+)\s*minutos?/i, " $1m")
+    .replace(/(\d+)\s*segundos?/i,"")
+    .replace(/,\s*/g, " ")
+    .trim();
 }
 
 // ── Fila de dato personal ─────────────────────────────────────────────────────
@@ -160,7 +192,13 @@ export default function FichaEstudiante() {
     }) || null;
   };
 
+  // Diagnóstico computado (Framework §3.5) — tiene prioridad sobre nivel_riesgo
+  const diagStyle = ficha ? getDiagnosticoStyle(ficha.diagnostico_riesgo) : getDiagnosticoStyle(null);
   const riesgoStyle = ficha ? getRiesgoStyle(ficha.nivel_riesgo) : {};
+
+  // Sede: usar la detectada por grupo si existe, si no la almacenada en BD
+  const sedeDisplay = ficha?.sede_detectada || ficha?.sede || "—";
+
   const compromisoLabel = ficha ? getCompromisoLabel(ficha.indice_compromiso) : "—";
   const compromisoStr = ficha?.indice_compromiso != null
     ? `${(ficha.indice_compromiso * 100).toFixed(0)}%` : "";
@@ -256,9 +294,9 @@ export default function FichaEstudiante() {
                   {compromisoLabel} {compromisoStr}
                 </div>
               </div>
-              <div className="px-3 py-1.5 text-center w-36 flex-shrink-0">
-                <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Proyección académica</div>
-                <div className={`font-bold text-xs mt-0.5 ${riesgoStyle.text}`}>{riesgoStyle.label}</div>
+              <div className={`px-3 py-1.5 text-center w-40 flex-shrink-0 ${diagStyle.bg} border-l border-[#BF8F00]`}>
+                <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Diagnóstico</div>
+                <div className={`font-bold text-xs mt-0.5 ${diagStyle.text}`}>{diagStyle.label}</div>
               </div>
             </div>
           </div>
@@ -296,7 +334,7 @@ export default function FichaEstudiante() {
                 </thead>
                 <tbody>
                   <tr>
-                    <td className="text-[10px] text-center px-1 py-0.5 border border-gray-200 text-gray-600">{ficha.sede || "—"}</td>
+                    <td className="text-[10px] text-center px-1 py-0.5 border border-gray-200 text-gray-700 font-medium">{sedeDisplay}</td>
                     <td className="text-[10px] text-center px-1 py-0.5 border border-gray-200 text-gray-300 italic">—</td>
                     <td className="text-[10px] text-center px-1 py-0.5 border border-gray-200 text-gray-300 italic">—</td>
                   </tr>
@@ -341,18 +379,20 @@ export default function FichaEstudiante() {
             {/* ─── SECCIÓN DERECHA ─── */}
             <div className="flex-1 overflow-hidden flex flex-col">
 
-              {/* Barra de info: sede / nivel / compromiso / riesgo */}
+              {/* Barra de info: sede / nivel / compromiso / diagnóstico */}
               <div className="grid grid-cols-4 divide-x divide-white/20 bg-[#1B3A6B] text-white">
                 <div className="px-3 py-1.5 text-center">
                   <div className="text-[9px] opacity-50 uppercase tracking-wider">Centro de Apoyo</div>
-                  <div className="text-xs font-semibold mt-0.5">{ficha.sede || "—"}</div>
+                  <div className="text-xs font-semibold mt-0.5">{sedeDisplay}</div>
                 </div>
                 <div className="px-3 py-1.5 text-center">
-                  <div className="text-[9px] opacity-50 uppercase tracking-wider">Nivel activo</div>
+                  <div className="text-[9px] opacity-50 uppercase tracking-wider">Semestre activo</div>
                   <div className="text-xs font-semibold mt-0.5">
-                    {Object.keys(cursos).length > 0
-                      ? `${Object.keys(cursos).length} cursos AVAC`
-                      : "Sin cursos"}
+                    {ficha.nivel_detectado
+                      ? ficha.nivel_detectado
+                      : Object.keys(cursos).length > 0
+                        ? `${Object.keys(cursos).length} cursos`
+                        : "Sin cursos"}
                   </div>
                 </div>
                 <div className="px-3 py-1.5 text-center">
@@ -366,9 +406,10 @@ export default function FichaEstudiante() {
                     {compromisoLabel} {compromisoStr}
                   </div>
                 </div>
-                <div className={`px-3 py-1.5 text-center ${riesgoStyle.bg}`}>
-                  <div className="text-[9px] opacity-70 uppercase tracking-wider text-gray-700">Proyección</div>
-                  <div className={`text-xs font-bold mt-0.5 ${riesgoStyle.text}`}>{riesgoStyle.label}</div>
+                {/* Diagnóstico con color de fondo según estado (Framework §3.5) */}
+                <div className={`px-3 py-1.5 text-center ${diagStyle.bg}`}>
+                  <div className="text-[9px] opacity-70 uppercase tracking-wider text-gray-700">Diagnóstico</div>
+                  <div className={`text-xs font-bold mt-0.5 ${diagStyle.text}`}>{diagStyle.label}</div>
                 </div>
               </div>
 
@@ -427,13 +468,15 @@ export default function FichaEstudiante() {
                                   </span>
                                 : "—"}
                             </td>
-                            {/* AVAC: días + última visita */}
+                            {/* AVAC: días + texto compactado */}
                             <td className="px-2 py-1 border border-gray-200 text-center">
                               <span className={`font-mono text-[11px] ${diasColor}`}>
                                 {diasInt != null ? `${diasInt}d` : "—"}
                               </span>
                               {acceso?.ultimo_acceso_texto && (
-                                <div className="text-[9px] text-gray-400 leading-tight">{acceso.ultimo_acceso_texto}</div>
+                                <div className="text-[9px] text-gray-400 leading-tight whitespace-nowrap">
+                                  {compactarAcceso(acceso.ultimo_acceso_texto)}
+                                </div>
                               )}
                             </td>
                             {/* Actividades: celdas de tareas */}
@@ -477,23 +520,38 @@ export default function FichaEstudiante() {
               )}
 
               {/* Fila resumen de KPIs */}
-              <div className="grid grid-cols-3 divide-x divide-gray-200 border-t border-gray-200 bg-[#F9F9F9]">
+              <div className="grid grid-cols-4 divide-x divide-gray-200 border-t border-gray-200 bg-[#F9F9F9]">
                 <div className="py-2 px-3 text-center">
                   <div className="text-[9px] text-gray-400 uppercase tracking-wider">Días sin AVAC</div>
-                  <div className={`font-bold text-sm mt-0.5 ${ficha.dias_sin_acceso > 14 ? "text-red-600" : ficha.dias_sin_acceso > 7 ? "text-orange-500" : "text-green-600"}`}>
+                  <div className={`font-bold text-sm mt-0.5 ${
+                    ficha.dias_sin_acceso == null ? "text-gray-400"
+                    : ficha.dias_sin_acceso > 14 ? "text-red-600"
+                    : ficha.dias_sin_acceso > 7 ? "text-orange-500"
+                    : "text-green-600"}`}>
                     {ficha.dias_sin_acceso != null ? `${Math.round(ficha.dias_sin_acceso)}d` : "—"}
                   </div>
                 </div>
                 <div className="py-2 px-3 text-center">
                   <div className="text-[9px] text-gray-400 uppercase tracking-wider">Tareas entregadas</div>
-                  <div className={`font-bold text-sm mt-0.5 ${ficha.porcentaje_tareas < 50 ? "text-red-600" : ficha.porcentaje_tareas < 75 ? "text-orange-500" : "text-green-600"}`}>
+                  <div className={`font-bold text-sm mt-0.5 ${
+                    ficha.porcentaje_tareas == null ? "text-gray-400"
+                    : ficha.porcentaje_tareas < 50 ? "text-red-600"
+                    : ficha.porcentaje_tareas < 75 ? "text-orange-500"
+                    : "text-green-600"}`}>
                     {ficha.porcentaje_tareas != null ? `${Math.round(ficha.porcentaje_tareas)}%` : "—"}
                   </div>
                 </div>
                 <div className="py-2 px-3 text-center">
-                  <div className="text-[9px] text-gray-400 uppercase tracking-wider">Nivel de Riesgo</div>
-                  <div className={`font-bold text-sm mt-0.5 ${riesgoStyle.text}`}>
-                    {ficha.nivel_riesgo || "—"}
+                  <div className="text-[9px] text-gray-400 uppercase tracking-wider">Compromiso AVAC</div>
+                  <div className={`font-bold text-sm mt-0.5 ${compromisoColor}`}>
+                    {compromisoLabel} {compromisoStr}
+                  </div>
+                </div>
+                {/* Diagnóstico: 4 estados con color semafórico */}
+                <div className={`py-2 px-3 text-center ${diagStyle.bg}`}>
+                  <div className="text-[9px] text-gray-500 uppercase tracking-wider">Diagnóstico</div>
+                  <div className={`font-bold text-xs mt-0.5 ${diagStyle.text}`}>
+                    {ficha.diagnostico_riesgo || "—"}
                   </div>
                 </div>
               </div>
