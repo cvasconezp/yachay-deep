@@ -4,155 +4,81 @@ import { api } from "../services/api";
 import { RiskBadge } from "../components/RiskBadge";
 import InterventionForm from "./InterventionForm";
 
-// ── Gauge circular de compromiso ─────────────────────────────────────────────
-function CompromisoGauge({ valor = 0, size = 96 }) {
-  const r = size * 0.39;
-  const cx = size / 2;
-  const cy = size / 2;
-  const circ = 2 * Math.PI * r;
-  const pct = Math.max(0, Math.min(1, valor || 0));
-  const dash = circ * pct;
-  const color = pct < 0.3 ? "#ef4444" : pct < 0.6 ? "#f97316" : "#22c55e";
-  const label = pct < 0.3 ? "Bajo" : pct < 0.6 ? "Medio" : "Alto";
-
-  return (
-    <div className="flex flex-col items-center gap-1">
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#e5e7eb" strokeWidth="7" />
-        <circle
-          cx={cx} cy={cy} r={r} fill="none"
-          stroke={color} strokeWidth="7"
-          strokeDasharray={`${dash} ${circ - dash}`}
-          strokeLinecap="round"
-          transform={`rotate(-90 ${cx} ${cy})`}
-        />
-        <text x={cx} y={cy - 5} textAnchor="middle" fill="#111827" fontSize={size * 0.16} fontWeight="bold">
-          {Math.round(pct * 100)}%
-        </text>
-        <text x={cx} y={cy + 10} textAnchor="middle" fill="#6b7280" fontSize={size * 0.095}>
-          compromiso
-        </text>
-      </svg>
-      <span className="text-xs font-semibold" style={{ color }}>{label}</span>
-    </div>
-  );
+// ── Helpers de color ──────────────────────────────────────────────────────────
+function getNoteStyle(nota, max = 40) {
+  if (nota == null) return { bg: "", text: "text-gray-400", border: "" };
+  const pct = nota / max;
+  if (pct >= 0.70) return { bg: "bg-green-100",  text: "text-green-800",  border: "border-green-300" };
+  if (pct >= 0.50) return { bg: "bg-yellow-100", text: "text-yellow-800", border: "border-yellow-300" };
+  return               { bg: "bg-red-100",    text: "text-red-700",   border: "border-red-300" };
 }
 
-// ── Card pequeña de indicador ─────────────────────────────────────────────────
-function KpiCard({ label, value, sub, highlight, className = "" }) {
-  return (
-    <div className={`rounded-lg p-3 ${highlight ? "bg-red-50 border border-red-100" : "bg-gray-50"} ${className}`}>
-      <div className="text-xs text-gray-500 font-medium mb-0.5">{label}</div>
-      <div className={`text-lg font-bold leading-tight ${highlight ? "text-red-700" : "text-gray-800"}`}>{value}</div>
-      {sub && <div className="text-xs text-gray-400 mt-0.5">{sub}</div>}
-    </div>
-  );
+function getRiesgoStyle(nivel) {
+  if (nivel === "Alto")  return { bg: "bg-red-100",    text: "text-red-700",    label: "En riesgo" };
+  if (nivel === "Medio") return { bg: "bg-yellow-100", text: "text-yellow-700", label: "Riesgo moderado" };
+  if (nivel === "Bajo")  return { bg: "bg-green-100",  text: "text-green-700",  label: "Sin riesgo" };
+  return                        { bg: "bg-gray-100",   text: "text-gray-500",   label: "Sin evaluar" };
+}
+
+function getCompromisoLabel(val) {
+  if (val == null) return "—";
+  if (val < 0.3) return "Bajo";
+  if (val < 0.6) return "Medio";
+  return "Alto";
 }
 
 // ── Fila de dato personal ─────────────────────────────────────────────────────
-function DataRow({ icon, label, value, href }) {
-  if (!value) return null;
+function PersonalRow({ label, value, href, warning }) {
+  if (!value || value === "—") {
+    return (
+      <tr>
+        <td className="text-right text-[10px] text-gray-500 font-semibold px-2 py-0.5 border border-gray-200 bg-[#F2F2F2] whitespace-nowrap w-28">{label}</td>
+        <td className="text-[10px] px-2 py-0.5 border border-gray-200 text-gray-300 italic">—</td>
+      </tr>
+    );
+  }
   return (
-    <div className="flex items-start gap-2 text-sm py-1.5 border-b border-gray-50 last:border-0">
-      <span className="w-4 text-base flex-shrink-0">{icon}</span>
-      <div className="min-w-0">
-        <span className="text-gray-400 text-xs block">{label}</span>
+    <tr className={warning ? "bg-red-50" : ""}>
+      <td className="text-right text-[10px] text-gray-500 font-semibold px-2 py-0.5 border border-gray-200 bg-[#F2F2F2] whitespace-nowrap w-28">{label}</td>
+      <td className="text-[10px] px-2 py-0.5 border border-gray-200">
         {href
           ? <a href={href} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline break-all">{value}</a>
-          : <span className="text-gray-800 break-all">{value}</span>
+          : <span className={warning ? "text-red-600 font-semibold" : "text-gray-800"}>{value}</span>
         }
+      </td>
+    </tr>
+  );
+}
+
+// ── Celda de actividad/tarea ───────────────────────────────────────────────────
+function TaskCell({ entregada, retrasada, title }) {
+  let cls = "inline-flex items-center justify-center w-[14px] h-[14px] rounded-sm text-white text-[8px] font-bold";
+  if (entregada && !retrasada) return <span className={`${cls} bg-green-500`} title={title}>✓</span>;
+  if (retrasada)               return <span className={`${cls} bg-red-500`}   title={title}>✗</span>;
+  return                              <span className={`${cls} bg-gray-300`}  title={title}>·</span>;
+}
+
+// ── Chip de calificación histórica ────────────────────────────────────────────
+function GradeChip({ asignatura, nota_final, docente }) {
+  const s = getNoteStyle(nota_final);
+  return (
+    <div className={`border ${s.border || "border-gray-200"} ${s.bg} rounded p-1.5 text-center`}
+         style={{ minWidth: "72px", maxWidth: "90px" }}
+         title={docente || asignatura}>
+      <div className="text-[9px] text-gray-500 leading-tight mb-1 overflow-hidden"
+           style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
+        {asignatura}
       </div>
+      <div className={`text-xs font-bold ${s.text}`}>{nota_final ?? "—"}</div>
     </div>
   );
 }
 
-// ── Proyección académica ──────────────────────────────────────────────────────
-function ProyeccionCard({ nivel_riesgo, dias_sin_acceso, porcentaje_tareas }) {
-  const config = {
-    Alto:  { label: "Riesgo de Deserción",   bg: "bg-red-50",    border: "border-red-200",    text: "text-red-800",    dot: "🔴" },
-    Medio: { label: "Riesgo Moderado",        bg: "bg-orange-50", border: "border-orange-200", text: "text-orange-800", dot: "🟡" },
-    Bajo:  { label: "Sin Riesgo Inmediato",   bg: "bg-green-50",  border: "border-green-200",  text: "text-green-800",  dot: "🟢" },
-  };
-  const c = config[nivel_riesgo] || { label: "Sin evaluar", bg: "bg-gray-50", border: "border-gray-200", text: "text-gray-600", dot: "⚪" };
-
+// ── Sección header ────────────────────────────────────────────────────────────
+function SectionHeader({ children, className = "" }) {
   return (
-    <div className={`rounded-xl border p-4 ${c.bg} ${c.border}`}>
-      <div className={`text-xs font-semibold uppercase tracking-wide mb-1 opacity-60 ${c.text}`}>Proyección Académica</div>
-      <div className={`flex items-center gap-1.5 font-bold text-sm ${c.text}`}>
-        <span>{c.dot}</span>
-        <span>{c.label}</span>
-      </div>
-      <div className={`mt-2 text-xs opacity-70 space-y-0.5 ${c.text}`}>
-        {dias_sin_acceso != null && <div>• {dias_sin_acceso}d sin acceder a AVAC</div>}
-        {porcentaje_tareas != null && <div>• {Math.round(porcentaje_tareas)}% tareas entregadas</div>}
-      </div>
-    </div>
-  );
-}
-
-// ── Tabla de accesos AVAC por curso ───────────────────────────────────────────
-function AvacCursoRow({ acceso, tareas }) {
-  const entregadas = tareas.filter(t => t.entregada).length;
-  const retrasadas = tareas.filter(t => t.retrasada).length;
-  const total = tareas.length;
-  const dias = acceso?.dias_sin_acceso;
-  const diasInt = dias != null ? Math.round(dias) : null;
-  const diasColor = diasInt == null ? "text-gray-400" : diasInt > 14 ? "text-red-600 font-semibold" : diasInt > 7 ? "text-orange-600" : "text-green-600";
-
-  return (
-    <div className="border border-gray-100 rounded-lg overflow-hidden">
-      {/* Cabecera del curso */}
-      <div className="bg-gray-50 px-4 py-2 flex items-center justify-between">
-        <div>
-          <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Curso {acceso?.codigo_curso || tareas[0]?.codigo_curso}</span>
-          {acceso?.estado_avac && (
-            <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">{acceso.estado_avac}</span>
-          )}
-        </div>
-        <div className="flex items-center gap-4 text-xs">
-          {acceso && (
-            <span className={`flex items-center gap-1 ${diasColor}`}>
-              🕐 {acceso.ultimo_acceso_texto || (diasInt != null ? `${diasInt} días` : "—")}
-            </span>
-          )}
-          {total > 0 && (
-            <span className="text-gray-500">
-              {entregadas}/{total} tareas
-              {retrasadas > 0 && <span className="text-red-500 ml-1">⚠️{retrasadas} retrasadas</span>}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Tareas del curso */}
-      {tareas.length > 0 && (
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="text-gray-400 border-b border-gray-100">
-              <th className="text-left px-4 py-1.5 font-medium">Unidad</th>
-              <th className="text-center px-3 py-1.5 font-medium">Entregada</th>
-              <th className="text-center px-3 py-1.5 font-medium">Calificación</th>
-              <th className="text-center px-3 py-1.5 font-medium">Retrasada</th>
-              <th className="text-left px-3 py-1.5 font-medium max-w-[180px]">Estado</th>
-            </tr>
-          </thead>
-          <tbody>
-            {tareas.sort((a, b) => String(a.unidad).localeCompare(String(b.unidad))).map((t, i) => (
-              <tr key={i} className={`border-t border-gray-50 ${t.retrasada ? "bg-red-50/40" : ""}`}>
-                <td className="px-4 py-2 font-medium text-gray-700">Unidad {t.unidad}</td>
-                <td className="px-3 py-2 text-center">{t.entregada ? "✅" : "❌"}</td>
-                <td className="px-3 py-2 text-center font-mono text-gray-600">
-                  {t.calificacion != null ? `${t.calificacion}/${t.calificacion_maxima ?? "?"}` : "—"}
-                </td>
-                <td className="px-3 py-2 text-center">{t.retrasada ? "⚠️" : "—"}</td>
-                <td className="px-3 py-2 text-gray-400 max-w-[180px] truncate">
-                  {(t.estado && t.estado !== "NaN" && t.estado !== "nan") ? t.estado : "—"}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+    <div className={`bg-[#D6E4F0] border-y border-gray-300 px-3 py-0.5 text-[10px] font-bold text-[#1B3A6B] uppercase tracking-wide ${className}`}>
+      {children}
     </div>
   );
 }
@@ -210,29 +136,51 @@ export default function FichaEstudiante() {
     URL.revokeObjectURL(url);
   };
 
-  // Construir mapa de accesos y tareas por código de curso
+  // Construir mapa de cursos AVAC
   const cursos = {};
   if (ficha) {
-    // Indexar accesos
     (ficha.accesos_avac || []).forEach(a => {
       if (!cursos[a.codigo_curso]) cursos[a.codigo_curso] = { acceso: null, tareas: [] };
       cursos[a.codigo_curso].acceso = a;
     });
-    // Indexar tareas
     (ficha.tareas || []).forEach(t => {
       if (!cursos[t.codigo_curso]) cursos[t.codigo_curso] = { acceso: null, tareas: [] };
       cursos[t.codigo_curso].tareas.push(t);
     });
   }
 
+  // Intentar hacer match entre cursos AVAC y calificaciones institucionales
+  const matchNota = (courseName, calificaciones) => {
+    if (!courseName || !calificaciones?.length) return null;
+    const norm = s => (s || "").toLowerCase().replace(/[^a-záéíóúñ0-9]/gi, "").slice(0, 12);
+    const cn = norm(courseName);
+    return calificaciones.find(c => {
+      const an = norm(c.asignatura);
+      return an && cn && (an.startsWith(cn.slice(0, 8)) || cn.startsWith(an.slice(0, 8)));
+    }) || null;
+  };
+
+  const riesgoStyle = ficha ? getRiesgoStyle(ficha.nivel_riesgo) : {};
+  const compromisoLabel = ficha ? getCompromisoLabel(ficha.indice_compromiso) : "—";
+  const compromisoStr = ficha?.indice_compromiso != null
+    ? `${(ficha.indice_compromiso * 100).toFixed(0)}%` : "";
+  const compromisoColor = ficha?.indice_compromiso == null ? "text-gray-400"
+    : ficha.indice_compromiso < 0.3 ? "text-red-600"
+    : ficha.indice_compromiso < 0.6 ? "text-yellow-600"
+    : "text-green-700";
+
+  const today = new Date().toLocaleDateString("es-EC", {
+    weekday: "long", day: "numeric", month: "long", year: "numeric"
+  });
+
+  const updatedText = new Date().toLocaleDateString("es-EC", { day: "2-digit", month: "short" });
+
   return (
     <div>
       {/* ── Título + buscador ─────────────────────────────────────────── */}
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Ficha del Estudiante</h1>
-          <p className="text-gray-400 text-sm">Carrera EIB — Monitoreo académico individual</p>
-        </div>
+      <div className="mb-4">
+        <h1 className="text-2xl font-bold text-gray-900">Ficha del Estudiante</h1>
+        <p className="text-gray-400 text-sm">Carrera EIB — Monitoreo académico individual</p>
       </div>
 
       <div className="relative mb-5">
@@ -247,11 +195,8 @@ export default function FichaEstudiante() {
         {searchResults.length > 0 && (
           <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-xl shadow-lg mt-1 max-h-64 overflow-y-auto">
             {searchResults.map(s => (
-              <button
-                key={s.id}
-                onClick={() => loadFicha(s.id)}
-                className="w-full text-left px-4 py-3 hover:bg-blue-50 flex items-center justify-between border-b border-gray-100 last:border-0"
-              >
+              <button key={s.id} onClick={() => loadFicha(s.id)}
+                className="w-full text-left px-4 py-3 hover:bg-blue-50 flex items-center justify-between border-b border-gray-100 last:border-0">
                 <div>
                   <div className="font-medium text-gray-900 text-sm">{s.nombre || "Sin nombre"}</div>
                   <div className="text-xs text-gray-400">{s.correo_institucional} · {s.carrera || "EIB"}</div>
@@ -263,252 +208,425 @@ export default function FichaEstudiante() {
         )}
       </div>
 
-      {/* ── Ficha completa ────────────────────────────────────────────── */}
+      {/* ── FICHA COMPLETA ─────────────────────────────────────────────── */}
       {ficha && (
-        <div className="space-y-4">
+        <div className="border border-gray-400 rounded-md overflow-hidden shadow text-xs" style={{ fontFamily: "Calibri, Arial, sans-serif" }}>
 
-          {/* === CABECERA === */}
-          <div className="bg-[#1B3A6B] text-white rounded-xl px-6 py-4">
-            <div className="flex items-start justify-between flex-wrap gap-3">
-              <div>
-                <div className="text-xs font-semibold uppercase tracking-widest opacity-60 mb-0.5">
-                  Carrera EIB — Educación Intercultural Bilingüe [En Línea]
-                </div>
-                <h2 className="text-xl font-bold">{ficha.nombre || "—"}</h2>
-                <div className="flex flex-wrap gap-4 mt-1 text-sm opacity-80">
-                  {ficha.correo_institucional && <span>📧 {ficha.correo_institucional}</span>}
-                  {ficha.cedula && <span>🪪 {ficha.cedula}</span>}
-                  {ficha.telefono && <span>📱 {ficha.telefono}</span>}
-                  {ficha.sede && <span>🏫 {ficha.sede}</span>}
+          {/* ═══ FILA 1: ENCABEZADO PRINCIPAL ═══ */}
+          <div className="bg-[#1B3A6B] text-white flex items-center justify-between px-4 py-2">
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-bold tracking-tight">Educación Intercultural Bilingüe</span>
+              <span className="opacity-40">|</span>
+              <span className="text-xs opacity-60 italic">CARRERA: Educación Intercultural Bilingüe</span>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button onClick={handleExportPDF}
+                className="bg-white/10 hover:bg-white/20 text-white px-3 py-1 rounded text-xs font-medium transition">
+                📄 PDF
+              </button>
+              <button onClick={() => setShowForm(true)}
+                className="bg-white text-[#1B3A6B] hover:bg-blue-50 px-3 py-1 rounded text-xs font-bold transition">
+                + Intervención
+              </button>
+            </div>
+          </div>
+
+          {/* ═══ FILA 2: BANDA DE IDENTIDAD (amarillo) ═══ */}
+          <div className="bg-[#FFF2CC] border-b border-[#BF8F00]">
+            <div className="flex divide-x divide-[#BF8F00]">
+              <div className="px-3 py-1.5 text-center w-36 flex-shrink-0">
+                <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Cédula</div>
+                <div className="font-bold text-gray-800 text-sm mt-0.5">{ficha.cedula || "—"}</div>
+              </div>
+              <div className="px-3 py-1.5 text-center w-36 flex-shrink-0">
+                <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Teléfono</div>
+                <div className="font-bold text-gray-800 text-sm mt-0.5">{ficha.telefono || "—"}</div>
+              </div>
+              <div className="px-4 py-1.5 text-center flex-1">
+                <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Nombres y apellidos</div>
+                <div className="font-bold text-[#1B3A6B] text-base mt-0.5 uppercase">{ficha.nombre || "—"}</div>
+              </div>
+              <div className="px-3 py-1.5 text-center w-28 flex-shrink-0">
+                <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Actualizado</div>
+                <div className="font-semibold text-gray-700 text-sm mt-0.5">{updatedText}</div>
+              </div>
+              <div className="px-3 py-1.5 text-center w-36 flex-shrink-0">
+                <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Compromiso</div>
+                <div className={`font-bold text-sm mt-0.5 ${compromisoColor}`}>
+                  {compromisoLabel} {compromisoStr}
                 </div>
               </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={handleExportPDF}
-                  className="bg-white/10 hover:bg-white/20 text-white px-3 py-2 rounded-lg text-xs font-medium transition-colors"
-                >
-                  📄 Exportar PDF
-                </button>
-                <button
-                  onClick={() => setShowForm(true)}
-                  className="bg-white text-[#1B3A6B] hover:bg-blue-50 px-3 py-2 rounded-lg text-xs font-semibold transition-colors"
-                >
-                  + Registrar intervención
-                </button>
+              <div className="px-3 py-1.5 text-center w-36 flex-shrink-0">
+                <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Proyección académica</div>
+                <div className={`font-bold text-xs mt-0.5 ${riesgoStyle.text}`}>{riesgoStyle.label}</div>
               </div>
             </div>
           </div>
 
-          {/* === GRID PRINCIPAL: 3 columnas === */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* ═══ CUERPO PRINCIPAL: 2 columnas ═══ */}
+          <div className="flex divide-x divide-gray-300 bg-white">
 
-            {/* ─── COL 1: Datos personales ─── */}
-            <div className="bg-white rounded-xl border border-gray-200 p-4">
-              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 pb-2 border-b border-gray-100">
-                📋 Datos Personales
-              </h3>
-              <div className="space-y-0.5">
-                <DataRow icon="📧" label="Correo institucional" value={ficha.correo_institucional} />
-                <DataRow icon="📬" label="Correo personal" value={ficha.correo} />
-                <DataRow icon="📱" label="Teléfono / WhatsApp" value={ficha.telefono}
-                  href={ficha.telefono ? `https://wa.me/593${ficha.telefono.replace(/\D/g, "").replace(/^0/, "")}` : null}
-                />
-                <DataRow icon="🏫" label="Sede" value={ficha.sede} />
-                <DataRow icon="📝" label="Estado matrícula" value={ficha.estado_matricula} />
-              </div>
+            {/* ─── COLUMNA IZQUIERDA ─── */}
+            <div className="flex-shrink-0 bg-white" style={{ width: "260px" }}>
 
-              {/* Sin datos visibles → mensaje */}
-              {!ficha.correo && !ficha.telefono && !ficha.sede && (
-                <p className="text-xs text-gray-400 mt-2 italic">
-                  Datos adicionales no disponibles en AVAC.<br />
-                  Disponible con integración al sistema académico.
-                </p>
-              )}
+              {/* Datos personales */}
+              <SectionHeader>Datos personales</SectionHeader>
+              <table className="w-full border-collapse">
+                <tbody>
+                  <PersonalRow label="Whatsapp" value={ficha.telefono}
+                    href={ficha.telefono ? `https://wa.me/593${ficha.telefono.replace(/\D/g, "").replace(/^0/, "")}` : null} />
+                  <PersonalRow label="Correo" value={ficha.correo} />
+                  <PersonalRow label="Correo Ins." value={ficha.correo_institucional} />
+                  <PersonalRow label="Discapacidad" value="—" />
+                  <PersonalRow label="Fecha nac. y edad" value="—" />
+                  <PersonalRow label="Autoidentificación" value="—" />
+                  <PersonalRow label="Lengua materna" value="—" />
+                </tbody>
+              </table>
 
-              <div className="mt-4 pt-3 border-t border-gray-100">
-                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-                  🗺️ Lugar de Residencia
-                </h3>
-                <p className="text-xs text-gray-400 italic">Sin datos geográficos disponibles</p>
-              </div>
-
-              <div className="mt-4 pt-3 border-t border-gray-100">
-                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-                  💰 Datos Socioeconómicos
-                </h3>
-                <p className="text-xs text-gray-400 italic">Sin datos socioeconómicos disponibles</p>
-              </div>
-            </div>
-
-            {/* ─── COL 2: Indicadores de riesgo ─── */}
-            <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-col gap-4">
-              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider pb-2 border-b border-gray-100">
-                📊 Indicadores de Compromiso
-              </h3>
-
-              {/* Gauge circular */}
-              <div className="flex justify-center">
-                <CompromisoGauge valor={ficha.indice_compromiso} size={110} />
-              </div>
-
-              {/* KPIs */}
-              <div className="grid grid-cols-2 gap-2">
-                <KpiCard
-                  label="Días sin AVAC"
-                  value={ficha.dias_sin_acceso != null ? `${Math.round(ficha.dias_sin_acceso)}d` : "—"}
-                  highlight={ficha.dias_sin_acceso > 14}
-                  sub={ficha.dias_sin_acceso > 14 ? "⚠️ Inactividad alta" : null}
-                />
-                <KpiCard
-                  label="Tareas entregadas"
-                  value={ficha.porcentaje_tareas != null ? `${Math.round(ficha.porcentaje_tareas)}%` : "—"}
-                  highlight={ficha.porcentaje_tareas != null && ficha.porcentaje_tareas < 50}
-                />
-                <div className="col-span-2">
-                  <KpiCard
-                    label="Nivel de Riesgo"
-                    value={<RiskBadge nivel={ficha.nivel_riesgo} size="lg" />}
-                  />
-                </div>
-              </div>
-
-              {/* Proyección */}
-              <ProyeccionCard
-                nivel_riesgo={ficha.nivel_riesgo}
-                dias_sin_acceso={ficha.dias_sin_acceso != null ? Math.round(ficha.dias_sin_acceso) : null}
-                porcentaje_tareas={ficha.porcentaje_tareas}
-              />
-            </div>
-
-            {/* ─── COL 3: Intervenciones ─── */}
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-                  📞 Seguimiento ({ficha.total_intervenciones})
-                </h3>
-                <button
-                  onClick={() => setShowForm(true)}
-                  className="text-xs text-blue-600 hover:text-blue-800 font-medium"
-                >
-                  + Nueva
-                </button>
-              </div>
-
-              <div className="flex-1 overflow-y-auto max-h-72">
-                {ficha.intervenciones?.length === 0 ? (
-                  <div className="text-center py-8">
-                    <div className="text-3xl mb-2">📋</div>
-                    <p className="text-xs text-gray-400">Sin intervenciones registradas</p>
-                  </div>
-                ) : (
-                  <div className="divide-y divide-gray-50">
-                    {ficha.intervenciones.map(inv => (
-                      <div key={inv.id} className="px-4 py-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex flex-wrap items-center gap-1 mb-1">
-                              {inv.medio && (
-                                <span className="inline-flex items-center bg-blue-100 text-blue-700 text-xs font-medium px-1.5 py-0.5 rounded-full">
-                                  {inv.medio}
-                                </span>
-                              )}
-                              {inv.motivo && (
-                                <span className="text-xs text-gray-500 truncate">{inv.motivo}</span>
-                              )}
-                            </div>
-                            {inv.observacion && (
-                              <p className="text-xs text-gray-700 leading-relaxed">{inv.observacion}</p>
-                            )}
-                            <div className="flex flex-wrap gap-2 mt-1 text-xs text-gray-400">
-                              {inv.estado && <span>Estado: <strong className="text-gray-600">{inv.estado}</strong></span>}
-                              {inv.asignatura && <span>· {inv.asignatura}</span>}
-                            </div>
-                          </div>
-                          <div className="text-right flex-shrink-0">
-                            <div className="text-xs text-gray-400">
-                              {inv.created_at ? new Date(inv.created_at).toLocaleDateString("es-EC") : ""}
-                            </div>
-                            {inv.monitor_nombre && (
-                              <div className="text-xs text-gray-400 truncate max-w-[80px]">{inv.monitor_nombre}</div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* === ACTIVIDAD AVAC Y TAREAS POR CURSO === */}
-          {Object.keys(cursos).length > 0 && (
-            <section className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
-                <h3 className="font-semibold text-gray-800 text-sm">
-                  📚 Actividad AVAC y Tareas por Curso ({Object.keys(cursos).length} cursos)
-                </h3>
-                <div className="text-xs text-gray-400">
-                  {(ficha.tareas || []).filter(t => t.entregada).length} /
-                  {(ficha.tareas || []).length} tareas entregadas
-                </div>
-              </div>
-              <div className="p-4 space-y-3">
-                {Object.entries(cursos).map(([codigo, { acceso, tareas: ts }]) => (
-                  <AvacCursoRow key={codigo} acceso={acceso} tareas={ts} />
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* === PRÁCTICAS PREPROFESIONALES === */}
-          <section className="bg-white rounded-xl border border-gray-200 p-5">
-            <h3 className="font-semibold text-gray-800 text-sm mb-3 pb-2 border-b border-gray-100">
-              🏫 Prácticas Preprofesionales
-            </h3>
-            <p className="text-xs text-gray-400 italic">
-              Datos de prácticas no disponibles en la fuente actual (AVAC).
-              Requiere integración con el sistema de prácticas institucional.
-            </p>
-          </section>
-
-          {/* === CALIFICACIONES INSTITUCIONALES === */}
-          {ficha.calificaciones?.length > 0 && (
-            <section className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <h3 className="px-5 py-3 font-semibold text-gray-800 text-sm border-b border-gray-100">
-                🎓 Calificaciones Institucionales ({ficha.calificaciones.length} asignaturas)
-              </h3>
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="text-left px-5 py-2.5 text-gray-500 font-medium text-xs">Asignatura</th>
-                    <th className="text-left px-5 py-2.5 text-gray-500 font-medium text-xs">Docente</th>
-                    <th className="text-left px-5 py-2.5 text-gray-500 font-medium text-xs">Grupo</th>
-                    <th className="text-center px-5 py-2.5 text-gray-500 font-medium text-xs">Nota Final</th>
+              {/* Lugar de residencia */}
+              <SectionHeader>Lugar de residencia</SectionHeader>
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-[#F2F2F2]">
+                    <th className="text-[10px] font-semibold text-gray-500 px-2 py-0.5 border border-gray-200 text-center">Provincia</th>
+                    <th className="text-[10px] font-semibold text-gray-500 px-2 py-0.5 border border-gray-200 text-center">Cantón</th>
+                    <th className="text-[10px] font-semibold text-gray-500 px-2 py-0.5 border border-gray-200 text-center">Parroquia</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {ficha.calificaciones.map((g, i) => (
-                    <tr key={i} className="border-t border-gray-100 hover:bg-gray-50">
-                      <td className="px-5 py-2.5 font-medium text-gray-800">{g.asignatura}</td>
-                      <td className="px-5 py-2.5 text-gray-500 text-xs">{g.docente || "—"}</td>
-                      <td className="px-5 py-2.5 text-gray-400 text-xs">{g.grupo || "—"}</td>
-                      <td className="px-5 py-2.5 text-center">
-                        <span className={`font-bold ${(g.nota_final ?? 0) < 28 ? "text-red-600" : "text-green-600"}`}>
-                          {g.nota_final ?? "—"}
-                        </span>
-                      </td>
+                  <tr>
+                    <td className="text-[10px] text-center px-1 py-0.5 border border-gray-200 text-gray-600">{ficha.sede || "—"}</td>
+                    <td className="text-[10px] text-center px-1 py-0.5 border border-gray-200 text-gray-300 italic">—</td>
+                    <td className="text-[10px] text-center px-1 py-0.5 border border-gray-200 text-gray-300 italic">—</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              {/* Mapa */}
+              <div className="bg-gray-50 border border-gray-200 mx-2 my-2 rounded flex flex-col items-center justify-center text-center"
+                   style={{ height: "130px" }}>
+                <svg viewBox="0 0 80 90" className="w-16 h-16 opacity-30" fill="#1B3A6B">
+                  {/* Ecuador simplified shape */}
+                  <path d="M38 5 L50 8 L60 15 L65 25 L62 38 L70 45 L72 55 L65 65 L55 72 L42 78 L30 75 L20 68 L15 55 L18 42 L12 32 L18 20 L28 12 Z" />
+                  <circle cx="38" cy="40" r="5" fill="#F0B000" opacity="1"/>
+                </svg>
+                <div className="text-[10px] text-gray-400 -mt-1">Datos geográficos</div>
+                <div className="text-[9px] text-gray-300">no disponibles</div>
+              </div>
+
+              <table className="w-full border-collapse">
+                <tbody>
+                  <PersonalRow label="Barrio o comunidad" value="—" />
+                </tbody>
+              </table>
+
+              {/* Datos socioeconómicos */}
+              <SectionHeader>Datos socioeconómicos</SectionHeader>
+              <table className="w-full border-collapse">
+                <tbody>
+                  <PersonalRow label="Nivel de beca" value="—" />
+                  <tr className={ficha.estado_matricula === "Matriculado" ? "bg-green-50" : "bg-red-50"}>
+                    <td className="text-right text-[10px] text-gray-500 font-semibold px-2 py-0.5 border border-gray-200 bg-[#F2F2F2] whitespace-nowrap w-28">Pago matrícula</td>
+                    <td className={`text-[10px] px-2 py-0.5 border border-gray-200 font-semibold ${ficha.estado_matricula === "Matriculado" ? "text-green-700" : "text-red-600"}`}>
+                      {ficha.estado_matricula || "—"}
+                    </td>
+                  </tr>
+                  <PersonalRow label="Empleabilidad" value="—" />
+                  <PersonalRow label="Madre o padre" value="—" />
+                </tbody>
+              </table>
+            </div>
+
+            {/* ─── SECCIÓN DERECHA ─── */}
+            <div className="flex-1 overflow-hidden flex flex-col">
+
+              {/* Barra de info: sede / nivel / compromiso / riesgo */}
+              <div className="grid grid-cols-4 divide-x divide-white/20 bg-[#1B3A6B] text-white">
+                <div className="px-3 py-1.5 text-center">
+                  <div className="text-[9px] opacity-50 uppercase tracking-wider">Centro de Apoyo</div>
+                  <div className="text-xs font-semibold mt-0.5">{ficha.sede || "—"}</div>
+                </div>
+                <div className="px-3 py-1.5 text-center">
+                  <div className="text-[9px] opacity-50 uppercase tracking-wider">Nivel activo</div>
+                  <div className="text-xs font-semibold mt-0.5">
+                    {Object.keys(cursos).length > 0
+                      ? `${Object.keys(cursos).length} cursos AVAC`
+                      : "Sin cursos"}
+                  </div>
+                </div>
+                <div className="px-3 py-1.5 text-center">
+                  <div className="text-[9px] opacity-50 uppercase tracking-wider">Compromiso</div>
+                  <div className={`text-xs font-bold mt-0.5 ${
+                    ficha.indice_compromiso == null ? "text-gray-300"
+                    : ficha.indice_compromiso < 0.3 ? "text-red-300"
+                    : ficha.indice_compromiso < 0.6 ? "text-yellow-300"
+                    : "text-green-300"
+                  }`}>
+                    {compromisoLabel} {compromisoStr}
+                  </div>
+                </div>
+                <div className={`px-3 py-1.5 text-center ${riesgoStyle.bg}`}>
+                  <div className="text-[9px] opacity-70 uppercase tracking-wider text-gray-700">Proyección</div>
+                  <div className={`text-xs font-bold mt-0.5 ${riesgoStyle.text}`}>{riesgoStyle.label}</div>
+                </div>
+              </div>
+
+              {/* Tabla de cursos AVAC activos */}
+              {Object.keys(cursos).length > 0 && (
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-[#BDD7EE]">
+                        <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 whitespace-nowrap text-[10px]">Nivel y grupo</th>
+                        <th className="text-left px-2 py-1 border border-gray-300 font-semibold text-gray-700 text-[10px]" style={{ minWidth: "180px" }}>Asignaturas matriculadas</th>
+                        <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 w-14 text-[10px]">Nota</th>
+                        <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 w-10 text-[10px]">Mat</th>
+                        <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 w-16 text-[10px]">AVAC</th>
+                        <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 w-28 text-[10px]">Actividades</th>
+                        <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 w-14 text-[10px]">Link</th>
+                        <th className="text-left px-2 py-1 border border-gray-300 font-semibold text-gray-700 text-[10px]">Docente</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(cursos).map(([codigo, { acceso, tareas: ts }], idx) => {
+                        const courseName = acceso?.nombre_curso || ts[0]?.nombre_curso || codigo;
+                        const matchedCal = matchNota(courseName, ficha.calificaciones);
+                        const nota = matchedCal?.nota_final ?? null;
+                        const noteStyle = getNoteStyle(nota);
+                        const sortedTasks = [...ts].sort((a, b) =>
+                          String(a.unidad).localeCompare(String(b.unidad), undefined, { numeric: true })
+                        );
+                        const diasInt = acceso?.dias_sin_acceso != null ? Math.round(acceso.dias_sin_acceso) : null;
+                        const diasColor = diasInt == null ? "text-gray-300"
+                          : diasInt > 14 ? "text-red-600 font-bold"
+                          : diasInt > 7 ? "text-orange-500"
+                          : "text-green-600";
+
+                        return (
+                          <tr key={codigo} className={idx % 2 === 0 ? "bg-white" : "bg-[#F9F9F9]"}>
+                            {/* Nivel y grupo */}
+                            <td className="px-2 py-1 border border-gray-200 text-center text-[10px] text-gray-500 whitespace-nowrap">
+                              {acceso?.id_avac
+                                ? <span className="font-mono">{acceso.id_avac}</span>
+                                : "—"}
+                            </td>
+                            {/* Asignatura */}
+                            <td className="px-2 py-1 border border-gray-200 font-medium text-gray-800">
+                              {courseName}
+                            </td>
+                            {/* Nota */}
+                            <td className={`px-2 py-1 border border-gray-200 text-center font-bold ${noteStyle.bg} ${noteStyle.text}`}>
+                              {nota != null ? nota : <span className="text-gray-300">—</span>}
+                            </td>
+                            {/* Mat (estado matrícula AVAC) */}
+                            <td className="px-2 py-1 border border-gray-200 text-center text-[10px] text-gray-500">
+                              {acceso?.estado_avac
+                                ? <span className="bg-blue-100 text-blue-700 px-1 rounded text-[9px]">
+                                    {acceso.estado_avac.slice(0, 3)}
+                                  </span>
+                                : "—"}
+                            </td>
+                            {/* AVAC: días + última visita */}
+                            <td className="px-2 py-1 border border-gray-200 text-center">
+                              <span className={`font-mono text-[11px] ${diasColor}`}>
+                                {diasInt != null ? `${diasInt}d` : "—"}
+                              </span>
+                              {acceso?.ultimo_acceso_texto && (
+                                <div className="text-[9px] text-gray-400 leading-tight">{acceso.ultimo_acceso_texto}</div>
+                              )}
+                            </td>
+                            {/* Actividades: celdas de tareas */}
+                            <td className="px-2 py-1 border border-gray-200">
+                              <div className="flex gap-0.5 justify-center flex-wrap">
+                                {sortedTasks.slice(0, 8).map((t, i) => (
+                                  <TaskCell
+                                    key={i}
+                                    entregada={t.entregada}
+                                    retrasada={t.retrasada}
+                                    title={`Unidad ${t.unidad}: ${t.entregada ? "Entregada" : t.retrasada ? "Retrasada" : "Pendiente"}`}
+                                  />
+                                ))}
+                                {sortedTasks.length > 8 && (
+                                  <span className="text-[9px] text-gray-400 self-center">+{sortedTasks.length - 8}</span>
+                                )}
+                                {sortedTasks.length === 0 && (
+                                  <span className="text-[9px] text-gray-300 italic">Sin tareas</span>
+                                )}
+                              </div>
+                            </td>
+                            {/* Link AVAC */}
+                            <td className="px-2 py-1 border border-gray-200 text-center">
+                              {acceso?.id_avac
+                                ? <a href={`https://avac.ups.edu.ec/course/view.php?id=${acceso.id_avac}`}
+                                     target="_blank" rel="noreferrer"
+                                     className="text-blue-500 hover:text-blue-700 font-mono text-[10px]">
+                                    {acceso.id_avac}
+                                  </a>
+                                : <span className="text-gray-300">—</span>}
+                            </td>
+                            {/* Docente */}
+                            <td className="px-2 py-1 border border-gray-200 text-gray-600 text-[10px]">
+                              {matchedCal?.docente || <span className="text-gray-300 italic">—</span>}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Fila resumen de KPIs */}
+              <div className="grid grid-cols-3 divide-x divide-gray-200 border-t border-gray-200 bg-[#F9F9F9]">
+                <div className="py-2 px-3 text-center">
+                  <div className="text-[9px] text-gray-400 uppercase tracking-wider">Días sin AVAC</div>
+                  <div className={`font-bold text-sm mt-0.5 ${ficha.dias_sin_acceso > 14 ? "text-red-600" : ficha.dias_sin_acceso > 7 ? "text-orange-500" : "text-green-600"}`}>
+                    {ficha.dias_sin_acceso != null ? `${Math.round(ficha.dias_sin_acceso)}d` : "—"}
+                  </div>
+                </div>
+                <div className="py-2 px-3 text-center">
+                  <div className="text-[9px] text-gray-400 uppercase tracking-wider">Tareas entregadas</div>
+                  <div className={`font-bold text-sm mt-0.5 ${ficha.porcentaje_tareas < 50 ? "text-red-600" : ficha.porcentaje_tareas < 75 ? "text-orange-500" : "text-green-600"}`}>
+                    {ficha.porcentaje_tareas != null ? `${Math.round(ficha.porcentaje_tareas)}%` : "—"}
+                  </div>
+                </div>
+                <div className="py-2 px-3 text-center">
+                  <div className="text-[9px] text-gray-400 uppercase tracking-wider">Nivel de Riesgo</div>
+                  <div className={`font-bold text-sm mt-0.5 ${riesgoStyle.text}`}>
+                    {ficha.nivel_riesgo || "—"}
+                  </div>
+                </div>
+              </div>
+
+              {/* Historial de calificaciones institucionales */}
+              {ficha.calificaciones?.length > 0 && (
+                <div className="border-t border-gray-200">
+                  <SectionHeader>
+                    Historial de calificaciones ({ficha.calificaciones.length} asignaturas)
+                  </SectionHeader>
+                  <div className="p-2 flex flex-wrap gap-1.5 bg-white">
+                    {ficha.calificaciones.map((c, i) => (
+                      <GradeChip key={i} asignatura={c.asignatura} nota_final={c.nota_final} docente={c.docente} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Si no hay cursos AVAC */}
+              {Object.keys(cursos).length === 0 && (
+                <div className="flex-1 flex items-center justify-center py-12 text-center text-gray-300">
+                  <div>
+                    <div className="text-3xl mb-2">📚</div>
+                    <div className="text-sm">Sin actividad AVAC registrada</div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ═══ PRÁCTICAS PREPROFESIONALES ═══ */}
+          <div className="border-t border-gray-300">
+            <div className="bg-[#1B3A6B] text-white px-4 py-1 text-[10px] font-bold uppercase tracking-wider">
+              Prácticas Preprofesionales
+            </div>
+            <div className="grid grid-cols-2 divide-x divide-gray-300 bg-white">
+              <table className="border-collapse w-full">
+                <tbody>
+                  {[
+                    ["Nombre práctica", "—"],
+                    ["IE Práctica", "—"],
+                    ["Ubicación IE", "—"],
+                    ["Distrito AMIE", "—"],
+                    ["Jurisdicción", "—"],
+                    ["Nombre autoridad", "—"],
+                    ["Cargo", "—"],
+                    ["Celular", "—"],
+                  ].map(([label, val]) => (
+                    <tr key={label}>
+                      <td className="bg-[#F2F2F2] border border-gray-200 text-right text-[10px] font-semibold text-gray-500 px-2 py-0.5 w-32 whitespace-nowrap">{label}</td>
+                      <td className="border border-gray-200 text-[10px] px-2 py-0.5 text-gray-300 italic">{val}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-            </section>
-          )}
+              <div className="p-3">
+                <div className="grid grid-cols-2 gap-2 text-[10px]">
+                  <div>
+                    <div className="bg-[#F2F2F2] text-center py-0.5 font-bold text-gray-600 border border-gray-200 mb-1">Sin membrete</div>
+                    <div className="text-center text-[#BF8F00] border border-gray-200 py-0.5 cursor-pointer hover:bg-yellow-50">Carta de solicitud</div>
+                    <div className="text-center text-[#BF8F00] border border-gray-200 py-0.5 cursor-pointer hover:bg-yellow-50 mt-0.5">Carta de solicitud</div>
+                  </div>
+                  <div>
+                    <div className="bg-[#F2F2F2] text-center py-0.5 font-bold text-gray-600 border border-gray-200 mb-1">Membretado</div>
+                    <div className="text-center text-[#BF8F00] border border-gray-200 py-0.5 cursor-pointer hover:bg-yellow-50">Carta de solicitud</div>
+                    <div className="text-center text-[#BF8F00] border border-gray-200 py-0.5 cursor-pointer hover:bg-yellow-50 mt-0.5">Carta de solicitud</div>
+                  </div>
+                  <div className="col-span-2 text-center text-[#BF8F00] border border-gray-200 py-0.5 cursor-pointer hover:bg-yellow-50">Carta compromiso</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ═══ SEGUIMIENTO E INTERVENCIONES ═══ */}
+          <div className="border-t border-gray-300">
+            <div className="bg-[#1B3A6B] text-white flex items-center justify-between px-4 py-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider">
+                Seguimiento e Intervenciones ({ficha.total_intervenciones || 0})
+              </span>
+              <button onClick={() => setShowForm(true)}
+                className="bg-white/10 hover:bg-white/20 text-white text-[10px] px-3 py-0.5 rounded font-medium">
+                + Nueva intervención
+              </button>
+            </div>
+            <div className="bg-white">
+              {ficha.intervenciones?.length === 0 ? (
+                <div className="py-5 text-center text-[10px] text-gray-300 italic">
+                  Sin intervenciones registradas
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-100">
+                  {ficha.intervenciones.map(inv => (
+                    <div key={inv.id} className="px-4 py-2 flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="flex flex-wrap items-center gap-1 mb-0.5">
+                          {inv.medio && (
+                            <span className="bg-blue-100 text-blue-700 text-[9px] font-medium px-1.5 py-0.5 rounded-full">
+                              {inv.medio}
+                            </span>
+                          )}
+                          {inv.motivo && <span className="text-[10px] text-gray-500">{inv.motivo}</span>}
+                        </div>
+                        {inv.observacion && <p className="text-xs text-gray-700 leading-relaxed">{inv.observacion}</p>}
+                        <div className="flex flex-wrap gap-2 mt-0.5 text-[9px] text-gray-400">
+                          {inv.estado && <span>Estado: <strong className="text-gray-600">{inv.estado}</strong></span>}
+                          {inv.asignatura && <span>· {inv.asignatura}</span>}
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <div className="text-[9px] text-gray-400">
+                          {inv.created_at ? new Date(inv.created_at).toLocaleDateString("es-EC") : ""}
+                        </div>
+                        {inv.monitor_nombre && (
+                          <div className="text-[9px] text-gray-400 truncate max-w-[90px]">{inv.monitor_nombre}</div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ═══ PIE DE PÁGINA ═══ */}
+          <div className="bg-[#1B3A6B] text-white text-center py-1.5 text-[9px] opacity-60 tracking-wide">
+            Yachay Deep — Carlos Vásconez P. © &nbsp;|&nbsp; {today}
+          </div>
 
         </div>
       )}
 
-      {/* Modal de intervención */}
+      {/* Modal intervención */}
       {showForm && ficha && (
         <InterventionForm
           student={ficha}
