@@ -4,11 +4,13 @@ Reemplaza la actualización manual de Power Query en el Excel.
 Soporta filtrado por bloque activo usando SemesterConfig.
 """
 import logging
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List
 import pandas as pd
 from sqlalchemy.orm import Session
+from sqlalchemy import func, text as sa_text
 
 from .transformers import (
     transform_ingresos_avac,
@@ -138,8 +140,7 @@ class ETLPipeline:
                     df_calificaciones = transform_calificaciones(str(latest_hist))
                     used_historico_fallback = True
                     # Extraer código de período del nombre para excluirlo del histórico
-                    import re as _re
-                    _m = _re.search(r'\(P(\d+)\)', latest_hist.name, _re.IGNORECASE)
+                    _m = re.search(r'\(P(\d+)\)', latest_hist.name, re.IGNORECASE)
                     self._fallback_periodo = f"P{_m.group(1)}" if _m else None
                 else:
                     self._fallback_periodo = None
@@ -148,6 +149,45 @@ class ETLPipeline:
 
             logs.append(f"  → {len(df_calificaciones)} registros de calificaciones{' (fallback TableauHistorico)' if used_historico_fallback else ''}")
 
+            # Enriquecer calificaciones con NIVEL del reporte si falta
+            # (P67 CSV no tiene columna NIVEL; el reporte.xlsx sí)
+            if (
+                not df_calificaciones.empty
+                and not df_personales.empty
+                and ("nivel" not in df_calificaciones.columns or df_calificaciones["nivel"].isna().all())
+            ):
+                # Construir mapa nombre→nivel desde el reporte original (antes de dedup)
+                reporte_path = Path(settings.DATA_PATH_REPORTE)
+                _nivel_map = {}
+                if reporte_path.is_dir():
+                    for _rf in sorted(reporte_path.glob("*_reporte.xlsx")):
+                        try:
+                            _rdf = pd.read_excel(_rf, engine="openpyxl")
+                            _rdf.columns = [c.strip().upper() for c in _rdf.columns]
+                            if "ESTUDIANTES" in _rdf.columns and "NIVEL" in _rdf.columns and "ASIGNATURA" in _rdf.columns:
+                                for _, _rr in _rdf.iterrows():
+                                    _nom = re.sub(r"\s+", " ", str(_rr.get("ESTUDIANTES", "")).strip().upper())
+                                    _asig = str(_rr.get("ASIGNATURA", "")).strip().upper()
+                                    _niv = _rr.get("NIVEL")
+                                    if _nom and _asig and pd.notna(_niv):
+                                        try:
+                                            _nivel_map[(_nom, _asig)] = int(_niv)
+                                        except (ValueError, TypeError):
+                                            pass
+                        except Exception:
+                            pass
+
+                if _nivel_map:
+                    def _get_nivel(row):
+                        nom = re.sub(r"\s+", " ", str(row.get("nombre_estudiante", "")).strip().upper())
+                        asig = str(row.get("asignatura", "")).strip().upper()
+                        return _nivel_map.get((nom, asig))
+
+                    df_calificaciones["nivel"] = df_calificaciones.apply(_get_nivel, axis=1)
+                    df_calificaciones["nivel"] = pd.to_numeric(df_calificaciones["nivel"], errors="coerce").astype("Int64")
+                    _filled = df_calificaciones["nivel"].notna().sum()
+                    logs.append(f"  → Enriquecido {_filled}/{len(df_calificaciones)} calificaciones con NIVEL del reporte")
+
             # 2. Calcular indicadores
             logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Calculando indicadores de riesgo...")
             df_master = calcular_indicadores_estudiantes(df_ingresos, df_tareas, df_calificaciones)
@@ -155,14 +195,18 @@ class ETLPipeline:
             # 3a. Crear registros base para todos los estudiantes del reporte
             #     (aunque aún no tengan actividad AVAC)
             # Limpiar cédulas 'nan' heredadas de corridas anteriores con el bug
-            from sqlalchemy import text as _sa_text
-            self.db.execute(_sa_text("UPDATE students SET cedula = NULL WHERE cedula = 'nan'"))
+            self.db.execute(sa_text("UPDATE students SET cedula = NULL WHERE cedula = 'nan'"))
             self.db.flush()
 
             if not df_personales.empty:
                 logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Sembrando estudiantes desde reporte.xlsx...")
                 n_seed = self._seed_students_from_personales(df_personales)
                 logs.append(f"  → {n_seed} estudiantes inicializados desde reporte")
+
+            # 3a-bis. Deduplicar estudiantes con mismo nombre (merge orphans)
+            n_merged = self._merge_duplicate_students()
+            if n_merged:
+                logs.append(f"  → {n_merged} estudiantes duplicados fusionados")
 
             # 3b. Upsert estudiantes con indicadores (actualiza los ya creados)
             logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Actualizando indicadores de estudiantes...")
@@ -274,6 +318,16 @@ class ETLPipeline:
             if estado and not student.estado_matricula:
                 student.estado_matricula = estado
 
+            # Nivel académico del reporte (moda de NIVEL por estudiante)
+            nivel_val = pr.get("nivel_academico")
+            if nivel_val is not None and pd.notna(nivel_val):
+                try:
+                    niv = int(nivel_val)
+                    if 1 <= niv <= 12 and not student.nivel_academico:
+                        student.nivel_academico = niv
+                except (ValueError, TypeError):
+                    pass
+
             # ── Datos personales del reporte institucional ──────────────
             # Estos SIEMPRE se actualizan (no solo para nuevos) porque el
             # reporte es la fuente de verdad para datos demográficos.
@@ -302,6 +356,82 @@ class ETLPipeline:
 
         self.db.commit()
         return count
+
+    def _merge_duplicate_students(self) -> int:
+        """
+        Detecta y fusiona estudiantes duplicados creados por desajuste de nombres.
+
+        Escenario típico: _seed_students_from_personales crea Student A con
+        correo_institucional + datos personales. Luego _upsert_grades no lo
+        encuentra (nombre con doble espacio) y crea Student B con solo
+        nombre + carrera (sin correo_institucional).
+
+        Estrategia: para cada Student sin correo_institucional, buscar otro
+        con el mismo nombre normalizado que SÍ tenga correo. Si existe,
+        mover grades/accesos/tareas del orphan al "bueno" y eliminar el orphan.
+        """
+        from ..models.grade import Grade
+
+        # Buscar orphans: Students sin correo_institucional
+        orphans = (
+            self.db.query(Student)
+            .filter(
+                (Student.correo_institucional.is_(None)) | (Student.correo_institucional == "")
+            )
+            .all()
+        )
+        if not orphans:
+            return 0
+
+        merged = 0
+        for orphan in orphans:
+            if not orphan.nombre:
+                continue
+
+            # Normalizar nombre del orphan
+            nombre_norm = re.sub(r"\s+", " ", orphan.nombre.strip().upper())
+
+            # Buscar el "bueno" con correo_institucional y mismo nombre normalizado
+            good = (
+                self.db.query(Student)
+                .filter(
+                    Student.id != orphan.id,
+                    Student.correo_institucional.isnot(None),
+                    Student.correo_institucional != "",
+                    func.replace(Student.nombre, "  ", " ") == nombre_norm,
+                )
+                .first()
+            )
+            if not good:
+                continue
+
+            # Mover grades del orphan al good
+            self.db.query(Grade).filter(Grade.student_id == orphan.id).update(
+                {Grade.student_id: good.id}, synchronize_session=False
+            )
+            # Mover accesos AVAC
+            self.db.query(AvacAccess).filter(AvacAccess.student_id == orphan.id).update(
+                {AvacAccess.student_id: good.id}, synchronize_session=False
+            )
+            # Mover tareas
+            self.db.query(TaskSubmission).filter(TaskSubmission.student_id == orphan.id).update(
+                {TaskSubmission.student_id: good.id}, synchronize_session=False
+            )
+
+            # Copiar datos del orphan que el good no tiene
+            if not good.carrera and orphan.carrera:
+                good.carrera = orphan.carrera
+
+            # Eliminar el orphan
+            self.db.delete(orphan)
+            merged += 1
+            logger.info(f"  Fusionado orphan '{orphan.nombre}' (id={orphan.id}) → '{good.nombre}' (id={good.id}, correo={good.correo_institucional})")
+
+        if merged:
+            self.db.flush()
+            self.db.commit()
+
+        return merged
 
     def _upsert_students(
         self,
@@ -441,6 +571,16 @@ class ETLPipeline:
                     if grupo_str and grupo_str.lower() not in ("nan", "none", ""):
                         student.grupo = grupo_str
 
+                # Nivel académico (moda de NIVEL del reporte) — prioridad 1
+                nivel_rep = _nan_to_none(pr.get("nivel_academico"))
+                if nivel_rep is not None:
+                    try:
+                        niv = int(nivel_rep)
+                        if 1 <= niv <= 12:
+                            student.nivel_academico = niv
+                    except (ValueError, TypeError):
+                        pass
+
             else:
                 # ── Fallback: nombre desde AVAC (prioridad 2) ───────────────────
                 nombre_avac = str(row.get("nombre_avac", "")).strip()
@@ -455,13 +595,15 @@ class ETLPipeline:
             # ── DatosEspecificos EIB (nivel académico, sede, whatsapp, residencia granular) ──
             de = datos_esp_map.get(correo)
             if de is not None:
-                # Nivel académico (entero 1–8) — solo DatosEspecificos lo tiene
-                nivel = de.get("nivel_academico")
-                if nivel is not None and not (isinstance(nivel, float) and pd.isna(nivel)):
-                    try:
-                        student.nivel_academico = int(nivel)
-                    except (ValueError, TypeError):
-                        pass
+                # Nivel académico (entero 1–8) — DatosEspecificos como fallback
+                # (reporte.xlsx ya lo estableció arriba si existía)
+                if not student.nivel_academico:
+                    nivel = de.get("nivel_academico")
+                    if nivel is not None and not (isinstance(nivel, float) and pd.isna(nivel)):
+                        try:
+                            student.nivel_academico = int(nivel)
+                        except (ValueError, TypeError):
+                            pass
 
                 # Sede / Centro de apoyo (más directo que majority-vote por grupo)
                 sede_de = str(de.get("sede", "") or "").strip()
@@ -617,11 +759,22 @@ class ETLPipeline:
 
         count = 0
         for _, row in df_calificaciones.iterrows():
-            nombre = str(row.get("nombre_estudiante", "")).strip().upper()
+            nombre = re.sub(r"\s+", " ", str(row.get("nombre_estudiante", "")).strip().upper())
             if not nombre:
                 continue
 
+            # Buscar por nombre exacto (ya normalizado sin dobles espacios)
             student = self.db.query(Student).filter(Student.nombre == nombre).first()
+            if not student:
+                # Fallback: buscar colapsando espacios en BD (por si hay registros viejos)
+                student = (
+                    self.db.query(Student)
+                    .filter(func.replace(Student.nombre, "  ", " ") == nombre)
+                    .first()
+                )
+                if student and student.nombre != nombre:
+                    # Corregir el nombre con doble espacio en BD
+                    student.nombre = nombre
             if not student:
                 student = Student(
                     nombre=nombre,
@@ -699,14 +852,23 @@ class ETLPipeline:
 
         count = 0
         for _, row in df_historico.iterrows():
-            nombre = str(row.get("nombre_estudiante", "")).strip().upper()
+            nombre = re.sub(r"\s+", " ", str(row.get("nombre_estudiante", "")).strip().upper())
             if not nombre:
                 continue
 
             periodo = str(row.get("periodo", "")).strip() or None
 
-            # Buscar estudiante por nombre (llave de cruce disponible en Tableau)
+            # Buscar estudiante por nombre (normalizado sin dobles espacios)
             student = self.db.query(Student).filter(Student.nombre == nombre).first()
+            if not student:
+                # Fallback: buscar colapsando espacios en BD
+                student = (
+                    self.db.query(Student)
+                    .filter(func.replace(Student.nombre, "  ", " ") == nombre)
+                    .first()
+                )
+                if student and student.nombre != nombre:
+                    student.nombre = nombre
             if not student:
                 # Crear estudiante mínimo si no existe (puede enriquecerse en runs posteriores)
                 student = Student(

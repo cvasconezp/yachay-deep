@@ -24,6 +24,8 @@ def normalizar_nombre(texto: Optional[str]) -> str:
     texto = str(texto)
     # Eliminar prefijo del scraper: "Seleccionar 'NOMBRE'"
     texto = re.sub(r"^Seleccionar\s+'?", "", texto).rstrip("'")
+    # Colapsar espacios múltiples (el reporte a veces tiene dobles espacios)
+    texto = re.sub(r"\s+", " ", texto)
     # Normalizar unicode → ASCII para comparaciones
     texto = texto.strip().upper()
     return texto
@@ -677,6 +679,20 @@ def transform_personales(carpeta_o_archivos) -> pd.DataFrame:
     else:
         df["grupo"] = None
 
+    # ── Nivel académico (NIVEL → moda por estudiante) ─────────────────────
+    # El reporte tiene una fila por asignatura; NIVEL puede variar por materia.
+    # Tomamos la moda (nivel más frecuente) como nivel_academico del estudiante.
+    if "NIVEL" in df.columns:
+        df["_nivel_raw"] = pd.to_numeric(df["NIVEL"], errors="coerce").astype("Int64")
+        _nivel_agg = (
+            df.dropna(subset=["_nivel_raw"])
+            .groupby("correo_institucional")["_nivel_raw"]
+            .agg(lambda s: s.mode().iloc[0] if not s.mode().empty else s.iloc[0])
+        )
+        df["nivel_academico"] = df["correo_institucional"].map(_nivel_agg)
+    else:
+        df["nivel_academico"] = None
+
     # ── Deduplicar: una fila por estudiante ───────────────────────────────────
     # Usamos groupby().first() en vez de drop_duplicates(keep="first") porque
     # .first() toma el primer valor NO-NULO de cada columna, coalesce-ando datos
@@ -705,6 +721,7 @@ def transform_personales(carpeta_o_archivos) -> pd.DataFrame:
         "genero",
         "autoidentificacion_etnica",
         "grupo",
+        "nivel_academico",
     ]
     result = df[[c for c in cols_salida if c in df.columns]].copy()
 
