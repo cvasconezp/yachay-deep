@@ -405,6 +405,141 @@ def calcular_indice_compromiso(
     }
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# TRANSFORMER 5: Datos personales de estudiantes (reporte.xlsx)
+# Reemplaza el origen "DataPersonales" del Power Query
+# ─────────────────────────────────────────────────────────────────────────────
+
+def transform_personales(carpeta_o_archivos) -> pd.DataFrame:
+    """
+    Lee todos los archivos *_reporte.xlsx que contengan datos personales
+    (cedula, teléfono, correo, etc.) y devuelve una fila única por estudiante.
+
+    La llave de cruce es CORREO_INSTITUCIONAL, que coincide con el campo
+    'correo' en IngresosAVAC, TableauHistorico y Tareas.
+
+    Args:
+        carpeta_o_archivos: ruta a la carpeta con los .xlsx  o  lista de rutas
+    """
+    archivos: list[Path] = []
+    if isinstance(carpeta_o_archivos, (str, Path)):
+        carpeta = Path(carpeta_o_archivos)
+        if carpeta.is_dir():
+            archivos = list(carpeta.glob("*_reporte.xlsx"))
+        else:
+            logger.warning(f"Carpeta de reportes no encontrada: {carpeta}")
+    else:
+        archivos = [Path(f) for f in carpeta_o_archivos]
+
+    if not archivos:
+        logger.warning("transform_personales: no se encontraron archivos *_reporte.xlsx")
+        return pd.DataFrame()
+
+    dfs = []
+    for archivo in archivos:
+        try:
+            df = pd.read_excel(
+                archivo,
+                engine="openpyxl",
+                dtype={"CEDULA": str, "TELEFONO": str, "CELULAR": str},
+            )
+            df["_fuente"] = archivo.name
+            dfs.append(df)
+            logger.info(f"  Reporte leído: {archivo.name} ({len(df)} filas)")
+        except Exception as e:
+            logger.error(f"Error leyendo {archivo.name}: {e}")
+
+    if not dfs:
+        return pd.DataFrame()
+
+    df = pd.concat(dfs, ignore_index=True)
+    # Normalizar encabezados
+    df.columns = [c.strip().upper() for c in df.columns]
+
+    # ── Correo institucional (llave de cruce) ─────────────────────────────────
+    if "CORREO_INSTITUCIONAL" not in df.columns:
+        logger.error("transform_personales: columna CORREO_INSTITUCIONAL no encontrada")
+        return pd.DataFrame()
+    df["correo_institucional"] = df["CORREO_INSTITUCIONAL"].apply(extraer_correo_usuario)
+    # Descartar filas sin correo válido
+    df = df[df["correo_institucional"].str.contains("@", na=False)]
+
+    # ── Cédula ────────────────────────────────────────────────────────────────
+    def _limpiar_cedula(val) -> Optional[str]:
+        if val is None or pd.isna(val):
+            return None
+        s = str(val).strip().split(".")[0]  # quitar decimales (Excel los añade)
+        return s if s.isdigit() else None
+
+    if "CEDULA" in df.columns:
+        df["cedula"] = df["CEDULA"].apply(_limpiar_cedula)
+    else:
+        df["cedula"] = None
+
+    # ── Nombre ────────────────────────────────────────────────────────────────
+    if "ESTUDIANTES" in df.columns:
+        df["nombre"] = df["ESTUDIANTES"].apply(normalizar_nombre)
+    else:
+        df["nombre"] = None
+
+    # ── Correo personal ───────────────────────────────────────────────────────
+    if "CORREO_PERSONAL" in df.columns:
+        df["correo"] = df["CORREO_PERSONAL"].apply(extraer_correo_usuario)
+    else:
+        df["correo"] = None
+
+    # ── Teléfono (prefiere CELULAR, fallback TELEFONO) ────────────────────────
+    def _telefono(row) -> Optional[str]:
+        for col in ("CELULAR", "TELEFONO"):
+            val = row.get(col)
+            if val is not None and not pd.isna(val):
+                s = str(val).strip().split(".")[0]
+                if s.isdigit() and int(s) > 0:
+                    return s
+        return None
+
+    df["telefono"] = df.apply(_telefono, axis=1)
+
+    # ── Carrera ───────────────────────────────────────────────────────────────
+    if "CARRERA" in df.columns:
+        df["carrera"] = df["CARRERA"].apply(normalizar_carrera)
+    else:
+        df["carrera"] = None
+
+    # ── Estado matrícula: combina PAGADO + ESTADO_MATRICULADOS ────────────────
+    def _estado_matricula(row) -> Optional[str]:
+        pagado = str(row.get("PAGADO", "")).strip().upper()
+        estado = str(row.get("ESTADO_MATRICULADOS", "")).strip()
+        if pagado == "SI":
+            return f"Matriculado - {estado}".rstrip("- ") if estado and estado.upper() != "NAN" else "Matriculado"
+        elif pagado == "NO":
+            return "Sin matrícula"
+        return None
+
+    if "PAGADO" in df.columns:
+        df["estado_matricula"] = df.apply(_estado_matricula, axis=1)
+    else:
+        df["estado_matricula"] = None
+
+    # ── Deduplicar: una fila por estudiante ───────────────────────────────────
+    df = df.drop_duplicates(subset=["correo_institucional"], keep="first")
+
+    # ── Seleccionar solo columnas necesarias para el Student model ────────────
+    cols_salida = [
+        "correo_institucional",
+        "cedula",
+        "nombre",
+        "correo",
+        "telefono",
+        "carrera",
+        "estado_matricula",
+    ]
+    result = df[[c for c in cols_salida if c in df.columns]].copy()
+
+    logger.info(f"Personales: {len(archivos)} archivo(s) → {len(result)} estudiantes únicos")
+    return result.reset_index(drop=True)
+
+
 def calcular_indicadores_estudiantes(
     df_ingresos: pd.DataFrame,
     df_tareas: pd.DataFrame,

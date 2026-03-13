@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     DATA_PATH_INGRESOS: str = "./data/IngresosAVAC"
     DATA_PATH_TAREAS: str = "./data/Tareas"
     DATA_PATH_CALIFICACIONES: str = "./data/calificaciones.csv"
+    # Carpeta con los archivos *_reporte.xlsx (datos personales de estudiantes)
+    DATA_PATH_REPORTE: str = "./data/Reportes"
 
     # App
     APP_NAME: str = "Yachay Deep"

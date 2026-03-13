@@ -14,6 +14,7 @@ from .transformers import (
     transform_ingresos_avac,
     transform_estado_tareas,
     transform_calificaciones,
+    transform_personales,
     calcular_indicadores_estudiantes,
 )
 from ..models import Student, AvacAccess, TaskSubmission, Grade, ScrapingRun
@@ -92,6 +93,10 @@ class ETLPipeline:
                 logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Sin semestre activo — procesando todos los CSVs")
 
             # 1. Cargar y transformar fuentes
+            logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Leyendo datos personales (reporte.xlsx)...")
+            df_personales = transform_personales(settings.DATA_PATH_REPORTE)
+            logs.append(f"  → {len(df_personales)} estudiantes con datos personales")
+
             logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Leyendo IngresosAVAC...")
             df_ingresos = transform_ingresos_avac(
                 settings.DATA_PATH_INGRESOS,
@@ -114,11 +119,18 @@ class ETLPipeline:
             logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Calculando indicadores de riesgo...")
             df_master = calcular_indicadores_estudiantes(df_ingresos, df_tareas, df_calificaciones)
 
-            # 3. Upsert estudiantes
-            logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Cargando estudiantes a BD...")
-            n = self._upsert_students(df_ingresos, df_calificaciones, df_master)
+            # 3a. Crear registros base para todos los estudiantes del reporte
+            #     (aunque aún no tengan actividad AVAC)
+            if not df_personales.empty:
+                logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Sembrando estudiantes desde reporte.xlsx...")
+                n_seed = self._seed_students_from_personales(df_personales)
+                logs.append(f"  → {n_seed} estudiantes inicializados desde reporte")
+
+            # 3b. Upsert estudiantes con indicadores (actualiza los ya creados)
+            logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Actualizando indicadores de estudiantes...")
+            n = self._upsert_students(df_ingresos, df_calificaciones, df_master, df_personales)
             total_registros += n
-            logs.append(f"  → {n} estudiantes actualizados")
+            logs.append(f"  → {n} estudiantes con indicadores actualizados")
 
             # 4. Upsert accesos AVAC
             logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Cargando accesos AVAC...")
@@ -165,21 +177,100 @@ class ETLPipeline:
         """Busca estudiante por correo institucional."""
         return self.db.query(Student).filter(Student.correo_institucional == correo).first()
 
+    def _seed_students_from_personales(self, df_personales: pd.DataFrame) -> int:
+        """
+        Crea registros Student mínimos para todos los estudiantes del reporte
+        que aún no existen en la BD (p.ej. recién matriculados sin actividad AVAC).
+        No sobreescribe datos si el estudiante ya existe.
+        """
+        if df_personales.empty:
+            return 0
+
+        count = 0
+        for _, pr in df_personales.iterrows():
+            ci = str(pr.get("correo_institucional", "")).strip()
+            if not ci or "@" not in ci:
+                continue
+
+            student = self._get_or_create_student(ci)
+            is_new = student is None
+            if is_new:
+                student = Student(correo_institucional=ci)
+                self.db.add(student)
+
+            # Solo poblar campos vacíos (no sobreescribir los ya calculados)
+            cedula = str(pr.get("cedula", "") or "").strip()
+            if cedula and not student.cedula:
+                student.cedula = cedula
+
+            nombre = str(pr.get("nombre", "") or "").strip()
+            if nombre and not student.nombre:
+                student.nombre = nombre
+
+            correo_p = str(pr.get("correo", "") or "").strip()
+            if correo_p and "@" in correo_p and not student.correo:
+                student.correo = correo_p
+
+            tel = str(pr.get("telefono", "") or "").strip()
+            if tel and not student.telefono:
+                student.telefono = tel
+
+            carrera = str(pr.get("carrera", "") or "").strip()
+            if carrera and not student.carrera:
+                student.carrera = carrera
+
+            estado = str(pr.get("estado_matricula", "") or "").strip()
+            if estado and not student.estado_matricula:
+                student.estado_matricula = estado
+
+            if is_new:
+                count += 1
+
+        self.db.commit()
+        return count
+
     def _upsert_students(
         self,
         df_ingresos: pd.DataFrame,
         df_calificaciones: pd.DataFrame,
         df_master: pd.DataFrame,
+        df_personales: Optional[pd.DataFrame] = None,
     ) -> int:
-        """Crea o actualiza registros de Student con indicadores calculados."""
-        count = 0
+        """
+        Crea o actualiza registros de Student con indicadores calculados.
 
-        cal_map = {}
+        Prioridad de datos personales:
+          1. df_personales (reporte.xlsx) — fuente más completa para cedula, telefono, etc.
+          2. df_ingresos (AVAC) — nombre y correo institucional
+          3. df_calificaciones (Tableau) — carrera como fallback
+        """
+        import math
+
+        def _nan_to_none(val):
+            """Convierte NaN/inf de pandas a None para inserción segura en BD."""
+            if val is None:
+                return None
+            try:
+                return None if math.isnan(float(val)) or math.isinf(float(val)) else val
+            except (TypeError, ValueError):
+                return val
+
+        # ── Construir mapa correo → datos personales (reporte.xlsx) ────────────
+        personales_map: dict = {}
+        if df_personales is not None and not df_personales.empty:
+            for _, pr in df_personales.iterrows():
+                ci = str(pr.get("correo_institucional", "")).strip()
+                if ci and "@" in ci:
+                    personales_map[ci] = pr
+
+        # ── Construir mapa nombre → calificaciones (fallback de carrera) ────────
+        cal_map: dict = {}
         if not df_calificaciones.empty and "nombre_estudiante" in df_calificaciones.columns:
             for _, row in df_calificaciones.iterrows():
                 nombre = str(row.get("nombre_estudiante", "")).strip().upper()
                 cal_map[nombre] = row
 
+        count = 0
         for _, row in df_master.iterrows():
             correo = str(row.get("correo", "")).strip()
             if not correo or "@" not in correo:
@@ -190,29 +281,56 @@ class ETLPipeline:
                 student = Student(correo_institucional=correo)
                 self.db.add(student)
 
-            nombre_avac = str(row.get("nombre_avac", "")).strip()
-            if nombre_avac and not student.nombre:
-                student.nombre = nombre_avac
+            # ── Datos personales desde reporte.xlsx (prioridad 1) ───────────────
+            pr = personales_map.get(correo)
+            if pr is not None:
+                # Cedula: solo sobreescribir si aún no está en BD
+                cedula = str(pr.get("cedula", "") or "").strip()
+                if cedula and not student.cedula:
+                    student.cedula = cedula
 
-            def _nan_to_none(val):
-                """Convert pandas NaN/inf to None for safe DB insertion."""
-                if val is None:
-                    return None
-                try:
-                    import math
-                    return None if math.isnan(float(val)) or math.isinf(float(val)) else val
-                except (TypeError, ValueError):
-                    return val
+                # Nombre: preferir reporte > AVAC
+                nombre_rep = str(pr.get("nombre", "") or "").strip()
+                if nombre_rep:
+                    student.nombre = nombre_rep
 
+                # Correo personal
+                correo_personal = str(pr.get("correo", "") or "").strip()
+                if correo_personal and "@" in correo_personal:
+                    student.correo = correo_personal
+
+                # Teléfono
+                telefono = str(pr.get("telefono", "") or "").strip()
+                if telefono:
+                    student.telefono = telefono
+
+                # Carrera desde reporte (más fiable que AVAC)
+                carrera_rep = str(pr.get("carrera", "") or "").strip()
+                if carrera_rep:
+                    student.carrera = carrera_rep
+
+                # Estado matrícula
+                estado = str(pr.get("estado_matricula", "") or "").strip()
+                if estado:
+                    student.estado_matricula = estado
+
+            else:
+                # ── Fallback: nombre desde AVAC (prioridad 2) ───────────────────
+                nombre_avac = str(row.get("nombre_avac", "")).strip()
+                if nombre_avac and not student.nombre:
+                    student.nombre = nombre_avac
+
+                # Carrera desde calificaciones (prioridad 3)
+                if nombre_avac in cal_map:
+                    cal_row = cal_map[nombre_avac]
+                    student.carrera = student.carrera or str(cal_row.get("carrera", "")).strip() or None
+
+            # ── Indicadores de riesgo (siempre desde df_master) ────────────────
             dias = _nan_to_none(row.get("dias_sin_acceso_max"))
             student.dias_sin_acceso = int(dias) if dias is not None else None
             student.indice_compromiso = _nan_to_none(row.get("indice_compromiso"))
             student.nivel_riesgo = row.get("nivel_riesgo")
             student.porcentaje_tareas = _nan_to_none(row.get("porcentaje_tareas"))
-
-            if nombre_avac in cal_map:
-                cal_row = cal_map[nombre_avac]
-                student.carrera = student.carrera or str(cal_row.get("carrera", "")).strip()
 
             count += 1
 
