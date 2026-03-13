@@ -15,6 +15,7 @@ from .transformers import (
     transform_estado_tareas,
     transform_calificaciones,
     transform_personales,
+    transform_datos_especificos,
     calcular_indicadores_estudiantes,
 )
 from ..models import Student, AvacAccess, TaskSubmission, Grade, ScrapingRun
@@ -97,6 +98,10 @@ class ETLPipeline:
             df_personales = transform_personales(settings.DATA_PATH_REPORTE)
             logs.append(f"  → {len(df_personales)} estudiantes con datos personales")
 
+            logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Leyendo DatosEspecificos EIB...")
+            df_datos_especificos = transform_datos_especificos(settings.DATA_PATH_DATOS_ESPECIFICOS)
+            logs.append(f"  → {len(df_datos_especificos)} estudiantes con datos específicos EIB")
+
             logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Leyendo IngresosAVAC...")
             df_ingresos = transform_ingresos_avac(
                 settings.DATA_PATH_INGRESOS,
@@ -128,7 +133,10 @@ class ETLPipeline:
 
             # 3b. Upsert estudiantes con indicadores (actualiza los ya creados)
             logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Actualizando indicadores de estudiantes...")
-            n = self._upsert_students(df_ingresos, df_calificaciones, df_master, df_personales)
+            n = self._upsert_students(
+                df_ingresos, df_calificaciones, df_master,
+                df_personales, df_datos_especificos,
+            )
             total_registros += n
             logs.append(f"  → {n} estudiantes con indicadores actualizados")
 
@@ -235,14 +243,24 @@ class ETLPipeline:
         df_calificaciones: pd.DataFrame,
         df_master: pd.DataFrame,
         df_personales: Optional[pd.DataFrame] = None,
+        df_datos_especificos: Optional[pd.DataFrame] = None,
     ) -> int:
         """
         Crea o actualiza registros de Student con indicadores calculados.
 
         Prioridad de datos personales:
-          1. df_personales (reporte.xlsx) — fuente más completa para cedula, telefono, etc.
-          2. df_ingresos (AVAC) — nombre y correo institucional
-          3. df_calificaciones (Tableau) — carrera como fallback
+          1. df_personales (reporte.xlsx) — cedula, telefono, estado matrícula, residencia básica
+          2. df_datos_especificos (DatosEspecificos EIB) — nivel académico, sede, whatsapp,
+             residencia granular (cantón, parroquia), nombre (apellidos + nombres)
+          3. df_ingresos (AVAC) — nombre y correo institucional
+          4. df_calificaciones (Tableau) — carrera como fallback
+
+        Campos residencia:
+          reporte.xlsx aporta: pais, provincia, ciudad (CIUDAD_DOM), barrio (BARRIO)
+          DatosEspecificos aporta: pais, provincia, ciudad (Cantón), parroquia, barrio
+          Si ambos tienen datos, reporte gana en pais/provincia/barrio y
+          DatosEspecificos gana en ciudad (Cantón es más granular que CIUDAD_DOM)
+          y agrega parroquia que el reporte no tiene.
         """
         import math
 
@@ -262,6 +280,14 @@ class ETLPipeline:
                 ci = str(pr.get("correo_institucional", "")).strip()
                 if ci and "@" in ci:
                     personales_map[ci] = pr
+
+        # ── Construir mapa correo → DatosEspecificos EIB ─────────────────────
+        datos_esp_map: dict = {}
+        if df_datos_especificos is not None and not df_datos_especificos.empty:
+            for _, de in df_datos_especificos.iterrows():
+                ci = str(de.get("correo_institucional", "")).strip()
+                if ci and "@" in ci:
+                    datos_esp_map[ci] = de
 
         # ── Construir mapa nombre → calificaciones (fallback de carrera) ────────
         cal_map: dict = {}
@@ -304,6 +330,11 @@ class ETLPipeline:
                 if telefono:
                     student.telefono = telefono
 
+                # WhatsApp (si el reporte lo incluye)
+                wa = str(pr.get("whatsapp", "") or "").strip()
+                if wa and not student.whatsapp:
+                    student.whatsapp = wa
+
                 # Carrera desde reporte (más fiable que AVAC)
                 carrera_rep = str(pr.get("carrera", "") or "").strip()
                 if carrera_rep:
@@ -313,6 +344,12 @@ class ETLPipeline:
                 estado = str(pr.get("estado_matricula", "") or "").strip()
                 if estado:
                     student.estado_matricula = estado
+
+                # Residencia desde reporte (pais, provincia, ciudad, barrio)
+                for campo in ("pais", "provincia", "ciudad", "barrio"):
+                    val = str(pr.get(campo, "") or "").strip()
+                    if val and val.lower() not in ("nan", "none", ""):
+                        setattr(student, campo, val)
 
             else:
                 # ── Fallback: nombre desde AVAC (prioridad 2) ───────────────────
@@ -324,6 +361,59 @@ class ETLPipeline:
                 if nombre_avac in cal_map:
                     cal_row = cal_map[nombre_avac]
                     student.carrera = student.carrera or str(cal_row.get("carrera", "")).strip() or None
+
+            # ── DatosEspecificos EIB (nivel académico, sede, whatsapp, residencia granular) ──
+            de = datos_esp_map.get(correo)
+            if de is not None:
+                # Nivel académico (entero 1–8) — solo DatosEspecificos lo tiene
+                nivel = de.get("nivel_academico")
+                if nivel is not None and not (isinstance(nivel, float) and pd.isna(nivel)):
+                    try:
+                        student.nivel_academico = int(nivel)
+                    except (ValueError, TypeError):
+                        pass
+
+                # Sede / Centro de apoyo (más directo que majority-vote por grupo)
+                sede_de = str(de.get("sede", "") or "").strip()
+                if sede_de and sede_de.lower() not in ("nan", "none", ""):
+                    student.sede = sede_de
+
+                # WhatsApp (si no lo tenemos ya del reporte)
+                wa_de = str(de.get("whatsapp", "") or "").strip()
+                if wa_de and not student.whatsapp:
+                    student.whatsapp = wa_de
+
+                # Nombre (Apellidos + Nombres del formulario) — solo si no vino del reporte
+                nombre_de = str(de.get("nombre", "") or "").strip()
+                if nombre_de and not student.nombre:
+                    student.nombre = nombre_de
+
+                # Cédula (si no vino del reporte)
+                cedula_de = str(de.get("cedula", "") or "").strip()
+                if cedula_de and not student.cedula:
+                    student.cedula = cedula_de
+
+                # Residencia granular: parroquia (solo en DatosEspecificos)
+                parroquia = str(de.get("parroquia", "") or "").strip()
+                if parroquia and parroquia.lower() not in ("nan", "none", ""):
+                    student.parroquia = parroquia
+
+                # Cantón como ciudad — solo si el reporte no lo tiene
+                ciudad_de = str(de.get("ciudad", "") or "").strip()
+                if ciudad_de and ciudad_de.lower() not in ("nan", "none", "") and not student.ciudad:
+                    student.ciudad = ciudad_de
+
+                # Barrio — solo si el reporte no lo tiene
+                barrio_de = str(de.get("barrio", "") or "").strip()
+                if barrio_de and barrio_de.lower() not in ("nan", "none", "") and not student.barrio:
+                    student.barrio = barrio_de
+
+                # País y Provincia — solo si el reporte no los tiene
+                for campo in ("pais", "provincia"):
+                    val_de = str(de.get(campo, "") or "").strip()
+                    if val_de and val_de.lower() not in ("nan", "none", ""):
+                        if not getattr(student, campo):
+                            setattr(student, campo, val_de)
 
             # ── Indicadores de riesgo (siempre desde df_master) ────────────────
             dias = _nan_to_none(row.get("dias_sin_acceso_max"))

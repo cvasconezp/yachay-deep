@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     DATA_PATH_CALIFICACIONES: str = "./data/calificaciones.csv"
     # Carpeta con los archivos *_reporte.xlsx (datos personales de estudiantes)
     DATA_PATH_REPORTE: str = "./data/Reportes"
+    # Carpeta con los archivos DatosEspecificos*.xlsx (formulario Microsoft Forms EIB)
+    # Contiene: nivel académico, sede, residencia, whatsapp, etnia, lengua, trabajo
+    DATA_PATH_DATOS_ESPECIFICOS: str = "./data/DatosEspecificos"
 
     # App
     APP_NAME: str = "Yachay Deep"

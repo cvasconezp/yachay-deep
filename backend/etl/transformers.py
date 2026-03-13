@@ -109,6 +109,88 @@ def extraer_correo_usuario(correo: Optional[str]) -> str:
     return str(correo).strip().lower()
 
 
+def extraer_grupo_numero(nombre_grupo: Optional[str]) -> Optional[str]:
+    """
+    Extrae el número de grupo/sección del campo NOMBRE_GRUPO del reporte.
+    Soporta grupos de múltiples dígitos (corrección al bug del Excel que solo
+    tomaba 1 carácter con MID(...,FIND("- ",...)+2,1)).
+
+    Ejemplos:
+      'Grupo - 3'                              → '3'
+      'GRUPO - 5'                              → '5'
+      'Grupo - 16 (Educacion Intercultural…)'  → '16'  ← bug en Excel: devolvía '1'
+      'Grupo - 1 (Educación Intercultural…)'   → '1'
+      'Eib 13041 Latacunga'                    → None   (no sigue el patrón)
+      None / ''                                → None
+    """
+    if not nombre_grupo or pd.isna(nombre_grupo):
+        return None
+    # re.IGNORECASE cubre 'Grupo', 'GRUPO', 'grupo'
+    m = re.search(r'grupo\s*-\s*(\d+)', str(nombre_grupo), re.IGNORECASE)
+    return m.group(1) if m else None
+
+
+def parse_nivel_academico(texto: Optional[str]) -> Optional[int]:
+    """
+    Convierte el campo NIVEL del formulario DatosEspecificos a número entero.
+
+    Formatos encontrados en datos reales (P67):
+      '1er nivel'  → 1
+      '3er nivel'  → 3
+      '5to nivel'  → 5
+      '7mo nivel'  → 7
+      5            → 5  (valor numérico directo del Excel)
+      'Oyente condicionado' → None
+
+    También soporta nombres completos: 'Primer nivel' → 1, 'Tercer nivel' → 3, etc.
+    """
+    if texto is None or (isinstance(texto, float) and pd.isna(texto)):
+        return None
+
+    # Valor numérico directo (algunas celdas Excel ya guardan el número)
+    if isinstance(texto, (int, float)):
+        try:
+            v = int(texto)
+            return v if 1 <= v <= 10 else None
+        except (ValueError, TypeError):
+            return None
+
+    t = str(texto).strip().lower()
+
+    # Número embebido: '5to nivel', '3er nivel', '1er nivel', '7mo nivel'
+    # Sin \b para que capture el dígito aunque esté pegado al ordinal ('5to', '3er')
+    m = re.search(r'(\d+)', t)
+    if m:
+        v = int(m.group(1))
+        return v if 1 <= v <= 10 else None
+
+    # Ordinales en texto: 'primer', 'segundo', etc.
+    ordinals = [
+        ('primer',   1), ('segundo',  2), ('tercer',   3), ('cuarto',   4),
+        ('quinto',   5), ('sexto',    6), ('s[eé]ptim', 7), ('octavo',   8),
+        ('noveno',   9), ('d[eé]cim', 10),
+    ]
+    for pattern, num in ordinals:
+        if re.search(pattern, t):
+            return num
+
+    return None
+
+
+def normalizar_texto_simple(texto: Optional[str]) -> Optional[str]:
+    """
+    Normaliza texto en Title Case, elimina espacios extra y None/NaN.
+    Útil para campos de residencia (Provincia, Ciudad, etc.).
+    """
+    if texto is None or (isinstance(texto, float) and pd.isna(texto)):
+        return None
+    s = str(texto).strip()
+    if not s or s.lower() in ("nan", "none", "-"):
+        return None
+    # Title case preservando acentos
+    return " ".join(w.capitalize() for w in s.split())
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # TRANSFORMER 1: IngresosAVAC (reemplaza query "IngresosAVAC" de PQ)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -521,6 +603,30 @@ def transform_personales(carpeta_o_archivos) -> pd.DataFrame:
     else:
         df["estado_matricula"] = None
 
+    # ── Residencia (disponible solo en 2505060014_reporte.xlsx y similares) ───
+    # Columnas: PAIS_DOM, PROVINCIA_DOM, CIUDAD_DOM, BARRIO
+    for src_col, dest_col in [
+        ("PAIS_DOM",      "pais"),
+        ("PROVINCIA_DOM", "provincia"),
+        ("CIUDAD_DOM",    "ciudad"),
+        ("BARRIO",        "barrio"),
+    ]:
+        if src_col in df.columns:
+            df[dest_col] = df[src_col].apply(normalizar_texto_simple)
+        else:
+            df[dest_col] = None
+
+    # ── WhatsApp (si el reporte lo incluye) ───────────────────────────────────
+    if "WHATSAPP_ESTUDIANTE" in df.columns:
+        def _whatsapp(val) -> Optional[str]:
+            if val is None or pd.isna(val):
+                return None
+            s = str(val).strip().split(".")[0]
+            return s if s.isdigit() and int(s) > 0 else None
+        df["whatsapp"] = df["WHATSAPP_ESTUDIANTE"].apply(_whatsapp)
+    else:
+        df["whatsapp"] = None
+
     # ── Deduplicar: una fila por estudiante ───────────────────────────────────
     df = df.drop_duplicates(subset=["correo_institucional"], keep="first")
 
@@ -531,12 +637,179 @@ def transform_personales(carpeta_o_archivos) -> pd.DataFrame:
         "nombre",
         "correo",
         "telefono",
+        "whatsapp",
         "carrera",
         "estado_matricula",
+        "pais",
+        "provincia",
+        "ciudad",
+        "barrio",
     ]
     result = df[[c for c in cols_salida if c in df.columns]].copy()
 
     logger.info(f"Personales: {len(archivos)} archivo(s) → {len(result)} estudiantes únicos")
+    return result.reset_index(drop=True)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TRANSFORMER 6: DatosEspecificos EIB (Microsoft Forms)
+# Fuente: formulario de inicio de semestre → "DatosEspecificos EIB (P67).xlsx"
+# Aporta: nivel académico, sede, residencia granular, whatsapp, etnia
+# ─────────────────────────────────────────────────────────────────────────────
+
+def transform_datos_especificos(carpeta_o_archivos) -> pd.DataFrame:
+    """
+    Lee el/los archivos DatosEspecificos*.xlsx (respuestas del formulario EIB).
+    Hoja de datos: 'Sheet1'.
+    Llave de cruce: 'Correo Institucional' → correo_institucional.
+
+    Columnas de salida:
+      correo_institucional, cedula, nombre, whatsapp,
+      nivel_academico (int 1–8),
+      sede (Centro de apoyo normalizado),
+      pais, provincia, ciudad (Cantón), parroquia, barrio
+
+    Args:
+        carpeta_o_archivos: ruta a la carpeta con los .xlsx  o  lista de rutas
+    """
+    archivos: list[Path] = []
+    if isinstance(carpeta_o_archivos, (str, Path)):
+        carpeta = Path(carpeta_o_archivos)
+        if carpeta.is_dir():
+            archivos = list(carpeta.glob("*.xlsx"))
+        else:
+            logger.warning(f"Carpeta DatosEspecificos no encontrada: {carpeta}")
+    else:
+        archivos = [Path(f) for f in carpeta_o_archivos]
+
+    if not archivos:
+        logger.warning("transform_datos_especificos: no se encontraron archivos .xlsx")
+        return pd.DataFrame()
+
+    dfs = []
+    for archivo in archivos:
+        try:
+            # La hoja de datos se llama 'Sheet1'; si no existe, leer la primera
+            xl = pd.ExcelFile(archivo, engine="openpyxl")
+            sheet = "Sheet1" if "Sheet1" in xl.sheet_names else xl.sheet_names[0]
+            df = xl.parse(sheet)
+            df["_fuente"] = archivo.name
+            dfs.append(df)
+            logger.info(f"  DatosEspecificos leído: {archivo.name} ({len(df)} filas)")
+        except Exception as e:
+            logger.error(f"Error leyendo {archivo.name}: {e}")
+
+    if not dfs:
+        return pd.DataFrame()
+
+    df = pd.concat(dfs, ignore_index=True)
+
+    # ── Correo institucional (llave de cruce) ─────────────────────────────────
+    col_correo = next(
+        (c for c in df.columns if "correo institucional" in c.lower()),
+        None
+    )
+    if not col_correo:
+        logger.error("transform_datos_especificos: columna 'Correo Institucional' no encontrada")
+        return pd.DataFrame()
+    df["correo_institucional"] = df[col_correo].apply(extraer_correo_usuario)
+    df = df[df["correo_institucional"].str.contains("@", na=False)]
+
+    # ── Cédula ────────────────────────────────────────────────────────────────
+    col_cedula = next((c for c in df.columns if "cédula" in c.lower() or "cedula" in c.lower()), None)
+    if col_cedula:
+        def _limpiar_cedula(val) -> Optional[str]:
+            if val is None or pd.isna(val):
+                return None
+            s = str(val).strip().split(".")[0]
+            return s if s.isdigit() else None
+        df["cedula"] = df[col_cedula].apply(_limpiar_cedula)
+    else:
+        df["cedula"] = None
+
+    # ── Nombre (Apellidos + Nombres) ──────────────────────────────────────────
+    col_apellidos = next((c for c in df.columns if c.strip().lower() == "apellidos"), None)
+    col_nombres   = next((c for c in df.columns if c.strip().lower() == "nombres"), None)
+    if col_apellidos and col_nombres:
+        df["nombre"] = (
+            df[col_apellidos].fillna("").apply(str).str.strip()
+            + " "
+            + df[col_nombres].fillna("").apply(str).str.strip()
+        ).str.strip().str.upper()
+        df["nombre"] = df["nombre"].replace("", None)
+    else:
+        df["nombre"] = None
+
+    # ── WhatsApp ──────────────────────────────────────────────────────────────
+    col_wp = next((c for c in df.columns if "whatsapp" in c.lower()), None)
+    if col_wp:
+        def _to_whatsapp(val) -> Optional[str]:
+            if val is None or pd.isna(val):
+                return None
+            s = str(val).strip().split(".")[0]
+            return s if s.isdigit() and int(s) > 0 else None
+        df["whatsapp"] = df[col_wp].apply(_to_whatsapp)
+    else:
+        df["whatsapp"] = None
+
+    # ── Nivel académico ───────────────────────────────────────────────────────
+    col_nivel = next(
+        (c for c in df.columns if c.strip().upper() == "NIVEL"),
+        None
+    )
+    if col_nivel:
+        df["nivel_academico"] = df[col_nivel].apply(parse_nivel_academico)
+    else:
+        df["nivel_academico"] = None
+
+    # ── Sede / Centro de apoyo ────────────────────────────────────────────────
+    col_centro = next(
+        (c for c in df.columns if "centro de apoyo" in c.lower()),
+        None
+    )
+    if col_centro:
+        df["sede"] = df[col_centro].apply(normalizar_texto_simple)
+    else:
+        df["sede"] = None
+
+    # ── Residencia ────────────────────────────────────────────────────────────
+    for src_col_pattern, dest_col in [
+        ("país",      "pais"),
+        ("provincia", "provincia"),
+        ("cantón",    "ciudad"),      # Cantón → ciudad (más granular que CIUDAD_DOM)
+        ("parroquia", "parroquia"),
+        ("barrio",    "barrio"),
+    ]:
+        src_col = next(
+            (c for c in df.columns if src_col_pattern in c.lower()),
+            None
+        )
+        if src_col:
+            df[dest_col] = df[src_col].apply(normalizar_texto_simple)
+        else:
+            df[dest_col] = None
+
+    # ── Deduplicar por correo institucional ───────────────────────────────────
+    df = df.drop_duplicates(subset=["correo_institucional"], keep="first")
+
+    cols_salida = [
+        "correo_institucional",
+        "cedula",
+        "nombre",
+        "whatsapp",
+        "nivel_academico",
+        "sede",
+        "pais",
+        "provincia",
+        "ciudad",
+        "parroquia",
+        "barrio",
+    ]
+    result = df[[c for c in cols_salida if c in df.columns]].copy()
+
+    logger.info(
+        f"DatosEspecificos: {len(archivos)} archivo(s) → {len(result)} estudiantes únicos"
+    )
     return result.reset_index(drop=True)
 
 

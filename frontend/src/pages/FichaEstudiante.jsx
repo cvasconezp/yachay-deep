@@ -311,8 +311,15 @@ export default function FichaEstudiante() {
               <SectionHeader>Datos personales</SectionHeader>
               <table className="w-full border-collapse">
                 <tbody>
-                  <PersonalRow label="Whatsapp" value={ficha.telefono}
-                    href={ficha.telefono ? `https://wa.me/593${ficha.telefono.replace(/\D/g, "").replace(/^0/, "")}` : null} />
+                  <PersonalRow
+                    label="Whatsapp"
+                    value={ficha.whatsapp || ficha.telefono}
+                    href={
+                      (ficha.whatsapp || ficha.telefono)
+                        ? `https://wa.me/593${(ficha.whatsapp || ficha.telefono).replace(/\D/g, "").replace(/^0/, "")}`
+                        : null
+                    }
+                  />
                   <PersonalRow label="Correo" value={ficha.correo} />
                   <PersonalRow label="Correo Ins." value={ficha.correo_institucional} />
                   <PersonalRow label="Discapacidad" value="—" />
@@ -334,9 +341,15 @@ export default function FichaEstudiante() {
                 </thead>
                 <tbody>
                   <tr>
-                    <td className="text-[10px] text-center px-1 py-0.5 border border-gray-200 text-gray-700 font-medium">{sedeDisplay}</td>
-                    <td className="text-[10px] text-center px-1 py-0.5 border border-gray-200 text-gray-300 italic">—</td>
-                    <td className="text-[10px] text-center px-1 py-0.5 border border-gray-200 text-gray-300 italic">—</td>
+                    <td className="text-[10px] text-center px-1 py-0.5 border border-gray-200 text-gray-700 font-medium">
+                      {ficha.provincia || <span className="text-gray-300 italic">—</span>}
+                    </td>
+                    <td className="text-[10px] text-center px-1 py-0.5 border border-gray-200 text-gray-700">
+                      {ficha.ciudad || <span className="text-gray-300 italic">—</span>}
+                    </td>
+                    <td className="text-[10px] text-center px-1 py-0.5 border border-gray-200 text-gray-700">
+                      {ficha.parroquia || <span className="text-gray-300 italic">—</span>}
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -355,7 +368,7 @@ export default function FichaEstudiante() {
 
               <table className="w-full border-collapse">
                 <tbody>
-                  <PersonalRow label="Barrio o comunidad" value="—" />
+                  <PersonalRow label="Barrio o comunidad" value={ficha.barrio} />
                 </tbody>
               </table>
 
@@ -388,11 +401,13 @@ export default function FichaEstudiante() {
                 <div className="px-3 py-1.5 text-center">
                   <div className="text-[9px] opacity-50 uppercase tracking-wider">Semestre activo</div>
                   <div className="text-xs font-semibold mt-0.5">
-                    {ficha.nivel_detectado
-                      ? ficha.nivel_detectado
-                      : Object.keys(cursos).length > 0
-                        ? `${Object.keys(cursos).length} cursos`
-                        : "Sin cursos"}
+                    {ficha.nivel_academico
+                      ? `${ficha.nivel_academico}° Nivel`
+                      : ficha.nivel_detectado
+                        ? ficha.nivel_detectado
+                        : Object.keys(cursos).length > 0
+                          ? `${Object.keys(cursos).length} cursos`
+                          : "Sin cursos"}
                   </div>
                 </div>
                 <div className="px-3 py-1.5 text-center">
@@ -448,9 +463,18 @@ export default function FichaEstudiante() {
                           <tr key={codigo} className={idx % 2 === 0 ? "bg-white" : "bg-[#F9F9F9]"}>
                             {/* Nivel y grupo */}
                             <td className="px-2 py-1 border border-gray-200 text-center text-[10px] text-gray-500 whitespace-nowrap">
-                              {acceso?.grupo || ts[0]?.grupo
-                                ? <span className="font-mono">{acceso?.grupo || ts[0]?.grupo}</span>
-                                : "—"}
+                              {(() => {
+                                const niv = acceso?.nivel ?? null;
+                                const grp = acceso?.grupo || ts[0]?.grupo || null;
+                                if (!niv && !grp) return <span className="text-gray-300">—</span>;
+                                return (
+                                  <span className="font-mono">
+                                    {niv ? `N${niv}` : ""}
+                                    {niv && grp ? " · " : ""}
+                                    {grp ? `G${grp}` : ""}
+                                  </span>
+                                );
+                              })()}
                             </td>
                             {/* Asignatura */}
                             <td className="px-2 py-1 border border-gray-200 font-medium text-gray-800">

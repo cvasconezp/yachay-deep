@@ -19,7 +19,15 @@ class CourseConfig(Base):
     docente = Column(String, nullable=True)
     semestre = Column(String, nullable=True, index=True)        # ej: "2026-1"
     bloque = Column(String, nullable=True, index=True)          # "1", "2", o "ambos"
-    grupo = Column(String, nullable=True)
+
+    # Nivel académico: semestre/año del plan de estudios (1–8)
+    # Ejemplo: NIVEL=7 en ListasASIG de Excel → estudiantes de 7mo semestre
+    nivel = Column(Integer, nullable=True, index=True)
+
+    # Grupo / sección dentro de la asignatura (número extraído de NOMBRE_GRUPO)
+    # "Grupo - 3 (Educación Intercultural Bilingue)" → grupo="3"
+    # Diferente al nivel académico: grupo es la sección del curso, no el año.
+    grupo = Column(String, nullable=True)                       # ej: "1", "3", "16"
 
     # Control de activación
     activo = Column(Boolean, default=True, nullable=False)      # false = no scrapar este semestre

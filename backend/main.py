@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 import logging
 
 from .config import settings
-from .database import create_tables
+from .database import create_tables, upgrade_tables
 from .auth.routes import router as auth_router
 from .routes.students import router as students_router
 from .routes.interventions import router as interventions_router
@@ -26,6 +26,7 @@ async def lifespan(app: FastAPI):
     """Startup: crear tablas y admin por defecto si no existen."""
     logger.info("Iniciando Yachay Deep API...")
     create_tables()
+    upgrade_tables()   # agrega columnas nuevas sin borrar datos
     _create_default_admin()
     logger.info("✅ Base de datos lista")
     yield

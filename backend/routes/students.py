@@ -149,7 +149,8 @@ class AvacAccessOut(BaseModel):
     codigo_curso: str
     nombre_curso: Optional[str] = None   # enriquecido desde Course.nombre
     docente: Optional[str] = None         # enriquecido desde Course.docente
-    grupo: Optional[str] = None           # enriquecido desde Course.grupo
+    nivel: Optional[int] = None           # nivel académico del curso (1-8) desde CourseConfig
+    grupo: Optional[str] = None           # grupo/sección extraído de NOMBRE_GRUPO
     ultimo_acceso_texto: Optional[str] = None
     dias_sin_acceso: Optional[float] = None
     estado_avac: Optional[str] = None
@@ -192,11 +193,20 @@ class FichaEstudiante(BaseModel):
     correo_institucional: Optional[str] = None
     correo: Optional[str] = None
     telefono: Optional[str] = None
+    whatsapp: Optional[str] = None           # número WhatsApp (DatosEspecificos o reporte)
     carrera: Optional[str] = None
     sede: Optional[str] = None               # sede almacenada en BD (puede ser vacía)
     sede_detectada: Optional[str] = None     # sede derivada por votación mayoritaria de grupos
     nivel_detectado: Optional[str] = None    # nivel/semestre activo detectado
+    nivel_academico: Optional[int] = None    # nivel académico del estudiante (1-8), desde DatosEspecificos
     estado_matricula: Optional[str] = None
+
+    # Residencia
+    pais: Optional[str] = None
+    provincia: Optional[str] = None
+    ciudad: Optional[str] = None             # ciudad / cantón
+    parroquia: Optional[str] = None          # parroquia (solo DatosEspecificos)
+    barrio: Optional[str] = None             # barrio o comunidad
 
     # Indicadores de riesgo
     nivel_riesgo: Optional[str] = None
@@ -328,6 +338,7 @@ def get_ficha(
             codigo_curso=a.codigo_curso,
             nombre_curso=course_map[a.codigo_curso].asignatura if a.codigo_curso in course_map else None,
             docente=course_map[a.codigo_curso].docente if a.codigo_curso in course_map else None,
+            nivel=course_map[a.codigo_curso].nivel if a.codigo_curso in course_map else None,
             grupo=course_map[a.codigo_curso].grupo if a.codigo_curso in course_map else None,
             ultimo_acceso_texto=a.ultimo_acceso_texto,
             dias_sin_acceso=a.dias_sin_acceso,
@@ -363,11 +374,18 @@ def get_ficha(
         correo_institucional=student.correo_institucional,
         correo=student.correo,
         telefono=student.telefono,
+        whatsapp=student.whatsapp,
         carrera=student.carrera,
         sede=student.sede,
         sede_detectada=sede_detectada,
         nivel_detectado=nivel_detectado,
+        nivel_academico=student.nivel_academico,
         estado_matricula=student.estado_matricula,
+        pais=student.pais,
+        provincia=student.provincia,
+        ciudad=student.ciudad,
+        parroquia=student.parroquia,
+        barrio=student.barrio,
         nivel_riesgo=student.nivel_riesgo,
         indice_compromiso=student.indice_compromiso,
         dias_sin_acceso=student.dias_sin_acceso,

@@ -13,9 +13,13 @@ class Student(Base):
     correo = Column(String, index=True, nullable=True)
     correo_institucional = Column(String, index=True, nullable=True)
     telefono = Column(String, nullable=True)
+    whatsapp = Column(String, nullable=True)           # WhatsApp (reporte o DatosEspecificos)
     carrera = Column(String, index=True, nullable=True)
-    sede = Column(String, nullable=True)
+    sede = Column(String, nullable=True)               # Centro de apoyo (DatosEspecificos > majority-vote)
     campus = Column(String, nullable=True)
+
+    # Academic level: semester number 1–8 (from DatosEspecificos NIVEL)
+    nivel_academico = Column(Integer, nullable=True)   # 1 = primero, 7 = séptimo, etc.
 
     # Computed risk indicators (updated by ETL)
     nivel_riesgo = Column(String, nullable=True)       # Alto / Medio / Bajo
@@ -23,6 +27,13 @@ class Student(Base):
     dias_sin_acceso = Column(Integer, nullable=True)   # días desde último acceso AVAC
     porcentaje_tareas = Column(Float, nullable=True)   # % tareas entregadas
     promedio_calificaciones = Column(Float, nullable=True)
+
+    # Residence (reporte.xlsx > DatosEspecificos)
+    pais = Column(String, nullable=True)               # país de domicilio
+    provincia = Column(String, nullable=True)          # provincia
+    ciudad = Column(String, nullable=True)             # ciudad / cantón
+    parroquia = Column(String, nullable=True)          # parroquia (solo DatosEspecificos)
+    barrio = Column(String, nullable=True)             # barrio o comunidad
 
     # Metadata
     periodo = Column(String, nullable=True)            # e.g. "2026-1"

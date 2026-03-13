@@ -99,10 +99,11 @@ async def upload_data_and_run_etl(
     """
     Sube un ZIP con los archivos de datos y dispara el ETL.
     Estructura esperada del ZIP:
-      IngresosAVAC/ingresosAVAC_XXXXX.csv   → accesos AVAC por curso
-      Tareas/estado_XXXXX.csv               → entregas por curso
-      Reportes/XXXXX_reporte.xlsx           → datos personales (cédula, teléfono, etc.)
-      (opcional) calificaciones.csv         → se copia a ./data/calificaciones.csv
+      IngresosAVAC/ingresosAVAC_XXXXX.csv          → accesos AVAC por curso
+      Tareas/estado_XXXXX.csv                       → entregas por curso
+      Reportes/XXXXX_reporte.xlsx                   → datos personales (cédula, teléfono, residencia)
+      DatosEspecificos/DatosEspecificos EIB*.xlsx   → formulario EIB (nivel, sede, whatsapp, residencia)
+      (opcional) calificaciones.csv                 → se copia a ./data/calificaciones.csv
     """
     if not file.filename.lower().endswith(".zip"):
         raise HTTPException(status_code=400, detail="Solo se aceptan archivos .zip")
