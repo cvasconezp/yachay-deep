@@ -43,6 +43,11 @@ def upgrade_tables():
             ("ciudad",         "VARCHAR"),
             ("parroquia",      "VARCHAR"),
             ("barrio",         "VARCHAR"),
+            # Nuevas columnas del reporte institucional (fix data quality)
+            ("fecha_nacimiento", "DATE"),
+            ("genero",           "VARCHAR"),
+            ("autoidentificacion_etnica", "VARCHAR"),
+            ("grupo",            "VARCHAR"),
         ],
         "course_configs": [
             ("nivel", "INTEGER"),
