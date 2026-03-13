@@ -16,6 +16,7 @@ class Grade(Base):
     nota_final = Column(Float, nullable=True)
     periodo = Column(String, nullable=True)
     sede = Column(String, nullable=True)
+    numero_repitencias = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     student = relationship("Student", back_populates="grades")

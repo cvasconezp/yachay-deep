@@ -402,6 +402,8 @@ def transform_calificaciones(ruta_csv: str) -> pd.DataFrame:
     if "estudiante" in col_lower: rename_map[col_lower["estudiante"]] = "nombre_estudiante"
     if "docente" in col_lower: rename_map[col_lower["docente"]] = "docente"
     if "nota final" in col_lower: rename_map[col_lower["nota final"]] = "nota_final"
+    if "numero_repitencias" in col_lower: rename_map[col_lower["numero_repitencias"]] = "numero_repitencias"
+    if "numero repitencias" in col_lower: rename_map[col_lower["numero repitencias"]] = "numero_repitencias"
     df = df.rename(columns=rename_map)
 
     # Limpiar carrera
@@ -411,6 +413,10 @@ def transform_calificaciones(ruta_csv: str) -> pd.DataFrame:
     # Nota final a float
     if "nota_final" in df.columns:
         df["nota_final"] = pd.to_numeric(df["nota_final"], errors="coerce")
+
+    # Número de repitencias a int
+    if "numero_repitencias" in df.columns:
+        df["numero_repitencias"] = pd.to_numeric(df["numero_repitencias"], errors="coerce").astype("Int64")
 
     # Eliminar filas sin estudiante
     if "nombre_estudiante" in df.columns:

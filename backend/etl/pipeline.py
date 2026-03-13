@@ -634,6 +634,10 @@ class ETLPipeline:
                 student.carrera = str(row.get("carrera", "")).strip()
 
             from ..models.grade import Grade
+            # numero_repitencias: puede venir como Int64 (nullable int) de pandas
+            _repitencias = row.get("numero_repitencias")
+            repitencias_val = int(_repitencias) if _repitencias is not None and not (hasattr(_repitencias, '__class__') and str(_repitencias) == '<NA>') else None
+
             grade = Grade(
                 student_id=student.id,
                 asignatura=str(row.get("asignatura", "")).strip(),
@@ -642,6 +646,7 @@ class ETLPipeline:
                 docente=str(row.get("docente", "")).strip() or None,
                 nota_final=row.get("nota_final"),
                 sede=str(row.get("sede", "")).strip() or None,
+                numero_repitencias=repitencias_val,
                 periodo=None,  # sin período = semestre actual
             )
             self.db.add(grade)
