@@ -47,10 +47,20 @@ function getCompromisoLabel(val) {
   return "Alto";
 }
 
+/**
+ * Parsea una fecha ISO date-only ("2001-12-31") como fecha LOCAL, no UTC.
+ * new Date("2001-12-31") → UTC midnight → en Ecuador (UTC-5) muestra día anterior.
+ * Agregando T00:00:00 se interpreta como hora local.
+ */
+function parseLocalDate(isoDate) {
+  if (!isoDate) return null;
+  return new Date(isoDate + (isoDate.includes("T") ? "" : "T00:00:00"));
+}
+
 /** Calcula la edad a partir de una fecha de nacimiento ISO */
 function calcAge(isoDate) {
   if (!isoDate) return null;
-  const birth = new Date(isoDate);
+  const birth = parseLocalDate(isoDate);
   const today = new Date();
   let age = today.getFullYear() - birth.getFullYear();
   const m = today.getMonth() - birth.getMonth();
@@ -380,7 +390,7 @@ export default function FichaEstudiante() {
                   <PersonalRow label="Discapacidad" value={ficha?.discapacidad || "—"} />
                   <PersonalRow label="Fecha nac. y edad" value={
                     ficha?.fecha_nacimiento
-                      ? `${new Date(ficha.fecha_nacimiento).toLocaleDateString("es-EC")} (${calcAge(ficha.fecha_nacimiento)} años)`
+                      ? `${parseLocalDate(ficha.fecha_nacimiento).toLocaleDateString("es-EC")} (${calcAge(ficha.fecha_nacimiento)} años)`
                       : "—"
                   } />
                   <PersonalRow label="Autoidentificación" value={ficha?.autoidentificacion_etnica || "—"} />
