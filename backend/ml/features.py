@@ -1,7 +1,7 @@
 """
 Ingenieria de features para prediccion de desercion y reprobacion.
 Consulta la tabla grades (datos historicos P60-P67) y construye
-features por estudiante-periodo.
+features por estudiante-periodo, agrupados por carrera.
 """
 import logging
 from typing import Optional
@@ -19,6 +19,7 @@ PERIODOS_ORDENADOS = ["P60", "P61", "P62", "P63", "P64", "P65", "P66", "P67"]
 def build_features(db: Session) -> pd.DataFrame:
     """
     Construye DataFrame con features + labels por (student_id, periodo).
+    Incluye columna 'carrera' para entrenar modelos por carrera.
 
     Features por estudiante-periodo:
       - promedio_notas: media de nota_final
@@ -33,7 +34,7 @@ def build_features(db: Session) -> pd.DataFrame:
       - reprobo: 1 si alguna nota < 70, 0 si todas >= 70
     """
     query = text("""
-        SELECT g.student_id, g.periodo, g.nota_final
+        SELECT g.student_id, g.periodo, g.nota_final, g.carrera
         FROM grades g
         WHERE g.periodo IS NOT NULL
         ORDER BY g.student_id, g.periodo
@@ -44,8 +45,15 @@ def build_features(db: Session) -> pd.DataFrame:
         logger.warning("No hay calificaciones historicas para construir features")
         return pd.DataFrame()
 
-    df = pd.DataFrame(rows, columns=["student_id", "periodo", "nota_final"])
+    df = pd.DataFrame(rows, columns=["student_id", "periodo", "nota_final", "carrera"])
     df["nota_final"] = pd.to_numeric(df["nota_final"], errors="coerce").fillna(0)
+
+    # Determinar carrera principal por estudiante (la más frecuente)
+    carrera_por_estudiante = (
+        df.groupby("student_id")["carrera"]
+        .agg(lambda x: x.mode().iloc[0] if not x.mode().empty else None)
+        .to_dict()
+    )
 
     # Agrupar por estudiante-periodo
     grouped = df.groupby(["student_id", "periodo"])
@@ -61,6 +69,9 @@ def build_features(db: Session) -> pd.DataFrame:
 
     features["std_notas"] = features["std_notas"].fillna(0)
     features["pct_reprobadas"] = features["num_reprobadas"] / features["num_asignaturas"]
+
+    # Asignar carrera principal a cada registro
+    features["carrera"] = features["student_id"].map(carrera_por_estudiante)
 
     # --- Labels ---
     # Conjunto de estudiantes presentes en cada periodo
@@ -90,10 +101,11 @@ def build_features(db: Session) -> pd.DataFrame:
     # Label reprobacion: 1 si tiene alguna nota < 70
     features["reprobo"] = (features["num_reprobadas"] > 0).astype(int)
 
+    carreras = features["carrera"].dropna().nunique()
     logger.info(
         f"Features construidas: {len(features)} registros, "
         f"{features['student_id'].nunique()} estudiantes, "
-        f"periodos: {periodos_en_datos}"
+        f"{carreras} carreras, periodos: {periodos_en_datos}"
     )
 
     return features
@@ -102,11 +114,12 @@ def build_features(db: Session) -> pd.DataFrame:
 def build_current_features(db: Session) -> pd.DataFrame:
     """
     Construye features para estudiantes del semestre actual (periodo IS NULL).
-    Usa el mismo esquema que build_features pero sin labels.
+    Incluye carrera del estudiante para seleccionar modelo correcto.
     """
     query = text("""
-        SELECT g.student_id, g.nota_final
+        SELECT g.student_id, g.nota_final, s.carrera
         FROM grades g
+        JOIN students s ON s.id = g.student_id
         WHERE g.periodo IS NULL
     """)
 
@@ -114,8 +127,15 @@ def build_current_features(db: Session) -> pd.DataFrame:
     if not rows:
         return pd.DataFrame()
 
-    df = pd.DataFrame(rows, columns=["student_id", "nota_final"])
+    df = pd.DataFrame(rows, columns=["student_id", "nota_final", "carrera"])
     df["nota_final"] = pd.to_numeric(df["nota_final"], errors="coerce").fillna(0)
+
+    # Carrera por estudiante (la más frecuente en grades actuales)
+    carrera_por_estudiante = (
+        df.groupby("student_id")["carrera"]
+        .agg(lambda x: x.mode().iloc[0] if not x.mode().empty else None)
+        .to_dict()
+    )
 
     grouped = df.groupby("student_id")
     features = grouped.agg(
@@ -130,6 +150,7 @@ def build_current_features(db: Session) -> pd.DataFrame:
 
     features["std_notas"] = features["std_notas"].fillna(0)
     features["pct_reprobadas"] = features["num_reprobadas"] / features["num_asignaturas"]
+    features["carrera"] = features["student_id"].map(carrera_por_estudiante)
 
     return features
 

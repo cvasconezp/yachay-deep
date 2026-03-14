@@ -408,7 +408,7 @@ export default function FichaEstudiante() {
             <div className="flex items-center justify-between px-4 py-1 bg-gray-50 border-b border-gray-100">
               <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Indicadores · Predicción IA</span>
               <span className="text-[9px] text-gray-400">
-                Modelo ML · P60-P67
+                Modelo ML por carrera · P60-P67
                 {ficha.prediccion_updated_at && (
                   <> · {new Date(ficha.prediccion_updated_at).toLocaleDateString("es-EC")}</>
                 )}
@@ -436,7 +436,7 @@ export default function FichaEstudiante() {
                 const colorDes = pctDes >= 70 ? "text-red-600" : pctDes >= 40 ? "text-orange-600" : "text-green-600";
                 const barDes = pctDes >= 70 ? "bg-red-500" : pctDes >= 40 ? "bg-orange-400" : "bg-green-500";
                 return (
-                  <div className="flex-1 px-4 py-1.5 border-r border-gray-200 cursor-help" title="Probabilidad de desercion predicha por modelo ML. Basado en: promedio, nota minima, dispersion de notas y materias reprobadas. Comparado contra patrones historicos P60-P67">
+                  <div className="flex-1 px-4 py-1.5 border-r border-gray-200 cursor-help" title="Probabilidad de desercion predicha por modelo ML entrenado con estudiantes de la misma carrera. Basado en: promedio, nota minima, dispersion de notas y materias reprobadas (P60-P67)">
                     <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Predicción Deserción</div>
                     <div className="flex items-baseline gap-1.5">
                       <span className={`text-base font-bold ${colorDes}`}>{pctDes}%</span>
@@ -454,7 +454,7 @@ export default function FichaEstudiante() {
                 const colorRep = pctRep >= 70 ? "text-red-600" : pctRep >= 40 ? "text-orange-600" : "text-green-600";
                 const barRep = pctRep >= 70 ? "bg-red-500" : pctRep >= 40 ? "bg-orange-400" : "bg-green-500";
                 return (
-                  <div className="flex-1 px-4 py-1.5 cursor-help" title="Probabilidad de reprobar al menos una materia, predicha por modelo ML con datos historicos P60-P67">
+                  <div className="flex-1 px-4 py-1.5 cursor-help" title="Probabilidad de reprobar al menos una materia, predicha por modelo ML entrenado con estudiantes de la misma carrera (P60-P67)">
                     <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Predicción Reprobación</div>
                     <div className="flex items-baseline gap-1.5">
                       <span className={`text-base font-bold ${colorRep}`}>{pctRep}%</span>

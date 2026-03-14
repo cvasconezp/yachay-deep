@@ -175,7 +175,7 @@ def scrape_ingresos(output_dir: str, codigos: list = None, base_url: str = None,
         try:
             start_time = time.time()
             resp = session.get(f"{base_url}/course/search.php?search={codigo_curso}", timeout=30)
-            soup = BeautifulSoup(resp.text, "html.parser")
+            soup = BeautifulSoup(resp.content, "html.parser", from_encoding="utf-8")
             enlace = soup.select_one(".coursebox a[href*='id=']")
 
             if not enlace:
@@ -185,7 +185,7 @@ def scrape_ingresos(output_dir: str, codigos: list = None, base_url: str = None,
 
             course_id = parse_qs(urlparse(enlace.get("href")).query).get("id", [None])[0]
             resp_part = session.get(f"{base_url}/user/index.php?id={course_id}&perpage=5000", timeout=30)
-            soup_part = BeautifulSoup(resp_part.text, "html.parser")
+            soup_part = BeautifulSoup(resp_part.content, "html.parser", from_encoding="utf-8")
 
             registros = []
             for fila in soup_part.select("table.generaltable tbody tr"):

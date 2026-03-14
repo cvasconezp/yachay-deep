@@ -76,7 +76,7 @@ def _procesar_reporte_general(session, url_reporte, es_especial=False):
     datos = {}
     try:
         resp = session.get(url_reporte, timeout=30)
-        soup = BeautifulSoup(resp.text, "html.parser")
+        soup = BeautifulSoup(resp.content, "html.parser", from_encoding="utf-8")
 
         headers = soup.select(
             "table#user-grades tr.heading th, table.generaltable tr th.header"
@@ -187,7 +187,7 @@ def scrape_tareas(output_dir: str, codigos=None, base_url: str = None, db=None):
             resp = session.get(
                 f"{base_url}/course/search.php?search={codigo_curso}", timeout=30
             )
-            soup = BeautifulSoup(resp.text, "html.parser")
+            soup = BeautifulSoup(resp.content, "html.parser", from_encoding="utf-8")
             link_curso = soup.select_one(".coursebox a[href*='view.php?id=']")
 
             if not link_curso:

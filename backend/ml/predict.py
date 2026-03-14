@@ -1,6 +1,6 @@
 """
-Predictor singleton — carga modelos entrenados y ejecuta predicciones
-para estudiantes del semestre actual.
+Predictor — carga modelos entrenados (por carrera + global) y ejecuta
+predicciones para estudiantes del semestre actual.
 """
 import json
 import logging
@@ -23,8 +23,8 @@ class Predictor:
     _instance = None
 
     def __init__(self):
-        self.model_desercion = None
-        self.model_reprobacion = None
+        self.models = {}  # key -> {"desercion": model, "reprobacion": model}
+        self.carrera_mapping = {}  # carrera -> key
         self.metadata = None
         self._loaded = False
 
@@ -36,27 +36,52 @@ class Predictor:
 
     def load_models(self) -> bool:
         """Carga modelos desde disco. Retorna True si al menos uno se cargo."""
-        des_path = MODELS_DIR / "desercion.joblib"
-        rep_path = MODELS_DIR / "reprobacion.joblib"
         meta_path = MODELS_DIR / "metadata.json"
+        mapping_path = MODELS_DIR / "carrera_mapping.json"
+
+        if meta_path.exists():
+            self.metadata = json.loads(meta_path.read_text(encoding="utf-8"))
+
+        if mapping_path.exists():
+            self.carrera_mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
 
         loaded_any = False
 
-        if des_path.exists():
-            self.model_desercion = joblib.load(des_path)
-            loaded_any = True
-            logger.info("Modelo de desercion cargado")
+        # Cargar todos los modelos disponibles
+        for joblib_file in MODELS_DIR.glob("*.joblib"):
+            name = joblib_file.stem  # e.g. "global_desercion", "eib_desercion"
+            model = joblib.load(joblib_file)
 
-        if rep_path.exists():
-            self.model_reprobacion = joblib.load(rep_path)
-            loaded_any = True
-            logger.info("Modelo de reprobacion cargado")
+            # Determinar key y tipo
+            if name.endswith("_desercion"):
+                key = name[:-len("_desercion")]
+                self.models.setdefault(key, {})["desercion"] = model
+                loaded_any = True
+            elif name.endswith("_reprobacion"):
+                key = name[:-len("_reprobacion")]
+                self.models.setdefault(key, {})["reprobacion"] = model
+                loaded_any = True
 
-        if meta_path.exists():
-            self.metadata = json.loads(meta_path.read_text())
+        # Compatibilidad: cargar modelos antiguos (desercion.joblib, reprobacion.joblib)
+        old_des = MODELS_DIR / "desercion.joblib"
+        old_rep = MODELS_DIR / "reprobacion.joblib"
+        if old_des.exists() and "global" not in self.models:
+            self.models.setdefault("global", {})["desercion"] = joblib.load(old_des)
+            loaded_any = True
+        if old_rep.exists() and "global" not in self.models.get("global", {}):
+            self.models.setdefault("global", {})["reprobacion"] = joblib.load(old_rep)
+            loaded_any = True
 
         self._loaded = loaded_any
+        if loaded_any:
+            logger.info(f"Modelos cargados: {list(self.models.keys())} ({sum(len(v) for v in self.models.values())} total)")
         return loaded_any
+
+    def _get_model_key(self, carrera: Optional[str]) -> str:
+        """Obtiene la key del modelo para una carrera dada."""
+        if carrera and carrera in self.carrera_mapping:
+            return self.carrera_mapping[carrera]
+        return "global"
 
     @property
     def is_loaded(self) -> bool:
@@ -67,23 +92,17 @@ class Predictor:
         if not self._loaded:
             self.load_models()
 
-        meta_path = MODELS_DIR / "metadata.json"
-        if meta_path.exists():
-            metadata = json.loads(meta_path.read_text())
-        else:
-            metadata = None
-
         return {
             "loaded": self._loaded,
-            "has_desercion": self.model_desercion is not None,
-            "has_reprobacion": self.model_reprobacion is not None,
-            "metadata": metadata,
+            "models": {k: list(v.keys()) for k, v in self.models.items()},
+            "carrera_mapping": self.carrera_mapping,
+            "metadata": self.metadata,
         }
 
     def predict_batch(self, db: Session) -> dict:
         """
         Ejecuta predicciones para todos los estudiantes del semestre actual.
-        Actualiza Student.prob_desercion, prob_reprobacion, prediccion_updated_at.
+        Usa modelo por carrera si existe, sino modelo global.
         """
         if not self._loaded:
             if not self.load_models():
@@ -95,41 +114,46 @@ class Predictor:
 
         from ..models.student import Student
 
-        X = features_df[FEATURE_COLUMNS].values
-        student_ids = features_df["student_id"].values
-
-        # Predicciones
-        prob_des = None
-        prob_rep = None
-
-        if self.model_desercion is not None:
-            prob_des = self.model_desercion.predict_proba(X)[:, 1]
-
-        if self.model_reprobacion is not None:
-            prob_rep = self.model_reprobacion.predict_proba(X)[:, 1]
-
-        # Actualizar BD
         now = datetime.now(timezone.utc)
         updated = 0
+        por_carrera_count = 0
+        global_count = 0
 
-        for i, sid in enumerate(student_ids):
-            student = db.query(Student).filter(Student.id == int(sid)).first()
+        for _, row in features_df.iterrows():
+            sid = int(row["student_id"])
+            carrera = row.get("carrera")
+            model_key = self._get_model_key(carrera)
+            models = self.models.get(model_key) or self.models.get("global", {})
+
+            X = np.array([[row[c] for c in FEATURE_COLUMNS]])
+
+            student = db.query(Student).filter(Student.id == sid).first()
             if not student:
                 continue
 
-            if prob_des is not None:
-                student.prob_desercion = round(float(prob_des[i]), 4)
-            if prob_rep is not None:
-                student.prob_reprobacion = round(float(prob_rep[i]), 4)
+            if "desercion" in models:
+                student.prob_desercion = round(float(models["desercion"].predict_proba(X)[0, 1]), 4)
+            if "reprobacion" in models:
+                student.prob_reprobacion = round(float(models["reprobacion"].predict_proba(X)[0, 1]), 4)
             student.prediccion_updated_at = now
             updated += 1
 
+            if model_key != "global":
+                por_carrera_count += 1
+            else:
+                global_count += 1
+
         db.commit()
 
-        logger.info(f"Predicciones actualizadas para {updated} estudiantes")
+        logger.info(
+            f"Predicciones actualizadas: {updated} estudiantes "
+            f"({por_carrera_count} por carrera, {global_count} global)"
+        )
         return {
             "status": "ok",
             "updated": updated,
+            "por_carrera": por_carrera_count,
+            "global_fallback": global_count,
             "total_features": len(features_df),
             "timestamp": now.isoformat(),
         }
@@ -140,8 +164,14 @@ class Predictor:
             if not self.load_models():
                 return None
 
-        from sqlalchemy import text
-        query = text("""
+        from sqlalchemy import text as sql_text
+
+        # Obtener carrera del estudiante
+        from ..models.student import Student
+        student = db.query(Student).filter(Student.id == student_id).first()
+        carrera = student.carrera if student else None
+
+        query = sql_text("""
             SELECT g.nota_final FROM grades g
             WHERE g.student_id = :sid AND g.periodo IS NULL
         """)
@@ -149,7 +179,6 @@ class Predictor:
         if not rows:
             return None
 
-        import pandas as pd
         notas = [float(r[0]) if r[0] is not None else 0.0 for r in rows]
         notas_arr = np.array(notas)
 
@@ -166,11 +195,18 @@ class Predictor:
 
         X = np.array([[features[c] for c in FEATURE_COLUMNS]])
 
-        result = {"features": features}
+        model_key = self._get_model_key(carrera)
+        models = self.models.get(model_key) or self.models.get("global", {})
 
-        if self.model_desercion is not None:
-            result["prob_desercion"] = round(float(self.model_desercion.predict_proba(X)[0, 1]), 4)
-        if self.model_reprobacion is not None:
-            result["prob_reprobacion"] = round(float(self.model_reprobacion.predict_proba(X)[0, 1]), 4)
+        result = {
+            "features": features,
+            "model_used": model_key,
+            "carrera": carrera,
+        }
+
+        if "desercion" in models:
+            result["prob_desercion"] = round(float(models["desercion"].predict_proba(X)[0, 1]), 4)
+        if "reprobacion" in models:
+            result["prob_reprobacion"] = round(float(models["reprobacion"].predict_proba(X)[0, 1]), 4)
 
         return result
