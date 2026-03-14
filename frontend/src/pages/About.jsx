@@ -3,6 +3,12 @@ import { YachayLogo } from "../components/YachayLogo";
 
 const PODCASTS = [
   {
+    title: "IA contra el abandono universitario virtual",
+    description:
+      "El desafío del abandono en carreras virtuales y cómo la inteligencia artificial puede transformar el monitoreo y acompañamiento estudiantil a escala.",
+    file: "/IA_contra_el_abandono_universitario_virtual.m4a",
+  },
+  {
     title: "IA para evitar el abandono universitario",
     description:
       "Cómo la inteligencia artificial y la analítica del aprendizaje pueden anticipar el riesgo de deserción y activar intervenciones oportunas en educación superior.",
