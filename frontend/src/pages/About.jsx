@@ -20,7 +20,7 @@ const FRAMEWORK_PHASES = [
   {
     phase: "Fase 1",
     title: "Analítica descriptiva y diagnóstica",
-    status: "active",
+    status: "completed",
     items: [
       "Monitoreo e indicadores de compromiso",
       "Dashboards de riesgo por estudiante, asignatura y docente",
@@ -28,34 +28,38 @@ const FRAMEWORK_PHASES = [
       "Fichas individuales con historial académico",
       "Registro y seguimiento de intervenciones",
       "Listas de tutoría por asignatura",
+      "Resumen de datos y exportación Excel",
     ],
   },
   {
     phase: "Fase 2",
     title: "Analítica predictiva",
-    status: "active",
+    status: "completed",
     items: [
       "Modelos de predicción de abandono y reprobación",
-      "Logistic Regression, Random Forest, XGBoost",
-      "Entrenamiento con datos históricos consolidados",
+      "Logistic Regression y Random Forest por carrera",
+      "Entrenamiento con datos históricos consolidados (P60-P67)",
+      "Predicción batch y auto-reentrenamiento",
     ],
   },
   {
     phase: "Fase 3",
     title: "Explicación del riesgo (XAI)",
-    status: "active",
+    status: "completed",
     items: [
-      "SHAP, LIME, importance ranking",
-      "Explicar por que el estudiante está en riesgo",
+      "Contribuciones por feature (coeficientes / importancias)",
+      "Comparación con media de carrera",
+      "Factores que incrementan o reducen el riesgo del estudiante",
     ],
   },
   {
     phase: "Fase 4",
     title: "Recomendaciones automáticas",
-    status: "active",
+    status: "completed",
     items: [
-      "Analítica prescriptiva",
-      "Sugerencias de intervención automatizadas",
+      "Motor de recomendaciones basado en reglas y XAI",
+      "Sugerencias de intervención priorizadas (urgente / importante / sugerida)",
+      "Derivación a Bienestar Estudiantil con notificación por correo",
     ],
   },
   {
@@ -163,7 +167,9 @@ export default function About() {
             <div
               key={i}
               className={`rounded-xl border p-4 ${
-                p.status === "active"
+                p.status === "completed"
+                  ? "border-green-300 bg-green-50/50"
+                  : p.status === "active"
                   ? "border-blue-300 bg-blue-50/50"
                   : "border-gray-200 bg-gray-50/50"
               }`}
@@ -171,7 +177,9 @@ export default function About() {
               <div className="flex items-center gap-3 mb-2">
                 <span
                   className={`text-xs font-bold px-2.5 py-1 rounded-full ${
-                    p.status === "active"
+                    p.status === "completed"
+                      ? "bg-green-600 text-white"
+                      : p.status === "active"
                       ? "bg-brand-gold text-brand-dark"
                       : "bg-gray-200 text-gray-500"
                   }`}
@@ -179,8 +187,13 @@ export default function About() {
                   {p.phase}
                 </span>
                 <span className="font-semibold text-gray-800">{p.title}</span>
-                {p.status === "active" && (
+                {p.status === "completed" && (
                   <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium ml-auto">
+                    Completada
+                  </span>
+                )}
+                {p.status === "active" && (
+                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium ml-auto">
                     En desarrollo
                   </span>
                 )}
@@ -189,7 +202,9 @@ export default function About() {
                 {p.items.map((item, j) => (
                   <li key={j} className="flex items-start gap-2">
                     <span className={`mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                      p.status === "active" ? "bg-blue-400" : "bg-gray-300"
+                      p.status === "completed" ? "bg-green-500"
+                      : p.status === "active" ? "bg-blue-400"
+                      : "bg-gray-300"
                     }`} />
                     {item}
                   </li>
