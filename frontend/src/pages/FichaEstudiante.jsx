@@ -554,10 +554,18 @@ export default function FichaEstudiante() {
                 <>
                   <SectionHeader>Prediccion IA</SectionHeader>
                   <div className="px-3 py-2 space-y-2">
-                    <PredictionBar value={ficha.prob_desercion} label="Desercion" />
-                    <PredictionBar value={ficha.prob_reprobacion} label="Reprobacion" />
+                    <PredictionBar
+                      value={ficha.prob_desercion}
+                      label="Desercion"
+                      tooltip="Probabilidad de que el estudiante no se matricule el próximo período. El modelo analiza: promedio de notas, nota mínima, dispersión entre notas, y materias reprobadas del semestre actual. Se compara contra patrones históricos de 4,476 estudiantes (P60-P67) que dejaron de matricularse."
+                    />
+                    <PredictionBar
+                      value={ficha.prob_reprobacion}
+                      label="Reprobacion"
+                      tooltip="Probabilidad de reprobar al menos una asignatura este semestre. El modelo evalúa: promedio actual, cantidad de materias con nota baja, notas mínimas cercanas al umbral (70), y variabilidad en el rendimiento. Basado en patrones históricos de 8 períodos académicos."
+                    />
                     <p className="text-[9px] text-gray-400 mt-1">
-                      Modelo ML entrenado con datos historicos P60-P67
+                      Modelo ML entrenado con datos historicos P60-P67 — comparación contra todos los estudiantes
                       {ficha.prediccion_updated_at && (
                         <> — actualizado {new Date(ficha.prediccion_updated_at).toLocaleDateString("es-EC")}</>
                       )}
