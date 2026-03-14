@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../services/api";
 import { RiskBadge } from "../components/RiskBadge";
 
+const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
 const MOTIVOS = [
   "Inactividad en AVAC",
   "Tareas no entregadas",
@@ -65,8 +67,24 @@ export default function Intervenciones() {
   const [editForm, setEditForm] = useState({});
   const [saving, setSaving] = useState(false);
 
+  // Export
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [colsDisponibles, setColsDisponibles] = useState([]);
+  const [colsSeleccionadas, setColsSeleccionadas] = useState(new Set([
+    "nombre", "carrera", "nivel_riesgo", "medio", "motivo", "estado",
+    "resultado", "requiere_seguimiento", "observacion", "monitor_nombre", "fecha",
+  ]));
+
   useEffect(() => {
     api.getCarreras().then(setCarreras).catch(() => {});
+    const token = localStorage.getItem("yd_token");
+    fetch(`${BASE_URL}/export/intervenciones/columnas-disponibles`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(r => r.json())
+      .then(setColsDisponibles)
+      .catch(() => {});
   }, []);
 
   const loadData = useCallback(async () => {
@@ -122,16 +140,131 @@ export default function Intervenciones() {
     }
   };
 
+  const toggleCol = (key) => {
+    setColsSeleccionadas(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const selectAllCols = () => setColsSeleccionadas(new Set(colsDisponibles.map(c => c.key)));
+  const deselectAllCols = () => setColsSeleccionadas(new Set(["nombre", "motivo", "fecha"]));
+
+  const handleExport = async () => {
+    if (colsSeleccionadas.size === 0) return;
+    setExporting(true);
+    try {
+      const params = new URLSearchParams();
+      params.set("columnas", Array.from(colsSeleccionadas).join(","));
+      if (filtros.carrera) params.set("carrera", filtros.carrera);
+      if (filtros.motivo) params.set("motivo", filtros.motivo);
+      if (filtros.estado) params.set("estado", filtros.estado);
+      if (filtros.resultado) params.set("resultado", filtros.resultado);
+      if (filtros.seguimiento) params.set("seguimiento", filtros.seguimiento);
+
+      const token = localStorage.getItem("yd_token");
+      const resp = await fetch(`${BASE_URL}/export/intervenciones/excel?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ detail: "Error al exportar" }));
+        throw new Error(err.detail || "Error al exportar");
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const disposition = resp.headers.get("Content-Disposition");
+      const filename = disposition?.match(/filename=(.+)/)?.[1] || "intervenciones.xlsx";
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const resumen = data?.resumen || {};
   const items = data?.items || [];
 
   return (
     <div>
       {/* Header */}
-      <div className="mb-4">
-        <h1 className="text-2xl font-bold text-gray-900">Intervenciones</h1>
-        <p className="text-gray-400 text-sm">Seguimiento y monitoreo de intervenciones realizadas</p>
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Intervenciones</h1>
+          <p className="text-gray-400 text-sm">Seguimiento y monitoreo de intervenciones realizadas</p>
+        </div>
+        <button
+          onClick={() => setExportOpen(!exportOpen)}
+          className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm"
+        >
+          {"📥"} Exportar Excel
+        </button>
       </div>
+
+      {/* Export panel */}
+      {exportOpen && (
+        <div className="bg-white rounded-xl border border-green-200 shadow-sm mb-5 p-5">
+          <h3 className="text-sm font-bold text-gray-800 mb-3">Configurar exportación de intervenciones</h3>
+
+          <p className="text-xs text-gray-500 mb-3">
+            Los filtros activos del dashboard se aplican a la exportación.
+            {(filtros.carrera || filtros.motivo || filtros.estado || filtros.resultado || filtros.seguimiento) ? (
+              <span className="text-green-700 font-medium ml-1">
+                Filtros activos: {[
+                  filtros.carrera && `Carrera: ${filtros.carrera}`,
+                  filtros.motivo && `Motivo: ${filtros.motivo}`,
+                  filtros.estado && `Estado: ${filtros.estado}`,
+                  filtros.resultado && `Resultado: ${filtros.resultado}`,
+                  filtros.seguimiento && "Solo pendientes",
+                ].filter(Boolean).join(" | ")}
+              </span>
+            ) : (
+              <span className="text-gray-400 ml-1">(sin filtros — se exportan todas)</span>
+            )}
+          </p>
+
+          {/* Column selection */}
+          <div className="mb-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-medium text-gray-600">Columnas a exportar ({colsSeleccionadas.size} seleccionadas)</span>
+              <div className="flex gap-2">
+                <button onClick={selectAllCols} className="text-[11px] text-blue-600 hover:underline">Seleccionar todas</button>
+                <button onClick={deselectAllCols} className="text-[11px] text-gray-500 hover:underline">Mínimo</button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-1.5">
+              {colsDisponibles.map(col => (
+                <label key={col.key} className="flex items-center gap-1.5 text-xs cursor-pointer hover:bg-gray-50 rounded px-1.5 py-1">
+                  <input
+                    type="checkbox"
+                    checked={colsSeleccionadas.has(col.key)}
+                    onChange={() => toggleCol(col.key)}
+                    className="accent-green-600"
+                  />
+                  <span className="text-gray-700">{col.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleExport}
+              disabled={exporting || colsSeleccionadas.size === 0}
+              className="bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              {exporting ? "Generando..." : "Descargar Excel"}
+            </button>
+            <button onClick={() => setExportOpen(false)} className="text-sm text-gray-500 hover:text-gray-700">Cerrar</button>
+          </div>
+        </div>
+      )}
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
