@@ -265,6 +265,11 @@ class ETLPipeline:
                 total_registros += n
                 logs.append(f"  → {n} registros de calificaciones")
 
+            # 6b. Calcular sede/centro de apoyo EIB por voto mayoritario de grupo
+            logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Calculando sedes EIB por grupo...")
+            n_sedes = self._compute_eib_sedes()
+            logs.append(f"  → {n_sedes} estudiantes EIB con sede asignada por grupo")
+
             # 7. Upsert calificaciones históricas (TableauHistorico P60–P67+)
             logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Leyendo calificaciones históricas (TableauHistorico)...")
             df_cal_historico = transform_calificaciones_historico(settings.DATA_PATH_CALIFICACIONES_HISTORICO)
@@ -728,6 +733,70 @@ class ETLPipeline:
                 student.promedio_calificaciones = round(float(promedio_cal), 2)
 
             count += 1
+
+        self.db.commit()
+        return count
+
+    # Mapeo: número de grupo EIB → centro de apoyo (sede)
+    EIB_GRUPO_SEDE = {
+        1: "Latacunga",
+        2: "Cayambe",
+        3: "Otavalo",
+        4: "Riobamba",
+        5: "Amazonía Norte",
+        6: "Wasakentsa",
+    }
+
+    def _compute_eib_sedes(self) -> int:
+        """Asigna sede a estudiantes EIB por voto mayoritario del grupo en calificaciones.
+
+        Lógica idéntica al Excel original:
+        Si >50% de las materias del estudiante pertenecen a un grupo (1-6),
+        se asigna el centro de apoyo correspondiente.
+        Solo aplica para la carrera de Educación Intercultural Bilingüe.
+        """
+        from ..models.grade import Grade as _Grade
+        from collections import Counter
+
+        # Estudiantes EIB con calificaciones del semestre actual
+        eib_grades = (
+            self.db.query(_Grade.student_id, _Grade.grupo)
+            .filter(
+                _Grade.periodo.is_(None),
+                _Grade.grupo.isnot(None),
+                func.lower(_Grade.carrera).contains("intercultural"),
+            )
+            .all()
+        )
+        if not eib_grades:
+            return 0
+
+        # Agrupar grupos por estudiante
+        student_grupos: dict[int, list[int]] = {}
+        for sid, grupo_str in eib_grades:
+            m = re.search(r"(\d+)", str(grupo_str))
+            if m:
+                student_grupos.setdefault(sid, []).append(int(m.group(1)))
+
+        # Voto mayoritario (>50%)
+        count = 0
+        sids = list(student_grupos.keys())
+        students = self.db.query(Student).filter(Student.id.in_(sids)).all()
+        student_map = {s.id: s for s in students}
+
+        for sid, grupos in student_grupos.items():
+            student = student_map.get(sid)
+            if not student:
+                continue
+            counter = Counter(grupos)
+            most_common_grupo, freq = counter.most_common(1)[0]
+            if freq / len(grupos) > 0.5 and most_common_grupo in self.EIB_GRUPO_SEDE:
+                student.sede = self.EIB_GRUPO_SEDE[most_common_grupo]
+                count += 1
+            else:
+                # Grupos 7+ o sin mayoría clara
+                if not student.sede:
+                    student.sede = None
 
         self.db.commit()
         return count
