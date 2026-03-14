@@ -23,8 +23,9 @@ DIAS_CRITICO = 14
 DIAS_ALERTA = 7
 COMPROMISO_BAJO = 0.30
 COMPROMISO_MEDIO = 0.55
-TAREAS_BAJO = 0.40
-TAREAS_MEDIO = 0.60
+# porcentaje_tareas se almacena en escala 0-100 en la BD
+TAREAS_BAJO = 40
+TAREAS_MEDIO = 60
 
 
 def _prioridad(nivel: str) -> int:
@@ -209,7 +210,7 @@ def generate_recommendations(
         recs.append({
             "prioridad": "importante",
             "accion": "Contactar para conocer razones de no entrega de tareas",
-            "motivo": f"Solo ha entregado el {round(tareas*100)}% de tareas — riesgo de acumulación",
+            "motivo": f"Solo ha entregado el {round(tareas)}% de tareas — riesgo de acumulación",
             "medio": "WhatsApp",
             "destinatario": "Tutor / Monitor",
             "categoria": "tareas",
@@ -218,7 +219,7 @@ def generate_recommendations(
         recs.append({
             "prioridad": "sugerida",
             "accion": "Recordar importancia de entrega oportuna de tareas",
-            "motivo": f"Porcentaje de entrega de tareas: {round(tareas*100)}%",
+            "motivo": f"Porcentaje de entrega de tareas: {round(tareas)}%",
             "medio": "Email",
             "destinatario": "Tutor / Monitor",
             "categoria": "tareas",

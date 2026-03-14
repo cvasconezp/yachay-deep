@@ -703,11 +703,12 @@ def get_resumen_datos(
             niv = s.nivel_academico or 0
             niveles[niv] = niveles.get(niv, 0) + 1
 
-        # Riesgo
+        # Riesgo — solo contar estudiantes que tienen nivel_riesgo calculado
         riesgo = {"Alto": 0, "Medio": 0, "Bajo": 0}
         for s in student_list:
-            r = s.nivel_riesgo or "Bajo"
-            riesgo[r] = riesgo.get(r, 0) + 1
+            r = s.nivel_riesgo
+            if r and r in riesgo:
+                riesgo[r] += 1
 
         # Ciudades
         ciudades = {}
@@ -741,10 +742,18 @@ def get_resumen_datos(
                 edades.append(edad)
         promedio_edad = round(sum(edades) / len(edades), 1) if edades else None
 
-        # Promedio calificaciones (del período seleccionado via grades)
+        # Promedio calificaciones por estudiante (promedio de promedios, no promedio plano)
+        # Esto evita que estudiantes con más materias pesen más que otros
         sid_set_for_grades = set(s.id for s in student_list)
-        notas_periodo = [g.nota_final for g in grade_list if g.student_id in sid_set_for_grades and g.nota_final is not None]
-        promedio_calif = round(sum(notas_periodo) / len(notas_periodo), 1) if notas_periodo else None
+        notas_por_estudiante = {}
+        for g in grade_list:
+            if g.student_id in sid_set_for_grades and g.nota_final is not None:
+                notas_por_estudiante.setdefault(g.student_id, []).append(g.nota_final)
+        if notas_por_estudiante:
+            promedios_ind = [sum(ns) / len(ns) for ns in notas_por_estudiante.values()]
+            promedio_calif = round(sum(promedios_ind) / len(promedios_ind), 1)
+        else:
+            promedio_calif = None
 
         # Estado matrícula
         estados = {}
@@ -764,8 +773,14 @@ def get_resumen_datos(
         compromisos = [s.indice_compromiso for s in student_list if s.indice_compromiso is not None]
         promedio_compromiso = round(sum(compromisos) / len(compromisos), 2) if compromisos else None
 
+        # Conteos de cobertura de datos
+        con_riesgo = sum(1 for s in student_list if s.nivel_riesgo)
+        con_calificacion = len(notas_por_estudiante)
+
         return {
             "total_estudiantes": total,
+            "con_riesgo_calculado": con_riesgo,
+            "con_calificaciones": con_calificacion,
             "por_nivel": dict(sorted(niveles.items())),
             "por_riesgo": riesgo,
             "reprobados": reprob,
@@ -863,7 +878,10 @@ def get_resumen_datos(
 
     por_carrera = []
     for nombre_carrera, sts in sorted(carreras_map.items()):
-        stats = compute_stats(sts, [g for g in grades if g.carrera == nombre_carrera])
+        # Incluir calificaciones donde la carrera coincide exactamente O por student_id
+        sts_ids = set(s.id for s in sts)
+        grades_carrera = [g for g in grades if g.student_id in sts_ids]
+        stats = compute_stats(sts, grades_carrera)
         stats["carrera"] = nombre_carrera
         stats["total_docentes"] = docentes_por_carrera.get(nombre_carrera, 0)
         stats["intervenciones"] = interv_carrera_motivo.get(nombre_carrera, {"total": 0, "por_motivo": {}, "pendientes": 0, "resueltas": 0})

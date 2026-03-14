@@ -36,12 +36,29 @@ def run_predictions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Ejecuta predicciones para todos los estudiantes del semestre actual."""
+    """
+    Ejecuta predicciones para todos los estudiantes del semestre actual.
+    Si no hay modelos entrenados (ej. después de un redeploy en Railway),
+    reentrena automáticamente antes de predecir.
+    """
     _require_admin(current_user)
 
     from ..ml.predict import Predictor
     predictor = Predictor.get_instance()
+
+    # Auto-reentrenar si no hay modelos cargados
+    if not predictor.is_loaded and not predictor.load_models():
+        from ..ml.train import train_models
+        train_result = train_models(db)
+        if train_result.get("status") != "ok":
+            return {"status": "error", "message": "No se pudo entrenar el modelo", "train_detail": train_result}
+        # Recargar modelos recién entrenados
+        predictor._loaded = False
+        predictor.load_models()
+
     result = predictor.predict_batch(db)
+    if result.get("status") == "error" and "No hay modelos" in result.get("message", ""):
+        result["hint"] = "No hay datos históricos suficientes para entrenar. Ejecute primero el ETL con datos del TableauHistorico."
     return result
 
 

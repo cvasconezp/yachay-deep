@@ -722,6 +722,11 @@ class ETLPipeline:
             student.nivel_riesgo = row.get("nivel_riesgo")
             student.porcentaje_tareas = _nan_to_none(row.get("porcentaje_tareas"))
 
+            # Promedio de calificaciones (del transformer, escala 0-100)
+            promedio_cal = _nan_to_none(row.get("promedio_notas"))
+            if promedio_cal is not None:
+                student.promedio_calificaciones = round(float(promedio_cal), 2)
+
             count += 1
 
         self.db.commit()
