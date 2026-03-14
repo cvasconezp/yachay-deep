@@ -12,10 +12,16 @@ function TabSistema() {
   const [etlLoading, setEtlLoading] = useState(false);
   const [msg, setMsg] = useState("");
   const [etlMsg, setEtlMsg] = useState("");
+  const [mlStatus, setMlStatus] = useState(null);
+  const [mlLoading, setMlLoading] = useState(false);
+  const [mlMsg, setMlMsg] = useState("");
+
+  const loadMlStatus = () => api.getPredictionStatus().then(setMlStatus).catch(() => {});
 
   useEffect(() => {
     api.getSystemStatus().then(setStatus).catch(() => setMsg("Error: No se pudo cargar el estado del sistema"));
     api.getETLRuns().then(setRuns).catch(() => setMsg("Error: No se pudo cargar el historial ETL"));
+    loadMlStatus();
   }, []);
 
   const handleRunETL = async () => {
@@ -123,6 +129,87 @@ function TabSistema() {
               ))}
             </tbody>
           </table>
+        )}
+      </div>
+
+      {/* Modelo Predictivo ML */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <h2 className="font-semibold text-gray-800 mb-4">Modelo Predictivo (Fase 2)</h2>
+
+        {mlStatus && (
+          <div className="grid grid-cols-3 gap-4 text-sm mb-4">
+            <div className="bg-gray-50 rounded-lg p-3">
+              <div className="text-gray-500 text-xs">Estado del modelo</div>
+              <div className={`font-semibold ${mlStatus.loaded ? "text-green-600" : "text-yellow-600"}`}>
+                {mlStatus.loaded ? "Cargado" : "Sin entrenar"}
+              </div>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-3">
+              <div className="text-gray-500 text-xs">Modelo desercion</div>
+              <div className="font-semibold text-gray-900">
+                {mlStatus.has_desercion ? "Disponible" : "—"}
+                {mlStatus.metadata?.results?.desercion?.best_auc && (
+                  <span className="text-xs text-gray-500 ml-1">
+                    (AUC: {mlStatus.metadata.results.desercion.best_auc})
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-3">
+              <div className="text-gray-500 text-xs">Entrenado</div>
+              <div className="font-semibold text-gray-900">
+                {mlStatus.metadata?.trained_at
+                  ? new Date(mlStatus.metadata.trained_at).toLocaleString("es-EC")
+                  : "Nunca"}
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="flex gap-3">
+          <button
+            onClick={async () => {
+              setMlLoading(true);
+              setMlMsg("");
+              try {
+                const r = await api.trainModel();
+                setMlMsg(r.status === "ok"
+                  ? `Modelo entrenado (${r.estudiantes} estudiantes, ${r.periodos?.length} periodos)`
+                  : `Aviso: ${r.message || "sin resultado"}`);
+                loadMlStatus();
+              } catch (e) { setMlMsg("Error: " + e.message); }
+              finally { setMlLoading(false); }
+            }}
+            disabled={mlLoading}
+            className="bg-brand text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-brand-light transition-colors disabled:opacity-60"
+          >
+            {mlLoading ? "Entrenando..." : "Reentrenar Modelo"}
+          </button>
+          <button
+            onClick={async () => {
+              setMlLoading(true);
+              setMlMsg("");
+              try {
+                const r = await api.runPredictions();
+                setMlMsg(r.status === "ok"
+                  ? `Predicciones actualizadas para ${r.updated} estudiantes`
+                  : `Aviso: ${r.message || "sin resultado"}`);
+              } catch (e) { setMlMsg("Error: " + e.message); }
+              finally { setMlLoading(false); }
+            }}
+            disabled={mlLoading || !mlStatus?.loaded}
+            className="bg-brand-gold text-brand-dark px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-brand-gold-light transition-colors disabled:opacity-60"
+          >
+            {mlLoading ? "Ejecutando..." : "Ejecutar Predicciones"}
+          </button>
+        </div>
+        <p className="text-xs text-gray-400 mt-2">
+          Entrena modelos de desercion y reprobacion con datos historicos (P60-P67). Las predicciones se ejecutan automaticamente al final del ETL si hay un modelo entrenado.
+        </p>
+        {mlMsg && (
+          <div className={`text-sm mt-3 px-4 py-2 rounded-lg ${mlMsg.startsWith("Error") ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
+            {mlMsg}
+          </div>
         )}
       </div>
     </div>

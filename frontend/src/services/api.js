@@ -120,6 +120,12 @@ class ApiClient {
     const qs = new URLSearchParams(params).toString();
     return this.get(`/analytics/tutorias/por-asignatura${qs ? "?" + qs : ""}`);
   }
+
+  // Predictions — ML (Fase 2)
+  trainModel() { return this.post("/predictions/train", {}); }
+  runPredictions() { return this.post("/predictions/run", {}); }
+  getPredictionStatus() { return this.get("/predictions/status"); }
+  getPredictionStudent(studentId) { return this.get(`/predictions/student/${studentId}`); }
 }
 
 export const api = new ApiClient();

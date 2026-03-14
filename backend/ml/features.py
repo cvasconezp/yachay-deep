@@ -1,0 +1,146 @@
+"""
+Ingenieria de features para prediccion de desercion y reprobacion.
+Consulta la tabla grades (datos historicos P60-P67) y construye
+features por estudiante-periodo.
+"""
+import logging
+from typing import Optional
+
+import pandas as pd
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
+
+# Periodos ordenados cronologicamente
+PERIODOS_ORDENADOS = ["P60", "P61", "P62", "P63", "P64", "P65", "P66", "P67"]
+
+
+def build_features(db: Session) -> pd.DataFrame:
+    """
+    Construye DataFrame con features + labels por (student_id, periodo).
+
+    Features por estudiante-periodo:
+      - promedio_notas: media de nota_final
+      - num_asignaturas: cantidad de materias
+      - num_reprobadas: materias con nota < 70
+      - pct_reprobadas: porcentaje reprobadas
+      - nota_min, nota_max, std_notas
+      - num_zeros: materias con nota = 0
+
+    Labels:
+      - deserto: 1 si NO aparece en el periodo siguiente, 0 si si
+      - reprobo: 1 si alguna nota < 70, 0 si todas >= 70
+    """
+    query = text("""
+        SELECT g.student_id, g.periodo, g.nota_final
+        FROM grades g
+        WHERE g.periodo IS NOT NULL
+        ORDER BY g.student_id, g.periodo
+    """)
+
+    rows = db.execute(query).fetchall()
+    if not rows:
+        logger.warning("No hay calificaciones historicas para construir features")
+        return pd.DataFrame()
+
+    df = pd.DataFrame(rows, columns=["student_id", "periodo", "nota_final"])
+    df["nota_final"] = pd.to_numeric(df["nota_final"], errors="coerce").fillna(0)
+
+    # Agrupar por estudiante-periodo
+    grouped = df.groupby(["student_id", "periodo"])
+    features = grouped.agg(
+        promedio_notas=("nota_final", "mean"),
+        num_asignaturas=("nota_final", "count"),
+        num_reprobadas=("nota_final", lambda x: (x < 70).sum()),
+        nota_min=("nota_final", "min"),
+        nota_max=("nota_final", "max"),
+        std_notas=("nota_final", "std"),
+        num_zeros=("nota_final", lambda x: (x == 0).sum()),
+    ).reset_index()
+
+    features["std_notas"] = features["std_notas"].fillna(0)
+    features["pct_reprobadas"] = features["num_reprobadas"] / features["num_asignaturas"]
+
+    # --- Labels ---
+    # Conjunto de estudiantes presentes en cada periodo
+    estudiantes_por_periodo = df.groupby("periodo")["student_id"].apply(set).to_dict()
+
+    # Construir periodo_siguiente mapping
+    periodos_en_datos = sorted(features["periodo"].unique().tolist())
+
+    def periodo_siguiente(p: str) -> Optional[str]:
+        if p in PERIODOS_ORDENADOS:
+            idx = PERIODOS_ORDENADOS.index(p)
+            if idx + 1 < len(PERIODOS_ORDENADOS):
+                nxt = PERIODOS_ORDENADOS[idx + 1]
+                if nxt in periodos_en_datos:
+                    return nxt
+        return None
+
+    # Label desercion: 1 si no aparece en periodo siguiente
+    def label_desercion(row):
+        nxt = periodo_siguiente(row["periodo"])
+        if nxt is None:
+            return None  # ultimo periodo, no se puede evaluar
+        return 0 if row["student_id"] in estudiantes_por_periodo.get(nxt, set()) else 1
+
+    features["deserto"] = features.apply(label_desercion, axis=1)
+
+    # Label reprobacion: 1 si tiene alguna nota < 70
+    features["reprobo"] = (features["num_reprobadas"] > 0).astype(int)
+
+    logger.info(
+        f"Features construidas: {len(features)} registros, "
+        f"{features['student_id'].nunique()} estudiantes, "
+        f"periodos: {periodos_en_datos}"
+    )
+
+    return features
+
+
+def build_current_features(db: Session) -> pd.DataFrame:
+    """
+    Construye features para estudiantes del semestre actual (periodo IS NULL).
+    Usa el mismo esquema que build_features pero sin labels.
+    """
+    query = text("""
+        SELECT g.student_id, g.nota_final
+        FROM grades g
+        WHERE g.periodo IS NULL
+    """)
+
+    rows = db.execute(query).fetchall()
+    if not rows:
+        return pd.DataFrame()
+
+    df = pd.DataFrame(rows, columns=["student_id", "nota_final"])
+    df["nota_final"] = pd.to_numeric(df["nota_final"], errors="coerce").fillna(0)
+
+    grouped = df.groupby("student_id")
+    features = grouped.agg(
+        promedio_notas=("nota_final", "mean"),
+        num_asignaturas=("nota_final", "count"),
+        num_reprobadas=("nota_final", lambda x: (x < 70).sum()),
+        nota_min=("nota_final", "min"),
+        nota_max=("nota_final", "max"),
+        std_notas=("nota_final", "std"),
+        num_zeros=("nota_final", lambda x: (x == 0).sum()),
+    ).reset_index()
+
+    features["std_notas"] = features["std_notas"].fillna(0)
+    features["pct_reprobadas"] = features["num_reprobadas"] / features["num_asignaturas"]
+
+    return features
+
+
+FEATURE_COLUMNS = [
+    "promedio_notas",
+    "num_asignaturas",
+    "num_reprobadas",
+    "pct_reprobadas",
+    "nota_min",
+    "nota_max",
+    "std_notas",
+    "num_zeros",
+]

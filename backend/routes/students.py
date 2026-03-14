@@ -245,6 +245,11 @@ class FichaEstudiante(BaseModel):
     promedio_calificaciones: Optional[float] = None
     diagnostico_riesgo: Optional[str] = None  # diagnóstico computado: Aprobación/Riesgo Académico/etc.
 
+    # Predicciones ML (Fase 2)
+    prob_desercion: Optional[float] = None
+    prob_reprobacion: Optional[float] = None
+    prediccion_updated_at: Optional[datetime] = None
+
     # Datos relacionados
     accesos_avac: list[AvacAccessOut] = []
     tareas: list[TaskSubmissionOut] = []
@@ -448,6 +453,9 @@ def get_ficha(
         porcentaje_tareas=student.porcentaje_tareas,
         promedio_calificaciones=student.promedio_calificaciones,
         diagnostico_riesgo=diagnostico,
+        prob_desercion=student.prob_desercion,
+        prob_reprobacion=student.prob_reprobacion,
+        prediccion_updated_at=student.prediccion_updated_at,
         accesos_avac=accesos_out,
         tareas=tareas_out,
         calificaciones=calificaciones,

@@ -17,6 +17,7 @@ from .routes.admin import router as admin_router
 from .routes.export import router as export_router
 from .routes.courses import router as courses_router
 from .routes.analytics import router as analytics_router
+from .routes.predictions import router as predictions_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -107,6 +108,7 @@ app.include_router(admin_router)
 app.include_router(export_router)
 app.include_router(courses_router)
 app.include_router(analytics_router)
+app.include_router(predictions_router)
 
 
 @app.get("/health")

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { api } from "../services/api";
-import { RiskBadge } from "../components/RiskBadge";
+import { RiskBadge, PredictionBar } from "../components/RiskBadge";
 import EcuadorMap from "../components/EcuadorMap";
 import InterventionForm from "./InterventionForm";
 
@@ -548,6 +548,23 @@ export default function FichaEstudiante() {
                   <PersonalRow label="Madre o padre" value="—" />
                 </tbody>
               </table>
+
+              {/* Predicción IA (Fase 2) */}
+              {(ficha.prob_desercion != null || ficha.prob_reprobacion != null) && (
+                <>
+                  <SectionHeader>Prediccion IA</SectionHeader>
+                  <div className="px-3 py-2 space-y-2">
+                    <PredictionBar value={ficha.prob_desercion} label="Desercion" />
+                    <PredictionBar value={ficha.prob_reprobacion} label="Reprobacion" />
+                    <p className="text-[9px] text-gray-400 mt-1">
+                      Modelo ML entrenado con datos historicos P60-P67
+                      {ficha.prediccion_updated_at && (
+                        <> — actualizado {new Date(ficha.prediccion_updated_at).toLocaleDateString("es-EC")}</>
+                      )}
+                    </p>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* ─── SECCIÓN DERECHA ─── */}

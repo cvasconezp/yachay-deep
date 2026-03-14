@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../services/api";
-import { RiskBadge, CompromisoBar } from "../components/RiskBadge";
+import { RiskBadge, CompromisoBar, PredictionBadge } from "../components/RiskBadge";
 
 const RISK_ORDER = { Alto: 0, Medio: 1, Bajo: 2 };
 
@@ -134,6 +134,7 @@ export default function Dashboard() {
                 <th className="text-center px-4 py-3 font-semibold text-gray-700">Riesgo</th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-700">Días sin AVAC</th>
                 <th className="px-4 py-3 font-semibold text-gray-700 w-36">Compromiso</th>
+                <th className="text-center px-4 py-3 font-semibold text-gray-700" title="Probabilidad de desercion predicha por modelo ML">Pred. Desercion</th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-700">Intervenciones</th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-700">Última</th>
               </tr>
@@ -158,6 +159,7 @@ export default function Dashboard() {
                       : "—"}
                   </td>
                   <td className="px-4 py-3"><CompromisoBar valor={s.indice_compromiso} /></td>
+                  <td className="px-4 py-3 text-center"><PredictionBadge value={s.prob_desercion} label="Desercion" /></td>
                   <td className="px-4 py-3 text-center">
                     <span className={`font-semibold ${s.total_intervenciones === 0 ? "text-gray-400" : "text-blue-600"}`}>
                       {s.total_intervenciones}

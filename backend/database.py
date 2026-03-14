@@ -48,6 +48,10 @@ def upgrade_tables():
             ("genero",           "VARCHAR"),
             ("autoidentificacion_etnica", "VARCHAR"),
             ("grupo",            "VARCHAR"),
+            # ML predictions (Phase 2)
+            ("prob_desercion",         "FLOAT"),
+            ("prob_reprobacion",       "FLOAT"),
+            ("prediccion_updated_at",  "TIMESTAMP"),
         ],
         "course_configs": [
             ("nivel", "INTEGER"),

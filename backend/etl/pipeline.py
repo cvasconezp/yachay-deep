@@ -275,6 +275,22 @@ class ETLPipeline:
                 total_registros += n
                 logs.append(f"  → {n} registros históricos cargados")
 
+            # 8. Ejecutar predicciones ML si el modelo existe
+            try:
+                from ..ml.predict import Predictor
+                predictor = Predictor.get_instance()
+                if predictor.load_models():
+                    logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Ejecutando predicciones ML...")
+                    ml_result = predictor.predict_batch(self.db)
+                    if ml_result.get("status") == "ok":
+                        logs.append(f"  → Predicciones actualizadas para {ml_result['updated']} estudiantes")
+                    else:
+                        logs.append(f"  ⚠️ ML: {ml_result.get('message', 'sin resultado')}")
+                else:
+                    logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Sin modelo ML entrenado — omitiendo predicciones")
+            except Exception as ml_err:
+                logs.append(f"  ⚠️ Error en predicciones ML (no crítico): {ml_err}")
+
             run.status = "success"
 
         except Exception as e:

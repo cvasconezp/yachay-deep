@@ -15,6 +15,36 @@ export function RiskBadge({ nivel, showDot = true, size = "sm" }) {
   );
 }
 
+export function PredictionBadge({ value, label }) {
+  if (value == null) return <span className="text-gray-400 text-xs">--</span>;
+  const pct = Math.round(value * 100);
+  const color = pct >= 70 ? "text-red-700 bg-red-100"
+    : pct >= 40 ? "text-orange-700 bg-orange-100"
+    : "text-green-700 bg-green-100";
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${color}`}
+      title={label ? `${label}: ${pct}%` : `${pct}%`}>
+      {pct}%
+    </span>
+  );
+}
+
+export function PredictionBar({ value, label }) {
+  if (value == null) return null;
+  const pct = Math.round(value * 100);
+  const barColor = pct >= 70 ? "bg-red-500" : pct >= 40 ? "bg-orange-400" : "bg-green-500";
+  const textColor = pct >= 70 ? "text-red-700" : pct >= 40 ? "text-orange-700" : "text-green-700";
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-gray-600 w-24 text-right">{label}</span>
+      <div className="flex-1 bg-gray-200 rounded-full h-2.5">
+        <div className={`h-2.5 rounded-full ${barColor} transition-all`} style={{ width: `${pct}%` }} />
+      </div>
+      <span className={`text-xs font-bold w-10 ${textColor}`}>{pct}%</span>
+    </div>
+  );
+}
+
 export function CompromisoBar({ valor }) {
   if (valor == null) return <span className="text-gray-400 text-xs">—</span>;
   const pct = Math.round(valor * 100);

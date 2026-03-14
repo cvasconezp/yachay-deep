@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Float, Text, Date
+from sqlalchemy import Column, Integer, String, DateTime, Float, Text, Date, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from ..database import Base
@@ -42,6 +42,11 @@ class Student(Base):
 
     # Academic group from institutional reporte (NOMBRE_GRUPO → "3")
     grupo = Column(String, nullable=True)
+
+    # ML predictions (Phase 2)
+    prob_desercion = Column(Float, nullable=True)          # 0.0-1.0
+    prob_reprobacion = Column(Float, nullable=True)        # 0.0-1.0
+    prediccion_updated_at = Column(DateTime, nullable=True)
 
     # Metadata
     periodo = Column(String, nullable=True)            # e.g. "2026-1"

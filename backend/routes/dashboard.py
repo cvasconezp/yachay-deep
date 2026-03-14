@@ -27,6 +27,8 @@ class RiskStudentOut(BaseModel):
     porcentaje_tareas: Optional[float]
     promedio_calificaciones: Optional[float]
     estado_matricula: Optional[str]
+    prob_desercion: Optional[float] = None
+    prob_reprobacion: Optional[float] = None
     total_intervenciones: int
     ultima_intervencion: Optional[str]
 
@@ -104,6 +106,8 @@ def get_risk_dashboard(
             porcentaje_tareas=student.porcentaje_tareas,
             promedio_calificaciones=student.promedio_calificaciones,
             estado_matricula=student.estado_matricula,
+            prob_desercion=student.prob_desercion,
+            prob_reprobacion=student.prob_reprobacion,
             total_intervenciones=total_interv or 0,
             ultima_intervencion=ultima_interv.isoformat() if ultima_interv else None,
         ))
