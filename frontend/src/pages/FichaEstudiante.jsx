@@ -406,7 +406,7 @@ export default function FichaEstudiante() {
           {/* ═══ INDICADORES ═══ */}
           <div className="bg-white border-b border-gray-200">
             <div className="flex items-center justify-between px-4 py-1 bg-gray-50 border-b border-gray-100">
-              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Indicadores</span>
+              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Indicadores · Predicción IA</span>
               <span className="text-[9px] text-gray-400">
                 Modelo ML · P60-P67
                 {ficha.prediccion_updated_at && (
@@ -430,14 +430,14 @@ export default function FichaEstudiante() {
                   </div>
                 )}
               </div>
-              {/* Pred. Deserción */}
+              {/* Predicción Deserción */}
               {ficha.prob_desercion != null && (() => {
                 const pctDes = Math.round(ficha.prob_desercion * 100);
                 const colorDes = pctDes >= 70 ? "text-red-600" : pctDes >= 40 ? "text-orange-600" : "text-green-600";
                 const barDes = pctDes >= 70 ? "bg-red-500" : pctDes >= 40 ? "bg-orange-400" : "bg-green-500";
                 return (
                   <div className="flex-1 px-4 py-1.5 border-r border-gray-200 cursor-help" title="Probabilidad de desercion predicha por modelo ML. Basado en: promedio, nota minima, dispersion de notas y materias reprobadas. Comparado contra patrones historicos P60-P67">
-                    <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Pred. Deserción</div>
+                    <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Predicción Deserción</div>
                     <div className="flex items-baseline gap-1.5">
                       <span className={`text-base font-bold ${colorDes}`}>{pctDes}%</span>
                       <span className={`text-[11px] font-semibold ${colorDes}`}>{pctDes >= 70 ? "Alto" : pctDes >= 40 ? "Moderado" : "Bajo"}</span>
@@ -448,14 +448,14 @@ export default function FichaEstudiante() {
                   </div>
                 );
               })()}
-              {/* Pred. Reprobación */}
+              {/* Predicción Reprobación */}
               {ficha.prob_reprobacion != null && (() => {
                 const pctRep = Math.round(ficha.prob_reprobacion * 100);
                 const colorRep = pctRep >= 70 ? "text-red-600" : pctRep >= 40 ? "text-orange-600" : "text-green-600";
                 const barRep = pctRep >= 70 ? "bg-red-500" : pctRep >= 40 ? "bg-orange-400" : "bg-green-500";
                 return (
                   <div className="flex-1 px-4 py-1.5 cursor-help" title="Probabilidad de reprobar al menos una materia, predicha por modelo ML con datos historicos P60-P67">
-                    <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Pred. Reprobación</div>
+                    <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Predicción Reprobación</div>
                     <div className="flex items-baseline gap-1.5">
                       <span className={`text-base font-bold ${colorRep}`}>{pctRep}%</span>
                       <span className={`text-[11px] font-semibold ${colorRep}`}>{pctRep >= 70 ? "Alto" : pctRep >= 40 ? "Moderado" : "Bajo"}</span>
