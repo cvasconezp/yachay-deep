@@ -67,7 +67,7 @@ const COLORS = {
 };
 
 // ── Componente ───────────────────────────────────────────────────────────────
-export default function EcuadorMap({ provincia, ciudad, parroquia, height = 160 }) {
+export default function EcuadorMap({ provincia, ciudad, parroquia, height = 160, showTitle = true }) {
   const matchedProvName = findProvince(provincia);
   const provData = matchedProvName ? ECUADOR_CANTONES[matchedProvName] : null;
   const matchedCanton = findCanton(provData, ciudad, parroquia);
@@ -220,17 +220,19 @@ export default function EcuadorMap({ provincia, ciudad, parroquia, height = 160 
         })}
 
         {/* Titulo: nombre de la provincia */}
-        <text
-          x={bounds.minX + bw * 0.5}
-          y={bounds.minY - bh * 0.12}
-          fontSize={fontTitulo}
-          fontFamily="Calibri, Arial, sans-serif"
-          fill={COLORS.texto}
-          fontWeight="700"
-          textAnchor="middle"
-        >
-          {matchedProvName}
-        </text>
+        {showTitle && (
+          <text
+            x={bounds.minX + bw * 0.5}
+            y={bounds.minY - bh * 0.12}
+            fontSize={fontTitulo}
+            fontFamily="Calibri, Arial, sans-serif"
+            fill={COLORS.texto}
+            fontWeight="700"
+            textAnchor="middle"
+          >
+            {matchedProvName}
+          </text>
+        )}
       </svg>
     </div>
   );

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { api } from "../services/api";
-import { RiskBadge, PredictionBar } from "../components/RiskBadge";
+import { RiskBadge } from "../components/RiskBadge";
 import EcuadorMap from "../components/EcuadorMap";
 import InterventionForm from "./InterventionForm";
 
@@ -409,17 +409,24 @@ export default function FichaEstudiante() {
                 <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Actualizado</div>
                 <div className="font-semibold text-gray-700 text-sm mt-0.5">{updatedText}</div>
               </div>
-              <div className="px-3 py-1.5 text-center w-32 flex-shrink-0">
-                <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider cursor-help" title="Indice de compromiso academico: acceso AVAC (30%), tareas entregadas (30%), rendimiento academico (25%), estado de matricula (15%)">Compromiso</div>
+            </div>
+          </div>
+
+          {/* ═══ FILA 3: INDICADORES (compromiso + predicciones) ═══ */}
+          <div className="bg-gray-50 border-b border-gray-300">
+            <div className="flex items-center divide-x divide-gray-300">
+              <div className="px-3 py-1 text-[9px] font-bold text-gray-500 uppercase tracking-wider bg-gray-100 flex-shrink-0">Indicadores</div>
+              <div className="px-4 py-1.5 text-center flex-shrink-0 cursor-help" title="Indice de compromiso academico: acceso AVAC (30%), tareas entregadas (30%), rendimiento academico (25%), estado de matricula (15%). Alto >= 70%, Medio >= 40%, Bajo < 40%">
+                <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Compromiso</div>
                 <div className={`font-bold text-sm mt-0.5 ${compromisoColor}`}>
                   {compromisoLabel} {compromisoStr}
                 </div>
               </div>
               {ficha.prob_desercion != null && (
-                <div className={`px-3 py-1.5 text-center w-36 flex-shrink-0 border-l border-[#BF8F00] ${
-                  Math.round(ficha.prob_desercion * 100) >= 70 ? "bg-red-100" : Math.round(ficha.prob_desercion * 100) >= 40 ? "bg-orange-50" : "bg-green-50"
-                }`}>
-                  <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider cursor-help" title="Probabilidad de desercion predicha por modelo ML. Basado en: promedio, nota minima, dispersión de notas y materias reprobadas. Comparado contra patrones historicos P60-P67">Pred. Desercion</div>
+                <div className={`px-4 py-1.5 text-center flex-shrink-0 cursor-help ${
+                  Math.round(ficha.prob_desercion * 100) >= 70 ? "bg-red-100" : Math.round(ficha.prob_desercion * 100) >= 40 ? "bg-orange-50" : ""
+                }`} title="Probabilidad de desercion predicha por modelo ML. Basado en: promedio, nota minima, dispersion de notas y materias reprobadas. Comparado contra patrones historicos P60-P67">
+                  <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Pred. Desercion</div>
                   <div className={`font-bold text-sm mt-0.5 ${
                     Math.round(ficha.prob_desercion * 100) >= 70 ? "text-red-700" : Math.round(ficha.prob_desercion * 100) >= 40 ? "text-orange-700" : "text-green-700"
                   }`}>
@@ -428,10 +435,10 @@ export default function FichaEstudiante() {
                 </div>
               )}
               {ficha.prob_reprobacion != null && (
-                <div className={`px-3 py-1.5 text-center w-36 flex-shrink-0 border-l border-[#BF8F00] ${
-                  Math.round(ficha.prob_reprobacion * 100) >= 70 ? "bg-red-100" : Math.round(ficha.prob_reprobacion * 100) >= 40 ? "bg-orange-50" : "bg-green-50"
-                }`}>
-                  <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider cursor-help" title="Probabilidad de reprobar al menos una materia, predicha por modelo ML con datos historicos P60-P67">Pred. Reprobacion</div>
+                <div className={`px-4 py-1.5 text-center flex-shrink-0 cursor-help ${
+                  Math.round(ficha.prob_reprobacion * 100) >= 70 ? "bg-red-100" : Math.round(ficha.prob_reprobacion * 100) >= 40 ? "bg-orange-50" : ""
+                }`} title="Probabilidad de reprobar al menos una materia, predicha por modelo ML con datos historicos P60-P67">
+                  <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Pred. Reprobacion</div>
                   <div className={`font-bold text-sm mt-0.5 ${
                     Math.round(ficha.prob_reprobacion * 100) >= 70 ? "text-red-700" : Math.round(ficha.prob_reprobacion * 100) >= 40 ? "text-orange-700" : "text-green-700"
                   }`}>
@@ -439,6 +446,13 @@ export default function FichaEstudiante() {
                   </div>
                 </div>
               )}
+              <div className="flex-1" />
+              <div className="px-3 py-1.5 text-[8px] text-gray-400 text-right flex-shrink-0">
+                Modelo ML · P60-P67
+                {ficha.prediccion_updated_at && (
+                  <> · {new Date(ficha.prediccion_updated_at).toLocaleDateString("es-EC")}</>
+                )}
+              </div>
             </div>
           </div>
 
@@ -512,7 +526,8 @@ export default function FichaEstudiante() {
                     provincia={ficha.provincia}
                     ciudad={ficha.ciudad}
                     parroquia={ficha.parroquia}
-                    height={140}
+                    height={200}
+                    showTitle={false}
                   />
                 </div>
               ) : (
@@ -548,30 +563,6 @@ export default function FichaEstudiante() {
                 </tbody>
               </table>
 
-              {/* Predicción IA — detalle con barras y tooltips */}
-              {(ficha.prob_desercion != null || ficha.prob_reprobacion != null) && (
-                <>
-                  <SectionHeader>Prediccion IA</SectionHeader>
-                  <div className="px-3 py-2 space-y-2">
-                    <PredictionBar
-                      value={ficha.prob_desercion}
-                      label="Desercion"
-                      tooltip="Probabilidad de que el estudiante no se matricule el próximo período. El modelo analiza: promedio de notas, nota mínima, dispersión entre notas, y materias reprobadas del semestre actual. Se compara contra patrones históricos de 4,476 estudiantes (P60-P67) que dejaron de matricularse."
-                    />
-                    <PredictionBar
-                      value={ficha.prob_reprobacion}
-                      label="Reprobacion"
-                      tooltip="Probabilidad de reprobar al menos una asignatura este semestre. El modelo evalúa: promedio actual, cantidad de materias con nota baja, notas mínimas cercanas al umbral (70), y variabilidad en el rendimiento. Basado en patrones históricos de 8 períodos académicos."
-                    />
-                    <p className="text-[9px] text-gray-400 mt-1">
-                      Modelo ML — datos historicos P60-P67 · todos los estudiantes
-                      {ficha.prediccion_updated_at && (
-                        <> · {new Date(ficha.prediccion_updated_at).toLocaleDateString("es-EC")}</>
-                      )}
-                    </p>
-                  </div>
-                </>
-              )}
             </div>
 
             {/* ─── SECCIÓN DERECHA ─── */}
