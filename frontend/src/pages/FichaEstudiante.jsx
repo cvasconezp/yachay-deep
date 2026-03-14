@@ -216,7 +216,7 @@ function MallaChip({ asignatura, nota_final, docente }) {
 // ── Sección header ────────────────────────────────────────────────────────────
 function SectionHeader({ children, className = "" }) {
   return (
-    <div className={`bg-[#D6E4F0] border-y border-gray-300 px-3 py-0.5 text-[10px] font-bold text-[#1B3A6B] uppercase tracking-wide ${className}`}>
+    <div className={`bg-brand-ice-light border-y border-gray-300 px-3 py-0.5 text-[10px] font-bold text-brand uppercase tracking-wide ${className}`}>
       {children}
     </div>
   );
@@ -395,7 +395,7 @@ export default function FichaEstudiante() {
         <div className="border border-gray-400 rounded-md overflow-hidden shadow text-xs" style={{ fontFamily: "Calibri, Arial, sans-serif" }}>
 
           {/* ═══ FILA 1: ENCABEZADO PRINCIPAL ═══ */}
-          <div className="bg-[#1B3A6B] text-white flex items-center justify-between px-4 py-2">
+          <div className="bg-brand text-white flex items-center justify-between px-4 py-2">
             <div className="flex items-center gap-3">
               <span className="text-sm font-bold tracking-tight">{ficha.carrera || "Monitoreo Estudiantil"}</span>
             </div>
@@ -405,7 +405,7 @@ export default function FichaEstudiante() {
                 📄 PDF
               </button>
               <button onClick={() => setShowForm(true)}
-                className="bg-white text-[#1B3A6B] hover:bg-blue-50 px-3 py-1 rounded text-xs font-bold transition">
+                className="bg-white text-brand hover:bg-blue-50 px-3 py-1 rounded text-xs font-bold transition">
                 + Intervención
               </button>
             </div>
@@ -424,7 +424,7 @@ export default function FichaEstudiante() {
               </div>
               <div className="px-4 py-1.5 text-center flex-1">
                 <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Nombres y apellidos</div>
-                <div className="font-bold text-[#1B3A6B] text-base mt-0.5 uppercase">{ficha.nombre || "—"}</div>
+                <div className="font-bold text-brand text-base mt-0.5 uppercase">{ficha.nombre || "—"}</div>
               </div>
               <div className="px-3 py-1.5 text-center w-28 flex-shrink-0">
                 <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Actualizado</div>
@@ -554,7 +554,7 @@ export default function FichaEstudiante() {
             <div className="flex-1 overflow-hidden flex flex-col">
 
               {/* Barra de info: sede (solo EIB) / nivel / carrera */}
-              <div className="flex divide-x divide-white/20 bg-[#1B3A6B] text-white">
+              <div className="flex divide-x divide-white/20 bg-brand text-white">
                 {isEIB && (
                   <div className="px-3 py-1.5 text-center flex-1">
                     <div className="text-[9px] opacity-50 uppercase tracking-wider">Centro de Apoyo</div>
@@ -835,7 +835,7 @@ export default function FichaEstudiante() {
                           return (
                             <div key={periodo} className="flex-shrink-0 flex flex-col" style={{ minWidth: "80px" }}>
                               {/* Encabezado de período */}
-                              <div className="bg-[#1B3A6B] text-white text-center rounded-t px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider">
+                              <div className="bg-brand text-white text-center rounded-t px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider">
                                 {periodo}
                               </div>
                               {/* Chips de asignaturas */}
@@ -946,7 +946,7 @@ export default function FichaEstudiante() {
 
           {/* ═══ PRÁCTICAS PREPROFESIONALES ═══ */}
           <div className="border-t border-gray-300">
-            <div className="bg-[#1B3A6B] text-white px-4 py-1 text-[10px] font-bold uppercase tracking-wider">
+            <div className="bg-brand text-white px-4 py-1 text-[10px] font-bold uppercase tracking-wider">
               Prácticas Preprofesionales
             </div>
             <div className="grid grid-cols-2 divide-x divide-gray-300 bg-white">
@@ -989,7 +989,7 @@ export default function FichaEstudiante() {
 
           {/* ═══ SEGUIMIENTO E INTERVENCIONES ═══ */}
           <div className="border-t border-gray-300">
-            <div className="bg-[#1B3A6B] text-white flex items-center justify-between px-4 py-1">
+            <div className="bg-brand text-white flex items-center justify-between px-4 py-1">
               <span className="text-[10px] font-bold uppercase tracking-wider">
                 Seguimiento e Intervenciones ({ficha.total_intervenciones || 0})
               </span>
@@ -1038,7 +1038,7 @@ export default function FichaEstudiante() {
           </div>
 
           {/* ═══ PIE DE PÁGINA ═══ */}
-          <div className="bg-[#1B3A6B] text-white text-center py-1.5 text-[9px] opacity-60 tracking-wide">
+          <div className="bg-brand text-white text-center py-1.5 text-[9px] opacity-60 tracking-wide">
             Yachay Deep — Carlos Vásconez P. © &nbsp;|&nbsp; {today}
           </div>
 

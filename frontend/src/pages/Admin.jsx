@@ -69,7 +69,7 @@ function TabSistema() {
           <button
             onClick={handleRunETL}
             disabled={etlLoading}
-            className="bg-[#1B3A6B] text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-800 transition-colors disabled:opacity-60"
+            className="bg-brand text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-brand-light transition-colors disabled:opacity-60"
           >
             {etlLoading ? "Ejecutando ETL..." : "Ejecutar ETL Manual"}
           </button>
@@ -212,7 +212,7 @@ function TabCursos() {
         <h2 className="font-semibold text-gray-800">Gestión de Cursos AVAC</h2>
         <button
           onClick={() => { resetForm(); setShowForm(true); }}
-          className="bg-[#1B3A6B] text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-800"
+          className="bg-brand text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-brand-light"
         >
           + Agregar Curso
         </button>
@@ -297,7 +297,7 @@ function TabCursos() {
             </div>
             <div className="flex gap-3">
               <button type="submit"
-                className="bg-[#1B3A6B] text-white px-5 py-2 rounded-lg text-sm font-semibold hover:bg-blue-800">
+                className="bg-brand text-white px-5 py-2 rounded-lg text-sm font-semibold hover:bg-brand-light">
                 {editCourse ? "Guardar cambios" : "Crear curso"}
               </button>
               <button type="button" onClick={resetForm}
@@ -446,7 +446,7 @@ function TabSemestre() {
             </select>
           </div>
           <button type="submit"
-            className="bg-[#1B3A6B] text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-800">
+            className="bg-brand text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-brand-light">
             Crear
           </button>
         </form>
@@ -482,7 +482,7 @@ function TabSemestre() {
                     <div className="flex items-center justify-center gap-2 flex-wrap">
                       {!s.activo && (
                         <button onClick={() => handleActivate(s.semestre)}
-                          className="text-xs px-2 py-1 rounded bg-[#1B3A6B] text-white hover:bg-blue-800">
+                          className="text-xs px-2 py-1 rounded bg-brand text-white hover:bg-brand-light">
                           Activar
                         </button>
                       )}
@@ -567,7 +567,7 @@ function TabUsuarios() {
             <option value="admin">Admin</option>
           </select>
           <button type="submit"
-            className="bg-[#1B3A6B] text-white rounded-lg py-2 text-sm font-semibold hover:bg-blue-800">
+            className="bg-brand text-white rounded-lg py-2 text-sm font-semibold hover:bg-brand-light">
             Crear usuario
           </button>
         </form>
@@ -623,7 +623,7 @@ export default function Admin() {
             onClick={() => setActiveTab(tab)}
             className={`px-5 py-2.5 text-sm font-medium transition-colors -mb-px
               ${activeTab === tab
-                ? "border-b-2 border-[#1B3A6B] text-[#1B3A6B]"
+                ? "border-b-2 border-brand text-brand"
                 : "text-gray-500 hover:text-gray-700"}`}
           >
             {tab}

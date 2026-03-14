@@ -121,7 +121,7 @@ export default function InterventionForm({ student, onClose, onSaved }) {
             <button type="button" onClick={onClose} className="flex-1 border border-gray-300 text-gray-700 rounded-lg py-2.5 text-sm font-medium hover:bg-gray-50">
               Cancelar
             </button>
-            <button type="submit" disabled={saving} className="flex-1 bg-[#1B3A6B] text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-blue-800 disabled:opacity-60">
+            <button type="submit" disabled={saving} className="flex-1 bg-brand text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-brand-light disabled:opacity-60">
               {saving ? "Guardando..." : "Guardar Intervención"}
             </button>
           </div>

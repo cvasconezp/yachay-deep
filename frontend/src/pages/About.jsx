@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { YachayLogo } from "../components/YachayLogo";
 
 const PODCASTS = [
   {
@@ -81,11 +82,14 @@ export default function About() {
   return (
     <div className="max-w-4xl mx-auto">
       {/* Header */}
-      <div className="mb-10">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Sobre Yachay Deep</h1>
-        <p className="text-gray-500 text-sm">
-          Learning Analytics-Driven Early Warning Decision Support System for Student Retention
-        </p>
+      <div className="mb-10 flex items-center gap-5">
+        <YachayLogo size={80} />
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 mb-1">Sobre Yachay Deep</h1>
+          <p className="text-gray-500 text-sm">
+            Learning Analytics-Driven Early Warning Decision Support System for Student Retention
+          </p>
+        </div>
       </div>
 
       {/* Resumen ejecutivo */}
@@ -113,8 +117,8 @@ export default function About() {
       <Section title="Arquitectura conceptual">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
           {CAPAS.map((c, i) => (
-            <div key={i} className="bg-gradient-to-br from-[#1B3A6B] to-[#2a5298] rounded-xl p-5 text-white">
-              <div className="text-xs font-semibold uppercase tracking-wider text-blue-200 mb-2">Capa {i + 1}</div>
+            <div key={i} className="bg-gradient-to-br from-brand to-brand-light rounded-xl p-5 text-white">
+              <div className="text-xs font-semibold uppercase tracking-wider text-brand-ice mb-2">Capa {i + 1}</div>
               <div className="font-bold text-lg mb-2">{c.name}</div>
               <div className="text-blue-100 text-sm leading-relaxed">{c.desc}</div>
             </div>
@@ -168,7 +172,7 @@ export default function About() {
                 <span
                   className={`text-xs font-bold px-2.5 py-1 rounded-full ${
                     p.status === "active"
-                      ? "bg-blue-600 text-white"
+                      ? "bg-brand-gold text-brand-dark"
                       : "bg-gray-200 text-gray-500"
                   }`}
                 >
@@ -208,7 +212,7 @@ export default function About() {
             ["Escalabilidad", "Sirve para investigacion, tesis, software real y proteccion intelectual."],
           ].map(([title, desc], i) => (
             <div key={i} className="flex gap-3 bg-white border border-gray-200 rounded-lg p-4">
-              <div className="w-8 h-8 bg-[#1B3A6B] text-white rounded-lg flex items-center justify-center font-bold text-sm flex-shrink-0">
+              <div className="w-8 h-8 bg-brand text-white rounded-lg flex items-center justify-center font-bold text-sm flex-shrink-0">
                 {i + 1}
               </div>
               <div>
@@ -229,7 +233,7 @@ export default function About() {
           {PODCASTS.map((pod, i) => (
             <div key={i} className="bg-white border border-gray-200 rounded-xl p-5 hover:shadow-md transition-shadow">
               <div className="flex items-start gap-4">
-                <div className="w-14 h-14 bg-gradient-to-br from-[#1B3A6B] to-[#4a7cc9] rounded-xl flex items-center justify-center flex-shrink-0">
+                <div className="w-14 h-14 bg-gradient-to-br from-brand to-brand-light rounded-xl flex items-center justify-center flex-shrink-0">
                   <svg className="w-7 h-7 text-white" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3zM8 11a4 4 0 0 0 8 0h2a6 6 0 0 1-5 5.91V20h3v2H8v-2h3v-3.09A6 6 0 0 1 6 11h2z"/>
                   </svg>
@@ -273,7 +277,7 @@ export default function About() {
       {/* Desarrollador */}
       <Section title="Desarrollador">
         <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-          <div className="bg-gradient-to-r from-[#1B3A6B] to-[#2a5298] px-6 py-8">
+          <div className="bg-gradient-to-r from-brand to-brand-light px-6 py-8">
             <div className="flex items-center gap-5">
               <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center text-3xl font-bold text-white border-2 border-white/30">
                 CV
@@ -350,7 +354,7 @@ export default function About() {
 
       {/* Footer */}
       <div className="text-center py-8 text-xs text-gray-400 border-t border-gray-200 mt-10">
-        Yachay Deep v1.0 | Universidad Politecnica Salesiana | {new Date().getFullYear()}
+        &copy; {new Date().getFullYear()} Carlos Vasconez-Paredes | PachaTech | Yachay Deep v1.0
       </div>
     </div>
   );
@@ -360,7 +364,7 @@ function Section({ title, children }) {
   return (
     <section className="mb-10">
       <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-        <span className="w-1 h-6 bg-[#1B3A6B] rounded-full" />
+        <span className="w-1 h-6 bg-brand rounded-full" />
         {title}
       </h2>
       {children}

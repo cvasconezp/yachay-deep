@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import { YachayLogo } from "../components/YachayLogo";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -25,10 +26,13 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#1B3A6B] to-[#0f2340] flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-brand to-brand-dark flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-[#1B3A6B]">Yachay Deep</h1>
+          <div className="flex justify-center mb-4">
+            <YachayLogo size={72} />
+          </div>
+          <h1 className="text-3xl font-bold text-brand">Yachay Deep</h1>
           <p className="text-gray-500 mt-2 text-sm">Sistema de Monitoreo Académico</p>
         </div>
 
@@ -39,7 +43,7 @@ export default function Login() {
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-gold"
               placeholder="usuario@ups.edu.ec"
               required
             />
@@ -51,7 +55,7 @@ export default function Login() {
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-gold"
               placeholder="••••••••"
               required
             />
@@ -66,11 +70,15 @@ export default function Login() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-[#1B3A6B] text-white rounded-lg py-3 font-semibold text-sm hover:bg-blue-800 transition-colors disabled:opacity-60"
+            className="w-full bg-brand-gold text-brand-dark rounded-lg py-3 font-semibold text-sm hover:bg-brand-gold-light transition-colors disabled:opacity-60"
           >
             {loading ? "Ingresando..." : "Ingresar"}
           </button>
         </form>
+
+        <p className="text-center text-xs text-gray-400 mt-6">
+          Universidad Politécnica Salesiana
+        </p>
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import { YachayLogo, YachayIcon } from "./YachayLogo";
 
 const NAV_ITEMS = [
   { path: "/dashboard",      label: "Dashboard",        icon: "📊" },
@@ -45,26 +46,29 @@ export function Layout({ children }) {
     <div className="min-h-screen bg-gray-50 flex">
       {/* Sidebar */}
       <aside
-        className={`${sidebarOpen ? "w-64" : "w-16"} bg-[#1B3A6B] text-white flex flex-col shadow-xl transition-all duration-300 relative flex-shrink-0`}
+        className={`${sidebarOpen ? "w-64" : "w-16"} bg-brand text-white flex flex-col shadow-xl transition-all duration-300 relative flex-shrink-0`}
       >
         {/* Botón toggle */}
         <button
           onClick={toggleSidebar}
-          className="absolute -right-3 top-9 w-6 h-6 bg-[#1B3A6B] border-2 border-white rounded-full flex items-center justify-center text-white text-xs hover:bg-blue-700 transition-colors z-10 shadow-md"
+          className="absolute -right-3 top-9 w-6 h-6 bg-brand border-2 border-white rounded-full flex items-center justify-center text-white text-xs hover:bg-brand-light transition-colors z-10 shadow-md"
           title={sidebarOpen ? "Ocultar panel" : "Mostrar panel"}
         >
           {sidebarOpen ? "«" : "»"}
         </button>
 
-        {/* Header */}
-        <div className={`border-b border-blue-800 ${sidebarOpen ? "p-6" : "p-3 flex items-center justify-center"}`}>
+        {/* Header con logo */}
+        <div className={`border-b border-white/10 ${sidebarOpen ? "p-5" : "p-3 flex items-center justify-center"}`}>
           {sidebarOpen ? (
-            <>
-              <h1 className="text-xl font-bold tracking-tight">Yachay Deep</h1>
-              <p className="text-blue-300 text-xs mt-1">Monitoreo Académico</p>
-            </>
+            <div className="flex items-center gap-3">
+              <YachayIcon size={36} />
+              <div>
+                <h1 className="text-lg font-bold tracking-tight leading-tight">Yachay Deep</h1>
+                <p className="text-brand-ice text-xs">Monitoreo Académico</p>
+              </div>
+            </div>
           ) : (
-            <h1 className="text-lg font-bold tracking-tight" title="Yachay Deep">YD</h1>
+            <YachayIcon size={28} />
           )}
         </div>
 
@@ -77,8 +81,8 @@ export function Layout({ children }) {
               title={!sidebarOpen ? item.label : undefined}
               className={`flex items-center ${sidebarOpen ? "gap-3 px-3" : "justify-center px-0"} py-2.5 rounded-lg text-sm font-medium transition-colors
                 ${location.pathname.startsWith(item.path)
-                  ? "bg-blue-600 text-white"
-                  : "text-blue-200 hover:bg-blue-800 hover:text-white"}`}
+                  ? "bg-brand-gold/90 text-brand-dark"
+                  : "text-blue-200 hover:bg-white/10 hover:text-white"}`}
             >
               <span className={sidebarOpen ? "" : "text-lg"}>{item.icon}</span>
               {sidebarOpen && item.label}
@@ -87,12 +91,12 @@ export function Layout({ children }) {
         </nav>
 
         {/* User section */}
-        <div className={`border-t border-blue-800 ${sidebarOpen ? "p-4" : "p-2 flex flex-col items-center"}`}>
+        <div className={`border-t border-white/10 ${sidebarOpen ? "p-4" : "p-2 flex flex-col items-center"}`}>
           {sidebarOpen ? (
             <>
               <div className="text-sm text-blue-300 mb-2">
                 <div className="font-medium text-white truncate">{user?.nombre}</div>
-                <div className="text-xs capitalize">{user?.role}</div>
+                <div className="text-xs capitalize text-brand-ice">{user?.role}</div>
               </div>
               <button
                 onClick={handleLogout}
@@ -105,7 +109,7 @@ export function Layout({ children }) {
             <button
               onClick={handleLogout}
               title={`${user?.nombre || "Usuario"} — Cerrar sesión`}
-              className="w-10 h-10 rounded-full bg-blue-800 flex items-center justify-center text-sm font-bold text-blue-200 hover:bg-blue-700 hover:text-white transition-colors"
+              className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-sm font-bold text-blue-200 hover:bg-white/20 hover:text-white transition-colors"
             >
               {user?.nombre?.charAt(0)?.toUpperCase() || "U"}
             </button>
