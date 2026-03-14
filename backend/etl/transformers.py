@@ -868,12 +868,28 @@ def transform_datos_especificos(carpeta_o_archivos) -> pd.DataFrame:
         df["nivel_academico"] = None
 
     # ── Sede / Centro de apoyo ────────────────────────────────────────────────
+    SEDES_VALIDAS = {"cayambe", "amazonia norte", "amazonía norte", "latacunga",
+                     "otavalo", "riobamba", "cuenca", "quito"}
+
+    def _normalizar_sede(texto):
+        val = normalizar_texto_simple(texto)
+        if val is None:
+            return None
+        # Descartar valores numéricos o demasiado cortos (errores de entrada)
+        if val.replace(" ", "").isdigit() or len(val) < 3:
+            return None
+        # Normalizar variantes conocidas
+        low = val.lower().strip()
+        if "amazon" in low:
+            return "Amazonía Norte"
+        # Validar contra sedes conocidas (warn pero no descartar desconocidas)
+        return val
     col_centro = next(
         (c for c in df.columns if "centro de apoyo" in c.lower()),
         None
     )
     if col_centro:
-        df["sede"] = df[col_centro].apply(normalizar_texto_simple)
+        df["sede"] = df[col_centro].apply(_normalizar_sede)
     else:
         df["sede"] = None
 

@@ -655,11 +655,12 @@ def get_resumen_datos(
     grade_student_ids = set(g.student_id for g in grades)
 
     # --- Base query de estudiantes ---
-    # Si hay período histórico, filtrar solo estudiantes con calificaciones en ese período
+    # Filtrar solo estudiantes que tienen calificaciones en el período seleccionado.
+    # Esto evita incluir desertores de períodos anteriores en el conteo actual.
     base_q = db.query(Student)
     if carrera:
         base_q = base_q.filter(func.lower(Student.carrera).contains(carrera.lower()))
-    if periodo_filter != "actual" and periodo_filter != "todos" and grade_student_ids:
+    if periodo_filter != "todos" and grade_student_ids:
         base_q = base_q.filter(Student.id.in_(grade_student_ids))
     students = base_q.all()
 
@@ -804,8 +805,8 @@ def get_resumen_datos(
     if carrera:
         interv_base_q = interv_base_q.filter(func.lower(Intervention.carrera).contains(carrera.lower()))
 
-    # Si filtramos por período histórico, solo intervenciones de esos estudiantes
-    if periodo_filter != "actual" and periodo_filter != "todos" and grade_student_ids:
+    # Filtrar intervenciones solo de estudiantes con calificaciones en el período
+    if periodo_filter != "todos" and grade_student_ids:
         interv_base_q = interv_base_q.filter(Intervention.student_id.in_(grade_student_ids))
 
     total_intervenciones = interv_base_q.count()
