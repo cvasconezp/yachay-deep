@@ -44,7 +44,7 @@ export default function Login() {
               value={email}
               onChange={e => setEmail(e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-gold"
-              placeholder="usuario@ups.edu.ec"
+              placeholder="usuario@yachaydeep.org"
               required
             />
           </div>
@@ -77,7 +77,7 @@ export default function Login() {
         </form>
 
         <p className="text-center text-xs text-gray-400 mt-6">
-          Universidad Politécnica Salesiana
+          PachaTech &copy; 2026
         </p>
       </div>
     </div>

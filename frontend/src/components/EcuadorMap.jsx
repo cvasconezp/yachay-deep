@@ -89,8 +89,8 @@ export default function EcuadorMap({ provincia, ciudad, parroquia, height = 160,
   const bh = bounds.maxY - bounds.minY;
   const padX = bw * 0.15;
   const padY = bh * 0.15;
-  // Extra padding arriba para titulo
-  const padTop = bh * 0.3;
+  // Extra padding arriba para titulo (reducido si no se muestra)
+  const padTop = showTitle ? bh * 0.3 : bh * 0.1;
   const vx = bounds.minX - padX;
   const vy = bounds.minY - padTop;
   const vw = bw + padX * 2;

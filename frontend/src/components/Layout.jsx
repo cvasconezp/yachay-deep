@@ -51,24 +51,28 @@ export function Layout({ children }) {
         {/* Botón toggle */}
         <button
           onClick={toggleSidebar}
-          className="absolute -right-3 top-9 w-6 h-6 bg-brand border-2 border-white rounded-full flex items-center justify-center text-white text-xs hover:bg-brand-light transition-colors z-10 shadow-md"
+          className="absolute -right-4 top-9 w-8 h-8 bg-brand-gold text-brand-dark border-2 border-white rounded-full flex items-center justify-center text-sm font-bold hover:bg-brand-gold-light transition-colors z-10 shadow-lg"
           title={sidebarOpen ? "Ocultar panel" : "Mostrar panel"}
         >
           {sidebarOpen ? "«" : "»"}
         </button>
 
         {/* Header con logo */}
-        <div className={`border-b border-white/10 ${sidebarOpen ? "p-5" : "p-3 flex items-center justify-center"}`}>
+        <div className={`border-b border-white/10 bg-brand-dark/40 ${sidebarOpen ? "p-5" : "p-3 flex items-center justify-center"}`}>
           {sidebarOpen ? (
             <div className="flex items-center gap-3">
-              <YachayIcon size={36} />
+              <div className="bg-white/15 rounded-lg p-1.5">
+                <YachayIcon size={32} />
+              </div>
               <div>
                 <h1 className="text-lg font-bold tracking-tight leading-tight">Yachay Deep</h1>
                 <p className="text-brand-ice text-xs">Monitoreo Académico</p>
               </div>
             </div>
           ) : (
-            <YachayIcon size={28} />
+            <div className="bg-white/15 rounded-lg p-1">
+              <YachayIcon size={26} />
+            </div>
           )}
         </div>
 

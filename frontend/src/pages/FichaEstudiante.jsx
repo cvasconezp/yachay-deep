@@ -212,6 +212,7 @@ export default function FichaEstudiante() {
   const [ficha, setFicha] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [practicasOpen, setPracticasOpen] = useState(false);
   const [carreras, setCarreras] = useState([]);
   const [selectedCarrera, setSelectedCarrera] = useState("");
   const searchTimeout = useRef(null);
@@ -373,86 +374,103 @@ export default function FichaEstudiante() {
       {ficha && (
         <div className="border border-gray-400 rounded-md overflow-hidden shadow text-xs" style={{ fontFamily: "Calibri, Arial, sans-serif" }}>
 
-          {/* ═══ FILA 1: ENCABEZADO PRINCIPAL ═══ */}
-          <div className="bg-brand text-white flex items-center justify-between px-4 py-2">
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-bold tracking-tight">{ficha.carrera || "Monitoreo Estudiantil"}</span>
+          {/* ═══ ENCABEZADO INSTITUCIONAL ═══ */}
+          <div className="bg-brand text-white">
+            {/* Barra superior: carrera + acciones */}
+            <div className="flex items-center justify-between px-5 py-1.5 border-b border-white/10">
+              <span className="text-[11px] font-semibold tracking-wide uppercase opacity-80">{ficha.carrera || "Monitoreo Estudiantil"}</span>
+              <div className="flex items-center gap-2">
+                <button onClick={handleExportPDF}
+                  className="bg-white/10 hover:bg-white/20 text-white px-3 py-1 rounded text-[11px] font-medium transition">
+                  PDF
+                </button>
+                <button onClick={() => setShowForm(true)}
+                  className="bg-white text-brand hover:bg-blue-50 px-3 py-1 rounded text-[11px] font-bold transition">
+                  + Intervención
+                </button>
+              </div>
             </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <button onClick={handleExportPDF}
-                className="bg-white/10 hover:bg-white/20 text-white px-3 py-1 rounded text-xs font-medium transition">
-                📄 PDF
-              </button>
-              <button onClick={() => setShowForm(true)}
-                className="bg-white text-brand hover:bg-blue-50 px-3 py-1 rounded text-xs font-bold transition">
-                + Intervención
-              </button>
-            </div>
-          </div>
-
-          {/* ═══ FILA 2: BANDA DE IDENTIDAD (amarillo) ═══ */}
-          <div className="bg-[#FFF2CC] border-b border-[#BF8F00]">
-            <div className="flex divide-x divide-[#BF8F00]">
-              <div className="px-3 py-1.5 text-center w-36 flex-shrink-0">
-                <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Cédula</div>
-                <div className="font-bold text-gray-800 text-sm mt-0.5">{ficha.cedula || "—"}</div>
-              </div>
-              <div className="px-3 py-1.5 text-center w-36 flex-shrink-0">
-                <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Teléfono</div>
-                <div className="font-bold text-gray-800 text-sm mt-0.5">{ficha.telefono || "—"}</div>
-              </div>
-              <div className="px-4 py-1.5 text-center flex-1">
-                <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Nombres y apellidos</div>
-                <div className="font-bold text-brand text-base mt-0.5 uppercase">{ficha.nombre || "—"}</div>
-              </div>
-              <div className="px-3 py-1.5 text-center w-28 flex-shrink-0">
-                <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Actualizado</div>
-                <div className="font-semibold text-gray-700 text-sm mt-0.5">{updatedText}</div>
+            {/* Nombre del estudiante + datos de identidad */}
+            <div className="px-5 py-3">
+              <h2 className="text-lg font-bold tracking-wide uppercase leading-tight">{ficha.nombre || "—"}</h2>
+              <div className="flex items-center gap-4 mt-1 text-[11px] text-white/70">
+                <span>CI: <strong className="text-white/90">{ficha.cedula || "—"}</strong></span>
+                <span className="w-px h-3 bg-white/20" />
+                <span>Tel: <strong className="text-white/90">{ficha.telefono || "—"}</strong></span>
+                <span className="w-px h-3 bg-white/20" />
+                <span>Actualizado: <strong className="text-white/90">{updatedText}</strong></span>
               </div>
             </div>
           </div>
 
-          {/* ═══ FILA 3: INDICADORES (compromiso + predicciones) ═══ */}
-          <div className="bg-gray-50 border-b border-gray-300">
-            <div className="flex items-center divide-x divide-gray-300">
-              <div className="px-3 py-1 text-[9px] font-bold text-gray-500 uppercase tracking-wider bg-gray-100 flex-shrink-0">Indicadores</div>
-              <div className="px-4 py-1.5 text-center flex-shrink-0 cursor-help" title="Indice de compromiso academico: acceso AVAC (30%), tareas entregadas (30%), rendimiento academico (25%), estado de matricula (15%). Alto >= 70%, Medio >= 40%, Bajo < 40%">
-                <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Compromiso</div>
-                <div className={`font-bold text-sm mt-0.5 ${compromisoColor}`}>
-                  {compromisoLabel} {compromisoStr}
+          {/* ═══ INDICADORES ═══ */}
+          <div className="bg-white border-b border-gray-200">
+            <div className="flex items-stretch">
+              {/* Compromiso */}
+              <div className="flex-1 px-4 py-2.5 border-r border-gray-200 cursor-help" title="Indice de compromiso academico: acceso AVAC (30%), tareas entregadas (30%), rendimiento academico (25%), estado de matricula (15%). Alto >= 70%, Medio >= 40%, Bajo < 40%">
+                <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mb-0.5">Compromiso</div>
+                <div className="flex items-baseline gap-1.5">
+                  <span className={`text-lg font-bold ${compromisoColor}`}>{compromisoStr || "—"}</span>
+                  <span className={`text-[11px] font-semibold ${compromisoColor}`}>{compromisoLabel}</span>
                 </div>
-              </div>
-              {ficha.prob_desercion != null && (
-                <div className={`px-4 py-1.5 text-center flex-shrink-0 cursor-help ${
-                  Math.round(ficha.prob_desercion * 100) >= 70 ? "bg-red-100" : Math.round(ficha.prob_desercion * 100) >= 40 ? "bg-orange-50" : ""
-                }`} title="Probabilidad de desercion predicha por modelo ML. Basado en: promedio, nota minima, dispersion de notas y materias reprobadas. Comparado contra patrones historicos P60-P67">
-                  <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Pred. Desercion</div>
-                  <div className={`font-bold text-sm mt-0.5 ${
-                    Math.round(ficha.prob_desercion * 100) >= 70 ? "text-red-700" : Math.round(ficha.prob_desercion * 100) >= 40 ? "text-orange-700" : "text-green-700"
-                  }`}>
-                    {Math.round(ficha.prob_desercion * 100)}%
+                {ficha.indice_compromiso != null && (
+                  <div className="mt-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full transition-all ${
+                      ficha.indice_compromiso >= 0.7 ? "bg-green-500" : ficha.indice_compromiso >= 0.4 ? "bg-yellow-400" : "bg-red-500"
+                    }`} style={{ width: `${Math.round(ficha.indice_compromiso * 100)}%` }} />
                   </div>
-                </div>
-              )}
-              {ficha.prob_reprobacion != null && (
-                <div className={`px-4 py-1.5 text-center flex-shrink-0 cursor-help ${
-                  Math.round(ficha.prob_reprobacion * 100) >= 70 ? "bg-red-100" : Math.round(ficha.prob_reprobacion * 100) >= 40 ? "bg-orange-50" : ""
-                }`} title="Probabilidad de reprobar al menos una materia, predicha por modelo ML con datos historicos P60-P67">
-                  <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Pred. Reprobacion</div>
-                  <div className={`font-bold text-sm mt-0.5 ${
-                    Math.round(ficha.prob_reprobacion * 100) >= 70 ? "text-red-700" : Math.round(ficha.prob_reprobacion * 100) >= 40 ? "text-orange-700" : "text-green-700"
-                  }`}>
-                    {Math.round(ficha.prob_reprobacion * 100)}%
-                  </div>
-                </div>
-              )}
-              <div className="flex-1" />
-              <div className="px-3 py-1.5 text-[8px] text-gray-400 text-right flex-shrink-0">
-                Modelo ML · P60-P67
-                {ficha.prediccion_updated_at && (
-                  <> · {new Date(ficha.prediccion_updated_at).toLocaleDateString("es-EC")}</>
                 )}
               </div>
+              {/* Pred. Deserción */}
+              {ficha.prob_desercion != null && (() => {
+                const pctDes = Math.round(ficha.prob_desercion * 100);
+                const colorDes = pctDes >= 70 ? "text-red-600" : pctDes >= 40 ? "text-orange-600" : "text-green-600";
+                const barDes = pctDes >= 70 ? "bg-red-500" : pctDes >= 40 ? "bg-orange-400" : "bg-green-500";
+                return (
+                  <div className="flex-1 px-4 py-2.5 border-r border-gray-200 cursor-help" title="Probabilidad de desercion predicha por modelo ML. Basado en: promedio, nota minima, dispersion de notas y materias reprobadas. Comparado contra patrones historicos P60-P67">
+                    <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mb-0.5">Pred. Deserción</div>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className={`text-lg font-bold ${colorDes}`}>{pctDes}%</span>
+                      <span className={`text-[11px] font-semibold ${colorDes}`}>{pctDes >= 70 ? "Alto" : pctDes >= 40 ? "Moderado" : "Bajo"}</span>
+                    </div>
+                    <div className="mt-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full transition-all ${barDes}`} style={{ width: `${pctDes}%` }} />
+                    </div>
+                  </div>
+                );
+              })()}
+              {/* Pred. Reprobación */}
+              {ficha.prob_reprobacion != null && (() => {
+                const pctRep = Math.round(ficha.prob_reprobacion * 100);
+                const colorRep = pctRep >= 70 ? "text-red-600" : pctRep >= 40 ? "text-orange-600" : "text-green-600";
+                const barRep = pctRep >= 70 ? "bg-red-500" : pctRep >= 40 ? "bg-orange-400" : "bg-green-500";
+                return (
+                  <div className="flex-1 px-4 py-2.5 border-r border-gray-200 cursor-help" title="Probabilidad de reprobar al menos una materia, predicha por modelo ML con datos historicos P60-P67">
+                    <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mb-0.5">Pred. Reprobación</div>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className={`text-lg font-bold ${colorRep}`}>{pctRep}%</span>
+                      <span className={`text-[11px] font-semibold ${colorRep}`}>{pctRep >= 70 ? "Alto" : pctRep >= 40 ? "Moderado" : "Bajo"}</span>
+                    </div>
+                    <div className="mt-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full transition-all ${barRep}`} style={{ width: `${pctRep}%` }} />
+                    </div>
+                  </div>
+                );
+              })()}
+              {/* Riesgo general */}
+              <div className="flex-1 px-4 py-2.5">
+                <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mb-0.5">Nivel de Riesgo</div>
+                <div className="flex items-center gap-2 mt-1">
+                  <RiskBadge nivel={ficha.nivel_riesgo} size="lg" />
+                </div>
+              </div>
+            </div>
+            {/* Pie de indicadores */}
+            <div className="px-4 py-0.5 bg-gray-50 border-t border-gray-100 text-[9px] text-gray-400 text-right">
+              Modelo ML · datos historicos P60-P67
+              {ficha.prediccion_updated_at && (
+                <> · actualizado {new Date(ficha.prediccion_updated_at).toLocaleDateString("es-EC")}</>
+              )}
             </div>
           </div>
 
@@ -526,13 +544,13 @@ export default function FichaEstudiante() {
                     provincia={ficha.provincia}
                     ciudad={ficha.ciudad}
                     parroquia={ficha.parroquia}
-                    height={200}
+                    height={280}
                     showTitle={false}
                   />
                 </div>
               ) : (
                 <div className="bg-gray-50 border border-gray-200 mx-2 my-2 rounded flex flex-col items-center justify-center text-center"
-                     style={{ height: "130px" }}>
+                     style={{ height: "180px" }}>
                   <svg viewBox="0 0 80 90" className="w-16 h-16 opacity-30" fill="#1B3A6B">
                     <path d="M38 5 L50 8 L60 15 L65 25 L62 38 L70 45 L72 55 L65 65 L55 72 L42 78 L30 75 L20 68 L15 55 L18 42 L12 32 L18 20 L28 12 Z" />
                     <circle cx="38" cy="40" r="5" fill="#F0B000" opacity="1"/>
@@ -959,47 +977,53 @@ export default function FichaEstudiante() {
             </div>
           </div>
 
-          {/* ═══ PRÁCTICAS PREPROFESIONALES ═══ */}
+          {/* ═══ PRÁCTICAS PREPROFESIONALES (desplegable) ═══ */}
           <div className="border-t border-gray-300">
-            <div className="bg-brand text-white px-4 py-1 text-[10px] font-bold uppercase tracking-wider">
-              Prácticas Preprofesionales
-            </div>
-            <div className="grid grid-cols-2 divide-x divide-gray-300 bg-white">
-              <table className="border-collapse w-full">
-                <tbody>
-                  {[
-                    ["Nombre práctica", "—"],
-                    ["IE Práctica", "—"],
-                    ["Ubicación IE", "—"],
-                    ["Distrito AMIE", "—"],
-                    ["Jurisdicción", "—"],
-                    ["Nombre autoridad", "—"],
-                    ["Cargo", "—"],
-                    ["Celular", "—"],
-                  ].map(([label, val]) => (
-                    <tr key={label}>
-                      <td className="bg-[#F2F2F2] border border-gray-200 text-right text-[11px] font-semibold text-gray-500 px-2 py-0.5 w-32 whitespace-nowrap">{label}</td>
-                      <td className="border border-gray-200 text-[11px] px-2 py-0.5 text-gray-300 italic">{val}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div className="p-3">
-                <div className="grid grid-cols-2 gap-2 text-[11px]">
-                  <div>
-                    <div className="bg-[#F2F2F2] text-center py-0.5 font-bold text-gray-600 border border-gray-200 mb-1">Sin membrete</div>
-                    <div className="text-center text-[#BF8F00] border border-gray-200 py-0.5 cursor-pointer hover:bg-yellow-50">Carta de solicitud</div>
-                    <div className="text-center text-[#BF8F00] border border-gray-200 py-0.5 cursor-pointer hover:bg-yellow-50 mt-0.5">Carta de solicitud</div>
+            <button
+              onClick={() => setPracticasOpen(p => !p)}
+              className="w-full bg-brand text-white px-4 py-1 text-[10px] font-bold uppercase tracking-wider flex items-center justify-between hover:bg-brand-light transition-colors"
+            >
+              <span>Prácticas Preprofesionales</span>
+              <span className={`transition-transform duration-200 ${practicasOpen ? "rotate-180" : ""}`}>▾</span>
+            </button>
+            {practicasOpen && (
+              <div className="grid grid-cols-2 divide-x divide-gray-300 bg-white">
+                <table className="border-collapse w-full">
+                  <tbody>
+                    {[
+                      ["Nombre práctica", "—"],
+                      ["IE Práctica", "—"],
+                      ["Ubicación IE", "—"],
+                      ["Distrito AMIE", "—"],
+                      ["Jurisdicción", "—"],
+                      ["Nombre autoridad", "—"],
+                      ["Cargo", "—"],
+                      ["Celular", "—"],
+                    ].map(([label, val]) => (
+                      <tr key={label}>
+                        <td className="bg-[#F2F2F2] border border-gray-200 text-right text-[11px] font-semibold text-gray-500 px-2 py-0.5 w-32 whitespace-nowrap">{label}</td>
+                        <td className="border border-gray-200 text-[11px] px-2 py-0.5 text-gray-300 italic">{val}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="p-3">
+                  <div className="grid grid-cols-2 gap-2 text-[11px]">
+                    <div>
+                      <div className="bg-[#F2F2F2] text-center py-0.5 font-bold text-gray-600 border border-gray-200 mb-1">Sin membrete</div>
+                      <div className="text-center text-[#BF8F00] border border-gray-200 py-0.5 cursor-pointer hover:bg-yellow-50">Carta de solicitud</div>
+                      <div className="text-center text-[#BF8F00] border border-gray-200 py-0.5 cursor-pointer hover:bg-yellow-50 mt-0.5">Carta de solicitud</div>
+                    </div>
+                    <div>
+                      <div className="bg-[#F2F2F2] text-center py-0.5 font-bold text-gray-600 border border-gray-200 mb-1">Membretado</div>
+                      <div className="text-center text-[#BF8F00] border border-gray-200 py-0.5 cursor-pointer hover:bg-yellow-50">Carta de solicitud</div>
+                      <div className="text-center text-[#BF8F00] border border-gray-200 py-0.5 cursor-pointer hover:bg-yellow-50 mt-0.5">Carta de solicitud</div>
+                    </div>
+                    <div className="col-span-2 text-center text-[#BF8F00] border border-gray-200 py-0.5 cursor-pointer hover:bg-yellow-50">Carta compromiso</div>
                   </div>
-                  <div>
-                    <div className="bg-[#F2F2F2] text-center py-0.5 font-bold text-gray-600 border border-gray-200 mb-1">Membretado</div>
-                    <div className="text-center text-[#BF8F00] border border-gray-200 py-0.5 cursor-pointer hover:bg-yellow-50">Carta de solicitud</div>
-                    <div className="text-center text-[#BF8F00] border border-gray-200 py-0.5 cursor-pointer hover:bg-yellow-50 mt-0.5">Carta de solicitud</div>
-                  </div>
-                  <div className="col-span-2 text-center text-[#BF8F00] border border-gray-200 py-0.5 cursor-pointer hover:bg-yellow-50">Carta compromiso</div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* ═══ SEGUIMIENTO E INTERVENCIONES ═══ */}
