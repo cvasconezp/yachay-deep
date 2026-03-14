@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
 
-from .config import settings
+from .config import settings, validate_security_settings
 from .database import create_tables, upgrade_tables
 from .auth.routes import router as auth_router
 from .routes.students import router as students_router
@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Startup: crear tablas y admin por defecto si no existen."""
     logger.info("Iniciando Yachay Deep API...")
+    validate_security_settings()
     create_tables()
     upgrade_tables()   # agrega columnas nuevas sin borrar datos
     _create_default_admin()
@@ -42,6 +43,8 @@ def _create_default_admin():
 
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@yachay.edu.ec")
     admin_pass = os.environ.get("ADMIN_PASSWORD", "YachayDeep2024!")
+    if admin_pass == "YachayDeep2024!":
+        logger.warning("⚠️ ADMIN_PASSWORD usa el valor por defecto. Configura una contraseña segura via variable de entorno.")
 
     db = SessionLocal()
     try:
@@ -106,18 +109,3 @@ def health_check():
     return {"status": "ok", "app": settings.APP_NAME}
 
 
-@app.get("/debug/fs")
-def debug_filesystem():
-    """Temporal: diagnóstico de rutas de datos en Railway."""
-    import os
-    cwd = os.getcwd()
-    data_path = os.path.abspath("./data")
-    result = {"cwd": cwd, "data_abs": data_path, "dirs": {}}
-    for subdir in ["IngresosAVAC", "Tareas"]:
-        p = os.path.join(data_path, subdir)
-        if os.path.isdir(p):
-            files = os.listdir(p)
-            result["dirs"][subdir] = {"count": len(files), "sample": files[:3]}
-        else:
-            result["dirs"][subdir] = {"count": 0, "exists": False}
-    return result

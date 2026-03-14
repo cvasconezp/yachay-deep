@@ -10,11 +10,13 @@ export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [carreras, setCarreras] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [filtros, setFiltros] = useState({ carrera: "", nivel_riesgo: "", solo_sin_intervencion: false });
   const navigate = useNavigate();
 
   const loadData = async () => {
     setLoading(true);
+    setError(null);
     try {
       const params = {};
       if (filtros.carrera) params.carrera = filtros.carrera;
@@ -37,6 +39,7 @@ export default function Dashboard() {
       setCarreras(carrerasData);
     } catch (e) {
       console.error(e);
+      setError(e.message || "Error al cargar los datos");
     } finally {
       setLoading(false);
     }
@@ -104,7 +107,15 @@ export default function Dashboard() {
 
       {/* Tabla */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        {loading ? (
+        {error ? (
+          <div className="text-center py-20">
+            <p className="text-red-600 font-medium mb-2">Error al cargar datos</p>
+            <p className="text-gray-500 text-sm mb-4">{error}</p>
+            <button onClick={loadData} className="text-sm text-blue-600 hover:text-blue-800 font-medium">
+              Reintentar
+            </button>
+          </div>
+        ) : loading ? (
           <div className="flex items-center justify-center py-20 text-gray-400">Cargando...</div>
         ) : students.length === 0 ? (
           <div className="text-center py-20 text-gray-400">No hay estudiantes con los filtros seleccionados</div>

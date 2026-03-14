@@ -36,7 +36,7 @@ class ApiClient {
       const error = await response.json().catch(() => ({ detail: "Error desconocido" }));
       const detail = error.detail;
       const message = Array.isArray(detail)
-        ? "Credenciales incorrectas"
+        ? detail.map(e => e.msg || e.message || JSON.stringify(e)).join("; ")
         : (typeof detail === "string" ? detail : `HTTP ${response.status}`);
       throw new Error(message);
     }

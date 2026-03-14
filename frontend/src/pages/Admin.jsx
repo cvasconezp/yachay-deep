@@ -10,6 +10,7 @@ function TabSistema() {
   const [status, setStatus] = useState(null);
   const [runs, setRuns] = useState([]);
   const [etlLoading, setEtlLoading] = useState(false);
+  const [etlMsg, setEtlMsg] = useState("");
 
   useEffect(() => {
     api.getSystemStatus().then(setStatus).catch(() => {});
@@ -18,12 +19,13 @@ function TabSistema() {
 
   const handleRunETL = async () => {
     setEtlLoading(true);
+    setEtlMsg("");
     try {
       const result = await api.triggerETL();
-      alert(result.message);
+      setEtlMsg(result.message);
       setTimeout(() => api.getETLRuns().then(setRuns), 2000);
     } catch (e) {
-      alert("Error: " + e.message);
+      setEtlMsg("Error: " + e.message);
     } finally {
       setEtlLoading(false);
     }
@@ -67,6 +69,11 @@ function TabSistema() {
           <p className="text-xs text-gray-400 mt-2">
             Procesa todos los CSVs de IngresosAVAC y Tareas y actualiza la base de datos.
           </p>
+          {etlMsg && (
+            <div className={`text-sm mt-3 px-4 py-2 rounded-lg ${etlMsg.startsWith("Error") ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
+              {etlMsg}
+            </div>
+          )}
         </div>
       </div>
 
@@ -174,14 +181,22 @@ function TabCursos() {
   };
 
   const handleToggle = async (c) => {
-    await api.patch(`/courses/${c.id}`, { activo: !c.activo });
-    loadCourses();
+    try {
+      await api.patch(`/courses/${c.id}`, { activo: !c.activo });
+      loadCourses();
+    } catch (err) {
+      setMsg("Error: " + err.message);
+    }
   };
 
   const handleDelete = async (id) => {
     if (!confirm("¿Eliminar este curso?")) return;
-    await api.delete(`/courses/${id}`);
-    loadCourses();
+    try {
+      await api.delete(`/courses/${id}`);
+      loadCourses();
+    } catch (err) {
+      setMsg("Error: " + err.message);
+    }
   };
 
   return (
@@ -515,8 +530,12 @@ function TabUsuarios() {
   };
 
   const toggleUser = async (user) => {
-    await api.patch(`/auth/users/${user.id}`, { is_active: !user.is_active });
-    api.listUsers().then(setUsers);
+    try {
+      await api.patch(`/auth/users/${user.id}`, { is_active: !user.is_active });
+      api.listUsers().then(setUsers);
+    } catch (err) {
+      setUserMsg("Error: " + err.message);
+    }
   };
 
   return (
