@@ -85,7 +85,6 @@ def get_etl_log(
     """Log detallado de una ejecución ETL."""
     run = db.query(ScrapingRun).filter(ScrapingRun.id == run_id).first()
     if not run:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Run no encontrado")
     return {"log": run.log_output, "errores": run.errores}
 
@@ -140,7 +139,7 @@ async def upload_data_and_run_etl(
 @router.get("/system/status")
 def system_status(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     """Estado general del sistema: última actualización, total estudiantes, etc."""
     from ..models import Student

@@ -31,6 +31,19 @@ class CourseConfigCreate(BaseModel):
     notas: Optional[str] = None
 
 
+class CourseConfigUpdate(BaseModel):
+    codigo_avac: Optional[str] = None
+    nombre: Optional[str] = None
+    asignatura: Optional[str] = None
+    carrera: Optional[str] = None
+    docente: Optional[str] = None
+    semestre: Optional[str] = None
+    bloque: Optional[str] = None
+    grupo: Optional[str] = None
+    activo: Optional[bool] = None
+    notas: Optional[str] = None
+
+
 class CourseConfigOut(BaseModel):
     id: int
     codigo_avac: str
@@ -120,13 +133,12 @@ def bulk_create_courses(courses: list[CourseConfigCreate], db: Session = Depends
 
 
 @router.patch("/{course_id}", response_model=CourseConfigOut, dependencies=[Depends(require_admin)])
-def update_course(course_id: int, payload: dict, db: Session = Depends(get_db)):
+def update_course(course_id: int, payload: CourseConfigUpdate, db: Session = Depends(get_db)):
     course = db.query(CourseConfig).filter(CourseConfig.id == course_id).first()
     if not course:
         raise HTTPException(status_code=404, detail="Curso no encontrado")
-    for field, value in payload.items():
-        if hasattr(course, field):
-            setattr(course, field, value)
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(course, field, value)
     db.commit()
     db.refresh(course)
     return course

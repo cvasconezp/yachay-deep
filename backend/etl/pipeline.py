@@ -5,7 +5,7 @@ Soporta filtrado por bloque activo usando SemesterConfig.
 """
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, List
 import pandas as pd
@@ -287,7 +287,7 @@ class ETLPipeline:
             run.registros_insertados = total_registros
             run.errores = errores if errores else None
             run.log_output = "\n".join(logs)
-            run.finished_at = datetime.utcnow()
+            run.finished_at = datetime.now(timezone.utc)
             self.db.commit()
 
         return run

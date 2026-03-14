@@ -4,7 +4,7 @@ Dashboard de riesgo — equivalente a la hoja EstudiantesEnRiesgo del Excel.
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_, or_
+from sqlalchemy import func, case, and_, or_
 from pydantic import BaseModel
 
 from ..database import get_db
@@ -25,6 +25,7 @@ class RiskStudentOut(BaseModel):
     indice_compromiso: Optional[float]
     dias_sin_acceso: Optional[int]
     porcentaje_tareas: Optional[float]
+    promedio_calificaciones: Optional[float]
     estado_matricula: Optional[str]
     total_intervenciones: int
     ultima_intervencion: Optional[str]
@@ -38,6 +39,7 @@ def get_risk_dashboard(
     carrera: Optional[str] = None,
     nivel_riesgo: Optional[str] = None,
     solo_sin_intervencion: bool = False,
+    offset: int = Query(0, ge=0),
     limit: int = Query(500, le=2500),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -71,12 +73,19 @@ def get_risk_dashboard(
         query = query.filter(interv_sq.c.total_intervenciones.is_(None))
 
     # Ordenar: riesgo Alto primero, luego por días sin acceso descendente
+    risk_order = case(
+        (Student.nivel_riesgo == "Alto", 0),
+        (Student.nivel_riesgo == "Medio", 1),
+        (Student.nivel_riesgo == "Bajo", 2),
+        else_=3,
+    )
     results = (
         query
         .order_by(
-            Student.nivel_riesgo.asc(),   # Alto < Bajo < Medio alfabéticamente → reordenar en frontend
+            risk_order,
             Student.dias_sin_acceso.desc().nullslast(),
         )
+        .offset(offset)
         .limit(limit)
         .all()
     )
@@ -93,6 +102,7 @@ def get_risk_dashboard(
             indice_compromiso=student.indice_compromiso,
             dias_sin_acceso=student.dias_sin_acceso,
             porcentaje_tareas=student.porcentaje_tareas,
+            promedio_calificaciones=student.promedio_calificaciones,
             estado_matricula=student.estado_matricula,
             total_intervenciones=total_interv or 0,
             ultima_intervencion=ultima_interv.isoformat() if ultima_interv else None,

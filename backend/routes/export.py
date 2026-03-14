@@ -140,7 +140,9 @@ def export_ficha_pdf(
     doc.build(story)
     buffer.seek(0)
 
-    filename = f"ficha_{student.nombre.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.pdf"
+    import re
+    safe_name = re.sub(r'[^\w\s-]', '', student.nombre or "estudiante").replace(' ', '_')
+    filename = f"ficha_{safe_name}_{datetime.now().strftime('%Y%m%d')}.pdf"
     return StreamingResponse(
         buffer,
         media_type="application/pdf",

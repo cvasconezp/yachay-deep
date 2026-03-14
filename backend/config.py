@@ -64,3 +64,16 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+_DEFAULT_SECRET_KEY = "change-this-in-production-use-openssl-rand-hex-32"
+
+
+def validate_security_settings():
+    """Emite warnings si hay configuraciones de seguridad inseguras."""
+    import logging
+    _logger = logging.getLogger(__name__)
+    if settings.SECRET_KEY == _DEFAULT_SECRET_KEY:
+        _logger.warning(
+            "⚠️ SECRET_KEY usa el valor por defecto. Los tokens JWT son predecibles. "
+            "Genera una clave segura con: openssl rand -hex 32"
+        )
