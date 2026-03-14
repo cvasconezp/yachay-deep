@@ -61,6 +61,12 @@ def upgrade_tables():
             ("numero_repitencias", "INTEGER"),
             ("nivel", "INTEGER"),
         ],
+        "interventions": [
+            ("derivar_bienestar", "BOOLEAN"),
+            ("tipo_evento_critico", "VARCHAR"),
+            ("reporte_bienestar", "TEXT"),
+            ("email_enviado", "BOOLEAN"),
+        ],
     }
 
     inspector = inspect(engine)

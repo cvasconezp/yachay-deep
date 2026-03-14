@@ -32,6 +32,14 @@ class Settings(BaseSettings):
     # Contiene: nivel académico, sede, residencia, whatsapp, etnia, lengua, trabajo
     DATA_PATH_DATOS_ESPECIFICOS: str = "./data/DatosEspecificos"
 
+    # Email (SMTP para derivaciones a Bienestar Estudiantil)
+    SMTP_HOST: Optional[str] = None
+    SMTP_PORT: int = 587
+    SMTP_USER: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    SMTP_FROM: Optional[str] = None
+    BIENESTAR_EMAIL: Optional[str] = None  # destinatario del departamento
+
     # App
     APP_NAME: str = "Yachay Deep"
     DEBUG: bool = False

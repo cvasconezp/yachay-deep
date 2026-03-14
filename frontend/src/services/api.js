@@ -140,6 +140,7 @@ class ApiClient {
   runPredictions() { return this.post("/predictions/run", {}); }
   getPredictionStatus() { return this.get("/predictions/status"); }
   getPredictionStudent(studentId) { return this.get(`/predictions/student/${studentId}`); }
+  getRecommendations(studentId) { return this.get(`/predictions/student/${studentId}/recommendations`); }
 }
 
 export const api = new ApiClient();

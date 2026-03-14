@@ -23,6 +23,18 @@ const RESULTADOS = [
   "Mensaje enviado sin respuesta",
 ];
 
+const EVENTOS_CRITICOS = [
+  "Enfermedad grave",
+  "Hospitalización (estudiante o familiar)",
+  "Pérdida de empleo",
+  "Problemas económicos severos",
+  "Situación de violencia",
+  "Duelo / pérdida familiar",
+  "Trastorno emocional / psicológico",
+  "Discapacidad o condición especial",
+  "Otro evento crítico",
+];
+
 function StatCard({ label, value, color = "text-brand", sub }) {
   return (
     <div className="bg-white rounded-xl border border-gray-200 px-5 py-4 shadow-sm">
@@ -90,6 +102,9 @@ export default function Intervenciones() {
       resultado: inv.resultado || "",
       requiere_seguimiento: inv.requiere_seguimiento || "",
       observacion: inv.observacion || "",
+      derivar_bienestar: inv.derivar_bienestar || false,
+      tipo_evento_critico: inv.tipo_evento_critico || "",
+      reporte_bienestar: inv.reporte_bienestar || "",
     });
   };
 
@@ -222,6 +237,7 @@ export default function Intervenciones() {
                   <th className="text-left px-3 py-2.5 font-semibold text-gray-600 text-xs uppercase tracking-wider">Medio</th>
                   <th className="text-left px-3 py-2.5 font-semibold text-gray-600 text-xs uppercase tracking-wider">Resultado</th>
                   <th className="text-center px-3 py-2.5 font-semibold text-gray-600 text-xs uppercase tracking-wider">Seg.</th>
+                  <th className="text-center px-3 py-2.5 font-semibold text-gray-600 text-xs uppercase tracking-wider">Bienestar</th>
                   <th className="text-left px-3 py-2.5 font-semibold text-gray-600 text-xs uppercase tracking-wider">Monitor</th>
                   <th className="text-left px-3 py-2.5 font-semibold text-gray-600 text-xs uppercase tracking-wider">Fecha</th>
                   <th className="text-center px-3 py-2.5 font-semibold text-gray-600 text-xs uppercase tracking-wider">Acción</th>
@@ -269,6 +285,16 @@ export default function Intervenciones() {
                     <td className="px-3 py-2.5 text-center">
                       {inv.requiere_seguimiento === "si" ? (
                         <span className="bg-orange-100 text-orange-700 text-[10px] font-bold px-2 py-0.5 rounded-full">Pend.</span>
+                      ) : (
+                        <span className="text-gray-300 text-xs">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5 text-center">
+                      {inv.derivar_bienestar ? (
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${inv.email_enviado ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}
+                          title={inv.tipo_evento_critico || ""}>
+                          {inv.email_enviado ? "Enviado" : "Derivado"}
+                        </span>
                       ) : (
                         <span className="text-gray-300 text-xs">—</span>
                       )}
@@ -352,6 +378,34 @@ export default function Intervenciones() {
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                   placeholder="Agregar o actualizar observación..."
                 />
+              </div>
+
+              {/* Derivación a Bienestar */}
+              <div className={`border rounded-lg p-3 ${editForm.derivar_bienestar ? "border-red-300 bg-red-50/50" : "border-gray-200"}`}>
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input type="checkbox" checked={editForm.derivar_bienestar}
+                    onChange={e => setEditForm(f => ({ ...f, derivar_bienestar: e.target.checked }))}
+                    className="rounded accent-red-600" />
+                  <span className={`font-medium ${editForm.derivar_bienestar ? "text-red-700" : "text-gray-700"}`}>
+                    Derivar a Bienestar Estudiantil
+                  </span>
+                </label>
+                {editForm.derivar_bienestar && (
+                  <div className="mt-2 space-y-2">
+                    <select value={editForm.tipo_evento_critico}
+                      onChange={e => setEditForm(f => ({ ...f, tipo_evento_critico: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option value="">Tipo de evento...</option>
+                      {EVENTOS_CRITICOS.map(ev => <option key={ev} value={ev}>{ev}</option>)}
+                    </select>
+                    <textarea value={editForm.reporte_bienestar}
+                      onChange={e => setEditForm(f => ({ ...f, reporte_bienestar: e.target.value }))}
+                      rows={3}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                      placeholder="Reporte para Bienestar Estudiantil..."
+                    />
+                  </div>
+                )}
               </div>
             </div>
 

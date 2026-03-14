@@ -207,8 +207,8 @@ export default function Docentes() {
                         <th className="text-left px-3 py-2 text-xs font-medium text-gray-500">Estudiante</th>
                         <th className="text-center px-3 py-2 text-xs font-medium text-gray-500">Nota</th>
                         <th className="text-center px-3 py-2 text-xs font-medium text-gray-500">Riesgo</th>
-                        <th className="px-3 py-2 text-xs font-medium text-gray-500 w-24 cursor-help" title="Indice de compromiso: acceso AVAC (30%), tareas (30%), rendimiento (25%), matrícula (15%)">Compromiso</th>
-                        <th className="text-center px-3 py-2 text-xs font-medium text-gray-500 cursor-help" title="Días desde el último acceso al Aula Virtual (AVAC)">Dias AVAC</th>
+                        <th className="px-3 py-2 text-xs font-medium text-gray-500 w-24 cursor-help" title="Índice de compromiso: acceso AVAC (30%), tareas (30%), rendimiento (25%), matrícula (15%)">Compromiso</th>
+                        <th className="text-center px-3 py-2 text-xs font-medium text-gray-500 cursor-help" title="Días desde el último acceso al Aula Virtual (AVAC)">Días AVAC</th>
                       </tr>
                     </thead>
                     <tbody>

@@ -1,6 +1,7 @@
 """
-Endpoints de prediccion ML — Fase 2 del Framework Yachay Deep.
-Permite entrenar modelos, ejecutar predicciones y consultar estado.
+Endpoints de prediccion ML — Fases 2-4 del Framework Yachay Deep.
+Permite entrenar modelos, ejecutar predicciones, consultar estado
+y generar recomendaciones automáticas de intervención.
 """
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -67,3 +68,25 @@ def predict_student(
     if result is None:
         raise HTTPException(status_code=404, detail="Sin datos para predecir")
     return result
+
+
+@router.get("/student/{student_id}/recommendations")
+def get_recommendations(
+    student_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Genera recomendaciones automáticas de intervención (Fase 4)."""
+    from ..ml.predict import Predictor
+    from ..ml.recommendations import generate_recommendations
+
+    # Obtener datos XAI si el modelo está cargado
+    xai_data = None
+    try:
+        predictor = Predictor.get_instance()
+        xai_data = predictor.predict_single(db, student_id)
+    except Exception:
+        pass
+
+    recs = generate_recommendations(db, student_id, xai_data)
+    return {"student_id": student_id, "recommendations": recs, "total": len(recs)}

@@ -25,6 +25,9 @@ class InterventionCreate(BaseModel):
     observacion: Optional[str] = None
     resultado: Optional[str] = None       # Contactado / No contestó / Buzón de voz
     requiere_seguimiento: Optional[str] = None  # "si" / "no"
+    derivar_bienestar: Optional[bool] = False
+    tipo_evento_critico: Optional[str] = None
+    reporte_bienestar: Optional[str] = None
 
 
 class InterventionUpdate(BaseModel):
@@ -36,6 +39,9 @@ class InterventionUpdate(BaseModel):
     observacion: Optional[str] = None
     resultado: Optional[str] = None
     requiere_seguimiento: Optional[str] = None
+    derivar_bienestar: Optional[bool] = None
+    tipo_evento_critico: Optional[str] = None
+    reporte_bienestar: Optional[str] = None
 
 
 class InterventionResponse(BaseModel):
@@ -49,6 +55,10 @@ class InterventionResponse(BaseModel):
     observacion: Optional[str]
     resultado: Optional[str]
     requiere_seguimiento: Optional[str]
+    derivar_bienestar: Optional[bool]
+    tipo_evento_critico: Optional[str]
+    reporte_bienestar: Optional[str]
+    email_enviado: Optional[bool]
     created_at: Optional[datetime]
 
     class Config:
@@ -82,10 +92,39 @@ def create_intervention(
         observacion=payload.observacion,
         resultado=payload.resultado,
         requiere_seguimiento=payload.requiere_seguimiento,
+        derivar_bienestar=payload.derivar_bienestar,
+        tipo_evento_critico=payload.tipo_evento_critico,
+        reporte_bienestar=payload.reporte_bienestar,
     )
     db.add(intervention)
     db.commit()
     db.refresh(intervention)
+
+    # Enviar correo a Bienestar Estudiantil si se solicitó derivación
+    if payload.derivar_bienestar:
+        from ..services.email import send_bienestar_report
+
+        student_data = {
+            "nombre": student.nombre,
+            "cedula": student.cedula,
+            "correo": student.correo,
+            "correo_institucional": student.correo_institucional,
+            "telefono": student.telefono,
+            "whatsapp": getattr(student, "whatsapp", None),
+            "carrera": student.carrera,
+            "sede": student.sede,
+        }
+        intervention_data = {
+            "tipo_evento_critico": payload.tipo_evento_critico,
+            "reporte_bienestar": payload.reporte_bienestar,
+            "motivo": payload.motivo,
+            "observacion": payload.observacion,
+        }
+        email_ok = send_bienestar_report(student_data, intervention_data, current_user.nombre)
+        intervention.email_enviado = email_ok
+        db.commit()
+        db.refresh(intervention)
+
     return intervention
 
 
@@ -107,6 +146,34 @@ def update_intervention(
 
     db.commit()
     db.refresh(intervention)
+
+    # Si se activa derivación a bienestar y aún no se envió correo
+    if intervention.derivar_bienestar and not intervention.email_enviado:
+        from ..services.email import send_bienestar_report
+
+        student = db.query(Student).filter(Student.id == intervention.student_id).first()
+        if student:
+            student_data = {
+                "nombre": student.nombre,
+                "cedula": student.cedula,
+                "correo": student.correo,
+                "correo_institucional": student.correo_institucional,
+                "telefono": student.telefono,
+                "whatsapp": getattr(student, "whatsapp", None),
+                "carrera": student.carrera,
+                "sede": student.sede,
+            }
+            intervention_data = {
+                "tipo_evento_critico": intervention.tipo_evento_critico,
+                "reporte_bienestar": intervention.reporte_bienestar,
+                "motivo": intervention.motivo,
+                "observacion": intervention.observacion,
+            }
+            email_ok = send_bienestar_report(student_data, intervention_data, current_user.nombre)
+            intervention.email_enviado = email_ok
+            db.commit()
+            db.refresh(intervention)
+
     return intervention
 
 
@@ -216,6 +283,9 @@ def interventions_dashboard(
             "resultado": inv.resultado,
             "requiere_seguimiento": inv.requiere_seguimiento,
             "observacion": inv.observacion,
+            "derivar_bienestar": inv.derivar_bienestar,
+            "tipo_evento_critico": inv.tipo_evento_critico,
+            "email_enviado": inv.email_enviado,
             "monitor_nombre": inv.monitor_nombre,
             "created_at": inv.created_at.isoformat() if inv.created_at else None,
         })

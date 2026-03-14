@@ -216,6 +216,9 @@ export default function FichaEstudiante() {
   const [xaiOpen, setXaiOpen] = useState(false);
   const [xaiData, setXaiData] = useState(null);
   const [xaiLoading, setXaiLoading] = useState(false);
+  const [recsOpen, setRecsOpen] = useState(false);
+  const [recsData, setRecsData] = useState(null);
+  const [recsLoading, setRecsLoading] = useState(false);
   const [carreras, setCarreras] = useState([]);
   const [selectedCarrera, setSelectedCarrera] = useState("");
   const searchTimeout = useRef(null);
@@ -257,6 +260,8 @@ export default function FichaEstudiante() {
     setSearchResults([]);
     setXaiData(null);
     setXaiOpen(false);
+    setRecsData(null);
+    setRecsOpen(false);
     try {
       const data = await api.getFicha(id);
       setFicha(data);
@@ -293,6 +298,22 @@ export default function FichaEstudiante() {
       setXaiData(null);
     } finally {
       setXaiLoading(false);
+    }
+  };
+
+  const toggleRecs = async () => {
+    if (recsOpen) { setRecsOpen(false); return; }
+    setRecsOpen(true);
+    if (recsData && recsData.student_id === ficha?.id) return;
+    setRecsLoading(true);
+    try {
+      const data = await api.getRecommendations(ficha.id);
+      setRecsData({ ...data, student_id: ficha.id });
+    } catch (e) {
+      console.error("Recommendations error:", e);
+      setRecsData(null);
+    } finally {
+      setRecsLoading(false);
     }
   };
 
@@ -561,6 +582,63 @@ export default function FichaEstudiante() {
                 )}
                 <div className="text-[8px] text-gray-400 text-center mt-1.5">
                   Modelo: {xaiData?.model_used || "—"} · Comparado con estudiantes de la misma carrera
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ═══ RECOMENDACIONES AUTOMÁTICAS (Fase 4) ═══ */}
+          <div className="border-t border-gray-200">
+            <button onClick={toggleRecs}
+              className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-gradient-to-r from-amber-50 to-orange-50 hover:from-amber-100 hover:to-orange-100 border-b border-gray-200 text-[10px] text-amber-700 font-semibold uppercase tracking-wider transition-colors">
+              <span className="text-xs">💡</span>
+              <span>{recsOpen ? "Ocultar" : "Ver"} recomendaciones de intervención</span>
+              <span className={`transition-transform duration-200 text-[8px] ${recsOpen ? "rotate-180" : ""}`}>▾</span>
+              {recsData?.total > 0 && !recsOpen && (
+                <span className="ml-1 bg-amber-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">{recsData.total}</span>
+              )}
+            </button>
+            {recsOpen && (
+              <div className="bg-amber-50/30 px-4 py-3">
+                {recsLoading ? (
+                  <div className="text-[11px] text-gray-400 text-center py-2">Generando recomendaciones...</div>
+                ) : !recsData?.recommendations?.length ? (
+                  <div className="text-[11px] text-gray-500 text-center py-2">Sin recomendaciones — el estudiante no presenta indicadores de alerta</div>
+                ) : (
+                  <div className="space-y-2">
+                    {recsData.recommendations.map((rec, i) => {
+                      const prioStyles = {
+                        urgente:    { border: "border-red-300", bg: "bg-red-50", badge: "bg-red-500 text-white", icon: "🔴" },
+                        importante: { border: "border-orange-300", bg: "bg-orange-50", badge: "bg-orange-400 text-white", icon: "🟠" },
+                        sugerida:   { border: "border-blue-200", bg: "bg-blue-50", badge: "bg-blue-400 text-white", icon: "🔵" },
+                      };
+                      const s = prioStyles[rec.prioridad] || prioStyles.sugerida;
+                      return (
+                        <div key={i} className={`border ${s.border} ${s.bg} rounded-lg p-3`}>
+                          <div className="flex items-start gap-2">
+                            <span className="text-sm flex-shrink-0 mt-0.5">{s.icon}</span>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${s.badge}`}>
+                                  {rec.prioridad}
+                                </span>
+                                <span className="text-[9px] text-gray-400 uppercase">{rec.categoria}</span>
+                              </div>
+                              <div className="text-[12px] font-semibold text-gray-800 leading-tight mb-1">{rec.accion}</div>
+                              <div className="text-[10px] text-gray-500 leading-relaxed mb-1.5">{rec.motivo}</div>
+                              <div className="flex items-center gap-3 text-[9px] text-gray-400">
+                                <span title="Medio sugerido">📨 {rec.medio}</span>
+                                <span title="Destinatario">👤 {rec.destinatario}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                <div className="text-[8px] text-gray-400 text-center mt-2">
+                  Analítica prescriptiva · Recomendaciones generadas automáticamente a partir del perfil de riesgo
                 </div>
               </div>
             )}

@@ -5,13 +5,13 @@ const PODCASTS = [
   {
     title: "IA para evitar el abandono universitario",
     description:
-      "Cómo la inteligencia artificial y la analítica del aprendizaje pueden anticipar el riesgo de deserción y activar intervenciónes oportunas en educación superior.",
+      "Cómo la inteligencia artificial y la analítica del aprendizaje pueden anticipar el riesgo de deserción y activar intervenciones oportunas en educación superior.",
     file: "/IA_para_evitar_el_abandono_universitario.m4a",
   },
   {
     title: "El Excel que frena el abandono universitario",
     description:
-      "El origen de Yachay Deep: cómo un sistema construido en Excel con macros VBA evolucióno hacia una plataforma web de inteligencia académica preventiva.",
+      "El origen de Yachay Deep: como un sistema construido en Excel con macros VBA evolucionó hacia una plataforma web de inteligencia académica preventiva.",
     file: "/El_Excel_que_frena_el_abandono_universitario.m4a",
   },
 ];
@@ -26,14 +26,14 @@ const FRAMEWORK_PHASES = [
       "Dashboards de riesgo por estudiante, asignatura y docente",
       "Clasificación de riesgo multinivel (Alto / Medio / Bajo)",
       "Fichas individuales con historial académico",
-      "Registro y seguimiento de intervenciónes",
+      "Registro y seguimiento de intervenciones",
       "Listas de tutoría por asignatura",
     ],
   },
   {
     phase: "Fase 2",
     title: "Analítica predictiva",
-    status: "upcoming",
+    status: "active",
     items: [
       "Modelos de predicción de abandono y reprobación",
       "Logistic Regression, Random Forest, XGBoost",
@@ -43,7 +43,7 @@ const FRAMEWORK_PHASES = [
   {
     phase: "Fase 3",
     title: "Explicación del riesgo (XAI)",
-    status: "upcoming",
+    status: "active",
     items: [
       "SHAP, LIME, importance ranking",
       "Explicar por que el estudiante está en riesgo",
@@ -52,7 +52,7 @@ const FRAMEWORK_PHASES = [
   {
     phase: "Fase 4",
     title: "Recomendaciones automáticas",
-    status: "upcoming",
+    status: "active",
     items: [
       "Analítica prescriptiva",
       "Sugerencias de intervención automatizadas",
