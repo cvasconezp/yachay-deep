@@ -3,9 +3,9 @@ import { YachayLogo } from "../components/YachayLogo";
 
 const PODCASTS = [
   {
-    title: "Yachay Deep: A Multilevel Intelligence Framework for Student Retention",
+    title: "Yachay Deep: Un framework multinivel de inteligencia académica para la retención estudiantil",
     description:
-      "An overview of Yachay Deep as a Learning Analytics-Driven Early Warning Decision Support System: its multilevel architecture, predictive modeling, explainable AI, and closed-loop intervention tracking for student retention in higher education.",
+      "Una visión general de Yachay Deep como sistema de soporte a la decisión con alerta temprana impulsado por analítica del aprendizaje: su arquitectura multinivel, modelado predictivo, IA explicable y trazabilidad de intervenciones de ciclo cerrado para la retención estudiantil en educación superior.",
     file: "/Yachay Deep A Multilevel Intelligence Framework for Student Retention.m4a",
   },
   {
