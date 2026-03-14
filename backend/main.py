@@ -2,9 +2,12 @@
 Yachay Deep — API Backend
 FastAPI application entry point
 """
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
+from slowapi import _rate_limiting
+from slowapi.errors import RateLimitExceeded
 import logging
 
 from .config import settings, validate_security_settings
@@ -43,20 +46,27 @@ def _create_default_admin():
     from .auth.jwt import hash_password
     import os
 
-    admin_email = os.environ.get("ADMIN_EMAIL", "admin@yachay.edu.ec")
-    admin_pass = os.environ.get("ADMIN_PASSWORD", "YachayDeep2024!")
-    if admin_pass == "YachayDeep2024!":
-        logger.warning("⚠️ ADMIN_PASSWORD usa el valor por defecto. Configura una contraseña segura via variable de entorno.")
+    admin_email = os.environ.get("ADMIN_EMAIL")
+    admin_pass = os.environ.get("ADMIN_PASSWORD")
 
-    if not os.environ.get("ADMIN_EMAIL") or not os.environ.get("ADMIN_PASSWORD"):
-        logger.warning("⚠️ SEGURIDAD: Usando credenciales admin por defecto. Configure ADMIN_EMAIL y ADMIN_PASSWORD en variables de entorno.")
+    if not admin_email or not admin_pass:
+        if not settings.DEBUG:
+            logger.warning(
+                "⚠️ ADMIN_EMAIL y ADMIN_PASSWORD no configurados. "
+                "No se creará usuario admin por defecto en producción."
+            )
+            return
+        # Solo en DEBUG: usar credenciales de desarrollo
+        admin_email = admin_email or "admin@yachay.edu.ec"
+        admin_pass = admin_pass or "dev12345"
+        logger.warning("⚠️ Usando credenciales admin de desarrollo (DEBUG=True).")
 
     db = SessionLocal()
     try:
         # Si ya existe el usuario con ese email, no hacer nada
         existing = db.query(User).filter(User.email == admin_email).first()
         if existing:
-            logger.info(f"✅ Usuario admin ya existe: {admin_email}")
+            logger.info(f"Usuario admin ya existe: {admin_email}")
             return
 
         # Si existe algún admin (con email diferente), actualizar sus credenciales
@@ -66,7 +76,7 @@ def _create_default_admin():
             admin.hashed_password = hash_password(admin_pass)
             admin.is_active = True
             db.commit()
-            logger.info(f"✅ Usuario admin actualizado: {admin_email}")
+            logger.info(f"Usuario admin actualizado: {admin_email}")
         else:
             # No existe ningún admin → crear uno nuevo
             new_admin = User(
@@ -78,7 +88,7 @@ def _create_default_admin():
             )
             db.add(new_admin)
             db.commit()
-            logger.info(f"✅ Usuario admin creado: {admin_email}")
+            logger.info(f"Usuario admin creado: {admin_email}")
     finally:
         db.close()
 
@@ -88,15 +98,29 @@ app = FastAPI(
     description="Sistema de monitoreo académico — Decision Support System para analítica educativa",
     version="1.0.0",
     lifespan=lifespan,
+    docs_url="/docs" if settings.DEBUG else None,
+    redoc_url="/redoc" if settings.DEBUG else None,
 )
+
+# Rate limiting — registrar el state en la app para slowapi
+from .auth.routes import limiter
+app.state.limiter = limiter
+
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "Demasiados intentos. Intente de nuevo en un momento."},
+    )
 
 # CORS — permite el frontend en Vercel
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 # Routers
@@ -111,8 +135,20 @@ app.include_router(analytics_router)
 app.include_router(predictions_router)
 
 
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    if not settings.DEBUG:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
+
+
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "app": settings.APP_NAME}
+    return {"status": "ok"}
 
 

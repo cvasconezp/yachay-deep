@@ -54,6 +54,23 @@ class ApiClient {
   patch(path, body) { return this.request(path, { method: "PATCH", body: JSON.stringify(body) }); }
   delete(path) { return this.request(path, { method: "DELETE" }); }
 
+  async getBlob(path) {
+    const token = this.getToken();
+    const response = await fetch(`${this.baseUrl}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (response.status === 401) {
+      localStorage.removeItem("yd_token");
+      window.dispatchEvent(new CustomEvent("yd:unauthorized"));
+      throw new Error("No autenticado");
+    }
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ detail: "Error al descargar" }));
+      throw new Error(err.detail || `HTTP ${response.status}`);
+    }
+    return response.blob();
+  }
+
   // Auth
   login(email, password) {
     const form = new FormData();
@@ -85,7 +102,10 @@ class ApiClient {
     const qs = new URLSearchParams(params).toString();
     return this.get(`/dashboard/risk${qs ? "?" + qs : ""}`);
   }
-  getStats() { return this.get("/dashboard/stats"); }
+  getStats(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.get(`/dashboard/stats${qs ? "?" + qs : ""}`);
+  }
   getCarreras() { return this.get("/dashboard/carreras"); }
 
   // Admin
@@ -95,16 +115,28 @@ class ApiClient {
 
   // Export
   exportFichaPDF(studentId) { return this.get(`/export/ficha/${studentId}/pdf`); }
+  getExportColumnas() { return this.get("/export/columnas-disponibles"); }
+  exportEstudiantesExcel(params) {
+    const qs = new URLSearchParams(params).toString();
+    return this.getBlob(`/export/estudiantes/excel${qs ? "?" + qs : ""}`);
+  }
+  getIntervencionesColumnas() { return this.get("/export/intervenciones/columnas-disponibles"); }
+  exportIntervencionesExcel(params) {
+    const qs = new URLSearchParams(params).toString();
+    return this.getBlob(`/export/intervenciones/excel${qs ? "?" + qs : ""}`);
+  }
 
   // Analytics — Asignaturas (Módulo 8.2)
   getAsignaturasAnalytics(params = {}) {
     const qs = new URLSearchParams(params).toString();
     return this.get(`/analytics/asignaturas${qs ? "?" + qs : ""}`);
   }
-  getAsignaturaDetalle(asignatura, docente) {
-    const params = new URLSearchParams({ asignatura });
+  getAsignaturaDetalle(asignatura, docente, periodo) {
+    const params = new URLSearchParams();
     if (docente) params.set("docente", docente);
-    return this.get(`/analytics/asignaturas/${encodeURIComponent(asignatura)}/detalle${docente ? "?docente=" + encodeURIComponent(docente) : ""}`);
+    if (periodo && periodo !== "actual") params.set("periodo", periodo);
+    const qs = params.toString();
+    return this.get(`/analytics/asignaturas/${encodeURIComponent(asignatura)}/detalle${qs ? "?" + qs : ""}`);
   }
 
   // Analytics — Docentes (Módulo 8.3)
@@ -112,8 +144,11 @@ class ApiClient {
     const qs = new URLSearchParams(params).toString();
     return this.get(`/analytics/docentes${qs ? "?" + qs : ""}`);
   }
-  getDocenteDetalle(docenteNombre) {
-    return this.get(`/analytics/docentes/${encodeURIComponent(docenteNombre)}/detalle`);
+  getDocenteDetalle(docenteNombre, periodo) {
+    const params = new URLSearchParams();
+    if (periodo && periodo !== "actual") params.set("periodo", periodo);
+    const qs = params.toString();
+    return this.get(`/analytics/docentes/${encodeURIComponent(docenteNombre)}/detalle${qs ? "?" + qs : ""}`);
   }
 
   // Analytics — Tutorías por asignatura (Módulo 8.4)
@@ -134,6 +169,10 @@ class ApiClient {
     return this.get(`/analytics/resumen${qs ? "?" + qs : ""}`);
   }
   getPeriodosDisponibles() { return this.get("/analytics/periodos"); }
+  getComparativa(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.get(`/analytics/comparativa${qs ? "?" + qs : ""}`);
+  }
 
   // Predictions — ML (Fase 2)
   trainModel() { return this.post("/predictions/train", {}); }

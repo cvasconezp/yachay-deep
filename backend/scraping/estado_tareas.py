@@ -148,7 +148,7 @@ def scrape_tareas(output_dir: str, codigos=None, base_url: str = None, db=None):
     """
     from .ingresos_avac import get_active_codigos, get_session_headless
 
-    base_url = base_url or BASE_URL
+    base_url = base_url or _settings.AVAC_BASE_URL
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
@@ -160,10 +160,11 @@ def scrape_tareas(output_dir: str, codigos=None, base_url: str = None, db=None):
         logger.warning("No hay códigos de cursos activos para scrapear tareas.")
         return {"codigos_procesados": 0, "errores": []}
 
-    # Iniciar sesión
-    username = os.getenv("AVAC_USERNAME")
-    password = os.getenv("AVAC_PASSWORD")
-    totp_secret = os.getenv("AVAC_TOTP_SECRET")
+    # Iniciar sesión (usar settings centralizado en vez de os.getenv directo)
+    from ..config import settings as _settings
+    username = _settings.AVAC_USERNAME
+    password = _settings.AVAC_PASSWORD
+    totp_secret = _settings.AVAC_TOTP_SECRET
 
     if username and password:
         logger.info("Iniciando sesión headless en AVAC para tareas...")

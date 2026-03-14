@@ -276,13 +276,17 @@ export default function FichaEstudiante() {
 
   const handleExportPDF = async () => {
     if (!ficha) return;
-    const blob = await api.exportFichaPDF(ficha.id);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `ficha_${(ficha.nombre || ficha.id).toString().replace(/\s+/g, "_")}.pdf`;
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      const blob = await api.exportFichaPDF(ficha.id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `ficha_${(ficha.nombre || ficha.id).toString().replace(/\s+/g, "_")}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert("Error al exportar PDF: " + e.message);
+    }
   };
 
   const toggleXai = async () => {

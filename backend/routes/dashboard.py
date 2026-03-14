@@ -4,13 +4,26 @@ Dashboard de riesgo — equivalente a la hoja EstudiantesEnRiesgo del Excel.
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func, case, and_, or_
+from sqlalchemy import func, case
 from pydantic import BaseModel
 
+from sqlalchemy import distinct as sa_distinct
+
 from ..database import get_db
-from ..models import Student, Intervention
+from ..models import Student, Intervention, Grade
 from ..auth.jwt import get_current_user
 from ..models.user import User
+
+
+def _period_student_ids(db: Session, periodo: Optional[str]):
+    """Subquery de student_ids filtrados por período."""
+    pf = periodo if periodo else "actual"
+    sq = db.query(Grade.student_id).distinct()
+    if pf == "actual":
+        sq = sq.filter(Grade.periodo.is_(None))
+    elif pf != "todos":
+        sq = sq.filter(Grade.periodo == pf)
+    return sq, pf
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -41,6 +54,7 @@ def get_risk_dashboard(
     carrera: Optional[str] = None,
     nivel_riesgo: Optional[str] = None,
     solo_sin_intervencion: bool = False,
+    periodo: Optional[str] = None,
     offset: int = Query(0, ge=0),
     limit: int = Query(500, le=2500),
     db: Session = Depends(get_db),
@@ -66,6 +80,10 @@ def get_risk_dashboard(
         .outerjoin(interv_sq, Student.id == interv_sq.c.student_id)
         .filter(Student.nivel_riesgo.isnot(None))
     )
+
+    # Filtrar por período: solo estudiantes que tienen calificaciones en ese período
+    period_sq, _ = _period_student_ids(db, periodo)
+    query = query.filter(Student.id.in_(period_sq))
 
     if carrera:
         query = query.filter(func.lower(Student.carrera).contains(carrera.lower()))
@@ -116,19 +134,23 @@ def get_risk_dashboard(
 
 @router.get("/stats")
 def get_stats(
+    periodo: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Resumen institucional: totales por riesgo, carreras, etc."""
-    total = db.query(func.count(Student.id)).scalar()
+    period_sq, _ = _period_student_ids(db, periodo)
+    base = db.query(Student).filter(Student.id.in_(period_sq))
+
+    total = base.count()
     por_riesgo = (
-        db.query(Student.nivel_riesgo, func.count(Student.id).label("total"))
+        base.with_entities(Student.nivel_riesgo, func.count(Student.id).label("total"))
         .filter(Student.nivel_riesgo.isnot(None))
         .group_by(Student.nivel_riesgo)
         .all()
     )
     por_carrera = (
-        db.query(Student.carrera, func.count(Student.id).label("total"))
+        base.with_entities(Student.carrera, func.count(Student.id).label("total"))
         .filter(Student.carrera.isnot(None))
         .group_by(Student.carrera)
         .order_by(func.count(Student.id).desc())

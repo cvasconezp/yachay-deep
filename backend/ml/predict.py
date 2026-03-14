@@ -115,6 +115,14 @@ class Predictor:
     def is_loaded(self) -> bool:
         return self._loaded
 
+    def reset(self):
+        """Reinicia el estado del predictor para forzar recarga de modelos."""
+        self.models = {}
+        self.stats = {}
+        self.carrera_mapping = {}
+        self.metadata = None
+        self._loaded = False
+
     def get_status(self) -> dict:
         """Estado actual del predictor."""
         if not self._loaded:

@@ -107,7 +107,13 @@ async def upload_data_and_run_etl(
     if not file.filename.lower().endswith(".zip"):
         raise HTTPException(status_code=400, detail="Solo se aceptan archivos .zip")
 
+    MAX_UPLOAD_SIZE = 500 * 1024 * 1024  # 500 MB
     content = await file.read()
+    if len(content) > MAX_UPLOAD_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Archivo demasiado grande ({len(content) // (1024*1024)} MB). Máximo: 500 MB",
+        )
     data_root = os.path.abspath("./data")
 
     try:

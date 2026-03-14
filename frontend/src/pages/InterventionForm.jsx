@@ -1,21 +1,6 @@
 import { useState } from "react";
 import { api } from "../services/api";
-
-const MEDIOS = ["WhatsApp", "Llamada telefónica", "Email", "Presencial", "Plataforma AVAC"];
-const MOTIVOS = ["Inactividad en AVAC", "Tareas no entregadas", "Bajo rendimiento", "Matrículas/Pagos", "Problemas personales", "Conectividad", "Otro"];
-const ESTADOS = ["Activo", "SNA (Sin Novedad Aparente)", "En riesgo", "Retirado", "Recuperado"];
-const RESULTADOS = ["Contactado - comprometido a mejorar", "Contactado - situación compleja", "No contestó", "Buzón de voz", "Mensaje enviado sin respuesta"];
-const EVENTOS_CRITICOS = [
-  "Enfermedad grave",
-  "Hospitalización (estudiante o familiar)",
-  "Pérdida de empleo",
-  "Problemas económicos severos",
-  "Situación de violencia",
-  "Duelo / pérdida familiar",
-  "Trastorno emocional / psicológico",
-  "Discapacidad o condición especial",
-  "Otro evento crítico",
-];
+import { MEDIOS, MOTIVOS, ESTADOS, RESULTADOS, EVENTOS_CRITICOS } from "../constants/interventions";
 
 export default function InterventionForm({ student, onClose, onSaved }) {
   const [form, setForm] = useState({

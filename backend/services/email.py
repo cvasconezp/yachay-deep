@@ -7,6 +7,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
+from html import escape as html_escape
 
 from ..config import settings
 
@@ -64,19 +65,20 @@ def _build_report_html(student: dict, intervention: dict, monitor: str) -> str:
     """Genera el HTML del reporte de derivación."""
     fecha = datetime.now().strftime("%d/%m/%Y %H:%M")
 
-    nombre = student.get("nombre", "—")
-    cedula = student.get("cedula", "—")
-    correo = student.get("correo", student.get("correo_institucional", "—"))
-    correo_inst = student.get("correo_institucional", "—")
-    telefono = student.get("telefono", "—")
-    whatsapp = student.get("whatsapp", "—")
-    carrera = student.get("carrera", "—")
-    sede = student.get("sede", "—")
+    nombre = html_escape(str(student.get("nombre", "—")))
+    cedula = html_escape(str(student.get("cedula", "—")))
+    correo = html_escape(str(student.get("correo", student.get("correo_institucional", "—"))))
+    correo_inst = html_escape(str(student.get("correo_institucional", "—")))
+    telefono = html_escape(str(student.get("telefono", "—")))
+    whatsapp = html_escape(str(student.get("whatsapp", "—")))
+    carrera = html_escape(str(student.get("carrera", "—")))
+    sede = html_escape(str(student.get("sede", "—")))
 
-    tipo_evento = intervention.get("tipo_evento_critico", "—")
-    reporte = intervention.get("reporte_bienestar", "—")
-    motivo = intervention.get("motivo", "—")
-    observacion = intervention.get("observacion", "—")
+    tipo_evento = html_escape(str(intervention.get("tipo_evento_critico", "—")))
+    reporte = html_escape(str(intervention.get("reporte_bienestar", "—")))
+    motivo = html_escape(str(intervention.get("motivo", "—")))
+    observacion = html_escape(str(intervention.get("observacion", "—")))
+    monitor = html_escape(str(monitor))
 
     return f"""
     <html>

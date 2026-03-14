@@ -2,13 +2,15 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../services/api";
 import { RiskBadge } from "../components/RiskBadge";
+import { SummaryCard } from "../components/StatCard";
+import { PeriodSelector } from "../components/PeriodSelector";
 
 export default function Tutorias() {
   const [tutorias, setTutorias] = useState([]);
   const [carreras, setCarreras] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [filtros, setFiltros] = useState({ carrera: "", nivel_riesgo: "Alto" });
+  const [filtros, setFiltros] = useState({ carrera: "", nivel_riesgo: "Alto", periodo: "actual" });
   const [expanded, setExpanded] = useState(new Set());
   const navigate = useNavigate();
 
@@ -18,6 +20,7 @@ export default function Tutorias() {
     try {
       const params = { nivel_riesgo: filtros.nivel_riesgo };
       if (filtros.carrera) params.carrera = filtros.carrera;
+      if (filtros.periodo && filtros.periodo !== "actual") params.periodo = filtros.periodo;
 
       const [data, carrerasData] = await Promise.all([
         api.getTutoriasPorAsignatura(params),
@@ -83,6 +86,11 @@ export default function Tutorias() {
 
       {/* Filtros */}
       <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4 flex flex-wrap gap-3 items-end">
+        <PeriodSelector
+          value={filtros.periodo}
+          onChange={v => setFiltros(f => ({ ...f, periodo: v }))}
+        />
+
         <div>
           <label className="text-xs font-medium text-gray-600 block mb-1">Carrera</label>
           <select
@@ -229,17 +237,3 @@ export default function Tutorias() {
   );
 }
 
-function SummaryCard({ label, value, color }) {
-  const colors = {
-    blue: "bg-blue-50 text-blue-700 border-blue-200",
-    red: "bg-red-50 text-red-700 border-red-200",
-    yellow: "bg-yellow-50 text-yellow-700 border-yellow-200",
-    green: "bg-green-50 text-green-700 border-green-200",
-  };
-  return (
-    <div className={`rounded-xl border p-4 ${colors[color]}`}>
-      <div className="text-3xl font-bold">{value}</div>
-      <div className="text-xs font-medium mt-1 opacity-80">{label}</div>
-    </div>
-  );
-}

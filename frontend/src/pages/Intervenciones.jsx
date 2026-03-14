@@ -2,50 +2,9 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../services/api";
 import { RiskBadge } from "../components/RiskBadge";
-
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
-
-const MOTIVOS = [
-  "Inactividad en AVAC",
-  "Tareas no entregadas",
-  "Bajo rendimiento",
-  "Matrículas/Pagos",
-  "Problemas personales",
-  "Conectividad",
-  "Otro",
-];
-
-const ESTADOS = ["Activo", "SNA (Sin Novedad Aparente)", "En riesgo", "Retirado", "Recuperado"];
-
-const RESULTADOS = [
-  "Contactado - comprometido a mejorar",
-  "Contactado - situación compleja",
-  "No contestó",
-  "Buzón de voz",
-  "Mensaje enviado sin respuesta",
-];
-
-const EVENTOS_CRITICOS = [
-  "Enfermedad grave",
-  "Hospitalización (estudiante o familiar)",
-  "Pérdida de empleo",
-  "Problemas económicos severos",
-  "Situación de violencia",
-  "Duelo / pérdida familiar",
-  "Trastorno emocional / psicológico",
-  "Discapacidad o condición especial",
-  "Otro evento crítico",
-];
-
-function StatCard({ label, value, color = "text-brand", sub }) {
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 px-5 py-4 shadow-sm">
-      <div className="text-xs text-gray-500 font-medium uppercase tracking-wider">{label}</div>
-      <div className={`text-2xl font-bold mt-1 ${color}`}>{value}</div>
-      {sub && <div className="text-[11px] text-gray-400 mt-0.5">{sub}</div>}
-    </div>
-  );
-}
+import { MOTIVOS, ESTADOS, RESULTADOS, EVENTOS_CRITICOS } from "../constants/interventions";
+import { StatCard } from "../components/StatCard";
+import { PeriodSelector } from "../components/PeriodSelector";
 
 export default function Intervenciones() {
   const navigate = useNavigate();
@@ -60,6 +19,7 @@ export default function Intervenciones() {
     estado: "",
     resultado: "",
     seguimiento: "",
+    periodo: "actual",
   });
 
   // Edit modal
@@ -78,13 +38,7 @@ export default function Intervenciones() {
 
   useEffect(() => {
     api.getCarreras().then(setCarreras).catch(() => {});
-    const token = localStorage.getItem("yd_token");
-    fetch(`${BASE_URL}/export/intervenciones/columnas-disponibles`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then(r => r.json())
-      .then(setColsDisponibles)
-      .catch(() => {});
+    api.getIntervencionesColumnas().then(setColsDisponibles).catch(() => {});
   }, []);
 
   const loadData = useCallback(async () => {
@@ -97,6 +51,7 @@ export default function Intervenciones() {
       if (filtros.estado) params.estado = filtros.estado;
       if (filtros.resultado) params.resultado = filtros.resultado;
       if (filtros.seguimiento) params.seguimiento = filtros.seguimiento;
+      if (filtros.periodo && filtros.periodo !== "actual") params.periodo = filtros.periodo;
       const result = await api.getInterventionsDashboard(params);
       setData(result);
     } catch (e) {
@@ -164,21 +119,11 @@ export default function Intervenciones() {
       if (filtros.resultado) params.set("resultado", filtros.resultado);
       if (filtros.seguimiento) params.set("seguimiento", filtros.seguimiento);
 
-      const token = localStorage.getItem("yd_token");
-      const resp = await fetch(`${BASE_URL}/export/intervenciones/excel?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({ detail: "Error al exportar" }));
-        throw new Error(err.detail || "Error al exportar");
-      }
-      const blob = await resp.blob();
+      const blob = await api.exportIntervencionesExcel(params);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      const disposition = resp.headers.get("Content-Disposition");
-      const filename = disposition?.match(/filename=(.+)/)?.[1] || "intervenciones.xlsx";
-      a.download = filename;
+      a.download = "intervenciones.xlsx";
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
@@ -311,6 +256,10 @@ export default function Intervenciones() {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2 mb-4">
+        <PeriodSelector
+          value={filtros.periodo}
+          onChange={v => updateFiltro("periodo", v)}
+        />
         <select value={filtros.carrera} onChange={e => updateFiltro("carrera", e.target.value)}
           className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[160px]">
           <option value="">Todas las carreras</option>

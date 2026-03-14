@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../services/api";
 import { RiskBadge, CompromisoBar, PredictionBadge } from "../components/RiskBadge";
+import { StatCard } from "../components/StatCard";
+import { PeriodSelector } from "../components/PeriodSelector";
 
 const RISK_ORDER = { Alto: 0, Medio: 1, Bajo: 2 };
 
@@ -11,7 +13,7 @@ export default function Dashboard() {
   const [carreras, setCarreras] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [filtros, setFiltros] = useState({ carrera: "", nivel_riesgo: "", solo_sin_intervencion: false });
+  const [filtros, setFiltros] = useState({ carrera: "", nivel_riesgo: "", solo_sin_intervencion: false, periodo: "actual" });
   const navigate = useNavigate();
 
   const loadData = useCallback(async () => {
@@ -22,10 +24,14 @@ export default function Dashboard() {
       if (filtros.carrera) params.carrera = filtros.carrera;
       if (filtros.nivel_riesgo) params.nivel_riesgo = filtros.nivel_riesgo;
       if (filtros.solo_sin_intervencion) params.solo_sin_intervencion = true;
+      if (filtros.periodo && filtros.periodo !== "actual") params.periodo = filtros.periodo;
+
+      const statsParams = {};
+      if (filtros.periodo && filtros.periodo !== "actual") statsParams.periodo = filtros.periodo;
 
       const [studentsData, statsData, carrerasData] = await Promise.all([
         api.getRiskDashboard(params),
-        api.getStats(),
+        api.getStats(statsParams),
         api.getCarreras(),
       ]);
 
@@ -70,6 +76,11 @@ export default function Dashboard() {
 
       {/* Filtros */}
       <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4 flex flex-wrap gap-3 items-end">
+        <PeriodSelector
+          value={filtros.periodo}
+          onChange={v => setFiltros(f => ({ ...f, periodo: v }))}
+        />
+
         <div>
           <label className="text-xs font-medium text-gray-600 block mb-1">Carrera</label>
           <select
@@ -178,17 +189,4 @@ export default function Dashboard() {
   );
 }
 
-function StatCard({ label, value, color }) {
-  const colors = {
-    blue:   "bg-blue-50 text-blue-700 border-blue-200",
-    red:    "bg-red-50 text-red-700 border-red-200",
-    yellow: "bg-yellow-50 text-yellow-700 border-yellow-200",
-    green:  "bg-green-50 text-green-700 border-green-200",
-  };
-  return (
-    <div className={`rounded-xl border p-4 ${colors[color]}`}>
-      <div className="text-3xl font-bold">{value}</div>
-      <div className="text-xs font-medium mt-1 opacity-80">{label}</div>
-    </div>
-  );
-}
+

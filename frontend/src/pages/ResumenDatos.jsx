@@ -1,17 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "../services/api";
-
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
-
-function StatCard({ label, value, color = "text-brand", sub }) {
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 px-5 py-4 shadow-sm">
-      <div className="text-xs text-gray-500 font-medium uppercase tracking-wider">{label}</div>
-      <div className={`text-2xl font-bold mt-1 ${color}`}>{value}</div>
-      {sub && <div className="text-[11px] text-gray-400 mt-0.5">{sub}</div>}
-    </div>
-  );
-}
+import { StatCard } from "../components/StatCard";
+import { PeriodSelector } from "../components/PeriodSelector";
+import { TrendCharts } from "../components/TrendCharts";
 
 function MiniBar({ label, value, total, color = "bg-brand" }) {
   const pct = total > 0 ? (value / total) * 100 : 0;
@@ -31,16 +22,14 @@ const DEFAULT_EXPORT_COLS = [
   "nivel_academico", "nivel_riesgo", "promedio_calificaciones",
 ];
 
-const FALLBACK_PERIODOS = [{ key: "actual", label: "Semestre actual" }];
-
 export default function ResumenDatos() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [carreras, setCarreras] = useState([]);
-  const [periodos, setPeriodos] = useState(FALLBACK_PERIODOS);
   const [filtroCarrera, setFiltroCarrera] = useState("");
   const [filtroPeriodo, setFiltroPeriodo] = useState("actual");
+  const [comparativa, setComparativa] = useState([]);
 
   // Export state
   const [exportOpen, setExportOpen] = useState(false);
@@ -57,17 +46,7 @@ export default function ResumenDatos() {
 
   useEffect(() => {
     api.getCarreras().then(setCarreras).catch(() => {});
-    api.getPeriodosDisponibles().then(p => {
-      if (p && p.length > 0) setPeriodos(p);
-    }).catch(() => {});
-    // Load available columns
-    const token = localStorage.getItem("yd_token");
-    fetch(`${BASE_URL}/export/columnas-disponibles`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then(r => r.json())
-      .then(setColsDisponibles)
-      .catch(() => {});
+    api.getExportColumnas().then(setColsDisponibles).catch(() => {});
   }, []);
 
   const loadData = useCallback(async () => {
@@ -77,8 +56,14 @@ export default function ResumenDatos() {
       const params = {};
       if (filtroCarrera) params.carrera = filtroCarrera;
       if (filtroPeriodo && filtroPeriodo !== "actual") params.periodo = filtroPeriodo;
-      const result = await api.getResumenDatos(params);
+      const compParams = {};
+      if (filtroCarrera) compParams.carrera = filtroCarrera;
+      const [result, compData] = await Promise.all([
+        api.getResumenDatos(params),
+        api.getComparativa(compParams),
+      ]);
       setData(result);
+      setComparativa(compData);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -111,21 +96,11 @@ export default function ResumenDatos() {
       if (exportRiesgo) params.set("nivel_riesgo", exportRiesgo);
       if (exportPeriodo && exportPeriodo !== "actual") params.set("periodo", exportPeriodo);
 
-      const token = localStorage.getItem("yd_token");
-      const resp = await fetch(`${BASE_URL}/export/estudiantes/excel?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({ detail: "Error al exportar" }));
-        throw new Error(err.detail || "Error al exportar");
-      }
-      const blob = await resp.blob();
+      const blob = await api.exportEstudiantesExcel(params);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      const disposition = resp.headers.get("Content-Disposition");
-      const filename = disposition?.match(/filename=(.+)/)?.[1] || "estudiantes.xlsx";
-      a.download = filename;
+      a.download = "estudiantes.xlsx";
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
@@ -161,10 +136,7 @@ export default function ResumenDatos() {
 
           {/* Export filters */}
           <div className="flex flex-wrap gap-2 mb-4">
-            <select value={exportPeriodo} onChange={e => setExportPeriodo(e.target.value)}
-              className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 min-w-[180px]">
-              {periodos.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
-            </select>
+            <PeriodSelector value={exportPeriodo} onChange={setExportPeriodo} />
             <select value={exportCarrera} onChange={e => setExportCarrera(e.target.value)}
               className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 min-w-[160px]">
               <option value="">Todas las carreras</option>
@@ -221,15 +193,15 @@ export default function ResumenDatos() {
 
       {/* Filter */}
       <div className="flex flex-wrap gap-2 mb-5">
-        <select value={filtroPeriodo} onChange={e => setFiltroPeriodo(e.target.value)}
-          className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[180px]">
-          {periodos.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
-        </select>
-        <select value={filtroCarrera} onChange={e => setFiltroCarrera(e.target.value)}
-          className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[160px]">
-          <option value="">Todas las carreras</option>
-          {carreras.map(c => <option key={c} value={c}>{c}</option>)}
-        </select>
+        <PeriodSelector value={filtroPeriodo} onChange={setFiltroPeriodo} />
+        <div>
+          <label className="text-xs font-medium text-gray-600 block mb-1">Carrera</label>
+          <select value={filtroCarrera} onChange={e => setFiltroCarrera(e.target.value)}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[160px]">
+            <option value="">Todas las carreras</option>
+            {carreras.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
       </div>
 
       {/* Error */}
@@ -414,6 +386,30 @@ export default function ResumenDatos() {
                     <span className="font-bold text-brand ml-2">{cnt}</span>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Tendencias comparativas */}
+          <TrendCharts data={comparativa} />
+
+          {/* Docentes por carrera */}
+          {porCarrera.length > 0 && porCarrera.some(c => c.total_docentes > 0) && (
+            <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm mb-6">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Docentes por carrera</h3>
+              <div className="space-y-1.5">
+                {porCarrera
+                  .filter(c => c.total_docentes > 0)
+                  .sort((a, b) => b.total_docentes - a.total_docentes)
+                  .map(c => (
+                    <MiniBar
+                      key={c.carrera}
+                      label={c.carrera}
+                      value={c.total_docentes}
+                      total={Math.max(...porCarrera.map(x => x.total_docentes))}
+                      color="bg-blue-500"
+                    />
+                  ))}
               </div>
             </div>
           )}

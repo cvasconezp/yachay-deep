@@ -4,44 +4,65 @@ Endpoints de intervenciones — equivalente a GuardarMonitoreoEnReporte() del VB
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from datetime import datetime
 
 from ..database import get_db
-from ..models import Intervention, Student
+from ..models import Intervention, Student, Grade
 from ..models.user import User
 from ..auth.jwt import get_current_user
 
 router = APIRouter(prefix="/interventions", tags=["interventions"])
 
 
+def _strip_str(v):
+    """Sanitiza campos de texto: strip whitespace."""
+    if isinstance(v, str):
+        return v.strip()
+    return v
+
+
 class InterventionCreate(BaseModel):
     student_id: int
-    medio: str              # WhatsApp / Llamada / Email / Presencial
-    motivo: str             # Bajo rendimiento / Inactividad AVAC / No entrega tareas / etc
-    estado: str             # Activo / SNA / Retirado / Recuperado
-    asignatura: Optional[str] = None
-    docente: Optional[str] = None
-    observacion: Optional[str] = None
-    resultado: Optional[str] = None       # Contactado / No contestó / Buzón de voz
-    requiere_seguimiento: Optional[str] = None  # "si" / "no"
+    medio: str = Field(..., max_length=100)
+    motivo: str = Field(..., max_length=200)
+    estado: str = Field(..., max_length=100)
+    asignatura: Optional[str] = Field(None, max_length=200)
+    docente: Optional[str] = Field(None, max_length=200)
+    observacion: Optional[str] = Field(None, max_length=2000)
+    resultado: Optional[str] = Field(None, max_length=200)
+    requiere_seguimiento: Optional[str] = Field(None, max_length=10)
     derivar_bienestar: Optional[bool] = False
-    tipo_evento_critico: Optional[str] = None
-    reporte_bienestar: Optional[str] = None
+    tipo_evento_critico: Optional[str] = Field(None, max_length=200)
+    reporte_bienestar: Optional[str] = Field(None, max_length=5000)
+
+    @field_validator("medio", "motivo", "estado", "asignatura", "docente",
+                     "observacion", "resultado", "tipo_evento_critico", "reporte_bienestar",
+                     mode="before")
+    @classmethod
+    def strip_whitespace(cls, v):
+        return _strip_str(v)
 
 
 class InterventionUpdate(BaseModel):
-    medio: Optional[str] = None
-    motivo: Optional[str] = None
-    estado: Optional[str] = None
-    asignatura: Optional[str] = None
-    docente: Optional[str] = None
-    observacion: Optional[str] = None
-    resultado: Optional[str] = None
-    requiere_seguimiento: Optional[str] = None
+    medio: Optional[str] = Field(None, max_length=100)
+    motivo: Optional[str] = Field(None, max_length=200)
+    estado: Optional[str] = Field(None, max_length=100)
+    asignatura: Optional[str] = Field(None, max_length=200)
+    docente: Optional[str] = Field(None, max_length=200)
+    observacion: Optional[str] = Field(None, max_length=2000)
+    resultado: Optional[str] = Field(None, max_length=200)
+    requiere_seguimiento: Optional[str] = Field(None, max_length=10)
     derivar_bienestar: Optional[bool] = None
-    tipo_evento_critico: Optional[str] = None
-    reporte_bienestar: Optional[str] = None
+    tipo_evento_critico: Optional[str] = Field(None, max_length=200)
+    reporte_bienestar: Optional[str] = Field(None, max_length=5000)
+
+    @field_validator("medio", "motivo", "estado", "asignatura", "docente",
+                     "observacion", "resultado", "tipo_evento_critico", "reporte_bienestar",
+                     mode="before")
+    @classmethod
+    def strip_whitespace(cls, v):
+        return _strip_str(v)
 
 
 class InterventionResponse(BaseModel):
@@ -139,6 +160,10 @@ def update_intervention(
     intervention = db.query(Intervention).filter(Intervention.id == intervention_id).first()
     if not intervention:
         raise HTTPException(status_code=404, detail="Intervención no encontrada")
+
+    # Solo el monitor que creó la intervención o un admin pueden editarla
+    if intervention.monitor_id != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Solo puedes editar tus propias intervenciones")
 
     update_data = payload.model_dump(exclude_unset=True)
     for field, value in update_data.items():
@@ -240,6 +265,7 @@ def interventions_dashboard(
     estado: Optional[str] = None,
     resultado: Optional[str] = None,
     seguimiento: Optional[str] = None,
+    periodo: Optional[str] = None,
     limit: int = 500,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -250,10 +276,19 @@ def interventions_dashboard(
     """
     from sqlalchemy import func, distinct
 
+    # --- Filtro por período: solo intervenciones de estudiantes del período ---
+    pf = periodo if periodo else "actual"
+    period_sq = db.query(Grade.student_id).distinct()
+    if pf == "actual":
+        period_sq = period_sq.filter(Grade.periodo.is_(None))
+    elif pf != "todos":
+        period_sq = period_sq.filter(Grade.periodo == pf)
+
     # --- Query principal: intervenciones + datos de estudiante ---
     query = (
         db.query(Intervention, Student.nombre, Student.carrera, Student.nivel_riesgo)
         .join(Student, Intervention.student_id == Student.id)
+        .filter(Intervention.student_id.in_(period_sq))
     )
     if carrera:
         query = query.filter(Student.carrera == carrera)
@@ -290,15 +325,18 @@ def interventions_dashboard(
             "created_at": inv.created_at.isoformat() if inv.created_at else None,
         })
 
-    # --- Resumen ---
-    total = db.query(func.count(Intervention.id)).scalar() or 0
+    # --- Resumen (filtrado por período) ---
+    base_resumen = db.query(Intervention).filter(Intervention.student_id.in_(period_sq))
+    total = base_resumen.count()
     estudiantes_intervenidos = (
-        db.query(func.count(distinct(Intervention.student_id))).scalar() or 0
+        db.query(func.count(distinct(Intervention.student_id)))
+        .filter(Intervention.student_id.in_(period_sq))
+        .scalar() or 0
     )
     pendientes_seguimiento = (
-        db.query(func.count(Intervention.id))
+        base_resumen
         .filter(Intervention.requiere_seguimiento == "si")
-        .scalar() or 0
+        .count()
     )
 
     # Por carrera
@@ -309,6 +347,7 @@ def interventions_dashboard(
             func.count(Intervention.id).label("intervenciones"),
         )
         .join(Student, Intervention.student_id == Student.id)
+        .filter(Intervention.student_id.in_(period_sq))
         .group_by(Student.carrera)
         .all()
     )

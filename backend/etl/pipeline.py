@@ -23,6 +23,7 @@ from .transformers import (
 )
 from ..models import Student, AvacAccess, TaskSubmission, Grade, ScrapingRun
 from ..models.course_config import CourseConfig, SemesterConfig
+from ..constants import EIB_GRUPO_SEDE
 from ..config import settings
 
 logger = logging.getLogger(__name__)
@@ -737,15 +738,7 @@ class ETLPipeline:
         self.db.commit()
         return count
 
-    # Mapeo: número de grupo EIB → centro de apoyo (sede)
-    EIB_GRUPO_SEDE = {
-        1: "Latacunga",
-        2: "Cayambe",
-        3: "Otavalo",
-        4: "Riobamba",
-        5: "Amazonía Norte",
-        6: "Wasakentsa",
-    }
+    # Mapeo importado desde backend.constants (fuente única)
 
     def _compute_eib_sedes(self) -> int:
         """Asigna sede a estudiantes EIB por voto mayoritario del grupo en calificaciones.
@@ -790,8 +783,8 @@ class ETLPipeline:
                 continue
             counter = Counter(grupos)
             most_common_grupo, freq = counter.most_common(1)[0]
-            if freq / len(grupos) > 0.5 and most_common_grupo in self.EIB_GRUPO_SEDE:
-                student.sede = self.EIB_GRUPO_SEDE[most_common_grupo]
+            if freq / len(grupos) > 0.5 and most_common_grupo in EIB_GRUPO_SEDE:
+                student.sede = EIB_GRUPO_SEDE[most_common_grupo]
                 count += 1
             else:
                 # Grupos 7+ o sin mayoría clara

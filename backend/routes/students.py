@@ -15,19 +15,9 @@ from ..models import Student, AvacAccess, TaskSubmission, Grade, Intervention
 from ..models.course_config import CourseConfig
 from ..auth.jwt import get_current_user
 from ..models.user import User
+from ..constants import EIB_GRUPO_SEDE_STR as SEDE_MAPPING
 
 router = APIRouter(prefix="/students", tags=["students"])
-
-# ─── Detección de sede por grupo mayoritario (Framework_FichaEst §3.3) ────────
-# Grupo-N → nombre de la sede física (EIB / UPS)
-SEDE_MAPPING: dict[str, str] = {
-    "1": "Latacunga",
-    "2": "Cayambe",
-    "3": "Otavalo",
-    "4": "Riobamba",
-    "5": "Cayambe-Amazonía",
-    "6": "Wasakentsa",
-}
 
 def detectar_sede(course_configs: list, student_grupo: str = None) -> Optional[str]:
     """
