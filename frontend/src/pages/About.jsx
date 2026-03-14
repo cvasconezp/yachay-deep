@@ -3,10 +3,10 @@ import { YachayLogo } from "../components/YachayLogo";
 
 const PODCASTS = [
   {
-    title: "IA contra el abandono universitario virtual",
+    title: "Yachay Deep: A Multilevel Intelligence Framework for Student Retention",
     description:
-      "El desafío del abandono en carreras virtuales y cómo la inteligencia artificial puede transformar el monitoreo y acompañamiento estudiantil a escala.",
-    file: "/IA_contra_el_abandono_universitario_virtual.m4a",
+      "An overview of Yachay Deep as a Learning Analytics-Driven Early Warning Decision Support System: its multilevel architecture, predictive modeling, explainable AI, and closed-loop intervention tracking for student retention in higher education.",
+    file: "/Yachay Deep A Multilevel Intelligence Framework for Student Retention.m4a",
   },
   {
     title: "IA para evitar el abandono universitario",
