@@ -10,11 +10,12 @@ function TabSistema() {
   const [status, setStatus] = useState(null);
   const [runs, setRuns] = useState([]);
   const [etlLoading, setEtlLoading] = useState(false);
+  const [msg, setMsg] = useState("");
   const [etlMsg, setEtlMsg] = useState("");
 
   useEffect(() => {
-    api.getSystemStatus().then(setStatus).catch(() => {});
-    api.getETLRuns().then(setRuns).catch(() => {});
+    api.getSystemStatus().then(setStatus).catch(() => setMsg("Error: No se pudo cargar el estado del sistema"));
+    api.getETLRuns().then(setRuns).catch(() => setMsg("Error: No se pudo cargar el historial ETL"));
   }, []);
 
   const handleRunETL = async () => {
@@ -22,7 +23,7 @@ function TabSistema() {
     setEtlMsg("");
     try {
       const result = await api.triggerETL();
-      setEtlMsg(result.message);
+      setEtlMsg(result.message || "ETL ejecutado correctamente");
       setTimeout(() => api.getETLRuns().then(setRuns), 2000);
     } catch (e) {
       setEtlMsg("Error: " + e.message);
@@ -33,6 +34,12 @@ function TabSistema() {
 
   return (
     <div className="space-y-6">
+      {msg && (
+        <div className={`text-sm px-4 py-2 rounded-lg ${msg.startsWith("Error") ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
+          {msg}
+        </div>
+      )}
+
       <div className="bg-white rounded-xl border border-gray-200 p-5">
         <h2 className="font-semibold text-gray-800 mb-4">Estado del Sistema</h2>
         {status ? (
@@ -514,7 +521,7 @@ function TabUsuarios() {
   const [userMsg, setUserMsg] = useState("");
 
   useEffect(() => {
-    api.listUsers().then(setUsers).catch(() => {});
+    api.listUsers().then(setUsers).catch(() => setUserMsg("Error: No se pudieron cargar los usuarios"));
   }, []);
 
   const handleCreateUser = async (e) => {

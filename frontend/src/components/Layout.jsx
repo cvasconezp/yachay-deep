@@ -3,9 +3,12 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 
 const NAV_ITEMS = [
-  { path: "/dashboard",      label: "Dashboard",      icon: "📊" },
-  { path: "/ficha",          label: "Ficha Estudiante", icon: "🎓" },
-  { path: "/intervenciones", label: "Intervenciones", icon: "📋" },
+  { path: "/dashboard",      label: "Dashboard",        icon: "📊" },
+  { path: "/ficha",          label: "Ficha Estudiante",  icon: "🎓" },
+  { path: "/asignaturas",    label: "Asignaturas",       icon: "📚" },
+  { path: "/docentes",       label: "Docentes",          icon: "👨‍🏫" },
+  { path: "/tutorias",       label: "Tutorías",          icon: "📋" },
+  { path: "/about",          label: "Sobre YD",          icon: "ℹ️" },
 ];
 
 const ADMIN_ITEMS = [

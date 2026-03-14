@@ -4,7 +4,11 @@ import { Layout } from "./components/Layout";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import FichaEstudiante from "./pages/FichaEstudiante";
+import Asignaturas from "./pages/Asignaturas";
+import Docentes from "./pages/Docentes";
+import Tutorias from "./pages/Tutorias";
 import Admin from "./pages/Admin";
+import About from "./pages/About";
 
 function PrivateRoute({ children, adminOnly = false }) {
   const { user, loading } = useAuth();
@@ -23,6 +27,10 @@ export default function App() {
           <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
           <Route path="/ficha" element={<PrivateRoute><FichaEstudiante /></PrivateRoute>} />
           <Route path="/ficha/:studentId" element={<PrivateRoute><FichaEstudiante /></PrivateRoute>} />
+          <Route path="/asignaturas" element={<PrivateRoute><Asignaturas /></PrivateRoute>} />
+          <Route path="/docentes" element={<PrivateRoute><Docentes /></PrivateRoute>} />
+          <Route path="/tutorias" element={<PrivateRoute><Tutorias /></PrivateRoute>} />
+          <Route path="/about" element={<PrivateRoute><About /></PrivateRoute>} />
           <Route path="/admin" element={<PrivateRoute adminOnly><Admin /></PrivateRoute>} />
           <Route path="*" element={<Navigate to="/dashboard" />} />
         </Routes>

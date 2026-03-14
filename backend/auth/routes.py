@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
 
 from ..database import get_db
@@ -32,7 +32,7 @@ class UserUpdate(BaseModel):
     is_active: Optional[bool] = None
     role: Optional[UserRole] = None
     nombre: Optional[str] = None
-    password: Optional[str] = None
+    password: Optional[str] = Field(None, min_length=8)
 
 
 class UserResponse(BaseModel):
@@ -101,14 +101,15 @@ def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    if payload.is_active is not None:
-        user.is_active = payload.is_active
-    if payload.role is not None:
-        user.role = payload.role
-    if payload.nombre is not None:
-        user.nombre = payload.nombre
-    if payload.password is not None:
-        user.hashed_password = hash_password(payload.password)
+    updates = payload.model_dump(exclude_unset=True)
+    if "is_active" in updates:
+        user.is_active = updates["is_active"]
+    if "role" in updates:
+        user.role = updates["role"]
+    if "nombre" in updates:
+        user.nombre = updates["nombre"]
+    if "password" in updates:
+        user.hashed_password = hash_password(updates["password"])
     db.commit()
     db.refresh(user)
     return user

@@ -784,15 +784,15 @@ export default function FichaEstudiante() {
               )}
 
               {/* Fila resumen de KPIs */}
-              <div className="grid grid-cols-4 divide-x divide-gray-200 border-t border-gray-200 bg-[#F9F9F9]">
+              <div className="grid grid-cols-2 divide-x divide-gray-200 border-t border-gray-200 bg-[#F9F9F9]">
                 <div className="py-2 px-3 text-center">
-                  <div className="text-[9px] text-gray-400 uppercase tracking-wider">Días sin AVAC</div>
+                  <div className="text-[9px] text-gray-400 uppercase tracking-wider">Dias sin AVAC</div>
                   <div className={`font-bold text-sm mt-0.5 ${
                     ficha.dias_sin_acceso == null ? "text-gray-400"
                     : ficha.dias_sin_acceso > 14 ? "text-red-600"
                     : ficha.dias_sin_acceso > 7 ? "text-orange-500"
                     : "text-green-600"}`}>
-                    {ficha.dias_sin_acceso != null ? `${Math.round(ficha.dias_sin_acceso)}d` : "—"}
+                    {ficha.dias_sin_acceso != null ? `${Math.round(ficha.dias_sin_acceso)}d` : "---"}
                   </div>
                 </div>
                 <div className="py-2 px-3 text-center">
@@ -802,10 +802,9 @@ export default function FichaEstudiante() {
                     : ficha.porcentaje_tareas < 50 ? "text-red-600"
                     : ficha.porcentaje_tareas < 75 ? "text-orange-500"
                     : "text-green-600"}`}>
-                    {ficha.porcentaje_tareas != null ? `${Math.round(ficha.porcentaje_tareas)}%` : "—"}
+                    {ficha.porcentaje_tareas != null ? `${Math.round(ficha.porcentaje_tareas)}%` : "---"}
                   </div>
                 </div>
-                {/* Compromiso y Diagnóstico ya se muestran en la banda superior */}
               </div>
 
               {/* ══ MALLA CURRICULAR HISTÓRICA (TableauHistorico P60–P67+) ══ */}

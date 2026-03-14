@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../services/api";
 import { RiskBadge, CompromisoBar } from "../components/RiskBadge";
@@ -10,13 +10,13 @@ export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [carreras, setCarreras] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState("");
   const [filtros, setFiltros] = useState({ carrera: "", nivel_riesgo: "", solo_sin_intervencion: false });
   const navigate = useNavigate();
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
-    setError(null);
+    setError("");
     try {
       const params = {};
       if (filtros.carrera) params.carrera = filtros.carrera;
@@ -39,13 +39,13 @@ export default function Dashboard() {
       setCarreras(carrerasData);
     } catch (e) {
       console.error(e);
-      setError(e.message || "Error al cargar los datos");
+      setError(e.message || "No se pudieron cargar los datos. Verifique su conexión e intente de nuevo.");
     } finally {
       setLoading(false);
     }
-  };
+  }, [filtros]);
 
-  useEffect(() => { loadData(); }, [filtros]);
+  useEffect(() => { loadData(); }, [loadData]);
 
   const riskCounts = stats?.por_nivel_riesgo?.reduce((acc, r) => ({ ...acc, [r.nivel]: r.total }), {}) || {};
 
@@ -53,6 +53,12 @@ export default function Dashboard() {
     <div>
       <h1 className="text-2xl font-bold text-gray-900 mb-1">Dashboard de Riesgo</h1>
       <p className="text-gray-500 text-sm mb-6">Estudiantes identificados con indicadores de riesgo académico</p>
+
+      {error && (
+        <div className="bg-red-50 text-red-700 border border-red-200 rounded-lg px-4 py-3 text-sm mb-4">
+          {error}
+        </div>
+      )}
 
       {/* Tarjetas de resumen */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">

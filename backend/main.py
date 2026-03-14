@@ -16,6 +16,7 @@ from .routes.dashboard import router as dashboard_router
 from .routes.admin import router as admin_router
 from .routes.export import router as export_router
 from .routes.courses import router as courses_router
+from .routes.analytics import router as analytics_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -45,6 +46,9 @@ def _create_default_admin():
     admin_pass = os.environ.get("ADMIN_PASSWORD", "YachayDeep2024!")
     if admin_pass == "YachayDeep2024!":
         logger.warning("⚠️ ADMIN_PASSWORD usa el valor por defecto. Configura una contraseña segura via variable de entorno.")
+
+    if not os.environ.get("ADMIN_EMAIL") or not os.environ.get("ADMIN_PASSWORD"):
+        logger.warning("⚠️ SEGURIDAD: Usando credenciales admin por defecto. Configure ADMIN_EMAIL y ADMIN_PASSWORD en variables de entorno.")
 
     db = SessionLocal()
     try:
@@ -102,6 +106,7 @@ app.include_router(dashboard_router)
 app.include_router(admin_router)
 app.include_router(export_router)
 app.include_router(courses_router)
+app.include_router(analytics_router)
 
 
 @app.get("/health")

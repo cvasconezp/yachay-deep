@@ -72,7 +72,7 @@ def get_risk_dashboard(
     if solo_sin_intervencion:
         query = query.filter(interv_sq.c.total_intervenciones.is_(None))
 
-    # Ordenar: riesgo Alto primero, luego por días sin acceso descendente
+    # Ordenar: riesgo Alto primero, luego Medio, luego Bajo
     risk_order = case(
         (Student.nivel_riesgo == "Alto", 0),
         (Student.nivel_riesgo == "Medio", 1),

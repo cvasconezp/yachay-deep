@@ -94,6 +94,32 @@ class ApiClient {
 
   // Export
   exportFichaPDF(studentId) { return this.get(`/export/ficha/${studentId}/pdf`); }
+
+  // Analytics — Asignaturas (Módulo 8.2)
+  getAsignaturasAnalytics(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.get(`/analytics/asignaturas${qs ? "?" + qs : ""}`);
+  }
+  getAsignaturaDetalle(asignatura, docente) {
+    const params = new URLSearchParams({ asignatura });
+    if (docente) params.set("docente", docente);
+    return this.get(`/analytics/asignaturas/${encodeURIComponent(asignatura)}/detalle${docente ? "?docente=" + encodeURIComponent(docente) : ""}`);
+  }
+
+  // Analytics — Docentes (Módulo 8.3)
+  getDocentesAnalytics(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.get(`/analytics/docentes${qs ? "?" + qs : ""}`);
+  }
+  getDocenteDetalle(docenteNombre) {
+    return this.get(`/analytics/docentes/${encodeURIComponent(docenteNombre)}/detalle`);
+  }
+
+  // Analytics — Tutorías por asignatura (Módulo 8.4)
+  getTutoriasPorAsignatura(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.get(`/analytics/tutorias/por-asignatura${qs ? "?" + qs : ""}`);
+  }
 }
 
 export const api = new ApiClient();

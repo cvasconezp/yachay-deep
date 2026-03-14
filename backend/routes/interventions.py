@@ -58,10 +58,6 @@ def create_intervention(
     if not student:
         raise HTTPException(status_code=404, detail="Estudiante no encontrado")
 
-    # Actualizar estado del estudiante si cambió
-    if payload.estado and payload.estado != student.estado_matricula:
-        student.estado_matricula = payload.estado
-
     intervention = Intervention(
         student_id=payload.student_id,
         monitor_id=current_user.id,

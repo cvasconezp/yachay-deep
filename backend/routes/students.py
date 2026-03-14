@@ -103,15 +103,23 @@ def diagnosticar_riesgo(
     if not pago_ok:
         return "En riesgo"
 
-    # Clasificar índice de compromiso
-    es_alto  = indice_compromiso is not None and indice_compromiso >= 0.6
-    es_medio = indice_compromiso is not None and 0.3 <= indice_compromiso < 0.6
-    es_bajo  = indice_compromiso is None or indice_compromiso < 0.3
-
     # Novedades del historial
     motivos = {(inv.motivo or "").lower() for inv in intervenciones}
     nov_ausent = bool(motivos & NOVEDADES_AUSENTISMO)
     nov_notas  = bool(motivos & NOVEDADES_NOTAS)
+
+    # Sin datos de compromiso: solo novedades pueden determinar riesgo
+    if indice_compromiso is None:
+        if nov_ausent:
+            return "Riesgo de Deserción"
+        if nov_notas:
+            return "Riesgo Académico"
+        return "Datos insuficientes"
+
+    # Clasificar índice de compromiso
+    es_alto  = indice_compromiso >= 0.6
+    es_medio = 0.3 <= indice_compromiso < 0.6
+    es_bajo  = indice_compromiso < 0.3
 
     if es_bajo or nov_ausent:
         return "Riesgo de Deserción"
