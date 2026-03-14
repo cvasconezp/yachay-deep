@@ -329,6 +329,80 @@ export default function ResumenDatos() {
             </div>
           </div>
 
+          {/* Intervenciones */}
+          {g.intervenciones && g.intervenciones.total > 0 && (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm mb-5 overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-100">
+                <h3 className="text-sm font-bold text-gray-800">Intervenciones realizadas</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Seguimiento y resolución de casos</p>
+              </div>
+              <div className="p-5">
+                {/* Summary cards */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                  <div className="text-center bg-blue-50 rounded-lg px-3 py-2.5">
+                    <div className="text-xl font-bold text-blue-700">{g.intervenciones.total}</div>
+                    <div className="text-[10px] text-blue-500 uppercase font-medium">Total</div>
+                  </div>
+                  <div className="text-center bg-green-50 rounded-lg px-3 py-2.5">
+                    <div className="text-xl font-bold text-green-700">{g.intervenciones.resueltas}</div>
+                    <div className="text-[10px] text-green-500 uppercase font-medium">Resueltas</div>
+                  </div>
+                  <div className="text-center bg-orange-50 rounded-lg px-3 py-2.5">
+                    <div className="text-xl font-bold text-orange-700">{g.intervenciones.pendientes_seguimiento}</div>
+                    <div className="text-[10px] text-orange-500 uppercase font-medium">Pendientes</div>
+                  </div>
+                  <div className="text-center bg-gray-50 rounded-lg px-3 py-2.5">
+                    <div className="text-xl font-bold text-gray-700">
+                      {g.intervenciones.total > 0
+                        ? `${Math.round((g.intervenciones.resueltas / g.intervenciones.total) * 100)}%`
+                        : "—"}
+                    </div>
+                    <div className="text-[10px] text-gray-500 uppercase font-medium">Tasa resolución</div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Por motivo */}
+                  <div>
+                    <div className="text-[10px] font-semibold text-gray-500 uppercase mb-2">Por motivo</div>
+                    <div className="space-y-1.5">
+                      {Object.entries(g.intervenciones.por_motivo || {})
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([motivo, cnt]) => (
+                          <MiniBar key={motivo} label={motivo} value={cnt} total={g.intervenciones.total} color="bg-blue-400" />
+                        ))}
+                    </div>
+                  </div>
+                  {/* Por resultado */}
+                  <div>
+                    <div className="text-[10px] font-semibold text-gray-500 uppercase mb-2">Por resultado</div>
+                    <div className="space-y-1.5">
+                      {Object.entries(g.intervenciones.por_resultado || {})
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([resultado, cnt]) => (
+                          <MiniBar key={resultado} label={resultado} value={cnt} total={g.intervenciones.total} color="bg-purple-400" />
+                        ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Por carrera */}
+                {Object.keys(g.intervenciones.por_carrera || {}).length > 1 && (
+                  <div className="mt-4">
+                    <div className="text-[10px] font-semibold text-gray-500 uppercase mb-2">Intervenciones por carrera</div>
+                    <div className="space-y-1.5">
+                      {Object.entries(g.intervenciones.por_carrera)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([car, cnt]) => (
+                          <MiniBar key={car} label={car} value={cnt} total={g.intervenciones.total} color="bg-teal-400" />
+                        ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Sedes */}
           {g.por_sede && Object.keys(g.por_sede).length > 1 && (
             <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm mb-5">
@@ -362,6 +436,9 @@ export default function ResumenDatos() {
                           <span><strong className="text-blue-600">{c.total_docentes}</strong> doc.</span>
                           <span>Prom: <strong>{c.promedio_calificaciones ?? "—"}</strong></span>
                           <span className="text-red-600"><strong>{c.por_riesgo?.Alto || 0}</strong> alto riesgo</span>
+                          {c.intervenciones?.total > 0 && (
+                            <span className="text-blue-500"><strong>{c.intervenciones.total}</strong> interv.</span>
+                          )}
                         </div>
                       </div>
                       <span className="text-gray-400 text-lg">{expandedCarrera === c.carrera ? "−" : "+"}</span>
@@ -422,6 +499,34 @@ export default function ResumenDatos() {
                             ))}
                           </div>
                         </div>
+
+                        {/* Intervenciones de la carrera */}
+                        {c.intervenciones && c.intervenciones.total > 0 && (
+                          <div className="mt-3">
+                            <div className="text-[10px] font-semibold text-gray-500 uppercase mb-1.5">Intervenciones</div>
+                            <div className="grid grid-cols-3 gap-2 mb-2">
+                              <div className="text-center bg-blue-50 rounded-lg px-2 py-1.5">
+                                <div className="text-sm font-bold text-blue-700">{c.intervenciones.total}</div>
+                                <div className="text-[9px] text-blue-500">Total</div>
+                              </div>
+                              <div className="text-center bg-green-50 rounded-lg px-2 py-1.5">
+                                <div className="text-sm font-bold text-green-700">{c.intervenciones.resueltas}</div>
+                                <div className="text-[9px] text-green-500">Resueltas</div>
+                              </div>
+                              <div className="text-center bg-orange-50 rounded-lg px-2 py-1.5">
+                                <div className="text-sm font-bold text-orange-700">{c.intervenciones.pendientes}</div>
+                                <div className="text-[9px] text-orange-500">Pendientes</div>
+                              </div>
+                            </div>
+                            {Object.keys(c.intervenciones.por_motivo || {}).length > 0 && (
+                              <div className="space-y-1">
+                                {Object.entries(c.intervenciones.por_motivo).sort((a, b) => b[1] - a[1]).map(([mot, cnt]) => (
+                                  <MiniBar key={mot} label={mot} value={cnt} total={c.intervenciones.total} color="bg-blue-400" />
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
 
                         {/* Niveles */}
                         {c.por_nivel && Object.keys(c.por_nivel).length > 0 && (

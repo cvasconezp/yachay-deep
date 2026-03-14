@@ -78,6 +78,7 @@ class ApiClient {
   createIntervention(data) { return this.post("/interventions/", data); }
   listInterventions(studentId) { return this.get(`/interventions/?student_id=${studentId}`); }
   interventionStats() { return this.get("/interventions/stats"); }
+  updateIntervention(id, data) { return this.patch(`/interventions/${id}`, data); }
 
   // Dashboard
   getRiskDashboard(params = {}) {

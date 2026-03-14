@@ -27,6 +27,17 @@ class InterventionCreate(BaseModel):
     requiere_seguimiento: Optional[str] = None  # "si" / "no"
 
 
+class InterventionUpdate(BaseModel):
+    medio: Optional[str] = None
+    motivo: Optional[str] = None
+    estado: Optional[str] = None
+    asignatura: Optional[str] = None
+    docente: Optional[str] = None
+    observacion: Optional[str] = None
+    resultado: Optional[str] = None
+    requiere_seguimiento: Optional[str] = None
+
+
 class InterventionResponse(BaseModel):
     id: int
     student_id: int
@@ -73,6 +84,27 @@ def create_intervention(
         requiere_seguimiento=payload.requiere_seguimiento,
     )
     db.add(intervention)
+    db.commit()
+    db.refresh(intervention)
+    return intervention
+
+
+@router.patch("/{intervention_id}", response_model=InterventionResponse)
+def update_intervention(
+    intervention_id: int,
+    payload: InterventionUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Actualiza una intervención existente (estado, resultado, observación, etc.)."""
+    intervention = db.query(Intervention).filter(Intervention.id == intervention_id).first()
+    if not intervention:
+        raise HTTPException(status_code=404, detail="Intervención no encontrada")
+
+    update_data = payload.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(intervention, field, value)
+
     db.commit()
     db.refresh(intervention)
     return intervention

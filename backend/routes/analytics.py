@@ -784,6 +784,49 @@ def get_resumen_datos(
     global_stats = compute_stats(students, grades)
     global_stats["total_docentes"] = total_docentes
 
+    # --- Estadísticas de intervenciones ---
+    interv_base_q = db.query(Intervention)
+    if carrera:
+        interv_base_q = interv_base_q.filter(func.lower(Intervention.carrera).contains(carrera.lower()))
+
+    # Si filtramos por período histórico, solo intervenciones de esos estudiantes
+    if periodo_filter != "actual" and periodo_filter != "todos" and grade_student_ids:
+        interv_base_q = interv_base_q.filter(Intervention.student_id.in_(grade_student_ids))
+
+    total_intervenciones = interv_base_q.count()
+
+    # Por motivo
+    por_motivo_interv = (
+        interv_base_q.with_entities(Intervention.motivo, func.count(Intervention.id))
+        .group_by(Intervention.motivo).all()
+    )
+    # Por resultado (resueltas vs pendientes)
+    por_resultado_interv = (
+        interv_base_q.with_entities(Intervention.resultado, func.count(Intervention.id))
+        .group_by(Intervention.resultado).all()
+    )
+    # Por seguimiento
+    pendientes_seg = (
+        interv_base_q.filter(Intervention.requiere_seguimiento == "si").count()
+    )
+    resueltas = (
+        interv_base_q.filter(Intervention.estado == "Recuperado").count()
+    )
+    # Por carrera (intervenciones)
+    interv_por_carrera = (
+        interv_base_q.with_entities(Intervention.carrera, func.count(Intervention.id))
+        .group_by(Intervention.carrera).all()
+    )
+
+    global_stats["intervenciones"] = {
+        "total": total_intervenciones,
+        "por_motivo": {m or "Sin motivo": c for m, c in por_motivo_interv},
+        "por_resultado": {r or "Sin resultado": c for r, c in por_resultado_interv},
+        "pendientes_seguimiento": pendientes_seg,
+        "resueltas": resueltas,
+        "por_carrera": {car or "Sin carrera": cnt for car, cnt in interv_por_carrera},
+    }
+
     # --- Por carrera ---
     carreras_map = {}
     for s in students:
@@ -804,11 +847,26 @@ def get_resumen_datos(
     docentes_carrera_q = docentes_carrera_q_base.group_by(Grade.carrera).all()
     docentes_por_carrera = {r[0]: r[1] for r in docentes_carrera_q}
 
+    # Intervenciones por carrera con detalle motivo
+    interv_carrera_motivo = {}
+    for inv in interv_base_q.all():
+        car = inv.carrera or "Sin carrera"
+        if car not in interv_carrera_motivo:
+            interv_carrera_motivo[car] = {"total": 0, "por_motivo": {}, "pendientes": 0, "resueltas": 0}
+        interv_carrera_motivo[car]["total"] += 1
+        mot = inv.motivo or "Sin motivo"
+        interv_carrera_motivo[car]["por_motivo"][mot] = interv_carrera_motivo[car]["por_motivo"].get(mot, 0) + 1
+        if inv.requiere_seguimiento == "si":
+            interv_carrera_motivo[car]["pendientes"] += 1
+        if inv.estado == "Recuperado":
+            interv_carrera_motivo[car]["resueltas"] += 1
+
     por_carrera = []
     for nombre_carrera, sts in sorted(carreras_map.items()):
         stats = compute_stats(sts, [g for g in grades if g.carrera == nombre_carrera])
         stats["carrera"] = nombre_carrera
         stats["total_docentes"] = docentes_por_carrera.get(nombre_carrera, 0)
+        stats["intervenciones"] = interv_carrera_motivo.get(nombre_carrera, {"total": 0, "por_motivo": {}, "pendientes": 0, "resueltas": 0})
         por_carrera.append(stats)
 
     return {"global": global_stats, "por_carrera": por_carrera}

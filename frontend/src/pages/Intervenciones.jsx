@@ -48,6 +48,11 @@ export default function Intervenciones() {
     seguimiento: "",
   });
 
+  // Edit modal
+  const [editItem, setEditItem] = useState(null);
+  const [editForm, setEditForm] = useState({});
+  const [saving, setSaving] = useState(false);
+
   useEffect(() => {
     api.getCarreras().then(setCarreras).catch(() => {});
   }, []);
@@ -75,6 +80,31 @@ export default function Intervenciones() {
 
   const updateFiltro = (key, value) => {
     setFiltros(prev => ({ ...prev, [key]: value }));
+  };
+
+  const openEdit = (inv, e) => {
+    e.stopPropagation();
+    setEditItem(inv);
+    setEditForm({
+      estado: inv.estado || "",
+      resultado: inv.resultado || "",
+      requiere_seguimiento: inv.requiere_seguimiento || "",
+      observacion: inv.observacion || "",
+    });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editItem) return;
+    setSaving(true);
+    try {
+      await api.updateIntervention(editItem.id, editForm);
+      setEditItem(null);
+      loadData();
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const resumen = data?.resumen || {};
@@ -194,6 +224,7 @@ export default function Intervenciones() {
                   <th className="text-center px-3 py-2.5 font-semibold text-gray-600 text-xs uppercase tracking-wider">Seg.</th>
                   <th className="text-left px-3 py-2.5 font-semibold text-gray-600 text-xs uppercase tracking-wider">Monitor</th>
                   <th className="text-left px-3 py-2.5 font-semibold text-gray-600 text-xs uppercase tracking-wider">Fecha</th>
+                  <th className="text-center px-3 py-2.5 font-semibold text-gray-600 text-xs uppercase tracking-wider">Acción</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -250,6 +281,14 @@ export default function Intervenciones() {
                         day: "2-digit", month: "short", year: "numeric"
                       }) : "—"}
                     </td>
+                    <td className="px-3 py-2.5 text-center">
+                      <button
+                        onClick={(e) => openEdit(inv, e)}
+                        className="text-blue-600 hover:text-blue-800 text-xs font-medium hover:underline"
+                      >
+                        Editar
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -267,6 +306,63 @@ export default function Intervenciones() {
           <div className="text-4xl mb-3">📋</div>
           <div className="text-sm">No hay intervenciones registradas</div>
           <p className="text-xs text-gray-400 mt-1">Las intervenciones se registran desde la ficha del estudiante</p>
+        </div>
+      )}
+
+      {/* Edit modal */}
+      {editItem && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setEditItem(null)}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-gray-900 mb-1">Editar intervención</h3>
+            <p className="text-xs text-gray-500 mb-4">{editItem.nombre} — {editItem.motivo}</p>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-medium text-gray-600 block mb-1">Estado</label>
+                <select value={editForm.estado} onChange={e => setEditForm(f => ({ ...f, estado: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="">Sin estado</option>
+                  {ESTADOS.map(e => <option key={e} value={e}>{e}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-gray-600 block mb-1">Resultado</label>
+                <select value={editForm.resultado} onChange={e => setEditForm(f => ({ ...f, resultado: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="">Sin resultado</option>
+                  {RESULTADOS.map(r => <option key={r} value={r}>{r}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-gray-600 block mb-1">Requiere seguimiento</label>
+                <select value={editForm.requiere_seguimiento} onChange={e => setEditForm(f => ({ ...f, requiere_seguimiento: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <option value="">—</option>
+                  <option value="si">Sí</option>
+                  <option value="no">No</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-gray-600 block mb-1">Observación</label>
+                <textarea value={editForm.observacion} onChange={e => setEditForm(f => ({ ...f, observacion: e.target.value }))}
+                  rows={3}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                  placeholder="Agregar o actualizar observación..."
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 mt-5">
+              <button onClick={() => setEditItem(null)} className="text-sm text-gray-500 hover:text-gray-700">Cancelar</button>
+              <button onClick={handleSaveEdit} disabled={saving}
+                className="bg-brand hover:bg-brand/90 disabled:bg-gray-300 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors">
+                {saving ? "Guardando..." : "Guardar cambios"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
