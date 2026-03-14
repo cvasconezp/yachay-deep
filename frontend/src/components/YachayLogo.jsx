@@ -1,35 +1,45 @@
 /**
  * Yachay Deep brand logo — SVG iceberg with sun.
- * Based on the official brand image.
+ * Faithful reproduction of the official brand image.
  */
+
+/** Shared SVG paths for the iceberg logo */
+function IcebergSVG({ size }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 200 220"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className="flex-shrink-0"
+    >
+      {/* Sun — top-left of peak */}
+      <circle cx="72" cy="28" r="18" fill="#E8A838" />
+
+      {/* Ice peak — main triangle with secondary ridge */}
+      <polygon points="62,100 105,48 148,100" fill="#A8DCE8" />
+      <polygon points="62,100 85,60 78,100" fill="#D8EFF4" />
+
+      {/* Waterline — thin dark line */}
+      <rect x="38" y="98" width="124" height="4" rx="2" fill="#1B3A6B" opacity="0.25" />
+
+      {/* Deep body — shield/pentagon shape narrowing to point */}
+      <path
+        d="M38,102 L162,102 L162,140 Q162,148 156,156 L112,210 Q105,218 100,218 Q95,218 88,210 L44,156 Q38,148 38,140 Z"
+        fill="#1B3A6B"
+      />
+
+      {/* Subtle horizontal line on deep body */}
+      <line x1="56" y1="132" x2="144" y2="132" stroke="#0F2444" strokeWidth="2.5" opacity="0.2" />
+    </svg>
+  );
+}
+
 export function YachayLogo({ size = 48, className = "", showText = false }) {
   return (
     <div className={`inline-flex items-center gap-3 ${className}`}>
-      <svg
-        width={size}
-        height={size}
-        viewBox="0 0 200 200"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-        className="flex-shrink-0"
-      >
-        {/* Sun */}
-        <circle cx="100" cy="32" r="20" fill="#E8A838" />
-
-        {/* Iceberg top (ice) */}
-        <polygon points="60,90 100,50 140,90" fill="#A8DCE8" />
-        <polygon points="50,90 80,65 70,90" fill="#D8EFF4" />
-
-        {/* Waterline */}
-        <rect x="45" y="88" width="110" height="6" rx="3" fill="#1B3A6B" opacity="0.3" />
-
-        {/* Iceberg bottom (deep) */}
-        <polygon points="40,94 160,94 130,180 70,180" fill="#1B3A6B" />
-
-        {/* Subtle depth line on iceberg bottom */}
-        <line x1="60" y1="120" x2="140" y2="120" stroke="#0F2444" strokeWidth="2" opacity="0.3" />
-      </svg>
-
+      <IcebergSVG size={size} />
       {showText && (
         <div className="flex flex-col">
           <span className="text-xl font-bold tracking-tight text-white leading-tight">
@@ -46,21 +56,5 @@ export function YachayLogo({ size = 48, className = "", showText = false }) {
 
 /** Compact icon-only version for collapsed sidebar & favicon */
 export function YachayIcon({ size = 32, className = "" }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 200 200"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className={className}
-    >
-      <circle cx="100" cy="32" r="20" fill="#E8A838" />
-      <polygon points="60,90 100,50 140,90" fill="#A8DCE8" />
-      <polygon points="50,90 80,65 70,90" fill="#D8EFF4" />
-      <rect x="45" y="88" width="110" height="6" rx="3" fill="#1B3A6B" opacity="0.3" />
-      <polygon points="40,94 160,94 130,180 70,180" fill="#1B3A6B" />
-      <line x1="60" y1="120" x2="140" y2="120" stroke="#0F2444" strokeWidth="2" opacity="0.3" />
-    </svg>
-  );
+  return <IcebergSVG size={size} />;
 }

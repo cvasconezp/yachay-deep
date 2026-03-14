@@ -9,7 +9,7 @@ const NAV_ITEMS = [
   { path: "/asignaturas",    label: "Asignaturas",       icon: "📚" },
   { path: "/docentes",       label: "Docentes",          icon: "👨‍🏫" },
   { path: "/tutorias",       label: "Tutorías",          icon: "📋" },
-  { path: "/about",          label: "Sobre YD",          icon: "ℹ️" },
+  { path: "/about",          label: "Sobre Yachay Deep",  icon: "ℹ️" },
 ];
 
 const ADMIN_ITEMS = [
