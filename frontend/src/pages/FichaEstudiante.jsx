@@ -14,25 +14,6 @@ function getNoteStyle(nota, max = 40) {
   return               { bg: "bg-red-100",    text: "text-red-700",   border: "border-red-300" };
 }
 
-/**
- * Mapea el diagnóstico computado (Framework_FichaEst §3.5) a colores + etiqueta.
- * 4 estados: Aprobación | Riesgo Académico | Riesgo de Deserción | En riesgo
- */
-function getDiagnosticoStyle(diagnostico) {
-  switch (diagnostico) {
-    case "Aprobación":
-      return { bg: "bg-green-100",  text: "text-green-800",  badge: "bg-green-500",  label: "Aprobación" };
-    case "Riesgo Académico":
-      return { bg: "bg-yellow-100", text: "text-yellow-800", badge: "bg-yellow-500", label: "Riesgo Académico" };
-    case "Riesgo de Deserción":
-      return { bg: "bg-orange-100", text: "text-orange-700", badge: "bg-orange-500", label: "Riesgo de Deserción" };
-    case "En riesgo":
-      return { bg: "bg-red-100",    text: "text-red-700",    badge: "bg-red-600",    label: "En riesgo" };
-    default:
-      return { bg: "bg-gray-100",   text: "text-gray-500",   badge: "bg-gray-400",   label: "Sin datos" };
-  }
-}
-
 /** Mantener compatibilidad con nivel_riesgo (Alto/Medio/Bajo) del ETL */
 function getRiesgoStyle(nivel) {
   if (nivel === "Alto")  return { bg: "bg-red-100",    text: "text-red-700",    label: "En riesgo" };
@@ -317,8 +298,6 @@ export default function FichaEstudiante() {
     }) || null;
   };
 
-  // Diagnóstico computado (Framework §3.5) — tiene prioridad sobre nivel_riesgo
-  const diagStyle = ficha ? getDiagnosticoStyle(ficha.diagnostico_riesgo) : getDiagnosticoStyle(null);
   const riesgoStyle = ficha ? getRiesgoStyle(ficha.nivel_riesgo) : {};
 
   // Carrera EIB: sedes, centro de apoyo y SEDE_MAPPING solo aplican para EIB
@@ -430,16 +409,36 @@ export default function FichaEstudiante() {
                 <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Actualizado</div>
                 <div className="font-semibold text-gray-700 text-sm mt-0.5">{updatedText}</div>
               </div>
-              <div className="px-3 py-1.5 text-center w-36 flex-shrink-0">
-                <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Compromiso</div>
+              <div className="px-3 py-1.5 text-center w-32 flex-shrink-0">
+                <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider cursor-help" title="Indice de compromiso academico: acceso AVAC (30%), tareas entregadas (30%), rendimiento academico (25%), estado de matricula (15%)">Compromiso</div>
                 <div className={`font-bold text-sm mt-0.5 ${compromisoColor}`}>
                   {compromisoLabel} {compromisoStr}
                 </div>
               </div>
-              <div className={`px-3 py-1.5 text-center w-40 flex-shrink-0 ${diagStyle.bg} border-l border-[#BF8F00]`}>
-                <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Diagnóstico</div>
-                <div className={`font-bold text-xs mt-0.5 ${diagStyle.text}`}>{diagStyle.label}</div>
-              </div>
+              {ficha.prob_desercion != null && (
+                <div className={`px-3 py-1.5 text-center w-36 flex-shrink-0 border-l border-[#BF8F00] ${
+                  Math.round(ficha.prob_desercion * 100) >= 70 ? "bg-red-100" : Math.round(ficha.prob_desercion * 100) >= 40 ? "bg-orange-50" : "bg-green-50"
+                }`}>
+                  <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider cursor-help" title="Probabilidad de desercion predicha por modelo ML. Basado en: promedio, nota minima, dispersión de notas y materias reprobadas. Comparado contra patrones historicos P60-P67">Pred. Desercion</div>
+                  <div className={`font-bold text-sm mt-0.5 ${
+                    Math.round(ficha.prob_desercion * 100) >= 70 ? "text-red-700" : Math.round(ficha.prob_desercion * 100) >= 40 ? "text-orange-700" : "text-green-700"
+                  }`}>
+                    {Math.round(ficha.prob_desercion * 100)}%
+                  </div>
+                </div>
+              )}
+              {ficha.prob_reprobacion != null && (
+                <div className={`px-3 py-1.5 text-center w-36 flex-shrink-0 border-l border-[#BF8F00] ${
+                  Math.round(ficha.prob_reprobacion * 100) >= 70 ? "bg-red-100" : Math.round(ficha.prob_reprobacion * 100) >= 40 ? "bg-orange-50" : "bg-green-50"
+                }`}>
+                  <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider cursor-help" title="Probabilidad de reprobar al menos una materia, predicha por modelo ML con datos historicos P60-P67">Pred. Reprobacion</div>
+                  <div className={`font-bold text-sm mt-0.5 ${
+                    Math.round(ficha.prob_reprobacion * 100) >= 70 ? "text-red-700" : Math.round(ficha.prob_reprobacion * 100) >= 40 ? "text-orange-700" : "text-green-700"
+                  }`}>
+                    {Math.round(ficha.prob_reprobacion * 100)}%
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -549,7 +548,7 @@ export default function FichaEstudiante() {
                 </tbody>
               </table>
 
-              {/* Predicción IA (Fase 2) */}
+              {/* Predicción IA — detalle con barras y tooltips */}
               {(ficha.prob_desercion != null || ficha.prob_reprobacion != null) && (
                 <>
                   <SectionHeader>Prediccion IA</SectionHeader>
@@ -565,9 +564,9 @@ export default function FichaEstudiante() {
                       tooltip="Probabilidad de reprobar al menos una asignatura este semestre. El modelo evalúa: promedio actual, cantidad de materias con nota baja, notas mínimas cercanas al umbral (70), y variabilidad en el rendimiento. Basado en patrones históricos de 8 períodos académicos."
                     />
                     <p className="text-[9px] text-gray-400 mt-1">
-                      Modelo ML entrenado con datos historicos P60-P67 — comparación contra todos los estudiantes
+                      Modelo ML — datos historicos P60-P67 · todos los estudiantes
                       {ficha.prediccion_updated_at && (
-                        <> — actualizado {new Date(ficha.prediccion_updated_at).toLocaleDateString("es-EC")}</>
+                        <> · {new Date(ficha.prediccion_updated_at).toLocaleDateString("es-EC")}</>
                       )}
                     </p>
                   </div>

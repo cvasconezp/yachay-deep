@@ -132,9 +132,9 @@ export default function Dashboard() {
                 <th className="text-left px-4 py-3 font-semibold text-gray-700">Estudiante</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-700">Carrera</th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-700">Riesgo</th>
-                <th className="text-center px-4 py-3 font-semibold text-gray-700">Días sin AVAC</th>
-                <th className="px-4 py-3 font-semibold text-gray-700 w-36">Compromiso</th>
-                <th className="text-center px-4 py-3 font-semibold text-gray-700" title="Probabilidad de desercion predicha por modelo ML">Pred. Desercion</th>
+                <th className="text-center px-4 py-3 font-semibold text-gray-700 cursor-help" title="Dias transcurridos desde el ultimo acceso del estudiante al Aula Virtual (AVAC)">Dias sin AVAC</th>
+                <th className="px-4 py-3 font-semibold text-gray-700 w-36 cursor-help" title="Indice de compromiso academico: acceso AVAC (30%), tareas entregadas (30%), rendimiento academico (25%), estado de matricula (15%). Alto >= 70%, Medio >= 40%, Bajo < 40%">Compromiso</th>
+                <th className="text-center px-4 py-3 font-semibold text-gray-700 cursor-help" title="Probabilidad de desercion predicha por modelo ML entrenado con datos historicos P60-P67. Basado en: promedio, nota minima, dispersión de notas y materias reprobadas">Pred. Desercion</th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-700">Intervenciones</th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-700">Última</th>
               </tr>

@@ -151,11 +151,11 @@ export default function Asignaturas() {
                 <th className="text-left px-4 py-3 font-semibold text-gray-700">Docente</th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-700">Nivel</th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-700">Estudiantes</th>
-                <th className="text-center px-4 py-3 font-semibold text-gray-700">Promedio</th>
-                <th className="text-center px-4 py-3 font-semibold text-gray-700">Aprobacion</th>
-                <th className="text-center px-4 py-3 font-semibold text-gray-700">Reprobacion</th>
-                <th className="text-center px-4 py-3 font-semibold text-gray-700">Repitentes</th>
-                <th className="text-center px-4 py-3 font-semibold text-gray-700">Riesgo Alto</th>
+                <th className="text-center px-4 py-3 font-semibold text-gray-700 cursor-help" title="Promedio general de notas finales de la asignatura (escala 0-100)">Promedio</th>
+                <th className="text-center px-4 py-3 font-semibold text-gray-700 cursor-help" title="Porcentaje de estudiantes con nota final >= 70">Aprobacion</th>
+                <th className="text-center px-4 py-3 font-semibold text-gray-700 cursor-help" title="Porcentaje de estudiantes con nota final < 70">Reprobacion</th>
+                <th className="text-center px-4 py-3 font-semibold text-gray-700 cursor-help" title="Estudiantes que estan cursando la asignatura por segunda vez o mas">Repitentes</th>
+                <th className="text-center px-4 py-3 font-semibold text-gray-700 cursor-help" title="Estudiantes en riesgo alto: nota < 60, materias reprobadas o inactividad en AVAC">Riesgo Alto</th>
               </tr>
             </thead>
             <tbody>
@@ -250,9 +250,9 @@ export default function Asignaturas() {
                       <th className="text-left px-3 py-2 font-medium text-gray-600">Estudiante</th>
                       <th className="text-center px-3 py-2 font-medium text-gray-600">Nota</th>
                       <th className="text-center px-3 py-2 font-medium text-gray-600">Riesgo</th>
-                      <th className="px-3 py-2 font-medium text-gray-600 w-28">Compromiso</th>
-                      <th className="text-center px-3 py-2 font-medium text-gray-600">Dias AVAC</th>
-                      <th className="text-center px-3 py-2 font-medium text-gray-600">Repitencias</th>
+                      <th className="px-3 py-2 font-medium text-gray-600 w-28 cursor-help" title="Indice de compromiso: acceso AVAC (30%), tareas (30%), rendimiento (25%), matricula (15%)">Compromiso</th>
+                      <th className="text-center px-3 py-2 font-medium text-gray-600 cursor-help" title="Dias desde el ultimo acceso al Aula Virtual (AVAC)">Dias AVAC</th>
+                      <th className="text-center px-3 py-2 font-medium text-gray-600 cursor-help" title="Numero de veces que el estudiante ha cursado esta asignatura previamente">Repitencias</th>
                     </tr>
                   </thead>
                   <tbody>

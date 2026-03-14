@@ -162,10 +162,10 @@ export default function Tutorias() {
                       <tr>
                         <th className="text-left px-4 py-2 text-xs font-medium text-gray-500">Estudiante</th>
                         <th className="text-left px-4 py-2 text-xs font-medium text-gray-500">Contacto</th>
-                        <th className="text-center px-4 py-2 text-xs font-medium text-gray-500">Riesgo</th>
+                        <th className="text-center px-4 py-2 text-xs font-medium text-gray-500 cursor-help" title="Nivel de riesgo academico del estudiante: Alto, Medio o Bajo">Riesgo</th>
                         <th className="text-center px-4 py-2 text-xs font-medium text-gray-500">Nota</th>
-                        <th className="text-left px-4 py-2 text-xs font-medium text-gray-500">Motivos</th>
-                        <th className="text-center px-4 py-2 text-xs font-medium text-gray-500">Interv. previas</th>
+                        <th className="text-left px-4 py-2 text-xs font-medium text-gray-500 cursor-help" title="Factores de riesgo identificados: bajo rendimiento, inactividad AVAC, materias reprobadas, etc.">Motivos</th>
+                        <th className="text-center px-4 py-2 text-xs font-medium text-gray-500 cursor-help" title="Numero de intervenciones o tutorias previas registradas para este estudiante">Interv. previas</th>
                         <th className="text-center px-4 py-2 text-xs font-medium text-gray-500">Accion</th>
                       </tr>
                     </thead>

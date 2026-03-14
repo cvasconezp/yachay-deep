@@ -111,11 +111,11 @@ export default function Docentes() {
                 <th className="text-left px-4 py-3 font-semibold text-gray-700">Docente</th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-700">Asignaturas</th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-700">Estudiantes</th>
-                <th className="text-center px-4 py-3 font-semibold text-gray-700">Promedio</th>
-                <th className="text-center px-4 py-3 font-semibold text-gray-700">Aprobacion</th>
-                <th className="text-center px-4 py-3 font-semibold text-gray-700">Riesgo Alto</th>
-                <th className="text-center px-4 py-3 font-semibold text-gray-700">Riesgo Medio</th>
-                <th className="px-4 py-3 font-semibold text-gray-700 w-28">Compromiso prom.</th>
+                <th className="text-center px-4 py-3 font-semibold text-gray-700 cursor-help" title="Promedio general de notas finales de todos los estudiantes del docente (escala 0-100)">Promedio</th>
+                <th className="text-center px-4 py-3 font-semibold text-gray-700 cursor-help" title="Porcentaje de estudiantes con nota final >= 70 sobre el total">Aprobacion</th>
+                <th className="text-center px-4 py-3 font-semibold text-gray-700 cursor-help" title="Estudiantes clasificados en riesgo alto: nota promedio < 60, materias reprobadas o inactividad prolongada en AVAC">Riesgo Alto</th>
+                <th className="text-center px-4 py-3 font-semibold text-gray-700 cursor-help" title="Estudiantes en riesgo moderado: rendimiento entre 60-69 o señales tempranas de dificultad academica">Riesgo Medio</th>
+                <th className="px-4 py-3 font-semibold text-gray-700 w-28 cursor-help" title="Promedio del indice de compromiso de los estudiantes del docente. Mide: acceso AVAC (30%), tareas (30%), rendimiento (25%), matricula (15%)">Compromiso prom.</th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-700">Intervenciones</th>
               </tr>
             </thead>
@@ -207,8 +207,8 @@ export default function Docentes() {
                         <th className="text-left px-3 py-2 text-xs font-medium text-gray-500">Estudiante</th>
                         <th className="text-center px-3 py-2 text-xs font-medium text-gray-500">Nota</th>
                         <th className="text-center px-3 py-2 text-xs font-medium text-gray-500">Riesgo</th>
-                        <th className="px-3 py-2 text-xs font-medium text-gray-500 w-24">Compromiso</th>
-                        <th className="text-center px-3 py-2 text-xs font-medium text-gray-500">Dias AVAC</th>
+                        <th className="px-3 py-2 text-xs font-medium text-gray-500 w-24 cursor-help" title="Indice de compromiso: acceso AVAC (30%), tareas (30%), rendimiento (25%), matricula (15%)">Compromiso</th>
+                        <th className="text-center px-3 py-2 text-xs font-medium text-gray-500 cursor-help" title="Dias desde el ultimo acceso al Aula Virtual (AVAC)">Dias AVAC</th>
                       </tr>
                     </thead>
                     <tbody>
