@@ -393,7 +393,7 @@ export default function FichaEstudiante() {
             {/* Nombre del estudiante + datos de identidad */}
             <div className="px-5 py-3">
               <h2 className="text-lg font-bold tracking-wide uppercase leading-tight">{ficha.nombre || "—"}</h2>
-              <div className="flex items-center gap-4 mt-1 text-[11px] text-white/70">
+              <div className="flex items-center gap-4 mt-1.5 text-[13px] text-white/70">
                 <span>CI: <strong className="text-white/90">{ficha.cedula || "—"}</strong></span>
                 <span className="w-px h-3 bg-white/20" />
                 <span>Tel: <strong className="text-white/90">{ficha.telefono || "—"}</strong></span>
@@ -405,16 +405,25 @@ export default function FichaEstudiante() {
 
           {/* ═══ INDICADORES ═══ */}
           <div className="bg-white border-b border-gray-200">
+            <div className="flex items-center justify-between px-4 py-1 bg-gray-50 border-b border-gray-100">
+              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Indicadores</span>
+              <span className="text-[9px] text-gray-400">
+                Modelo ML · P60-P67
+                {ficha.prediccion_updated_at && (
+                  <> · {new Date(ficha.prediccion_updated_at).toLocaleDateString("es-EC")}</>
+                )}
+              </span>
+            </div>
             <div className="flex items-stretch">
               {/* Compromiso */}
-              <div className="flex-1 px-4 py-2.5 border-r border-gray-200 cursor-help" title="Indice de compromiso academico: acceso AVAC (30%), tareas entregadas (30%), rendimiento academico (25%), estado de matricula (15%). Alto >= 70%, Medio >= 40%, Bajo < 40%">
-                <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mb-0.5">Compromiso</div>
+              <div className="flex-1 px-4 py-1.5 border-r border-gray-200 cursor-help" title="Indice de compromiso academico: acceso AVAC (30%), tareas entregadas (30%), rendimiento academico (25%), estado de matricula (15%). Alto >= 70%, Medio >= 40%, Bajo < 40%">
+                <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Compromiso</div>
                 <div className="flex items-baseline gap-1.5">
-                  <span className={`text-lg font-bold ${compromisoColor}`}>{compromisoStr || "—"}</span>
+                  <span className={`text-base font-bold ${compromisoColor}`}>{compromisoStr || "—"}</span>
                   <span className={`text-[11px] font-semibold ${compromisoColor}`}>{compromisoLabel}</span>
                 </div>
                 {ficha.indice_compromiso != null && (
-                  <div className="mt-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="mt-0.5 h-1 bg-gray-100 rounded-full overflow-hidden">
                     <div className={`h-full rounded-full transition-all ${
                       ficha.indice_compromiso >= 0.7 ? "bg-green-500" : ficha.indice_compromiso >= 0.4 ? "bg-yellow-400" : "bg-red-500"
                     }`} style={{ width: `${Math.round(ficha.indice_compromiso * 100)}%` }} />
@@ -427,13 +436,13 @@ export default function FichaEstudiante() {
                 const colorDes = pctDes >= 70 ? "text-red-600" : pctDes >= 40 ? "text-orange-600" : "text-green-600";
                 const barDes = pctDes >= 70 ? "bg-red-500" : pctDes >= 40 ? "bg-orange-400" : "bg-green-500";
                 return (
-                  <div className="flex-1 px-4 py-2.5 border-r border-gray-200 cursor-help" title="Probabilidad de desercion predicha por modelo ML. Basado en: promedio, nota minima, dispersion de notas y materias reprobadas. Comparado contra patrones historicos P60-P67">
-                    <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mb-0.5">Pred. Deserción</div>
+                  <div className="flex-1 px-4 py-1.5 border-r border-gray-200 cursor-help" title="Probabilidad de desercion predicha por modelo ML. Basado en: promedio, nota minima, dispersion de notas y materias reprobadas. Comparado contra patrones historicos P60-P67">
+                    <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Pred. Deserción</div>
                     <div className="flex items-baseline gap-1.5">
-                      <span className={`text-lg font-bold ${colorDes}`}>{pctDes}%</span>
+                      <span className={`text-base font-bold ${colorDes}`}>{pctDes}%</span>
                       <span className={`text-[11px] font-semibold ${colorDes}`}>{pctDes >= 70 ? "Alto" : pctDes >= 40 ? "Moderado" : "Bajo"}</span>
                     </div>
-                    <div className="mt-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="mt-0.5 h-1 bg-gray-100 rounded-full overflow-hidden">
                       <div className={`h-full rounded-full transition-all ${barDes}`} style={{ width: `${pctDes}%` }} />
                     </div>
                   </div>
@@ -445,32 +454,18 @@ export default function FichaEstudiante() {
                 const colorRep = pctRep >= 70 ? "text-red-600" : pctRep >= 40 ? "text-orange-600" : "text-green-600";
                 const barRep = pctRep >= 70 ? "bg-red-500" : pctRep >= 40 ? "bg-orange-400" : "bg-green-500";
                 return (
-                  <div className="flex-1 px-4 py-2.5 border-r border-gray-200 cursor-help" title="Probabilidad de reprobar al menos una materia, predicha por modelo ML con datos historicos P60-P67">
-                    <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mb-0.5">Pred. Reprobación</div>
+                  <div className="flex-1 px-4 py-1.5 cursor-help" title="Probabilidad de reprobar al menos una materia, predicha por modelo ML con datos historicos P60-P67">
+                    <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Pred. Reprobación</div>
                     <div className="flex items-baseline gap-1.5">
-                      <span className={`text-lg font-bold ${colorRep}`}>{pctRep}%</span>
+                      <span className={`text-base font-bold ${colorRep}`}>{pctRep}%</span>
                       <span className={`text-[11px] font-semibold ${colorRep}`}>{pctRep >= 70 ? "Alto" : pctRep >= 40 ? "Moderado" : "Bajo"}</span>
                     </div>
-                    <div className="mt-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="mt-0.5 h-1 bg-gray-100 rounded-full overflow-hidden">
                       <div className={`h-full rounded-full transition-all ${barRep}`} style={{ width: `${pctRep}%` }} />
                     </div>
                   </div>
                 );
               })()}
-              {/* Riesgo general */}
-              <div className="flex-1 px-4 py-2.5">
-                <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mb-0.5">Nivel de Riesgo</div>
-                <div className="flex items-center gap-2 mt-1">
-                  <RiskBadge nivel={ficha.nivel_riesgo} size="lg" />
-                </div>
-              </div>
-            </div>
-            {/* Pie de indicadores */}
-            <div className="px-4 py-0.5 bg-gray-50 border-t border-gray-100 text-[9px] text-gray-400 text-right">
-              Modelo ML · datos historicos P60-P67
-              {ficha.prediccion_updated_at && (
-                <> · actualizado {new Date(ficha.prediccion_updated_at).toLocaleDateString("es-EC")}</>
-              )}
             </div>
           </div>
 
