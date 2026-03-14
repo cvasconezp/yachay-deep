@@ -1,9 +1,11 @@
 """
-Exportación a PDF — equivalente a ExportarFichaAPDF() del VBA.
+Exportación a PDF y Excel.
 """
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from io import BytesIO
 from datetime import datetime
 
@@ -13,6 +15,175 @@ from ..auth.jwt import get_current_user
 from ..models.user import User
 
 router = APIRouter(prefix="/export", tags=["export"])
+
+
+# ─── Columnas disponibles para exportación Excel ─────────────────────────────
+
+EXPORT_COLUMNS = {
+    "cedula": {"label": "Cédula", "getter": lambda s, _: s.cedula},
+    "nombre": {"label": "Nombres completos", "getter": lambda s, _: s.nombre},
+    "correo": {"label": "Correo personal", "getter": lambda s, _: s.correo},
+    "correo_institucional": {"label": "Correo institucional", "getter": lambda s, _: s.correo_institucional},
+    "telefono": {"label": "Teléfono", "getter": lambda s, _: s.telefono},
+    "whatsapp": {"label": "WhatsApp", "getter": lambda s, _: s.whatsapp},
+    "carrera": {"label": "Carrera", "getter": lambda s, _: s.carrera},
+    "nivel_academico": {"label": "Nivel académico", "getter": lambda s, _: s.nivel_academico},
+    "sede": {"label": "Centro de apoyo", "getter": lambda s, _: s.sede},
+    "grupo": {"label": "Grupo", "getter": lambda s, _: s.grupo},
+    "estado_matricula": {"label": "Estado matrícula", "getter": lambda s, _: s.estado_matricula},
+    "nivel_riesgo": {"label": "Nivel de riesgo", "getter": lambda s, _: s.nivel_riesgo},
+    "indice_compromiso": {"label": "Índice compromiso", "getter": lambda s, _: round(s.indice_compromiso, 2) if s.indice_compromiso is not None else None},
+    "dias_sin_acceso": {"label": "Días sin acceso AVAC", "getter": lambda s, _: s.dias_sin_acceso},
+    "porcentaje_tareas": {"label": "% Tareas entregadas", "getter": lambda s, _: round(s.porcentaje_tareas, 1) if s.porcentaje_tareas is not None else None},
+    "promedio_calificaciones": {"label": "Promedio calificaciones", "getter": lambda s, _: round(s.promedio_calificaciones, 1) if s.promedio_calificaciones is not None else None},
+    "prob_desercion": {"label": "Prob. deserción", "getter": lambda s, _: round(s.prob_desercion, 2) if s.prob_desercion is not None else None},
+    "prob_reprobacion": {"label": "Prob. reprobación", "getter": lambda s, _: round(s.prob_reprobacion, 2) if s.prob_reprobacion is not None else None},
+    "genero": {"label": "Género", "getter": lambda s, _: s.genero},
+    "autoidentificacion_etnica": {"label": "Autoidentificación étnica", "getter": lambda s, _: s.autoidentificacion_etnica},
+    "fecha_nacimiento": {"label": "Fecha nacimiento", "getter": lambda s, _: s.fecha_nacimiento.isoformat() if s.fecha_nacimiento else None},
+    "pais": {"label": "País", "getter": lambda s, _: s.pais},
+    "provincia": {"label": "Provincia", "getter": lambda s, _: s.provincia},
+    "ciudad": {"label": "Ciudad", "getter": lambda s, _: s.ciudad},
+    "parroquia": {"label": "Parroquia", "getter": lambda s, _: s.parroquia},
+    "barrio": {"label": "Barrio/Comunidad", "getter": lambda s, _: s.barrio},
+    "total_intervenciones": {"label": "Total intervenciones", "getter": lambda s, ctx: ctx.get("interv", {}).get(s.id, 0)},
+}
+
+
+@router.get("/columnas-disponibles")
+def get_columnas_disponibles(
+    current_user: User = Depends(get_current_user),
+):
+    """Lista de columnas disponibles para exportación con su clave y etiqueta."""
+    return [{"key": k, "label": v["label"]} for k, v in EXPORT_COLUMNS.items()]
+
+
+@router.get("/estudiantes/excel")
+def export_estudiantes_excel(
+    carrera: Optional[str] = None,
+    nivel: Optional[int] = None,
+    nivel_riesgo: Optional[str] = None,
+    columnas: str = Query("cedula,nombre,correo_institucional,carrera,nivel_academico,nivel_riesgo", description="Columnas separadas por coma"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Exporta estudiantes a Excel con filtros y columnas seleccionables."""
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    except ImportError:
+        raise HTTPException(status_code=500, detail="openpyxl no instalado")
+
+    # Filtrar estudiantes
+    query = db.query(Student)
+    if carrera:
+        query = query.filter(func.lower(Student.carrera).contains(carrera.lower()))
+    if nivel:
+        query = query.filter(Student.nivel_academico == nivel)
+    if nivel_riesgo:
+        query = query.filter(Student.nivel_riesgo == nivel_riesgo)
+    query = query.order_by(Student.carrera, Student.nivel_academico, Student.nombre)
+    students = query.all()
+
+    if not students:
+        raise HTTPException(status_code=404, detail="No se encontraron estudiantes con los filtros aplicados")
+
+    # Parsear columnas solicitadas
+    cols_requested = [c.strip() for c in columnas.split(",") if c.strip() in EXPORT_COLUMNS]
+    if not cols_requested:
+        cols_requested = ["cedula", "nombre", "correo_institucional", "carrera", "nivel_academico", "nivel_riesgo"]
+
+    # Pre-cargar contexto (intervenciones por estudiante)
+    ctx = {}
+    if "total_intervenciones" in cols_requested:
+        student_ids = [s.id for s in students]
+        interv_counts = dict(
+            db.query(Intervention.student_id, func.count(Intervention.id))
+            .filter(Intervention.student_id.in_(student_ids))
+            .group_by(Intervention.student_id)
+            .all()
+        )
+        ctx["interv"] = interv_counts
+
+    # Crear workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Estudiantes"
+
+    # Estilos
+    header_font = Font(name="Calibri", bold=True, color="FFFFFF", size=11)
+    header_fill = PatternFill(start_color="1B3A6B", end_color="1B3A6B", fill_type="solid")
+    header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    cell_font = Font(name="Calibri", size=10)
+    thin_border = Border(
+        left=Side(style="thin", color="D0D5DD"),
+        right=Side(style="thin", color="D0D5DD"),
+        top=Side(style="thin", color="D0D5DD"),
+        bottom=Side(style="thin", color="D0D5DD"),
+    )
+    alt_fill = PatternFill(start_color="F5F7FA", end_color="F5F7FA", fill_type="solid")
+
+    # Headers
+    for col_idx, col_key in enumerate(cols_requested, 1):
+        cell = ws.cell(row=1, column=col_idx, value=EXPORT_COLUMNS[col_key]["label"])
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_align
+        cell.border = thin_border
+
+    # Datos
+    for row_idx, student in enumerate(students, 2):
+        for col_idx, col_key in enumerate(cols_requested, 1):
+            value = EXPORT_COLUMNS[col_key]["getter"](student, ctx)
+            cell = ws.cell(row=row_idx, column=col_idx, value=value)
+            cell.font = cell_font
+            cell.border = thin_border
+            if row_idx % 2 == 0:
+                cell.fill = alt_fill
+
+    # Autofit columns
+    for col_idx, col_key in enumerate(cols_requested, 1):
+        max_len = len(EXPORT_COLUMNS[col_key]["label"])
+        for row_idx in range(2, min(len(students) + 2, 52)):  # Sample first 50 rows
+            val = ws.cell(row=row_idx, column=col_idx).value
+            if val:
+                max_len = max(max_len, len(str(val)))
+        ws.column_dimensions[ws.cell(row=1, column=col_idx).column_letter].width = min(max_len + 3, 40)
+
+    # Fila de resumen
+    summary_row = len(students) + 3
+    ws.cell(row=summary_row, column=1, value=f"Total: {len(students)} estudiantes").font = Font(bold=True, size=10)
+    ws.cell(row=summary_row + 1, column=1, value=f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')} — {current_user.nombre}").font = Font(size=9, color="888888")
+
+    # Filtro aplicado
+    filter_desc = "Filtros: "
+    if carrera:
+        filter_desc += f"Carrera={carrera} "
+    if nivel:
+        filter_desc += f"Nivel={nivel} "
+    if nivel_riesgo:
+        filter_desc += f"Riesgo={nivel_riesgo} "
+    if not carrera and not nivel and not nivel_riesgo:
+        filter_desc += "Ninguno (todos)"
+    ws.cell(row=summary_row + 2, column=1, value=filter_desc).font = Font(size=9, color="888888")
+
+    # Freeze header row
+    ws.freeze_panes = "A2"
+    ws.auto_filter.ref = ws.dimensions
+
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+
+    import re
+    safe_carrera = re.sub(r'[^\w\s-]', '', carrera or "todos").replace(' ', '_')
+    filename = f"estudiantes_{safe_carrera}_{datetime.now().strftime('%Y%m%d')}.xlsx"
+
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 @router.get("/ficha/{student_id}/pdf")

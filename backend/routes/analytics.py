@@ -1,11 +1,12 @@
 """
-Analítica de asignaturas y docentes — Módulos 8.2 y 8.3 del Framework.
-Proporciona vistas agregadas por asignatura y por docente.
+Analítica de asignaturas, docentes y resumen de datos — Módulos 8.2, 8.3, 8.5.
+Proporciona vistas agregadas por asignatura, por docente y resumen general.
 """
 from typing import Optional
+from datetime import date
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func, case, and_, distinct
+from sqlalchemy import func, case, and_, distinct, extract
 from pydantic import BaseModel
 
 from ..database import get_db
@@ -592,3 +593,173 @@ def get_tutorias_por_asignatura(
     # Ordenar asignaturas por total en riesgo descendente
     output.sort(key=lambda x: x.total_en_riesgo, reverse=True)
     return output
+
+
+# ─── Módulo 8.5: Resumen de Datos ────────────────────────────────────────────
+
+@router.get("/resumen")
+def get_resumen_datos(
+    carrera: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Resumen estadístico general y por carrera:
+    estudiantes, niveles, reprobados, repitentes, desertores,
+    promedio calificaciones, docentes, ciudades, edad promedio.
+    """
+    today = date.today()
+
+    # --- Base query de estudiantes ---
+    base_q = db.query(Student)
+    if carrera:
+        base_q = base_q.filter(func.lower(Student.carrera).contains(carrera.lower()))
+    students = base_q.all()
+
+    if not students:
+        return {"global": {}, "por_carrera": []}
+
+    student_ids = [s.id for s in students]
+
+    # --- Calificaciones del semestre actual ---
+    grades_q = db.query(Grade).filter(Grade.periodo.is_(None))
+    if carrera:
+        grades_q = grades_q.filter(func.lower(Grade.carrera).contains(carrera.lower()))
+    grades = grades_q.all()
+
+    # Reprobados: estudiantes con al menos una nota < 70
+    reprobados_ids = set()
+    repitentes_ids = set()
+    for g in grades:
+        if g.student_id in student_ids:
+            if g.nota_final is not None and g.nota_final < 70:
+                reprobados_ids.add(g.student_id)
+            if g.numero_repitencias and g.numero_repitencias > 0:
+                repitentes_ids.add(g.student_id)
+
+    # Docentes únicos del semestre actual
+    docentes_q = (
+        db.query(func.count(distinct(Grade.docente)))
+        .filter(Grade.periodo.is_(None), Grade.docente.isnot(None), Grade.docente != "")
+    )
+    if carrera:
+        docentes_q = docentes_q.filter(func.lower(Grade.carrera).contains(carrera.lower()))
+    total_docentes = docentes_q.scalar() or 0
+
+    # --- Cálculos globales ---
+    def compute_stats(student_list, grade_list):
+        total = len(student_list)
+        if total == 0:
+            return {}
+
+        # Niveles académicos
+        niveles = {}
+        for s in student_list:
+            niv = s.nivel_academico or 0
+            niveles[niv] = niveles.get(niv, 0) + 1
+
+        # Riesgo
+        riesgo = {"Alto": 0, "Medio": 0, "Bajo": 0}
+        for s in student_list:
+            r = s.nivel_riesgo or "Bajo"
+            riesgo[r] = riesgo.get(r, 0) + 1
+
+        # Ciudades
+        ciudades = {}
+        for s in student_list:
+            c = s.ciudad or "Sin dato"
+            ciudades[c] = ciudades.get(c, 0) + 1
+
+        # Sedes
+        sedes = {}
+        for s in student_list:
+            sede = s.sede or "Sin dato"
+            sedes[sede] = sedes.get(sede, 0) + 1
+
+        # Género
+        generos = {}
+        for s in student_list:
+            g = s.genero or "Sin dato"
+            generos[g] = generos.get(g, 0) + 1
+
+        # Autoidentificación étnica
+        etnias = {}
+        for s in student_list:
+            e = s.autoidentificacion_etnica or "Sin dato"
+            etnias[e] = etnias.get(e, 0) + 1
+
+        # Edad promedio
+        edades = []
+        for s in student_list:
+            if s.fecha_nacimiento:
+                edad = (today - s.fecha_nacimiento).days / 365.25
+                edades.append(edad)
+        promedio_edad = round(sum(edades) / len(edades), 1) if edades else None
+
+        # Promedio calificaciones
+        notas = [s.promedio_calificaciones for s in student_list if s.promedio_calificaciones is not None]
+        promedio_calif = round(sum(notas) / len(notas), 1) if notas else None
+
+        # Estado matrícula
+        estados = {}
+        for s in student_list:
+            est = s.estado_matricula or "Sin dato"
+            estados[est] = estados.get(est, 0) + 1
+
+        # Reprobados/repitentes de este grupo
+        sid_set = set(s.id for s in student_list)
+        reprob = len(reprobados_ids & sid_set)
+        repit = len(repitentes_ids & sid_set)
+
+        # Prob deserción alta (>0.5)
+        desertores_prob = sum(1 for s in student_list if s.prob_desercion and s.prob_desercion > 0.5)
+
+        # Compromiso promedio
+        compromisos = [s.indice_compromiso for s in student_list if s.indice_compromiso is not None]
+        promedio_compromiso = round(sum(compromisos) / len(compromisos), 2) if compromisos else None
+
+        return {
+            "total_estudiantes": total,
+            "por_nivel": dict(sorted(niveles.items())),
+            "por_riesgo": riesgo,
+            "reprobados": reprob,
+            "repitentes": repit,
+            "desertores_prob": desertores_prob,
+            "promedio_calificaciones": promedio_calif,
+            "promedio_edad": promedio_edad,
+            "promedio_compromiso": promedio_compromiso,
+            "por_ciudad": dict(sorted(ciudades.items(), key=lambda x: -x[1])),
+            "por_sede": dict(sorted(sedes.items(), key=lambda x: -x[1])),
+            "por_genero": generos,
+            "por_etnia": dict(sorted(etnias.items(), key=lambda x: -x[1])),
+            "por_estado_matricula": estados,
+        }
+
+    global_stats = compute_stats(students, grades)
+    global_stats["total_docentes"] = total_docentes
+
+    # --- Por carrera ---
+    carreras_map = {}
+    for s in students:
+        c = s.carrera or "Sin carrera"
+        if c not in carreras_map:
+            carreras_map[c] = []
+        carreras_map[c].append(s)
+
+    # Docentes por carrera
+    docentes_carrera_q = (
+        db.query(Grade.carrera, func.count(distinct(Grade.docente)))
+        .filter(Grade.periodo.is_(None), Grade.docente.isnot(None), Grade.docente != "")
+        .group_by(Grade.carrera)
+        .all()
+    )
+    docentes_por_carrera = {r[0]: r[1] for r in docentes_carrera_q}
+
+    por_carrera = []
+    for nombre_carrera, sts in sorted(carreras_map.items()):
+        stats = compute_stats(sts, [g for g in grades if g.carrera == nombre_carrera])
+        stats["carrera"] = nombre_carrera
+        stats["total_docentes"] = docentes_por_carrera.get(nombre_carrera, 0)
+        por_carrera.append(stats)
+
+    return {"global": global_stats, "por_carrera": por_carrera}

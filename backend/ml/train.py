@@ -178,6 +178,32 @@ def _train_single_target(df, target_col: str, model_name: str) -> dict:
     joblib.dump(best_model, model_path)
     logger.info(f"  Mejor modelo {model_name}: {best_name} (AUC={best_auc:.4f}) -> {model_path}")
 
+    # --- XAI: guardar estadisticas de entrenamiento para explicaciones ---
+    feature_means = [round(float(v), 4) for v in X_train.mean(axis=0)]
+    feature_stds = [round(float(v), 4) for v in X_train.std(axis=0)]
+
+    xai_stats = {
+        "model_type": best_name,
+        "feature_columns": FEATURE_COLUMNS,
+        "feature_means": dict(zip(FEATURE_COLUMNS, feature_means)),
+        "feature_stds": dict(zip(FEATURE_COLUMNS, feature_stds)),
+    }
+
+    if best_name == "logistic":
+        xai_stats["coefficients"] = dict(zip(
+            FEATURE_COLUMNS,
+            [round(float(c), 6) for c in best_model.coef_[0]]
+        ))
+    elif best_name == "random_forest":
+        xai_stats["feature_importances"] = dict(zip(
+            FEATURE_COLUMNS,
+            [round(float(fi), 6) for fi in best_model.feature_importances_]
+        ))
+
+    stats_path = MODELS_DIR / f"{model_name}_stats.json"
+    stats_path.write_text(json.dumps(xai_stats, indent=2, ensure_ascii=False))
+    logger.info(f"  XAI stats guardadas: {stats_path}")
+
     return {
         "status": "ok",
         "best_model": best_name,

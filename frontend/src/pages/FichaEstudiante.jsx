@@ -213,6 +213,9 @@ export default function FichaEstudiante() {
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [practicasOpen, setPracticasOpen] = useState(false);
+  const [xaiOpen, setXaiOpen] = useState(false);
+  const [xaiData, setXaiData] = useState(null);
+  const [xaiLoading, setXaiLoading] = useState(false);
   const [carreras, setCarreras] = useState([]);
   const [selectedCarrera, setSelectedCarrera] = useState("");
   const searchTimeout = useRef(null);
@@ -252,6 +255,8 @@ export default function FichaEstudiante() {
   const loadFicha = async (id) => {
     setLoading(true);
     setSearchResults([]);
+    setXaiData(null);
+    setXaiOpen(false);
     try {
       const data = await api.getFicha(id);
       setFicha(data);
@@ -273,6 +278,22 @@ export default function FichaEstudiante() {
     a.download = `ficha_${(ficha.nombre || ficha.id).toString().replace(/\s+/g, "_")}.pdf`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const toggleXai = async () => {
+    if (xaiOpen) { setXaiOpen(false); return; }
+    setXaiOpen(true);
+    if (xaiData && xaiData.student_id === ficha?.id) return; // ya cargado
+    setXaiLoading(true);
+    try {
+      const data = await api.getPredictionStudent(ficha.id);
+      setXaiData({ ...data, student_id: ficha.id });
+    } catch (e) {
+      console.error("XAI error:", e);
+      setXaiData(null);
+    } finally {
+      setXaiLoading(false);
+    }
   };
 
   // Construir mapa de cursos AVAC
@@ -467,6 +488,82 @@ export default function FichaEstudiante() {
                 );
               })()}
             </div>
+            {/* Botón XAI: Ver factores principales */}
+            {(ficha.prob_desercion != null || ficha.prob_reprobacion != null) && (
+              <button onClick={toggleXai}
+                className="w-full flex items-center justify-center gap-1.5 py-1 bg-gray-50 hover:bg-gray-100 border-t border-gray-100 text-[10px] text-brand font-semibold uppercase tracking-wider transition-colors">
+                <span>{xaiOpen ? "Ocultar" : "Ver"} factores principales</span>
+                <span className={`transition-transform duration-200 text-[8px] ${xaiOpen ? "rotate-180" : ""}`}>▾</span>
+              </button>
+            )}
+            {/* Panel XAI expandido */}
+            {xaiOpen && (
+              <div className="border-t border-gray-200 bg-gray-50 px-4 py-2">
+                {xaiLoading ? (
+                  <div className="text-[11px] text-gray-400 text-center py-2">Cargando explicación...</div>
+                ) : !xaiData ? (
+                  <div className="text-[11px] text-gray-400 text-center py-2">Sin datos de explicación disponibles</div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* Factores Deserción */}
+                    {xaiData.explicacion_desercion && (
+                      <div>
+                        <div className="text-[9px] font-bold text-gray-500 uppercase tracking-wider mb-1">Factores · Deserción</div>
+                        {xaiData.explicacion_desercion.map((f, i) => {
+                          const abs = Math.abs(f.contribucion);
+                          const maxC = Math.abs(xaiData.explicacion_desercion[0]?.contribucion) || 1;
+                          const pct = Math.min(100, (abs / maxC) * 100);
+                          const isRisk = f.direccion === "incrementa";
+                          return (
+                            <div key={i} className="mb-1" title={`Valor: ${f.valor} · Media carrera: ${f.media_carrera}`}>
+                              <div className="flex items-center justify-between text-[10px]">
+                                <span className="text-gray-600">{f.label}</span>
+                                <span className={`font-semibold ${isRisk ? "text-red-600" : "text-green-600"}`}>
+                                  {f.valor} <span className="text-[8px] text-gray-400">(med: {f.media_carrera})</span>
+                                </span>
+                              </div>
+                              <div className="h-1 bg-gray-200 rounded-full overflow-hidden mt-0.5">
+                                <div className={`h-full rounded-full ${isRisk ? "bg-red-400" : "bg-green-400"}`}
+                                  style={{ width: `${pct}%` }} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {/* Factores Reprobación */}
+                    {xaiData.explicacion_reprobacion && (
+                      <div>
+                        <div className="text-[9px] font-bold text-gray-500 uppercase tracking-wider mb-1">Factores · Reprobación</div>
+                        {xaiData.explicacion_reprobacion.map((f, i) => {
+                          const abs = Math.abs(f.contribucion);
+                          const maxC = Math.abs(xaiData.explicacion_reprobacion[0]?.contribucion) || 1;
+                          const pct = Math.min(100, (abs / maxC) * 100);
+                          const isRisk = f.direccion === "incrementa";
+                          return (
+                            <div key={i} className="mb-1" title={`Valor: ${f.valor} · Media carrera: ${f.media_carrera}`}>
+                              <div className="flex items-center justify-between text-[10px]">
+                                <span className="text-gray-600">{f.label}</span>
+                                <span className={`font-semibold ${isRisk ? "text-red-600" : "text-green-600"}`}>
+                                  {f.valor} <span className="text-[8px] text-gray-400">(med: {f.media_carrera})</span>
+                                </span>
+                              </div>
+                              <div className="h-1 bg-gray-200 rounded-full overflow-hidden mt-0.5">
+                                <div className={`h-full rounded-full ${isRisk ? "bg-red-400" : "bg-green-400"}`}
+                                  style={{ width: `${pct}%` }} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+                <div className="text-[8px] text-gray-400 text-center mt-1.5">
+                  Modelo: {xaiData?.model_used || "—"} · Comparado con estudiantes de la misma carrera
+                </div>
+              </div>
+            )}
           </div>
 
           {/* ═══ CUERPO PRINCIPAL: 2 columnas ═══ */}

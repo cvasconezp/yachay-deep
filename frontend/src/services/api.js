@@ -121,6 +121,18 @@ class ApiClient {
     return this.get(`/analytics/tutorias/por-asignatura${qs ? "?" + qs : ""}`);
   }
 
+  // Interventions — Dashboard
+  getInterventionsDashboard(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.get(`/interventions/dashboard${qs ? "?" + qs : ""}`);
+  }
+
+  // Analytics — Resumen de Datos (Módulo 8.5)
+  getResumenDatos(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.get(`/analytics/resumen${qs ? "?" + qs : ""}`);
+  }
+
   // Predictions — ML (Fase 2)
   trainModel() { return this.post("/predictions/train", {}); }
   runPredictions() { return this.post("/predictions/run", {}); }

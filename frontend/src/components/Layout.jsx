@@ -9,6 +9,8 @@ const NAV_ITEMS = [
   { path: "/asignaturas",    label: "Asignaturas",       icon: "📚" },
   { path: "/docentes",       label: "Docentes",          icon: "👨‍🏫" },
   { path: "/tutorias",       label: "Tutorías",          icon: "📋" },
+  { path: "/intervenciones", label: "Intervenciones",     icon: "🤝" },
+  { path: "/resumen",        label: "Resumen de Datos",   icon: "📈" },
   { path: "/about",          label: "Sobre Yachay Deep",  icon: "ℹ️" },
 ];
 

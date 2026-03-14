@@ -132,3 +132,94 @@ def intervention_stats(
         "por_resultado": [{"resultado": r.resultado, "total": r.total} for r in by_resultado],
         "por_estado": [{"estado": r.estado, "total": r.total} for r in by_estado_cambio],
     }
+
+
+@router.get("/dashboard")
+def interventions_dashboard(
+    carrera: Optional[str] = None,
+    motivo: Optional[str] = None,
+    estado: Optional[str] = None,
+    resultado: Optional[str] = None,
+    seguimiento: Optional[str] = None,
+    limit: int = 500,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Dashboard de intervenciones: lista completa con datos del estudiante,
+    tarjetas resumen por carrera, y filtros avanzados.
+    """
+    from sqlalchemy import func, distinct
+
+    # --- Query principal: intervenciones + datos de estudiante ---
+    query = (
+        db.query(Intervention, Student.nombre, Student.carrera, Student.nivel_riesgo)
+        .join(Student, Intervention.student_id == Student.id)
+    )
+    if carrera:
+        query = query.filter(Student.carrera == carrera)
+    if motivo:
+        query = query.filter(Intervention.motivo == motivo)
+    if estado:
+        query = query.filter(Intervention.estado == estado)
+    if resultado:
+        query = query.filter(Intervention.resultado == resultado)
+    if seguimiento:
+        query = query.filter(Intervention.requiere_seguimiento == seguimiento)
+
+    rows = query.order_by(Intervention.created_at.desc()).limit(limit).all()
+
+    items = []
+    for inv, nombre, car, riesgo in rows:
+        items.append({
+            "id": inv.id,
+            "student_id": inv.student_id,
+            "nombre": nombre,
+            "carrera": car or inv.carrera,
+            "nivel_riesgo": riesgo,
+            "medio": inv.medio,
+            "motivo": inv.motivo,
+            "estado": inv.estado,
+            "asignatura": inv.asignatura,
+            "resultado": inv.resultado,
+            "requiere_seguimiento": inv.requiere_seguimiento,
+            "observacion": inv.observacion,
+            "monitor_nombre": inv.monitor_nombre,
+            "created_at": inv.created_at.isoformat() if inv.created_at else None,
+        })
+
+    # --- Resumen ---
+    total = db.query(func.count(Intervention.id)).scalar() or 0
+    estudiantes_intervenidos = (
+        db.query(func.count(distinct(Intervention.student_id))).scalar() or 0
+    )
+    pendientes_seguimiento = (
+        db.query(func.count(Intervention.id))
+        .filter(Intervention.requiere_seguimiento == "si")
+        .scalar() or 0
+    )
+
+    # Por carrera
+    por_carrera = (
+        db.query(
+            Student.carrera,
+            func.count(distinct(Intervention.student_id)).label("estudiantes"),
+            func.count(Intervention.id).label("intervenciones"),
+        )
+        .join(Student, Intervention.student_id == Student.id)
+        .group_by(Student.carrera)
+        .all()
+    )
+
+    return {
+        "items": items,
+        "resumen": {
+            "total_intervenciones": total,
+            "estudiantes_intervenidos": estudiantes_intervenidos,
+            "pendientes_seguimiento": pendientes_seguimiento,
+            "por_carrera": [
+                {"carrera": r.carrera or "Sin carrera", "estudiantes": r.estudiantes, "intervenciones": r.intervenciones}
+                for r in por_carrera
+            ],
+        },
+    }

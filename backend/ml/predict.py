@@ -19,11 +19,24 @@ logger = logging.getLogger(__name__)
 MODELS_DIR = Path(__file__).parent / "models"
 
 
+FEATURE_LABELS = {
+    "promedio_notas": "Promedio de notas",
+    "num_asignaturas": "Cantidad de materias",
+    "num_reprobadas": "Materias reprobadas",
+    "pct_reprobadas": "Porcentaje reprobadas",
+    "nota_min": "Nota mínima",
+    "nota_max": "Nota máxima",
+    "std_notas": "Dispersión de notas",
+    "num_zeros": "Materias con nota cero",
+}
+
+
 class Predictor:
     _instance = None
 
     def __init__(self):
         self.models = {}  # key -> {"desercion": model, "reprobacion": model}
+        self.stats = {}   # key -> {"desercion": stats_dict, "reprobacion": stats_dict}
         self.carrera_mapping = {}  # carrera -> key
         self.metadata = None
         self._loaded = False
@@ -61,6 +74,21 @@ class Predictor:
                 key = name[:-len("_reprobacion")]
                 self.models.setdefault(key, {})["reprobacion"] = model
                 loaded_any = True
+
+        # Cargar estadísticas XAI
+        for stats_file in MODELS_DIR.glob("*_stats.json"):
+            name = stats_file.stem  # e.g. "global_desercion_stats"
+            name = name[:-len("_stats")]  # "global_desercion"
+            if name.endswith("_desercion"):
+                key = name[:-len("_desercion")]
+                self.stats.setdefault(key, {})["desercion"] = json.loads(
+                    stats_file.read_text(encoding="utf-8")
+                )
+            elif name.endswith("_reprobacion"):
+                key = name[:-len("_reprobacion")]
+                self.stats.setdefault(key, {})["reprobacion"] = json.loads(
+                    stats_file.read_text(encoding="utf-8")
+                )
 
         # Compatibilidad: cargar modelos antiguos (desercion.joblib, reprobacion.joblib)
         old_des = MODELS_DIR / "desercion.joblib"
@@ -158,8 +186,60 @@ class Predictor:
             "timestamp": now.isoformat(),
         }
 
+    def _compute_explanations(
+        self, features: dict, model_key: str, target: str, top_n: int = 5
+    ) -> Optional[list]:
+        """
+        Calcula las contribuciones de cada feature a la prediccion (XAI).
+        - LogisticRegression: contribution = coef_i * (value_i - mean_i)
+        - RandomForest: contribution = importance_i * ((value_i - mean_i) / std_i)
+        Retorna lista ordenada por |contribucion| descendente.
+        """
+        stats_key = self.stats.get(model_key, {}).get(target)
+        if not stats_key:
+            # Intentar fallback a global
+            stats_key = self.stats.get("global", {}).get(target)
+        if not stats_key:
+            return None
+
+        model_type = stats_key.get("model_type")
+        means = stats_key.get("feature_means", {})
+        stds = stats_key.get("feature_stds", {})
+
+        contributions = []
+
+        for col in FEATURE_COLUMNS:
+            val = features.get(col, 0)
+            mean = means.get(col, 0)
+            std = stds.get(col, 1)
+
+            if model_type == "logistic":
+                coefs = stats_key.get("coefficients", {})
+                coef = coefs.get(col, 0)
+                contrib = coef * (val - mean)
+            elif model_type == "random_forest":
+                importances = stats_key.get("feature_importances", {})
+                imp = importances.get(col, 0)
+                safe_std = std if std > 0.001 else 1.0
+                contrib = imp * ((val - mean) / safe_std)
+            else:
+                continue
+
+            direction = "incrementa" if contrib > 0 else "reduce"
+            contributions.append({
+                "feature": col,
+                "label": FEATURE_LABELS.get(col, col),
+                "valor": round(val, 2),
+                "media_carrera": round(mean, 2),
+                "contribucion": round(float(contrib), 4),
+                "direccion": direction,
+            })
+
+        contributions.sort(key=lambda x: abs(x["contribucion"]), reverse=True)
+        return contributions[:top_n]
+
     def predict_single(self, db: Session, student_id: int) -> Optional[dict]:
-        """Prediccion individual con features detalladas."""
+        """Prediccion individual con features detalladas y explicaciones XAI."""
         if not self._loaded:
             if not self.load_models():
                 return None
@@ -206,7 +286,13 @@ class Predictor:
 
         if "desercion" in models:
             result["prob_desercion"] = round(float(models["desercion"].predict_proba(X)[0, 1]), 4)
+            result["explicacion_desercion"] = self._compute_explanations(
+                features, model_key, "desercion"
+            )
         if "reprobacion" in models:
             result["prob_reprobacion"] = round(float(models["reprobacion"].predict_proba(X)[0, 1]), 4)
+            result["explicacion_reprobacion"] = self._compute_explanations(
+                features, model_key, "reprobacion"
+            )
 
         return result
