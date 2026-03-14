@@ -63,16 +63,36 @@ def export_estudiantes_excel(
     carrera: Optional[str] = None,
     nivel: Optional[int] = None,
     nivel_riesgo: Optional[str] = None,
+    periodo: Optional[str] = None,
     columnas: str = Query("cedula,nombre,correo_institucional,carrera,nivel_academico,nivel_riesgo", description="Columnas separadas por coma"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Exporta estudiantes a Excel con filtros y columnas seleccionables."""
+    """Exporta estudiantes a Excel con filtros y columnas seleccionables.
+    periodo: 'actual' o None = semestre actual, 'P60'-'P67' = histórico, 'todos' = todos.
+    """
     try:
         from openpyxl import Workbook
         from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
     except ImportError:
         raise HTTPException(status_code=500, detail="openpyxl no instalado")
+
+    from ..models import Grade as _Grade
+
+    periodo_filter = periodo if periodo else "actual"
+
+    # Si es período histórico, filtrar estudiantes por quienes tienen calificaciones en ese período
+    student_ids_in_periodo = None
+    if periodo_filter not in ("actual", "todos"):
+        grade_sids = (
+            db.query(_Grade.student_id)
+            .filter(_Grade.periodo == periodo_filter)
+            .distinct()
+            .all()
+        )
+        student_ids_in_periodo = set(sid for (sid,) in grade_sids)
+        if not student_ids_in_periodo:
+            raise HTTPException(status_code=404, detail=f"No hay calificaciones para el período {periodo_filter}")
 
     # Filtrar estudiantes
     query = db.query(Student)
@@ -82,6 +102,8 @@ def export_estudiantes_excel(
         query = query.filter(Student.nivel_academico == nivel)
     if nivel_riesgo:
         query = query.filter(Student.nivel_riesgo == nivel_riesgo)
+    if student_ids_in_periodo is not None:
+        query = query.filter(Student.id.in_(student_ids_in_periodo))
     query = query.order_by(Student.carrera, Student.nivel_academico, Student.nombre)
     students = query.all()
 
@@ -157,6 +179,10 @@ def export_estudiantes_excel(
 
     # Filtro aplicado
     filter_desc = "Filtros: "
+    if periodo_filter and periodo_filter != "actual":
+        filter_desc += f"Período={periodo_filter} "
+    else:
+        filter_desc += "Período=Semestre actual "
     if carrera:
         filter_desc += f"Carrera={carrera} "
     if nivel:
@@ -164,7 +190,7 @@ def export_estudiantes_excel(
     if nivel_riesgo:
         filter_desc += f"Riesgo={nivel_riesgo} "
     if not carrera and not nivel and not nivel_riesgo:
-        filter_desc += "Ninguno (todos)"
+        filter_desc += "(sin filtros adicionales)"
     ws.cell(row=summary_row + 2, column=1, value=filter_desc).font = Font(size=9, color="888888")
 
     # Freeze header row

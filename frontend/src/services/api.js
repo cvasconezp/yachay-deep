@@ -132,6 +132,7 @@ class ApiClient {
     const qs = new URLSearchParams(params).toString();
     return this.get(`/analytics/resumen${qs ? "?" + qs : ""}`);
   }
+  getPeriodosDisponibles() { return this.get("/analytics/periodos"); }
 
   // Predictions — ML (Fase 2)
   trainModel() { return this.post("/predictions/train", {}); }

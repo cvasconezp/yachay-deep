@@ -597,9 +597,33 @@ def get_tutorias_por_asignatura(
 
 # ─── Módulo 8.5: Resumen de Datos ────────────────────────────────────────────
 
+@router.get("/periodos")
+def get_periodos_disponibles(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Lista de períodos disponibles en calificaciones."""
+    periodos_raw = (
+        db.query(Grade.periodo)
+        .distinct()
+        .all()
+    )
+    periodos = []
+    for (p,) in periodos_raw:
+        if p is None:
+            periodos.append({"key": "actual", "label": "Semestre actual"})
+        else:
+            periodos.append({"key": p, "label": p})
+    # Ordenar: "actual" primero, luego por key descendente (P67 > P60)
+    periodos.sort(key=lambda x: ("0" if x["key"] == "actual" else "1" + x["key"]), reverse=True)
+    periodos.reverse()
+    return periodos
+
+
 @router.get("/resumen")
 def get_resumen_datos(
     carrera: Optional[str] = None,
+    periodo: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -607,25 +631,42 @@ def get_resumen_datos(
     Resumen estadístico general y por carrera:
     estudiantes, niveles, reprobados, repitentes, desertores,
     promedio calificaciones, docentes, ciudades, edad promedio.
+    Filtra por período: "actual" = semestre actual, "P60"-"P67" = históricos.
     """
     today = date.today()
 
-    # --- Base query de estudiantes ---
-    base_q = db.query(Student)
-    if carrera:
-        base_q = base_q.filter(func.lower(Student.carrera).contains(carrera.lower()))
-    students = base_q.all()
+    # --- Determinar filtro de período para calificaciones ---
+    # periodo=None o "actual" → Grade.periodo IS NULL (semestre actual)
+    # periodo="P60" → Grade.periodo == "P60"
+    # periodo="todos" → sin filtro de período
+    periodo_filter = periodo if periodo else "actual"
 
-    if not students:
-        return {"global": {}, "por_carrera": []}
-
-    student_ids = [s.id for s in students]
-
-    # --- Calificaciones del semestre actual ---
-    grades_q = db.query(Grade).filter(Grade.periodo.is_(None))
+    # --- Calificaciones del período seleccionado ---
+    grades_q = db.query(Grade)
+    if periodo_filter == "actual":
+        grades_q = grades_q.filter(Grade.periodo.is_(None))
+    elif periodo_filter != "todos":
+        grades_q = grades_q.filter(Grade.periodo == periodo_filter)
     if carrera:
         grades_q = grades_q.filter(func.lower(Grade.carrera).contains(carrera.lower()))
     grades = grades_q.all()
+
+    # Obtener IDs de estudiantes que tienen calificaciones en este período
+    grade_student_ids = set(g.student_id for g in grades)
+
+    # --- Base query de estudiantes ---
+    # Si hay período histórico, filtrar solo estudiantes con calificaciones en ese período
+    base_q = db.query(Student)
+    if carrera:
+        base_q = base_q.filter(func.lower(Student.carrera).contains(carrera.lower()))
+    if periodo_filter != "actual" and periodo_filter != "todos" and grade_student_ids:
+        base_q = base_q.filter(Student.id.in_(grade_student_ids))
+    students = base_q.all()
+
+    if not students:
+        return {"global": {}, "por_carrera": [], "periodos_disponibles": []}
+
+    student_ids = set(s.id for s in students)
 
     # Reprobados: estudiantes con al menos una nota < 70
     reprobados_ids = set()
@@ -637,11 +678,15 @@ def get_resumen_datos(
             if g.numero_repitencias and g.numero_repitencias > 0:
                 repitentes_ids.add(g.student_id)
 
-    # Docentes únicos del semestre actual
+    # Docentes únicos del período
     docentes_q = (
         db.query(func.count(distinct(Grade.docente)))
-        .filter(Grade.periodo.is_(None), Grade.docente.isnot(None), Grade.docente != "")
+        .filter(Grade.docente.isnot(None), Grade.docente != "")
     )
+    if periodo_filter == "actual":
+        docentes_q = docentes_q.filter(Grade.periodo.is_(None))
+    elif periodo_filter != "todos":
+        docentes_q = docentes_q.filter(Grade.periodo == periodo_filter)
     if carrera:
         docentes_q = docentes_q.filter(func.lower(Grade.carrera).contains(carrera.lower()))
     total_docentes = docentes_q.scalar() or 0
@@ -696,9 +741,10 @@ def get_resumen_datos(
                 edades.append(edad)
         promedio_edad = round(sum(edades) / len(edades), 1) if edades else None
 
-        # Promedio calificaciones
-        notas = [s.promedio_calificaciones for s in student_list if s.promedio_calificaciones is not None]
-        promedio_calif = round(sum(notas) / len(notas), 1) if notas else None
+        # Promedio calificaciones (del período seleccionado via grades)
+        sid_set_for_grades = set(s.id for s in student_list)
+        notas_periodo = [g.nota_final for g in grade_list if g.student_id in sid_set_for_grades and g.nota_final is not None]
+        promedio_calif = round(sum(notas_periodo) / len(notas_periodo), 1) if notas_periodo else None
 
         # Estado matrícula
         estados = {}
@@ -746,13 +792,16 @@ def get_resumen_datos(
             carreras_map[c] = []
         carreras_map[c].append(s)
 
-    # Docentes por carrera
-    docentes_carrera_q = (
+    # Docentes por carrera (del período seleccionado)
+    docentes_carrera_q_base = (
         db.query(Grade.carrera, func.count(distinct(Grade.docente)))
-        .filter(Grade.periodo.is_(None), Grade.docente.isnot(None), Grade.docente != "")
-        .group_by(Grade.carrera)
-        .all()
+        .filter(Grade.docente.isnot(None), Grade.docente != "")
     )
+    if periodo_filter == "actual":
+        docentes_carrera_q_base = docentes_carrera_q_base.filter(Grade.periodo.is_(None))
+    elif periodo_filter != "todos":
+        docentes_carrera_q_base = docentes_carrera_q_base.filter(Grade.periodo == periodo_filter)
+    docentes_carrera_q = docentes_carrera_q_base.group_by(Grade.carrera).all()
     docentes_por_carrera = {r[0]: r[1] for r in docentes_carrera_q}
 
     por_carrera = []

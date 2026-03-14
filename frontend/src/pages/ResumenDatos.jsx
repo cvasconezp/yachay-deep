@@ -36,7 +36,9 @@ export default function ResumenDatos() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [carreras, setCarreras] = useState([]);
+  const [periodos, setPeriodos] = useState([]);
   const [filtroCarrera, setFiltroCarrera] = useState("");
+  const [filtroPeriodo, setFiltroPeriodo] = useState("actual");
 
   // Export state
   const [exportOpen, setExportOpen] = useState(false);
@@ -45,6 +47,7 @@ export default function ResumenDatos() {
   const [exportCarrera, setExportCarrera] = useState("");
   const [exportNivel, setExportNivel] = useState("");
   const [exportRiesgo, setExportRiesgo] = useState("");
+  const [exportPeriodo, setExportPeriodo] = useState("actual");
   const [exporting, setExporting] = useState(false);
 
   // Carrera detail expand
@@ -52,6 +55,7 @@ export default function ResumenDatos() {
 
   useEffect(() => {
     api.getCarreras().then(setCarreras).catch(() => {});
+    api.getPeriodosDisponibles().then(setPeriodos).catch(() => {});
     // Load available columns
     const token = localStorage.getItem("yd_token");
     fetch(`${BASE_URL}/export/columnas-disponibles`, {
@@ -68,6 +72,7 @@ export default function ResumenDatos() {
     try {
       const params = {};
       if (filtroCarrera) params.carrera = filtroCarrera;
+      if (filtroPeriodo && filtroPeriodo !== "actual") params.periodo = filtroPeriodo;
       const result = await api.getResumenDatos(params);
       setData(result);
     } catch (e) {
@@ -75,7 +80,7 @@ export default function ResumenDatos() {
     } finally {
       setLoading(false);
     }
-  }, [filtroCarrera]);
+  }, [filtroCarrera, filtroPeriodo]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -100,6 +105,7 @@ export default function ResumenDatos() {
       if (exportCarrera) params.set("carrera", exportCarrera);
       if (exportNivel) params.set("nivel", exportNivel);
       if (exportRiesgo) params.set("nivel_riesgo", exportRiesgo);
+      if (exportPeriodo && exportPeriodo !== "actual") params.set("periodo", exportPeriodo);
 
       const token = localStorage.getItem("yd_token");
       const resp = await fetch(`${BASE_URL}/export/estudiantes/excel?${params.toString()}`, {
@@ -151,6 +157,11 @@ export default function ResumenDatos() {
 
           {/* Export filters */}
           <div className="flex flex-wrap gap-2 mb-4">
+            <select value={exportPeriodo} onChange={e => setExportPeriodo(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 min-w-[180px]">
+              {periodos.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
+              {periodos.length === 0 && <option value="actual">Semestre actual</option>}
+            </select>
             <select value={exportCarrera} onChange={e => setExportCarrera(e.target.value)}
               className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 min-w-[160px]">
               <option value="">Todas las carreras</option>
@@ -207,6 +218,11 @@ export default function ResumenDatos() {
 
       {/* Filter */}
       <div className="flex flex-wrap gap-2 mb-5">
+        <select value={filtroPeriodo} onChange={e => setFiltroPeriodo(e.target.value)}
+          className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[180px]">
+          {periodos.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
+          {periodos.length === 0 && <option value="actual">Semestre actual</option>}
+        </select>
         <select value={filtroCarrera} onChange={e => setFiltroCarrera(e.target.value)}
           className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[160px]">
           <option value="">Todas las carreras</option>
