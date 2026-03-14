@@ -22,7 +22,7 @@ export function PredictionBadge({ value, label }) {
     : pct >= 40 ? "text-orange-700 bg-orange-100"
     : "text-green-700 bg-green-100";
   const riskText = pct >= 70 ? "Alto" : pct >= 40 ? "Moderado" : "Bajo";
-  const tooltipText = label === "Desercion"
+  const tooltipText = label === "Deserción"
     ? `${riskText} riesgo de deserción (${pct}%). Modelo ML basado en: promedio, nota mínima, dispersión de notas y materias reprobadas. Comparado contra patrones históricos P60-P67.`
     : `${label}: ${pct}%`;
   return (

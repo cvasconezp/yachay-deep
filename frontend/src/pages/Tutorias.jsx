@@ -26,7 +26,7 @@ export default function Tutorias() {
       setTutorias(data);
       setCarreras(carrerasData);
     } catch (e) {
-      setError("No se pudieron cargar las listas de tutorias.");
+      setError("No se pudieron cargar las listas de tutorías.");
     } finally {
       setLoading(false);
     }
@@ -55,9 +55,9 @@ export default function Tutorias() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-1">Tutorias por Asignatura</h1>
+      <h1 className="text-2xl font-bold text-gray-900 mb-1">Tutorías por Asignatura</h1>
       <p className="text-gray-500 text-sm mb-6">
-        Listas de convocatoria a tutoria agrupadas por materia con motivos de riesgo
+        Listas de convocatoria a tutoría agrupadas por materia con motivos de riesgo
       </p>
 
       {error && (
@@ -162,11 +162,11 @@ export default function Tutorias() {
                       <tr>
                         <th className="text-left px-4 py-2 text-xs font-medium text-gray-500">Estudiante</th>
                         <th className="text-left px-4 py-2 text-xs font-medium text-gray-500">Contacto</th>
-                        <th className="text-center px-4 py-2 text-xs font-medium text-gray-500 cursor-help" title="Nivel de riesgo academico del estudiante: Alto, Medio o Bajo">Riesgo</th>
+                        <th className="text-center px-4 py-2 text-xs font-medium text-gray-500 cursor-help" title="Nivel de riesgo académico del estudiante: Alto, Medio o Bajo">Riesgo</th>
                         <th className="text-center px-4 py-2 text-xs font-medium text-gray-500">Nota</th>
                         <th className="text-left px-4 py-2 text-xs font-medium text-gray-500 cursor-help" title="Factores de riesgo identificados: bajo rendimiento, inactividad AVAC, materias reprobadas, etc.">Motivos</th>
-                        <th className="text-center px-4 py-2 text-xs font-medium text-gray-500 cursor-help" title="Numero de intervenciones o tutorias previas registradas para este estudiante">Interv. previas</th>
-                        <th className="text-center px-4 py-2 text-xs font-medium text-gray-500">Accion</th>
+                        <th className="text-center px-4 py-2 text-xs font-medium text-gray-500 cursor-help" title="Número de intervenciones o tutorías previas registradas para este estudiante">Interv. previas</th>
+                        <th className="text-center px-4 py-2 text-xs font-medium text-gray-500">Acción</th>
                       </tr>
                     </thead>
                     <tbody>

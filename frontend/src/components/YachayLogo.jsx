@@ -46,7 +46,7 @@ export function YachayLogo({ size = 48, className = "", showText = false }) {
             Yachay Deep
           </span>
           <span className="text-xs text-brand-ice opacity-80 leading-tight">
-            Monitoreo Academico
+            Monitoreo Académico
           </span>
         </div>
       )}

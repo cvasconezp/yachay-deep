@@ -5,13 +5,13 @@ const PODCASTS = [
   {
     title: "IA para evitar el abandono universitario",
     description:
-      "Como la inteligencia artificial y la analitica del aprendizaje pueden anticipar el riesgo de desercion y activar intervenciones oportunas en educacion superior.",
+      "Cómo la inteligencia artificial y la analítica del aprendizaje pueden anticipar el riesgo de deserción y activar intervenciónes oportunas en educación superior.",
     file: "/IA_para_evitar_el_abandono_universitario.m4a",
   },
   {
     title: "El Excel que frena el abandono universitario",
     description:
-      "El origen de Yachay Deep: como un sistema construido en Excel con macros VBA evoluciono hacia una plataforma web de inteligencia academica preventiva.",
+      "El origen de Yachay Deep: cómo un sistema construido en Excel con macros VBA evolucióno hacia una plataforma web de inteligencia académica preventiva.",
     file: "/El_Excel_que_frena_el_abandono_universitario.m4a",
   },
 ];
@@ -19,61 +19,61 @@ const PODCASTS = [
 const FRAMEWORK_PHASES = [
   {
     phase: "Fase 1",
-    title: "Analitica descriptiva y diagnostica",
+    title: "Analítica descriptiva y diagnóstica",
     status: "active",
     items: [
       "Monitoreo e indicadores de compromiso",
       "Dashboards de riesgo por estudiante, asignatura y docente",
-      "Clasificacion de riesgo multinivel (Alto / Medio / Bajo)",
-      "Fichas individuales con historial academico",
-      "Registro y seguimiento de intervenciones",
-      "Listas de tutoria por asignatura",
+      "Clasificación de riesgo multinivel (Alto / Medio / Bajo)",
+      "Fichas individuales con historial académico",
+      "Registro y seguimiento de intervenciónes",
+      "Listas de tutoría por asignatura",
     ],
   },
   {
     phase: "Fase 2",
-    title: "Analitica predictiva",
+    title: "Analítica predictiva",
     status: "upcoming",
     items: [
-      "Modelos de prediccion de abandono y reprobacion",
+      "Modelos de predicción de abandono y reprobación",
       "Logistic Regression, Random Forest, XGBoost",
-      "Entrenamiento con datos historicos consolidados",
+      "Entrenamiento con datos históricos consolidados",
     ],
   },
   {
     phase: "Fase 3",
-    title: "Explicacion del riesgo (XAI)",
+    title: "Explicación del riesgo (XAI)",
     status: "upcoming",
     items: [
       "SHAP, LIME, importance ranking",
-      "Explicar por que el estudiante esta en riesgo",
+      "Explicar por que el estudiante está en riesgo",
     ],
   },
   {
     phase: "Fase 4",
-    title: "Recomendaciones automaticas",
+    title: "Recomendaciones automáticas",
     status: "upcoming",
     items: [
-      "Analitica prescriptiva",
-      "Sugerencias de intervencion automatizadas",
+      "Analítica prescriptiva",
+      "Sugerencias de intervención automatizadas",
     ],
   },
   {
     phase: "Fase 5",
-    title: "Integracion LMS completa",
+    title: "Integración LMS completa",
     status: "upcoming",
     items: [
       "APIs de Moodle/Canvas",
-      "Actualizacion en tiempo real",
+      "Actualización en tiempo real",
       "Trazabilidad institucional completa",
     ],
   },
 ];
 
 const CAPAS = [
-  { name: "Learning Analytics", desc: "Analisis de comportamiento educativo y compromiso academico" },
-  { name: "Early Warning System", desc: "Identificacion de senales de riesgo antes del fracaso" },
-  { name: "Decision Support System", desc: "Soporte para la toma de decisiones pedagogicas e institucionales" },
+  { name: "Learning Analytics", desc: "Análisis de comportamiento educativo y compromiso académico" },
+  { name: "Early Warning System", desc: "Identificación de señales de riesgo antes del fracaso" },
+  { name: "Decision Support System", desc: "Soporte para la toma de decisiones pedagógicas e institucionales" },
 ];
 
 export default function About() {
@@ -95,21 +95,21 @@ export default function About() {
       {/* Resumen ejecutivo */}
       <Section title="Resumen ejecutivo">
         <p className="text-gray-700 leading-relaxed mb-4">
-          <strong>Yachay Deep</strong> es un sistema de inteligencia academica preventiva orientado a la permanencia
-          estudiantil en educacion superior, especialmente en entornos virtuales o hibridos. Su proposito es
+          <strong>Yachay Deep</strong> es un sistema de inteligencia académica preventiva orientado a la permanencia
+          estudiantil en educación superior, especialmente en entornos virtuales o híbridos. Su propósito es
           identificar tempranamente estudiantes en riesgo, comprender los factores que explican dicho riesgo y
-          apoyar decisiones pedagogicas e institucionales oportunas.
+          apoyar decisiones pedagógicas e institucionales oportunas.
         </p>
         <p className="text-gray-700 leading-relaxed mb-4">
-          Desde una formulacion cientifica rigurosa, Yachay Deep se define como un{" "}
+          Desde una formulación científica rigurosa, Yachay Deep se define como un{" "}
           <em>Learning Analytics-Driven Early Warning Decision Support System</em>: un sistema en el que los
           datos educativos son recopilados y procesados, se analizan mediante Learning Analytics, se transforman en
           alertas tempranas propias de un Early Warning System, y finalmente se convierten en acciones concretas
           mediante un Decision Support System.
         </p>
         <p className="text-gray-600 leading-relaxed text-sm">
-          Su valor esta precisamente en la integracion de las tres capas, lo que lo distingue de soluciones que
-          solo abordan una dimension del problema.
+          Su valor está precisamente en la integración de las tres capas, lo que lo distingue de soluciones que
+          solo abordan una dimensión del problema.
         </p>
       </Section>
 
@@ -134,16 +134,16 @@ export default function About() {
       {/* Enfoque multinivel */}
       <Section title="Enfoque multinivel del riesgo">
         <p className="text-gray-600 text-sm mb-4">
-          El riesgo estudiantil no se explica solo por variables individuales. Yachay Deep analiza simultaneamente
-          multiples niveles:
+          El riesgo estudiantil no se explica solo por variables individuales. Yachay Deep analiza simultáneamente
+          múltiples niveles:
         </p>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           {[
             { level: "Estudiante", icon: "person", desc: "Comportamiento individual, accesos, tareas, calificaciones" },
-            { level: "Asignatura", icon: "book", desc: "Promedios, aprobacion, repitencia, materias criticas" },
-            { level: "Docente", icon: "school", desc: "Carga academica, gestion de cursos, concentracion de riesgo" },
-            { level: "Administrativo", icon: "receipt", desc: "Matricula, deuda, bloqueos financieros" },
-            { level: "Intervencion", icon: "support", desc: "Acciones institucionales, seguimiento, impacto" },
+            { level: "Asignatura", icon: "book", desc: "Promedios, aprobación, repitencia, materias críticas" },
+            { level: "Docente", icon: "school", desc: "Carga académica, gestión de cursos, concentración de riesgo" },
+            { level: "Administrativo", icon: "receipt", desc: "Matrícula, deuda, bloqueos financieros" },
+            { level: "Intervención", icon: "support", desc: "Acciones institucionales, seguimiento, impacto" },
           ].map((n, i) => (
             <div key={i} className="bg-white border border-gray-200 rounded-xl p-4 text-center hover:shadow-md transition-shadow">
               <div className="text-2xl mb-2">
@@ -157,7 +157,7 @@ export default function About() {
       </Section>
 
       {/* Hoja de ruta */}
-      <Section title="Hoja de ruta de madurez analitica">
+      <Section title="Hoja de ruta de madurez analítica">
         <div className="space-y-3">
           {FRAMEWORK_PHASES.map((p, i) => (
             <div
@@ -204,12 +204,12 @@ export default function About() {
       <Section title="Principios rectores">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {[
-            ["Prevencion temprana", "No esperar al fracaso. Detectar senales previas de riesgo."],
-            ["Integracion humano-maquina", "La analitica apoya, orienta y prioriza la intervencion humana."],
+            ["Prevención temprana", "No esperar al fracaso. Detectar señales previas de riesgo."],
+            ["Integración humano-máquina", "La analítica apoya, orienta y prioriza la intervención humana."],
             ["Decisiones basadas en evidencia", "Datos dispersos transformados en evidencia accionable."],
-            ["Ciclo cerrado", "Deteccion, alerta, intervencion, seguimiento y evaluacion."],
+            ["Ciclo cerrado", "Detección, alerta, intervención, seguimiento y evaluación."],
             ["Explicabilidad", "El riesgo debe poder explicarse con claridad a docentes y gestores."],
-            ["Escalabilidad", "Sirve para investigacion, tesis, software real y proteccion intelectual."],
+            ["Escalabilidad", "Sirve para investigación, tesis, software real y protección intelectual."],
           ].map(([title, desc], i) => (
             <div key={i} className="flex gap-3 bg-white border border-gray-200 rounded-lg p-4">
               <div className="w-8 h-8 bg-brand text-white rounded-lg flex items-center justify-center font-bold text-sm flex-shrink-0">
@@ -227,7 +227,7 @@ export default function About() {
       {/* Podcasts */}
       <Section title="Podcasts">
         <p className="text-gray-500 text-sm mb-4">
-          Episodios que explican el contexto, motivacion y evolucion de Yachay Deep.
+          Episodios que explican el contexto, motivación y evolución de Yachay Deep.
         </p>
         <div className="space-y-4">
           {PODCASTS.map((pod, i) => (
@@ -257,8 +257,8 @@ export default function About() {
         </div>
       </Section>
 
-      {/* Stack tecnologico */}
-      <Section title="Stack tecnologico">
+      {/* Stack tecnológico */}
+      <Section title="Stack tecnológico">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
             { cat: "Backend", items: "FastAPI, Python, SQLAlchemy, Pandas" },
@@ -285,7 +285,7 @@ export default function About() {
               <div className="text-white">
                 <h3 className="text-xl font-bold">Carlos Vasconez-Paredes</h3>
                 <p className="text-blue-200 text-sm mt-1">
-                  Docente | Gestor de Analitica del Aprendizaje | Investigador
+                  Docente | Gestor de Analítica del Aprendizaje | Investigador
                 </p>
               </div>
             </div>
@@ -293,16 +293,16 @@ export default function About() {
 
           <div className="p-6">
             <p className="text-gray-700 text-sm leading-relaxed mb-5">
-              Docente, gestor de Analitica del Aprendizaje e investigador en el campo de la innovacion educativa,
-              la analitica del aprendizaje y la transformacion digital en educacion superior. Su trabajo se centra
-              en la integracion de pedagogia, ciencia de datos y tecnologias emergentes para mejorar la permanencia
-              y el exito academico de los estudiantes.
+              Docente, gestor de Analítica del Aprendizaje e investigador en el campo de la innovación educativa,
+              la analítica del aprendizaje y la transformación digital en educación superior. Su trabajo se centra
+              en la integración de pedagogía, ciencia de datos y tecnologías emergentes para mejorar la permanencia
+              y el éxito académico de los estudiantes.
             </p>
             <p className="text-gray-700 text-sm leading-relaxed mb-5">
-              Creador de Yachay Deep, su experiencia combina docencia, coordinacion academica, monitoreo de
-              estudiantes en linea y desarrollo de soluciones basadas en datos para la gestion educativa. Sus
-              intereses de investigacion se enfocan en Learning Analytics, inteligencia artificial aplicada a la
-              educacion, sistemas de alerta temprana y modelos predictivos para la retencion estudiantil.
+              Creador de Yachay Deep, su experiencia combina docencia, coordinación académica, monitoreo de
+              estudiantes en línea y desarrollo de soluciones basadas en datos para la gestión educativa. Sus
+              intereses de investigación se enfocan en Learning Analytics, inteligencia artificial aplicada a la
+              educación, sistemas de alerta temprana y modelos predictivos para la retención estudiantil.
             </p>
 
             {/* Links */}
@@ -329,7 +329,7 @@ export default function About() {
               />
               <SocialLink
                 href="https://scholar.google.com/citations?user=w46QDacAAAAJ&hl=es"
-                label="Google Academico"
+                label="Google Académico"
                 color="bg-[#4285F4]"
                 icon={
                   <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">

@@ -51,9 +51,9 @@ export default function Asignaturas() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-1">Analitica de Asignaturas</h1>
+      <h1 className="text-2xl font-bold text-gray-900 mb-1">Analítica de Asignaturas</h1>
       <p className="text-gray-500 text-sm mb-6">
-        Vista agregada por materia: promedios, aprobacion, reprobacion, repitencia y materias criticas
+        Vista agregada por materia: promedios, aprobación, reprobación, repitencia y materias críticas
       </p>
 
       {error && (
@@ -71,7 +71,7 @@ export default function Asignaturas() {
             color="blue"
           />
           <SummaryCard
-            label="Materias criticas"
+            label="Materias críticas"
             value={asignaturas.filter(a =>
               (a.porcentaje_reprobacion && a.porcentaje_reprobacion > 50) ||
               (a.promedio_general && a.promedio_general < 60)
@@ -129,7 +129,7 @@ export default function Asignaturas() {
             onChange={e => setFiltros(f => ({ ...f, solo_criticas: e.target.checked }))}
             className="rounded"
           />
-          Solo materias criticas
+          Solo materias críticas
         </label>
 
         <div className="ml-auto text-sm text-gray-500">
@@ -152,8 +152,8 @@ export default function Asignaturas() {
                 <th className="text-center px-4 py-3 font-semibold text-gray-700">Nivel</th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-700">Estudiantes</th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-700 cursor-help" title="Promedio general de notas finales de la asignatura (escala 0-100)">Promedio</th>
-                <th className="text-center px-4 py-3 font-semibold text-gray-700 cursor-help" title="Porcentaje de estudiantes con nota final >= 70">Aprobacion</th>
-                <th className="text-center px-4 py-3 font-semibold text-gray-700 cursor-help" title="Porcentaje de estudiantes con nota final < 70">Reprobacion</th>
+                <th className="text-center px-4 py-3 font-semibold text-gray-700 cursor-help" title="Porcentaje de estudiantes con nota final >= 70">Aprobación</th>
+                <th className="text-center px-4 py-3 font-semibold text-gray-700 cursor-help" title="Porcentaje de estudiantes con nota final < 70">Reprobación</th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-700 cursor-help" title="Estudiantes que estan cursando la asignatura por segunda vez o mas">Repitentes</th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-700 cursor-help" title="Estudiantes en riesgo alto: nota < 60, materias reprobadas o inactividad en AVAC">Riesgo Alto</th>
               </tr>
@@ -250,9 +250,9 @@ export default function Asignaturas() {
                       <th className="text-left px-3 py-2 font-medium text-gray-600">Estudiante</th>
                       <th className="text-center px-3 py-2 font-medium text-gray-600">Nota</th>
                       <th className="text-center px-3 py-2 font-medium text-gray-600">Riesgo</th>
-                      <th className="px-3 py-2 font-medium text-gray-600 w-28 cursor-help" title="Indice de compromiso: acceso AVAC (30%), tareas (30%), rendimiento (25%), matricula (15%)">Compromiso</th>
-                      <th className="text-center px-3 py-2 font-medium text-gray-600 cursor-help" title="Dias desde el ultimo acceso al Aula Virtual (AVAC)">Dias AVAC</th>
-                      <th className="text-center px-3 py-2 font-medium text-gray-600 cursor-help" title="Numero de veces que el estudiante ha cursado esta asignatura previamente">Repitencias</th>
+                      <th className="px-3 py-2 font-medium text-gray-600 w-28 cursor-help" title="Índice de compromiso: acceso AVAC (30%), tareas (30%), rendimiento (25%), matrícula (15%)">Compromiso</th>
+                      <th className="text-center px-3 py-2 font-medium text-gray-600 cursor-help" title="Días desde el último acceso al Aula Virtual (AVAC)">Días AVAC</th>
+                      <th className="text-center px-3 py-2 font-medium text-gray-600 cursor-help" title="Número de veces que el estudiante ha cursado esta asignatura previamente">Repitencias</th>
                     </tr>
                   </thead>
                   <tbody>
