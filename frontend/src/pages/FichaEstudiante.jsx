@@ -230,14 +230,28 @@ export default function FichaEstudiante() {
   const [searchResults, setSearchResults] = useState([]);
   const [ficha, setFicha] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [carreras, setCarreras] = useState([]);
   const [selectedCarrera, setSelectedCarrera] = useState("");
   const searchTimeout = useRef(null);
+  const searchAbort = useRef(null);
+  const searchContainerRef = useRef(null);
 
   // Cargar lista de carreras al montar
   useEffect(() => {
     api.getCarreras().then(setCarreras).catch(() => {});
+  }, []);
+
+  // Cerrar dropdown al hacer click fuera
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target)) {
+        setSearchResults([]);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   useEffect(() => {
@@ -247,13 +261,18 @@ export default function FichaEstudiante() {
   // Re-buscar cuando cambia la carrera seleccionada
   const triggerSearch = (q, carrera) => {
     clearTimeout(searchTimeout.current);
+    if (searchAbort.current) searchAbort.current.abort();
     // Si hay carrera seleccionada, buscar incluso sin query (lista de carrera)
     if (!carrera && q.length < 2) { setSearchResults([]); return; }
     searchTimeout.current = setTimeout(async () => {
+      const controller = new AbortController();
+      searchAbort.current = controller;
       try {
-        const results = await api.searchStudents(q, carrera);
+        const results = await api.searchStudents(q, carrera, { signal: controller.signal });
         setSearchResults(results);
-      } catch (e) { console.error(e); }
+      } catch (e) {
+        if (e.name !== "AbortError") console.error(e);
+      }
     }, 300);
   };
 
@@ -269,6 +288,7 @@ export default function FichaEstudiante() {
 
   const loadFicha = async (id) => {
     setLoading(true);
+    setError(null);
     setSearchResults([]);
     try {
       const data = await api.getFicha(id);
@@ -277,6 +297,7 @@ export default function FichaEstudiante() {
       navigate(`/ficha/${id}`, { replace: true });
     } catch (e) {
       console.error(e);
+      setError(e.message || "Error al cargar la ficha del estudiante");
     } finally {
       setLoading(false);
     }
@@ -284,13 +305,17 @@ export default function FichaEstudiante() {
 
   const handleExportPDF = async () => {
     if (!ficha) return;
-    const blob = await api.exportFichaPDF(ficha.id);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `ficha_${(ficha.nombre || ficha.id).toString().replace(/\s+/g, "_")}.pdf`;
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      const blob = await api.exportFichaPDF(ficha.id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `ficha_${(ficha.nombre || ficha.id).toString().replace(/\s+/g, "_")}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError("Error al exportar PDF: " + (e.message || "intenta de nuevo"));
+    }
   };
 
   // Construir mapa de cursos AVAC
@@ -364,7 +389,7 @@ export default function FichaEstudiante() {
         </select>
 
         {/* Buscador */}
-        <div className="relative flex-1">
+        <div className="relative flex-1" ref={searchContainerRef}>
           <input
             type="text"
             value={query}
@@ -389,6 +414,14 @@ export default function FichaEstudiante() {
           )}
         </div>
       </div>
+
+      {/* ── ERROR ─────────────────────────────────────────────────────── */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-4 flex items-center justify-between">
+          <span className="text-red-700 text-sm">{error}</span>
+          <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600 text-xs ml-4">Cerrar</button>
+        </div>
+      )}
 
       {/* ── FICHA COMPLETA ─────────────────────────────────────────────── */}
       {ficha && (
@@ -470,7 +503,6 @@ export default function FichaEstudiante() {
                   })()}
                   <PersonalRow label="Correo" value={ficha.correo} />
                   <PersonalRow label="Correo Ins." value={ficha.correo_institucional} />
-                  <PersonalRow label="Discapacidad" value={ficha?.discapacidad || "—"} />
                   <PersonalRow label="Fecha nac. y edad" value={
                     ficha?.fecha_nacimiento
                       ? `${parseLocalDate(ficha.fecha_nacimiento).toLocaleDateString("es-EC")} (${calcAge(ficha.fecha_nacimiento)} años)`
@@ -534,18 +566,15 @@ export default function FichaEstudiante() {
               </table>
 
               {/* Datos socioeconómicos */}
-              <SectionHeader>Datos socioeconómicos</SectionHeader>
+              <SectionHeader>Estado académico</SectionHeader>
               <table className="w-full border-collapse">
                 <tbody>
-                  <PersonalRow label="Nivel de beca" value="—" />
                   <tr className={ficha.estado_matricula === "Matriculado" ? "bg-green-50" : "bg-red-50"}>
                     <td className="text-right text-[11px] text-gray-500 font-semibold px-2 py-0.5 border border-gray-200 bg-[#F2F2F2] whitespace-nowrap w-28">Pago matrícula</td>
                     <td className={`text-[11px] px-2 py-0.5 border border-gray-200 font-semibold ${ficha.estado_matricula === "Matriculado" ? "text-green-700" : "text-red-600"}`}>
                       {ficha.estado_matricula || "—"}
                     </td>
                   </tr>
-                  <PersonalRow label="Empleabilidad" value="—" />
-                  <PersonalRow label="Madre o padre" value="—" />
                 </tbody>
               </table>
             </div>
@@ -945,46 +974,13 @@ export default function FichaEstudiante() {
             </div>
           </div>
 
-          {/* ═══ PRÁCTICAS PREPROFESIONALES ═══ */}
+          {/* ═══ PRÁCTICAS PREPROFESIONALES (próximamente) ═══ */}
           <div className="border-t border-gray-300">
             <div className="bg-[#1B3A6B] text-white px-4 py-1 text-[10px] font-bold uppercase tracking-wider">
               Prácticas Preprofesionales
             </div>
-            <div className="grid grid-cols-2 divide-x divide-gray-300 bg-white">
-              <table className="border-collapse w-full">
-                <tbody>
-                  {[
-                    ["Nombre práctica", "—"],
-                    ["IE Práctica", "—"],
-                    ["Ubicación IE", "—"],
-                    ["Distrito AMIE", "—"],
-                    ["Jurisdicción", "—"],
-                    ["Nombre autoridad", "—"],
-                    ["Cargo", "—"],
-                    ["Celular", "—"],
-                  ].map(([label, val]) => (
-                    <tr key={label}>
-                      <td className="bg-[#F2F2F2] border border-gray-200 text-right text-[11px] font-semibold text-gray-500 px-2 py-0.5 w-32 whitespace-nowrap">{label}</td>
-                      <td className="border border-gray-200 text-[11px] px-2 py-0.5 text-gray-300 italic">{val}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div className="p-3">
-                <div className="grid grid-cols-2 gap-2 text-[11px]">
-                  <div>
-                    <div className="bg-[#F2F2F2] text-center py-0.5 font-bold text-gray-600 border border-gray-200 mb-1">Sin membrete</div>
-                    <div className="text-center text-[#BF8F00] border border-gray-200 py-0.5 cursor-pointer hover:bg-yellow-50">Carta de solicitud</div>
-                    <div className="text-center text-[#BF8F00] border border-gray-200 py-0.5 cursor-pointer hover:bg-yellow-50 mt-0.5">Carta de solicitud</div>
-                  </div>
-                  <div>
-                    <div className="bg-[#F2F2F2] text-center py-0.5 font-bold text-gray-600 border border-gray-200 mb-1">Membretado</div>
-                    <div className="text-center text-[#BF8F00] border border-gray-200 py-0.5 cursor-pointer hover:bg-yellow-50">Carta de solicitud</div>
-                    <div className="text-center text-[#BF8F00] border border-gray-200 py-0.5 cursor-pointer hover:bg-yellow-50 mt-0.5">Carta de solicitud</div>
-                  </div>
-                  <div className="col-span-2 text-center text-[#BF8F00] border border-gray-200 py-0.5 cursor-pointer hover:bg-yellow-50">Carta compromiso</div>
-                </div>
-              </div>
+            <div className="bg-white py-4 text-center text-[11px] text-gray-400 italic">
+              Módulo en desarrollo — próximamente
             </div>
           </div>
 

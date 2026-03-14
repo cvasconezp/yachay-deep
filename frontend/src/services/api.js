@@ -48,7 +48,7 @@ class ApiClient {
     return response.json();
   }
 
-  get(path) { return this.request(path); }
+  get(path, options = {}) { return this.request(path, options); }
   post(path, body) { return this.request(path, { method: "POST", body: JSON.stringify(body) }); }
   put(path, body) { return this.request(path, { method: "PUT", body: JSON.stringify(body) }); }
   patch(path, body) { return this.request(path, { method: "PATCH", body: JSON.stringify(body) }); }
@@ -66,11 +66,11 @@ class ApiClient {
   listUsers() { return this.get("/auth/users"); }
 
   // Students
-  searchStudents(q, carrera = "") {
+  searchStudents(q, carrera = "", options = {}) {
     const params = new URLSearchParams();
     if (q) params.set("q", q);
     if (carrera) params.set("carrera", carrera);
-    return this.get(`/students/search?${params.toString()}`);
+    return this.get(`/students/search?${params.toString()}`, options);
   }
   getFicha(studentId) { return this.get(`/students/${studentId}/ficha`); }
 
