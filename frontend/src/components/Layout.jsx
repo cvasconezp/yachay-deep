@@ -46,7 +46,7 @@ export function Layout({ children }) {
     <div className="min-h-screen bg-gray-50 flex">
       {/* Sidebar */}
       <aside
-        className={`${sidebarOpen ? "w-64" : "w-16"} bg-brand text-white flex flex-col shadow-xl transition-all duration-300 relative flex-shrink-0`}
+        className={`${sidebarOpen ? "w-64" : "w-16"} bg-brand text-white flex flex-col shadow-xl transition-all duration-300 relative flex-shrink-0 sticky top-0 h-screen overflow-y-auto`}
       >
         {/* Botón toggle */}
         <button
