@@ -275,19 +275,43 @@ class ETLPipeline:
                 total_registros += n
                 logs.append(f"  → {n} registros históricos cargados")
 
-            # 8. Ejecutar predicciones ML si el modelo existe
+            # 8. Reentrenar modelos ML con datos históricos actualizados
+            try:
+                from ..ml.train import train_models
+                logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Reentrenando modelos ML (por carrera)...")
+                train_result = train_models(self.db)
+                if train_result.get("status") == "ok":
+                    carreras_modelo = len(train_result.get("carreras_con_modelo", []))
+                    carreras_fallback = len(train_result.get("carreras_fallback", []))
+                    logs.append(
+                        f"  → Modelos entrenados: {carreras_modelo} por carrera, "
+                        f"{carreras_fallback} usando global ({train_result.get('estudiantes', 0)} estudiantes)"
+                    )
+                else:
+                    logs.append(f"  ⚠️ Entrenamiento ML: {train_result.get('message', 'sin resultado')}")
+            except Exception as train_err:
+                logs.append(f"  ⚠️ Error en entrenamiento ML (no crítico): {train_err}")
+
+            # 9. Ejecutar predicciones ML con modelos recién entrenados
             try:
                 from ..ml.predict import Predictor
                 predictor = Predictor.get_instance()
+                # Forzar recarga de modelos recién entrenados
+                predictor._loaded = False
                 if predictor.load_models():
                     logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Ejecutando predicciones ML...")
                     ml_result = predictor.predict_batch(self.db)
                     if ml_result.get("status") == "ok":
-                        logs.append(f"  → Predicciones actualizadas para {ml_result['updated']} estudiantes")
+                        por_carrera = ml_result.get("por_carrera", 0)
+                        global_fb = ml_result.get("global_fallback", 0)
+                        logs.append(
+                            f"  → Predicciones actualizadas: {ml_result['updated']} estudiantes "
+                            f"({por_carrera} por carrera, {global_fb} global)"
+                        )
                     else:
                         logs.append(f"  ⚠️ ML: {ml_result.get('message', 'sin resultado')}")
                 else:
-                    logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Sin modelo ML entrenado — omitiendo predicciones")
+                    logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Sin modelo ML — omitiendo predicciones")
             except Exception as ml_err:
                 logs.append(f"  ⚠️ Error en predicciones ML (no crítico): {ml_err}")
 
