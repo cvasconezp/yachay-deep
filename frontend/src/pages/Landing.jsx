@@ -122,6 +122,7 @@ export default function Landing() {
             <a href="#evolution" className="hidden sm:inline text-sm text-gray-600 hover:text-brand transition-colors px-3 py-1">Evolución</a>
             <a href="#podcasts" className="hidden sm:inline text-sm text-gray-600 hover:text-brand transition-colors px-3 py-1">Podcasts</a>
             <a href="#contact" className="hidden sm:inline text-sm text-gray-600 hover:text-brand transition-colors px-3 py-1">Contacto</a>
+            <a href="https://pachatech.vercel.app/" target="_blank" rel="noopener noreferrer" className="hidden sm:inline text-sm text-gray-600 hover:text-brand transition-colors px-3 py-1">Pacha Tech</a>
             <button
               onClick={() => navigate("/login")}
               className="bg-brand-gold text-brand-dark font-semibold text-sm px-5 py-2 rounded-lg hover:bg-brand-gold-light transition-colors"
@@ -177,12 +178,32 @@ export default function Landing() {
       </section>
 
       {/* ── Pacha Tech banner ── */}
-      <section className="bg-gray-50 border-b border-gray-100 py-6">
-        <div className="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-center gap-3 text-center">
-          <span className="text-sm text-gray-500">Diseñado y desarrollado por</span>
-          <span className="font-bold text-brand text-lg tracking-wide">Pacha Tech</span>
-          <span className="text-sm text-gray-400 hidden sm:inline">|</span>
-          <span className="text-sm text-gray-500">Soluciones de inteligencia académica para carreras virtuales</span>
+      <section className="bg-gray-50 border-b border-gray-100 py-8">
+        <div className="max-w-6xl mx-auto px-4">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-6 bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+            <div className="flex flex-col sm:flex-row items-center gap-4">
+              <div className="w-12 h-12 bg-gradient-to-br from-brand to-brand-light rounded-xl flex items-center justify-center flex-shrink-0">
+                <span className="text-white font-bold text-lg">PT</span>
+              </div>
+              <div className="text-center sm:text-left">
+                <div className="font-bold text-brand text-lg tracking-wide">Pacha Tech</div>
+                <p className="text-sm text-gray-500 max-w-md">
+                  Soluciones de inteligencia académica, analítica del aprendizaje y tecnologías emergentes para educación superior.
+                </p>
+              </div>
+            </div>
+            <a
+              href="https://pachatech.vercel.app/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bg-brand text-white font-semibold text-sm px-6 py-2.5 rounded-lg hover:bg-brand-light transition-colors inline-flex items-center gap-2 flex-shrink-0"
+            >
+              Visitar Pacha Tech
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+              </svg>
+            </a>
+          </div>
         </div>
       </section>
 
@@ -294,28 +315,69 @@ export default function Landing() {
       </section>
 
       {/* ── Podcasts ── */}
-      <section id="podcasts" className="py-20 bg-gray-50">
+      <section id="podcasts" className="py-20 bg-gradient-to-br from-brand-dark via-brand to-brand-light">
         <div className="max-w-6xl mx-auto px-4">
-          <SectionHeader
-            title="Podcasts"
-            subtitle="Episodios que explican el contexto, motivación y evolución de Yachay Deep."
-          />
-          <div className="mt-12 space-y-4">
+          <div className="text-center mb-12">
+            <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm px-4 py-1.5 rounded-full mb-4">
+              <svg className="w-4 h-4 text-brand-gold" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3zM8 11a4 4 0 0 0 8 0h2a6 6 0 0 1-5 5.91V20h3v2H8v-2h3v-3.09A6 6 0 0 1 6 11h2z" />
+              </svg>
+              <span className="text-xs font-semibold text-brand-gold tracking-wider uppercase">Podcast</span>
+            </div>
+            <h2 className="text-2xl md:text-3xl font-bold text-white">Escucha Yachay Deep</h2>
+            <p className="text-blue-200 mt-3 max-w-2xl mx-auto leading-relaxed">
+              Episodios que explican el contexto, motivación y evolución del framework.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {PODCASTS.map((pod, i) => (
-              <div key={i} className="bg-white border border-gray-200 rounded-xl p-5 hover:shadow-md transition-shadow">
-                <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 bg-gradient-to-br from-brand to-brand-light rounded-xl flex items-center justify-center flex-shrink-0">
-                    <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3zM8 11a4 4 0 0 0 8 0h2a6 6 0 0 1-5 5.91V20h3v2H8v-2h3v-3.09A6 6 0 0 1 6 11h2z" />
-                    </svg>
+              <div
+                key={i}
+                className={`relative rounded-2xl overflow-hidden transition-all duration-300 ${
+                  playingIdx === i
+                    ? "bg-white shadow-2xl shadow-brand-gold/20 ring-2 ring-brand-gold/40 scale-[1.02]"
+                    : "bg-white/10 backdrop-blur-sm border border-white/15 hover:bg-white/15 hover:border-white/25"
+                }`}
+              >
+                <div className="p-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 text-sm font-bold ${
+                      playingIdx === i ? "bg-brand-gold text-brand-dark" : "bg-white/15 text-white"
+                    }`}>
+                      {playingIdx === i ? (
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                        </svg>
+                      ) : (
+                        <span>{i + 1}</span>
+                      )}
+                    </div>
+                    <span className={`text-xs font-medium uppercase tracking-wider ${
+                      playingIdx === i ? "text-brand-gold" : "text-brand-ice/70"
+                    }`}>
+                      Episodio {i + 1}
+                    </span>
                   </div>
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-gray-900 text-sm">{pod.title}</h3>
-                    <p className="text-xs text-gray-500 mt-1">{pod.description}</p>
-                    <audio controls className="mt-3 w-full" onPlay={() => setPlayingIdx(i)} preload="none">
-                      <source src={pod.file} type="audio/mp4" />
-                    </audio>
-                  </div>
+                  <h3 className={`font-bold text-base mb-2 leading-snug ${
+                    playingIdx === i ? "text-gray-900" : "text-white"
+                  }`}>
+                    {pod.title}
+                  </h3>
+                  <p className={`text-xs leading-relaxed mb-4 ${
+                    playingIdx === i ? "text-gray-500" : "text-blue-200/80"
+                  }`}>
+                    {pod.description}
+                  </p>
+                  <audio
+                    controls
+                    className="w-full"
+                    onPlay={() => setPlayingIdx(i)}
+                    onPause={() => { if (playingIdx === i) setPlayingIdx(null); }}
+                    onEnded={() => { if (playingIdx === i) setPlayingIdx(null); }}
+                    preload="none"
+                  >
+                    <source src={pod.file} type="audio/mp4" />
+                  </audio>
                 </div>
               </div>
             ))}
@@ -354,6 +416,17 @@ export default function Landing() {
               </svg>
               LinkedIn
             </a>
+            <a
+              href="https://pachatech.vercel.app/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="border-2 border-white/30 text-white font-semibold px-8 py-3 rounded-xl text-base hover:bg-white/10 transition-colors inline-flex items-center justify-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 003 12c0-1.605.42-3.113 1.157-4.418" />
+              </svg>
+              Pacha Tech
+            </a>
           </div>
 
           {/* Creator card */}
@@ -389,7 +462,9 @@ export default function Landing() {
             <span className="text-white font-semibold text-sm">Yachay Deep</span>
           </div>
           <div className="text-gray-400 text-xs text-center">
-            &copy; {new Date().getFullYear()} Carlos Vasconez-Paredes | Pacha Tech | Soluciones de inteligencia académica para carreras virtuales
+            &copy; {new Date().getFullYear()} Carlos Vasconez-Paredes |{" "}
+            <a href="https://pachatech.vercel.app/" target="_blank" rel="noopener noreferrer" className="text-brand-ice hover:text-white transition-colors">Pacha Tech</a>
+            {" "}| Soluciones de inteligencia académica para carreras virtuales
           </div>
           <button
             onClick={() => navigate("/login")}
