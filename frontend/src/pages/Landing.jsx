@@ -77,9 +77,9 @@ const EVOLUTION = [
 
 const PODCASTS = [
   {
-    title: "Yachay Deep: Un framework multinivel de inteligencia académica para la retención estudiantil",
-    description: "Una visión general de Yachay Deep como sistema de soporte a la decisión con alerta temprana impulsado por analítica del aprendizaje.",
-    file: "/Yachay Deep A Multilevel Intelligence Framework for Student Retention.m4a",
+    title: "El Excel que frena el abandono universitario",
+    description: "El origen de Yachay Deep: un sistema en Excel con macros VBA que evolucionó hacia una plataforma web.",
+    file: "/El_Excel_que_frena_el_abandono_universitario.m4a",
   },
   {
     title: "IA para evitar el abandono universitario",
@@ -87,9 +87,9 @@ const PODCASTS = [
     file: "/IA_para_evitar_el_abandono_universitario.m4a",
   },
   {
-    title: "El Excel que frena el abandono universitario",
-    description: "El origen de Yachay Deep: un sistema en Excel con macros VBA que evolucionó hacia una plataforma web.",
-    file: "/El_Excel_que_frena_el_abandono_universitario.m4a",
+    title: "Yachay Deep: Un framework multinivel de inteligencia académica para la retención estudiantil",
+    description: "Una visión general de Yachay Deep como sistema de soporte a la decisión con alerta temprana impulsado por analítica del aprendizaje.",
+    file: "/Yachay Deep A Multilevel Intelligence Framework for Student Retention.m4a",
   },
 ];
 
