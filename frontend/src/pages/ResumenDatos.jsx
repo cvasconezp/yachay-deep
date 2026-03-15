@@ -516,7 +516,7 @@ export default function ResumenDatos() {
                             </div>
                             {Object.keys(c.intervenciones.por_motivo || {}).length > 0 && (
                               <div className="space-y-1">
-                                {Object.entries(c.intervenciones.por_motivo).sort((a, b) => b[1] - a[1]).map(([mot, cnt]) => (
+                                {Object.entries(c.intervenciones?.por_motivo || {}).sort((a, b) => b[1] - a[1]).map(([mot, cnt]) => (
                                   <MiniBar key={mot} label={mot} value={cnt} total={c.intervenciones.total} color="bg-blue-400" />
                                 ))}
                               </div>
