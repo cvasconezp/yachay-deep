@@ -118,6 +118,7 @@ export default function Intervenciones() {
       if (filtros.estado) params.set("estado", filtros.estado);
       if (filtros.resultado) params.set("resultado", filtros.resultado);
       if (filtros.seguimiento) params.set("seguimiento", filtros.seguimiento);
+      if (filtros.periodo && filtros.periodo !== "actual") params.set("periodo", filtros.periodo);
 
       const blob = await api.exportIntervencionesExcel(params);
       const url = URL.createObjectURL(blob);

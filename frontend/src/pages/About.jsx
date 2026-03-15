@@ -5,7 +5,7 @@ const PODCASTS = [
   {
     title: "El Excel que frena el abandono universitario",
     description:
-      "El origen de Yachay Deep: como un sistema construido en Excel con macros VBA evolucionó hacia una plataforma web de inteligencia académica preventiva.",
+      "El origen de Yachay Deep: cómo un sistema construido en Excel con macros VBA evolucionó hacia una plataforma web de inteligencia académica preventiva.",
     file: "/El_Excel_que_frena_el_abandono_universitario.m4a",
   },
   {
