@@ -71,6 +71,14 @@ class SemesterConfigCreate(BaseModel):
     bloque2_fin: Optional[datetime] = None
 
 
+class SemesterConfigUpdate(BaseModel):
+    bloque_actual: Optional[str] = None
+    bloque1_inicio: Optional[datetime] = None
+    bloque1_fin: Optional[datetime] = None
+    bloque2_inicio: Optional[datetime] = None
+    bloque2_fin: Optional[datetime] = None
+
+
 class SemesterConfigOut(BaseModel):
     id: int
     semestre: str
@@ -200,6 +208,19 @@ def set_bloque(semestre: str, payload: BloqueUpdate, db: Session = Depends(get_d
     s.bloque_actual = payload.bloque
     db.commit()
     return {"semestre": semestre, "bloque_actual": payload.bloque}
+
+
+@router.patch("/semester/{semestre}", response_model=SemesterConfigOut, dependencies=[Depends(require_admin)])
+def update_semester(semestre: str, payload: SemesterConfigUpdate, db: Session = Depends(get_db)):
+    """Actualiza las fechas y configuración de un semestre existente."""
+    s = db.query(SemesterConfig).filter(SemesterConfig.semestre == semestre).first()
+    if not s:
+        raise HTTPException(status_code=404, detail="Semestre no encontrado")
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(s, field, value)
+    db.commit()
+    db.refresh(s)
+    return s
 
 
 @router.post("/semester/deactivate-all", dependencies=[Depends(require_admin)])
