@@ -15,19 +15,9 @@ from ..models import Student, AvacAccess, TaskSubmission, Grade, Intervention
 from ..models.course_config import CourseConfig
 from ..auth.jwt import get_current_user
 from ..models.user import User
+from ..constants import EIB_GRUPO_SEDE_STR as SEDE_MAPPING
 
 router = APIRouter(prefix="/students", tags=["students"])
-
-# ─── Detección de sede por grupo mayoritario (Framework_FichaEst §3.3) ────────
-# Grupo-N → nombre de la sede física (EIB / UPS)
-SEDE_MAPPING: dict[str, str] = {
-    "1": "Latacunga",
-    "2": "Cayambe",
-    "3": "Otavalo",
-    "4": "Riobamba",
-    "5": "Cayambe-Amazonía",
-    "6": "Wasakentsa",
-}
 
 def detectar_sede(course_configs: list, student_grupo: str = None) -> Optional[str]:
     """
@@ -103,15 +93,23 @@ def diagnosticar_riesgo(
     if not pago_ok:
         return "En riesgo"
 
-    # Clasificar índice de compromiso
-    es_alto  = indice_compromiso is not None and indice_compromiso >= 0.6
-    es_medio = indice_compromiso is not None and 0.3 <= indice_compromiso < 0.6
-    es_bajo  = indice_compromiso is None or indice_compromiso < 0.3
-
     # Novedades del historial
     motivos = {(inv.motivo or "").lower() for inv in intervenciones}
     nov_ausent = bool(motivos & NOVEDADES_AUSENTISMO)
     nov_notas  = bool(motivos & NOVEDADES_NOTAS)
+
+    # Sin datos de compromiso: solo novedades pueden determinar riesgo
+    if indice_compromiso is None:
+        if nov_ausent:
+            return "Riesgo de Deserción"
+        if nov_notas:
+            return "Riesgo Académico"
+        return "Datos insuficientes"
+
+    # Clasificar índice de compromiso
+    es_alto  = indice_compromiso >= 0.6
+    es_medio = 0.3 <= indice_compromiso < 0.6
+    es_bajo  = indice_compromiso < 0.3
 
     if es_bajo or nov_ausent:
         return "Riesgo de Deserción"
@@ -236,6 +234,11 @@ class FichaEstudiante(BaseModel):
     porcentaje_tareas: Optional[float] = None
     promedio_calificaciones: Optional[float] = None
     diagnostico_riesgo: Optional[str] = None  # diagnóstico computado: Aprobación/Riesgo Académico/etc.
+
+    # Predicciones ML (Fase 2)
+    prob_desercion: Optional[float] = None
+    prob_reprobacion: Optional[float] = None
+    prediccion_updated_at: Optional[datetime] = None
 
     # Datos relacionados
     accesos_avac: list[AvacAccessOut] = []
@@ -440,6 +443,9 @@ def get_ficha(
         porcentaje_tareas=student.porcentaje_tareas,
         promedio_calificaciones=student.promedio_calificaciones,
         diagnostico_riesgo=diagnostico,
+        prob_desercion=student.prob_desercion,
+        prob_reprobacion=student.prob_reprobacion,
+        prediccion_updated_at=student.prediccion_updated_at,
         accesos_avac=accesos_out,
         tareas=tareas_out,
         calificaciones=calificaciones,

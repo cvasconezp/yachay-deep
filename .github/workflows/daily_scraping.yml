@@ -43,6 +43,32 @@ jobs:
         run: |
           mkdir -p data/IngresosAVAC
           mkdir -p data/Tareas
+          mkdir -p data/TableauHistorico
+          mkdir -p data/Reportes
+          mkdir -p data/DatosEspecificos
+
+      # ─── Descargar archivos estáticos (TableauHistorico, Reportes, DatosEspecificos) ───
+      # Configura el secret STATIC_DATA_URL con la URL directa a un .zip que contenga:
+      #   TableauHistorico/    → Detalle de Calificaciones _data(P60).csv ... (P67).csv
+      #   Reportes/            → *_reporte.xlsx
+      #   DatosEspecificos/    → DatosEspecificos*.xlsx
+      #
+      # Puedes usar Google Drive (link directo), Dropbox, S3, o cualquier URL de descarga.
+      # Ejemplo Google Drive: https://drive.google.com/uc?export=download&id=FILE_ID
+      # ──────────────────────────────────────────────────────────────────────────────────
+      - name: Descargar datos estáticos (TableauHistorico, Reportes, DatosEspecificos)
+        env:
+          STATIC_DATA_URL: ${{ secrets.STATIC_DATA_URL }}
+        run: |
+          if [ -z "$STATIC_DATA_URL" ]; then
+            echo "⏭️ STATIC_DATA_URL no configurado, omitiendo descarga de datos estáticos."
+            exit 0
+          fi
+          echo "📥 Descargando archivos estáticos desde STATIC_DATA_URL..."
+          curl -fsSL -o static_data.zip "$STATIC_DATA_URL"
+          unzip -o static_data.zip -d data/
+          echo "✅ Archivos estáticos extraídos:"
+          ls -R data/TableauHistorico/ data/Reportes/ data/DatosEspecificos/ 2>/dev/null || true
 
       - name: Ejecutar scraping + ETL
         env:
@@ -58,10 +84,12 @@ jobs:
           DATA_PATH_INGRESOS: ./data/IngresosAVAC
           DATA_PATH_TAREAS: ./data/Tareas
           DATA_PATH_CALIFICACIONES: ./data/calificaciones.csv
+          DATA_PATH_CALIFICACIONES_HISTORICO: ./data/TableauHistorico
+          DATA_PATH_REPORTE: ./data/Reportes
+          DATA_PATH_DATOS_ESPECIFICOS: ./data/DatosEspecificos
 
         run: |
-          cd backend
-          python -m scraping.runner --mode ${{ inputs.mode || 'full' }}
+          python -m backend.scraping.runner --mode ${{ inputs.mode || 'full' }}
 
       - name: Subir logs como artefacto
         if: always()
@@ -71,6 +99,7 @@ jobs:
           path: |
             data/IngresosAVAC/cursos_no_encontrados.csv
             data/IngresosAVAC/errores.log
+          if-no-files-found: ignore
           retention-days: 30
 
       - name: Notificar éxito

@@ -2,8 +2,9 @@
 Yachay Deep — API Backend
 FastAPI application entry point
 """
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import logging
 
@@ -16,6 +17,8 @@ from .routes.dashboard import router as dashboard_router
 from .routes.admin import router as admin_router
 from .routes.export import router as export_router
 from .routes.courses import router as courses_router
+from .routes.analytics import router as analytics_router
+from .routes.predictions import router as predictions_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -29,9 +32,30 @@ async def lifespan(app: FastAPI):
     create_tables()
     upgrade_tables()   # agrega columnas nuevas sin borrar datos
     _create_default_admin()
+    _cleanup_stuck_etl_runs()
     logger.info("✅ Base de datos lista")
     yield
     logger.info("Apagando Yachay Deep API")
+
+
+def _cleanup_stuck_etl_runs():
+    """Marca como 'failed' cualquier ETL run que quedó en 'running' de un reinicio anterior."""
+    from .database import SessionLocal
+    from .models.scraping_run import ScrapingRun
+    from datetime import datetime, timezone
+
+    db = SessionLocal()
+    try:
+        stuck = db.query(ScrapingRun).filter(ScrapingRun.status == "running").all()
+        for run in stuck:
+            run.status = "failed"
+            run.finished_at = datetime.now(timezone.utc)
+            run.log_output = (run.log_output or "") + "\n[STARTUP] Marcado como failed: el servidor reinició mientras el ETL estaba en ejecución."
+        if stuck:
+            db.commit()
+            logger.warning(f"⚠️ {len(stuck)} ETL run(s) atascados marcados como 'failed' tras reinicio")
+    finally:
+        db.close()
 
 
 def _create_default_admin():
@@ -41,17 +65,27 @@ def _create_default_admin():
     from .auth.jwt import hash_password
     import os
 
-    admin_email = os.environ.get("ADMIN_EMAIL", "admin@yachay.edu.ec")
-    admin_pass = os.environ.get("ADMIN_PASSWORD", "YachayDeep2024!")
-    if admin_pass == "YachayDeep2024!":
-        logger.warning("⚠️ ADMIN_PASSWORD usa el valor por defecto. Configura una contraseña segura via variable de entorno.")
+    admin_email = os.environ.get("ADMIN_EMAIL")
+    admin_pass = os.environ.get("ADMIN_PASSWORD")
+
+    if not admin_email or not admin_pass:
+        if not settings.DEBUG:
+            logger.warning(
+                "⚠️ ADMIN_EMAIL y ADMIN_PASSWORD no configurados. "
+                "No se creará usuario admin por defecto en producción."
+            )
+            return
+        # Solo en DEBUG: usar credenciales de desarrollo
+        admin_email = admin_email or "admin@yachay.edu.ec"
+        admin_pass = admin_pass or "dev12345"
+        logger.warning("⚠️ Usando credenciales admin de desarrollo (DEBUG=True).")
 
     db = SessionLocal()
     try:
         # Si ya existe el usuario con ese email, no hacer nada
         existing = db.query(User).filter(User.email == admin_email).first()
         if existing:
-            logger.info(f"✅ Usuario admin ya existe: {admin_email}")
+            logger.info(f"Usuario admin ya existe: {admin_email}")
             return
 
         # Si existe algún admin (con email diferente), actualizar sus credenciales
@@ -61,7 +95,7 @@ def _create_default_admin():
             admin.hashed_password = hash_password(admin_pass)
             admin.is_active = True
             db.commit()
-            logger.info(f"✅ Usuario admin actualizado: {admin_email}")
+            logger.info(f"Usuario admin actualizado: {admin_email}")
         else:
             # No existe ningún admin → crear uno nuevo
             new_admin = User(
@@ -73,7 +107,7 @@ def _create_default_admin():
             )
             db.add(new_admin)
             db.commit()
-            logger.info(f"✅ Usuario admin creado: {admin_email}")
+            logger.info(f"Usuario admin creado: {admin_email}")
     finally:
         db.close()
 
@@ -83,15 +117,18 @@ app = FastAPI(
     description="Sistema de monitoreo académico — Decision Support System para analítica educativa",
     version="1.0.0",
     lifespan=lifespan,
+    docs_url="/docs" if settings.DEBUG else None,
+    redoc_url="/redoc" if settings.DEBUG else None,
 )
+
 
 # CORS — permite el frontend en Vercel
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 # Routers
@@ -102,10 +139,24 @@ app.include_router(dashboard_router)
 app.include_router(admin_router)
 app.include_router(export_router)
 app.include_router(courses_router)
+app.include_router(analytics_router)
+app.include_router(predictions_router)
+
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    if not settings.DEBUG:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
 
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "app": settings.APP_NAME}
+    return {"status": "ok"}
 
 

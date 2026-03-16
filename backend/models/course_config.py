@@ -3,6 +3,7 @@ CourseConfig — gestión dinámica de cursos AVAC por semestre y bloque.
 Reemplaza la lista hardcodeada de códigos en los scripts de scraping.
 El admin actualiza esta tabla al inicio de cada semestre.
 """
+from datetime import datetime, timezone as tz
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text
 from sqlalchemy.sql import func
 from ..database import Base
@@ -54,3 +55,23 @@ class SemesterConfig(Base):
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    @property
+    def fecha_fin_actual(self) -> datetime | None:
+        """Fecha de fin del bloque activo (o del último bloque con fecha)."""
+        if self.bloque_actual == "2" and self.bloque2_fin:
+            return self.bloque2_fin
+        if self.bloque_actual == "1" and self.bloque1_fin:
+            return self.bloque1_fin
+        return self.bloque2_fin or self.bloque1_fin
+
+    @property
+    def semestre_finalizado(self) -> bool:
+        """True si la fecha actual supera la fecha de fin del bloque activo."""
+        fin = self.fecha_fin_actual
+        if fin is None:
+            return False  # sin fechas configuradas, asumir activo
+        now = datetime.now(tz.utc)
+        if fin.tzinfo is None:
+            fin = fin.replace(tzinfo=tz.utc)
+        return now > fin

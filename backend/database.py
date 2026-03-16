@@ -48,6 +48,10 @@ def upgrade_tables():
             ("genero",           "VARCHAR"),
             ("autoidentificacion_etnica", "VARCHAR"),
             ("grupo",            "VARCHAR"),
+            # ML predictions (Phase 2)
+            ("prob_desercion",         "FLOAT"),
+            ("prob_reprobacion",       "FLOAT"),
+            ("prediccion_updated_at",  "TIMESTAMP"),
         ],
         "course_configs": [
             ("nivel", "INTEGER"),
@@ -56,6 +60,12 @@ def upgrade_tables():
             ("periodo", "VARCHAR"),
             ("numero_repitencias", "INTEGER"),
             ("nivel", "INTEGER"),
+        ],
+        "interventions": [
+            ("derivar_bienestar", "BOOLEAN"),
+            ("tipo_evento_critico", "VARCHAR"),
+            ("reporte_bienestar", "TEXT"),
+            ("email_enviado", "BOOLEAN"),
         ],
     }
 
@@ -69,5 +79,5 @@ def upgrade_tables():
             existing_cols = {c["name"] for c in inspector.get_columns(table)}
             for col_name, col_type in columns:
                 if col_name not in existing_cols:
-                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col_name} {col_type}"))
+                    conn.execute(text(f'ALTER TABLE "{table}" ADD COLUMN "{col_name}" {col_type}'))
         conn.commit()

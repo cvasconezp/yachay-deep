@@ -1,10 +1,6 @@
 import { useState } from "react";
 import { api } from "../services/api";
-
-const MEDIOS = ["WhatsApp", "Llamada telefónica", "Email", "Presencial", "Plataforma AVAC"];
-const MOTIVOS = ["Inactividad en AVAC", "Tareas no entregadas", "Bajo rendimiento", "Matrículas/Pagos", "Problemas personales", "Conectividad", "Otro"];
-const ESTADOS = ["Activo", "SNA (Sin Novedad Aparente)", "En riesgo", "Retirado", "Recuperado"];
-const RESULTADOS = ["Contactado - comprometido a mejorar", "Contactado - situación compleja", "No contestó", "Buzón de voz", "Mensaje enviado sin respuesta"];
+import { MEDIOS, MOTIVOS, ESTADOS, RESULTADOS, EVENTOS_CRITICOS } from "../constants/interventions";
 
 export default function InterventionForm({ student, onClose, onSaved }) {
   const [form, setForm] = useState({
@@ -17,6 +13,9 @@ export default function InterventionForm({ student, onClose, onSaved }) {
     observacion: "",
     resultado: "",
     requiere_seguimiento: "no",
+    derivar_bienestar: false,
+    tipo_evento_critico: "",
+    reporte_bienestar: "",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -34,6 +33,10 @@ export default function InterventionForm({ student, onClose, onSaved }) {
     e.preventDefault();
     if (!form.medio || !form.motivo || !form.estado) {
       setError("Medio, motivo y estado son obligatorios");
+      return;
+    }
+    if (form.derivar_bienestar && (!form.tipo_evento_critico || !form.reporte_bienestar)) {
+      setError("Para derivar a Bienestar debe indicar el tipo de evento y el reporte");
       return;
     }
     setSaving(true);
@@ -118,6 +121,45 @@ export default function InterventionForm({ student, onClose, onSaved }) {
             Requiere seguimiento posterior
           </label>
 
+          {/* Derivación a Bienestar Estudiantil */}
+          <div className={`border rounded-xl p-4 transition-colors ${form.derivar_bienestar ? "border-red-300 bg-red-50/50" : "border-gray-200 bg-gray-50/50"}`}>
+            <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.derivar_bienestar}
+                onChange={e => update("derivar_bienestar", e.target.checked)}
+                className="rounded accent-red-600"
+              />
+              <span className={form.derivar_bienestar ? "text-red-700" : "text-gray-700"}>
+                Derivar a Bienestar Estudiantil
+              </span>
+            </label>
+            <p className="text-[11px] text-gray-400 mt-1 ml-6">
+              Activar si el estudiante requiere atención psicológica o de bienestar
+            </p>
+
+            {form.derivar_bienestar && (
+              <div className="mt-3 space-y-3 ml-1">
+                <FormField label="Tipo de evento crítico *">
+                  <select value={form.tipo_evento_critico} onChange={e => update("tipo_evento_critico", e.target.value)} className={selectClass}>
+                    <option value="">Seleccionar evento...</option>
+                    {EVENTOS_CRITICOS.map(ev => <option key={ev} value={ev}>{ev}</option>)}
+                  </select>
+                </FormField>
+
+                <FormField label="Reporte para Bienestar *">
+                  <textarea
+                    value={form.reporte_bienestar}
+                    onChange={e => update("reporte_bienestar", e.target.value)}
+                    rows={4}
+                    className={inputClass + " resize-none"}
+                    placeholder="Describa la situación del estudiante con el mayor detalle posible. Esta información será enviada al departamento de Bienestar Estudiantil..."
+                  />
+                </FormField>
+              </div>
+            )}
+          </div>
+
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
               {error}
@@ -128,7 +170,7 @@ export default function InterventionForm({ student, onClose, onSaved }) {
             <button type="button" onClick={handleCancel} className="flex-1 border border-gray-300 text-gray-700 rounded-lg py-2.5 text-sm font-medium hover:bg-gray-50">
               Cancelar
             </button>
-            <button type="submit" disabled={saving} className="flex-1 bg-[#1B3A6B] text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-blue-800 disabled:opacity-60">
+            <button type="submit" disabled={saving} className="flex-1 bg-brand text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-brand-light disabled:opacity-60">
               {saving ? "Guardando..." : "Guardar Intervención"}
             </button>
           </div>

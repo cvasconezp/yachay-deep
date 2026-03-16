@@ -453,42 +453,67 @@ def calcular_indice_compromiso(
     tareas_entregadas: int,
     tareas_totales: int,
     notas: list[Optional[float]],
-    bloque_actual: int = 1   # 1 o 2
+    bloque_actual: int = 1,   # 1 o 2
+    promedio_calificaciones: Optional[float] = None,
+    estado_matricula: Optional[str] = None,
 ) -> dict:
     """
-    Replica el algoritmo de CalcularCompromiso() del VBA.
+    Modelo de riesgo ponderado multinivel (Framework Capa 5).
 
-    Fórmula:
-      - 40% = acceso AVAC (≤7 días = 0.4, >7 días = 0.0)
-      - 60% = actividades: (entregadas/totales) × 0.6
-        + bonus: nota=1 cuenta doble como señal de presencia
+    Score compuesto con 4 dimensiones:
+      - 30% = acceso AVAC (engagement con la plataforma)
+      - 30% = actividades entregadas (cumplimiento)
+      - 25% = rendimiento académico (calificaciones)
+      - 15% = factor administrativo (estado matrícula)
 
-    Devuelve dict con {indice, nivel_riesgo, color_hex}
+    Devuelve dict con {indice, nivel_riesgo, color_hex, componentes}
     """
-    # Componente AVAC (40%)
+    # ── Componente AVAC (30%) ──
     if dias_sin_acceso is None:
         puntaje_acceso = 0.0
+    elif dias_sin_acceso <= 3:
+        puntaje_acceso = 0.30
     elif dias_sin_acceso <= 7:
-        puntaje_acceso = 0.4
+        puntaje_acceso = 0.24
     elif dias_sin_acceso <= 14:
-        puntaje_acceso = 0.2
+        puntaje_acceso = 0.12
+    elif dias_sin_acceso <= 21:
+        puntaje_acceso = 0.06
     else:
         puntaje_acceso = 0.0
 
-    # Componente actividades (60%)
+    # ── Componente actividades (30%) ──
     if tareas_totales == 0:
         puntaje_tareas = 0.0
     else:
-        # Nota=1 se cuenta como 2 entregas (señal de "intentó")
-        entregas_ponderadas = 0
-        for nota in notas:
-            if nota is not None:
-                entregas_ponderadas += 2 if nota == 1.0 else 1
-        # Cap al máximo posible
-        entregas_ponderadas = min(entregas_ponderadas, tareas_totales)
-        puntaje_tareas = (tareas_entregadas / tareas_totales) * 0.6
+        puntaje_tareas = (tareas_entregadas / tareas_totales) * 0.30
 
-    indice = round(puntaje_acceso + puntaje_tareas, 3)
+    # ── Componente rendimiento académico (25%) ──
+    # Escala institucional: 0-100, aprobación >= 70
+    if promedio_calificaciones is not None and promedio_calificaciones > 0:
+        if promedio_calificaciones >= 90:
+            puntaje_rendimiento = 0.25
+        elif promedio_calificaciones >= 80:
+            puntaje_rendimiento = 0.20
+        elif promedio_calificaciones >= 70:
+            puntaje_rendimiento = 0.15
+        elif promedio_calificaciones >= 50:
+            puntaje_rendimiento = 0.08
+        else:
+            puntaje_rendimiento = 0.0
+    else:
+        # Sin datos de calificaciones: neutral (no penalizar ni bonificar)
+        puntaje_rendimiento = 0.125  # punto medio
+
+    # ── Componente administrativo (15%) ──
+    if estado_matricula and "matriculad" in str(estado_matricula).lower():
+        puntaje_admin = 0.15
+    elif estado_matricula:
+        puntaje_admin = 0.05  # estado irregular pero presente
+    else:
+        puntaje_admin = 0.075  # sin datos: neutral
+
+    indice = round(puntaje_acceso + puntaje_tareas + puntaje_rendimiento + puntaje_admin, 3)
 
     # Clasificación de riesgo
     if indice >= 0.7:
@@ -507,6 +532,8 @@ def calcular_indice_compromiso(
         "color_riesgo": color,
         "puntaje_acceso": puntaje_acceso,
         "puntaje_tareas": puntaje_tareas,
+        "puntaje_rendimiento": puntaje_rendimiento,
+        "puntaje_admin": puntaje_admin,
     }
 
 
@@ -841,12 +868,28 @@ def transform_datos_especificos(carpeta_o_archivos) -> pd.DataFrame:
         df["nivel_academico"] = None
 
     # ── Sede / Centro de apoyo ────────────────────────────────────────────────
+    SEDES_VALIDAS = {"cayambe", "amazonia norte", "amazonía norte", "latacunga",
+                     "otavalo", "riobamba", "cuenca", "quito"}
+
+    def _normalizar_sede(texto):
+        val = normalizar_texto_simple(texto)
+        if val is None:
+            return None
+        # Descartar valores numéricos o demasiado cortos (errores de entrada)
+        if val.replace(" ", "").isdigit() or len(val) < 3:
+            return None
+        # Normalizar variantes conocidas
+        low = val.lower().strip()
+        if "amazon" in low:
+            return "Amazonía Norte"
+        # Validar contra sedes conocidas (warn pero no descartar desconocidas)
+        return val
     col_centro = next(
         (c for c in df.columns if "centro de apoyo" in c.lower()),
         None
     )
     if col_centro:
-        df["sede"] = df[col_centro].apply(normalizar_texto_simple)
+        df["sede"] = df[col_centro].apply(_normalizar_sede)
     else:
         df["sede"] = None
 
@@ -907,7 +950,7 @@ def transform_calificaciones_historico(carpeta: str) -> pd.DataFrame:
     Columnas: Sede, Campus, Carrera, Asignatura, Grupo, Estudiante, Docente, Nota Final
     Escala de Nota Final: 0–100
 
-    Filtra por Carrera que contenga 'INTERCULTURAL' para quedarse solo con EIB.
+    Incluye todas las carreras (sin filtro).
     """
     carpeta_path = Path(carpeta)
 
@@ -941,10 +984,7 @@ def transform_calificaciones_historico(carpeta: str) -> pd.DataFrame:
             if "nota final"  in col_lower: rename_map[col_lower["nota final"]]  = "nota_final"
             df = df.rename(columns=rename_map)
 
-            # Filtrar solo EIB (carrera contiene 'INTERCULTURAL')
-            if "carrera" in df.columns:
-                df = df[df["carrera"].str.contains("INTERCULTURAL", case=False, na=False)].copy()
-            else:
+            if "carrera" not in df.columns:
                 logger.warning(f"  {archivo.name}: columna 'Carrera' no encontrada")
                 continue
 
@@ -1042,6 +1082,23 @@ def calcular_indicadores_estudiantes(
     # Merge principal: ingresos + tareas por correo
     df_master = acceso_agg.merge(tareas_agg, on="correo", how="left")
 
+    # Merge con calificaciones si hay datos: agregar promedio por correo
+    if not cal_agg.empty and "nombre_estudiante" in cal_agg.columns:
+        # Intentar cruce por nombre normalizado
+        df_master["nombre_norm"] = df_master["nombre_avac"].apply(
+            lambda x: normalizar_nombre(x) if pd.notna(x) else ""
+        )
+        cal_agg["nombre_norm"] = cal_agg["nombre_estudiante"].apply(
+            lambda x: normalizar_nombre(x) if pd.notna(x) else ""
+        )
+        df_master = df_master.merge(
+            cal_agg[["nombre_norm", "promedio_notas"]],
+            on="nombre_norm", how="left",
+        )
+        df_master.drop(columns=["nombre_norm"], inplace=True, errors="ignore")
+    else:
+        df_master["promedio_notas"] = None
+
     # Calcular índice de compromiso para cada estudiante
     indicadores = []
     for _, row in df_master.iterrows():
@@ -1050,11 +1107,19 @@ def calcular_indicadores_estudiantes(
                 return int(val) if val is not None and not pd.isna(val) else 0
             except (ValueError, TypeError):
                 return 0
+
+        promedio = row.get("promedio_notas")
+        if promedio is not None and pd.notna(promedio):
+            promedio = float(promedio)
+        else:
+            promedio = None
+
         ind = calcular_indice_compromiso(
             dias_sin_acceso=row.get("dias_sin_acceso_max"),
             tareas_entregadas=_safe_int(row.get("total_entregas", 0)),
             tareas_totales=_safe_int(row.get("total_tareas", 0)),
-            notas=[],  # se pasan notas individuales si se quiere el bonus
+            notas=[],
+            promedio_calificaciones=promedio,
         )
         indicadores.append(ind)
 

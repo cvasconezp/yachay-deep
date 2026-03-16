@@ -32,6 +32,14 @@ class Settings(BaseSettings):
     # Contiene: nivel académico, sede, residencia, whatsapp, etnia, lengua, trabajo
     DATA_PATH_DATOS_ESPECIFICOS: str = "./data/DatosEspecificos"
 
+    # Email (SMTP para derivaciones a Bienestar Estudiantil)
+    SMTP_HOST: Optional[str] = None
+    SMTP_PORT: int = 587
+    SMTP_USER: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    SMTP_FROM: Optional[str] = None
+    BIENESTAR_EMAIL: Optional[str] = None  # destinatario del departamento
+
     # App
     APP_NAME: str = "Yachay Deep"
     DEBUG: bool = False
@@ -69,10 +77,16 @@ _DEFAULT_SECRET_KEY = "change-this-in-production-use-openssl-rand-hex-32"
 
 
 def validate_security_settings():
-    """Emite warnings si hay configuraciones de seguridad inseguras."""
+    """Valida configuraciones de seguridad. Falla en producción si son inseguras."""
     import logging
     _logger = logging.getLogger(__name__)
     if settings.SECRET_KEY == _DEFAULT_SECRET_KEY:
+        if not settings.DEBUG:
+            raise RuntimeError(
+                "SECRET_KEY usa el valor por defecto y DEBUG=False. "
+                "Esto permite forjar tokens JWT. Genera una clave segura con: "
+                "openssl rand -hex 32  y configúrala como variable de entorno."
+            )
         _logger.warning(
             "⚠️ SECRET_KEY usa el valor por defecto. Los tokens JWT son predecibles. "
             "Genera una clave segura con: openssl rand -hex 32"

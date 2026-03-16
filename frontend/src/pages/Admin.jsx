@@ -10,11 +10,20 @@ function TabSistema() {
   const [status, setStatus] = useState(null);
   const [runs, setRuns] = useState([]);
   const [etlLoading, setEtlLoading] = useState(false);
+  const [uploadLoading, setUploadLoading] = useState(false);
+  const [msg, setMsg] = useState("");
   const [etlMsg, setEtlMsg] = useState("");
+  const [uploadMsg, setUploadMsg] = useState("");
+  const [mlStatus, setMlStatus] = useState(null);
+  const [mlLoading, setMlLoading] = useState(false);
+  const [mlMsg, setMlMsg] = useState("");
+
+  const loadMlStatus = () => api.getPredictionStatus().then(setMlStatus).catch(() => {});
 
   useEffect(() => {
-    api.getSystemStatus().then(setStatus).catch(() => {});
-    api.getETLRuns().then(setRuns).catch(() => {});
+    api.getSystemStatus().then(setStatus).catch(() => setMsg("Error: No se pudo cargar el estado del sistema"));
+    api.getETLRuns().then(setRuns).catch(() => setMsg("Error: No se pudo cargar el historial ETL"));
+    loadMlStatus();
   }, []);
 
   const handleRunETL = async () => {
@@ -22,7 +31,7 @@ function TabSistema() {
     setEtlMsg("");
     try {
       const result = await api.triggerETL();
-      setEtlMsg(result.message);
+      setEtlMsg(result.message || "ETL ejecutado correctamente");
       setTimeout(() => api.getETLRuns().then(setRuns), 2000);
     } catch (e) {
       setEtlMsg("Error: " + e.message);
@@ -33,6 +42,12 @@ function TabSistema() {
 
   return (
     <div className="space-y-6">
+      {msg && (
+        <div className={`text-sm px-4 py-2 rounded-lg ${msg.startsWith("Error") ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
+          {msg}
+        </div>
+      )}
+
       <div className="bg-white rounded-xl border border-gray-200 p-5">
         <h2 className="font-semibold text-gray-800 mb-4">Estado del Sistema</h2>
         {status ? (
@@ -62,7 +77,7 @@ function TabSistema() {
           <button
             onClick={handleRunETL}
             disabled={etlLoading}
-            className="bg-[#1B3A6B] text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-800 transition-colors disabled:opacity-60"
+            className="bg-brand text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-brand-light transition-colors disabled:opacity-60"
           >
             {etlLoading ? "Ejecutando ETL..." : "Ejecutar ETL Manual"}
           </button>
@@ -72,6 +87,47 @@ function TabSistema() {
           {etlMsg && (
             <div className={`text-sm mt-3 px-4 py-2 rounded-lg ${etlMsg.startsWith("Error") ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
               {etlMsg}
+            </div>
+          )}
+        </div>
+
+        <div className="mt-4 pt-4 border-t border-gray-100">
+          <label className="block text-sm font-semibold text-gray-700 mb-2">
+            Subir datos y ejecutar ETL
+          </label>
+          <p className="text-xs text-gray-400 mb-2">
+            Sube un archivo ZIP con los CSVs de calificaciones históricas (TableauHistorico/), IngresosAVAC/, Tareas/ y Reportes/.
+            Se extraen a la carpeta data/ del servidor y se ejecuta el ETL automáticamente.
+          </p>
+          <div className="flex items-center gap-3">
+            <input
+              type="file"
+              accept=".zip"
+              id="etl-zip-upload"
+              className="text-sm file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+              disabled={uploadLoading}
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                setUploadLoading(true);
+                setUploadMsg("");
+                try {
+                  const result = await api.uploadAndRunETL(file);
+                  setUploadMsg(result.message || "ZIP subido y ETL iniciado");
+                  setTimeout(() => api.getETLRuns().then(setRuns), 3000);
+                } catch (err) {
+                  setUploadMsg("Error: " + err.message);
+                } finally {
+                  setUploadLoading(false);
+                  e.target.value = "";
+                }
+              }}
+            />
+            {uploadLoading && <span className="text-sm text-blue-600 animate-pulse">Subiendo y ejecutando...</span>}
+          </div>
+          {uploadMsg && (
+            <div className={`text-sm mt-3 px-4 py-2 rounded-lg ${uploadMsg.startsWith("Error") ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
+              {uploadMsg}
             </div>
           )}
         </div>
@@ -116,6 +172,87 @@ function TabSistema() {
               ))}
             </tbody>
           </table>
+        )}
+      </div>
+
+      {/* Modelo Predictivo ML */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <h2 className="font-semibold text-gray-800 mb-4">Modelo Predictivo (Fase 2)</h2>
+
+        {mlStatus && (
+          <div className="grid grid-cols-3 gap-4 text-sm mb-4">
+            <div className="bg-gray-50 rounded-lg p-3">
+              <div className="text-gray-500 text-xs">Estado del modelo</div>
+              <div className={`font-semibold ${mlStatus.loaded ? "text-green-600" : "text-yellow-600"}`}>
+                {mlStatus.loaded ? "Cargado" : "Sin entrenar"}
+              </div>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-3">
+              <div className="text-gray-500 text-xs">Modelo desercion</div>
+              <div className="font-semibold text-gray-900">
+                {mlStatus.has_desercion ? "Disponible" : "—"}
+                {mlStatus.metadata?.results?.desercion?.best_auc && (
+                  <span className="text-xs text-gray-500 ml-1">
+                    (AUC: {mlStatus.metadata.results.desercion.best_auc})
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-3">
+              <div className="text-gray-500 text-xs">Entrenado</div>
+              <div className="font-semibold text-gray-900">
+                {mlStatus.metadata?.trained_at
+                  ? new Date(mlStatus.metadata.trained_at).toLocaleString("es-EC")
+                  : "Nunca"}
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="flex gap-3">
+          <button
+            onClick={async () => {
+              setMlLoading(true);
+              setMlMsg("");
+              try {
+                const r = await api.trainModel();
+                setMlMsg(r.status === "ok"
+                  ? `Modelo entrenado (${r.estudiantes} estudiantes, ${r.periodos?.length} periodos)`
+                  : `Aviso: ${r.message || "sin resultado"}`);
+                loadMlStatus();
+              } catch (e) { setMlMsg("Error: " + e.message); }
+              finally { setMlLoading(false); }
+            }}
+            disabled={mlLoading}
+            className="bg-brand text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-brand-light transition-colors disabled:opacity-60"
+          >
+            {mlLoading ? "Entrenando..." : "Reentrenar Modelo"}
+          </button>
+          <button
+            onClick={async () => {
+              setMlLoading(true);
+              setMlMsg("");
+              try {
+                const r = await api.runPredictions();
+                setMlMsg(r.status === "ok"
+                  ? `Predicciones actualizadas para ${r.updated} estudiantes`
+                  : `Aviso: ${r.message || "sin resultado"}`);
+              } catch (e) { setMlMsg("Error: " + e.message); }
+              finally { setMlLoading(false); }
+            }}
+            disabled={mlLoading || !mlStatus?.loaded}
+            className="bg-brand-gold text-brand-dark px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-brand-gold-light transition-colors disabled:opacity-60"
+          >
+            {mlLoading ? "Ejecutando..." : "Ejecutar Predicciones"}
+          </button>
+        </div>
+        <p className="text-xs text-gray-400 mt-2">
+          Entrena modelos de desercion y reprobacion con datos historicos (P60-P67). Las predicciones se ejecutan automaticamente al final del ETL si hay un modelo entrenado.
+        </p>
+        {mlMsg && (
+          <div className={`text-sm mt-3 px-4 py-2 rounded-lg ${mlMsg.startsWith("Error") ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
+            {mlMsg}
+          </div>
         )}
       </div>
     </div>
@@ -205,7 +342,7 @@ function TabCursos() {
         <h2 className="font-semibold text-gray-800">Gestión de Cursos AVAC</h2>
         <button
           onClick={() => { resetForm(); setShowForm(true); }}
-          className="bg-[#1B3A6B] text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-800"
+          className="bg-brand text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-brand-light"
         >
           + Agregar Curso
         </button>
@@ -290,7 +427,7 @@ function TabCursos() {
             </div>
             <div className="flex gap-3">
               <button type="submit"
-                className="bg-[#1B3A6B] text-white px-5 py-2 rounded-lg text-sm font-semibold hover:bg-blue-800">
+                className="bg-brand text-white px-5 py-2 rounded-lg text-sm font-semibold hover:bg-brand-light">
                 {editCourse ? "Guardar cambios" : "Crear curso"}
               </button>
               <button type="button" onClick={resetForm}
@@ -368,6 +505,8 @@ function TabSemestre() {
   const [semesters, setSemesters] = useState([]);
   const [newSem, setNewSem] = useState({ semestre: "", bloque_actual: "1" });
   const [msg, setMsg] = useState("");
+  const [editing, setEditing] = useState(null); // semestre string being edited
+  const [editDates, setEditDates] = useState({});
 
   const loadSemesters = async () => {
     try {
@@ -410,6 +549,50 @@ function TabSemestre() {
     }
   };
 
+  const toLocalDate = (isoStr) => {
+    if (!isoStr) return "";
+    return isoStr.slice(0, 10); // "YYYY-MM-DD"
+  };
+
+  const startEditing = (s) => {
+    setEditing(s.semestre);
+    setEditDates({
+      bloque1_inicio: toLocalDate(s.bloque1_inicio),
+      bloque1_fin: toLocalDate(s.bloque1_fin),
+      bloque2_inicio: toLocalDate(s.bloque2_inicio),
+      bloque2_fin: toLocalDate(s.bloque2_fin),
+    });
+  };
+
+  const handleSaveDates = async () => {
+    try {
+      const payload = {};
+      for (const [k, v] of Object.entries(editDates)) {
+        payload[k] = v ? `${v}T23:59:59` : null;
+      }
+      // For inicio fields, use start of day
+      if (payload.bloque1_inicio) payload.bloque1_inicio = `${editDates.bloque1_inicio}T00:00:00`;
+      if (payload.bloque2_inicio) payload.bloque2_inicio = `${editDates.bloque2_inicio}T00:00:00`;
+      await api.patch(`/courses/semester/${editing}`, payload);
+      setMsg(`Fechas de ${editing} actualizadas`);
+      setEditing(null);
+      loadSemesters();
+    } catch (err) {
+      setMsg("Error: " + err.message);
+    }
+  };
+
+  const handleDeactivateAll = async () => {
+    if (!window.confirm("Esto desactivará todos los semestres y detendrá el scraping diario. ¿Continuar?")) return;
+    try {
+      await api.post("/courses/semester/deactivate-all");
+      setMsg("Todos los semestres desactivados");
+      loadSemesters();
+    } catch (err) {
+      setMsg("Error: " + err.message);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <h2 className="font-semibold text-gray-800">Gestión de Semestres</h2>
@@ -423,7 +606,7 @@ function TabSemestre() {
       {/* Crear semestre */}
       <div className="bg-white rounded-xl border border-gray-200 p-5">
         <h3 className="font-medium text-gray-700 mb-3 text-sm">Nuevo Semestre</h3>
-        <form onSubmit={handleCreate} className="flex gap-3 items-end">
+        <form onSubmit={handleCreate} className="flex gap-3 items-end flex-wrap">
           <div>
             <label className="block text-xs text-gray-500 mb-1">Semestre (ej: 2026-1)</label>
             <input value={newSem.semestre} onChange={e => setNewSem(s => ({ ...s, semestre: e.target.value }))}
@@ -439,7 +622,7 @@ function TabSemestre() {
             </select>
           </div>
           <button type="submit"
-            className="bg-[#1B3A6B] text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-800">
+            className="bg-brand text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-brand-light">
             Crear
           </button>
         </form>
@@ -450,56 +633,115 @@ function TabSemestre() {
         {semesters.length === 0 ? (
           <p className="text-center py-8 text-gray-400 text-sm">No hay semestres configurados</p>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="text-left px-5 py-2.5 text-gray-600 font-medium">Semestre</th>
-                <th className="text-center px-5 py-2.5 text-gray-600 font-medium">Estado</th>
-                <th className="text-center px-5 py-2.5 text-gray-600 font-medium">Bloque actual</th>
-                <th className="text-center px-5 py-2.5 text-gray-600 font-medium">Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {semesters.map(s => (
-                <tr key={s.id} className="border-t border-gray-100">
-                  <td className="px-5 py-3 font-semibold text-gray-800">{s.semestre}</td>
-                  <td className="px-5 py-3 text-center">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${s.activo ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
-                      {s.activo ? "Activo" : "Inactivo"}
+          <div className="divide-y divide-gray-100">
+            {semesters.map(s => {
+              const isExpired = s.activo && (
+                (s.bloque_actual === "1" && s.bloque1_fin && new Date(s.bloque1_fin) < new Date()) ||
+                (s.bloque_actual === "2" && s.bloque2_fin && new Date(s.bloque2_fin) < new Date()) ||
+                (!s.bloque1_fin && !s.bloque2_fin && false)
+              );
+              return (
+              <div key={s.id} className="p-4">
+                {/* Row 1: semestre info + actions */}
+                <div className="flex items-center gap-4 flex-wrap">
+                  <span className="font-semibold text-gray-800 min-w-[80px]">{s.semestre}</span>
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${s.activo ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+                    {s.activo ? "Activo" : "Inactivo"}
+                  </span>
+                  {isExpired && (
+                    <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                      Finalizado
                     </span>
-                  </td>
-                  <td className="px-5 py-3 text-center text-gray-700">
-                    Bloque {s.bloque_actual}
-                  </td>
-                  <td className="px-5 py-3 text-center">
-                    <div className="flex items-center justify-center gap-2 flex-wrap">
-                      {!s.activo && (
-                        <button onClick={() => handleActivate(s.semestre)}
-                          className="text-xs px-2 py-1 rounded bg-[#1B3A6B] text-white hover:bg-blue-800">
-                          Activar
-                        </button>
-                      )}
-                      <button onClick={() => handleSetBloque(s.semestre, "1")}
-                        className={`text-xs px-2 py-1 rounded border ${s.bloque_actual === "1" ? "border-blue-500 text-blue-700 bg-blue-50" : "border-gray-300 text-gray-600 hover:bg-gray-50"}`}>
-                        Bloque 1
+                  )}
+                  <span className="text-gray-500 text-xs">Bloque {s.bloque_actual}</span>
+                  <div className="flex items-center gap-2 ml-auto">
+                    {!s.activo && (
+                      <button onClick={() => handleActivate(s.semestre)}
+                        className="text-xs px-2 py-1 rounded bg-brand text-white hover:bg-brand-light">
+                        Activar
                       </button>
-                      <button onClick={() => handleSetBloque(s.semestre, "2")}
-                        className={`text-xs px-2 py-1 rounded border ${s.bloque_actual === "2" ? "border-blue-500 text-blue-700 bg-blue-50" : "border-gray-300 text-gray-600 hover:bg-gray-50"}`}>
-                        Bloque 2
-                      </button>
+                    )}
+                    <button onClick={() => handleSetBloque(s.semestre, "1")}
+                      className={`text-xs px-2 py-1 rounded border ${s.bloque_actual === "1" ? "border-blue-500 text-blue-700 bg-blue-50" : "border-gray-300 text-gray-600 hover:bg-gray-50"}`}>
+                      Bloque 1
+                    </button>
+                    <button onClick={() => handleSetBloque(s.semestre, "2")}
+                      className={`text-xs px-2 py-1 rounded border ${s.bloque_actual === "2" ? "border-blue-500 text-blue-700 bg-blue-50" : "border-gray-300 text-gray-600 hover:bg-gray-50"}`}>
+                      Bloque 2
+                    </button>
+                    <button onClick={() => editing === s.semestre ? setEditing(null) : startEditing(s)}
+                      className="text-xs px-2 py-1 rounded border border-gray-300 text-gray-600 hover:bg-gray-50">
+                      {editing === s.semestre ? "Cancelar" : "Fechas"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Row 2: dates display */}
+                {(s.bloque1_inicio || s.bloque1_fin || s.bloque2_inicio || s.bloque2_fin) && editing !== s.semestre && (
+                  <div className="mt-2 flex gap-6 text-xs text-gray-500">
+                    {(s.bloque1_inicio || s.bloque1_fin) && (
+                      <span>B1: {toLocalDate(s.bloque1_inicio) || "?"} a {toLocalDate(s.bloque1_fin) || "?"}</span>
+                    )}
+                    {(s.bloque2_inicio || s.bloque2_fin) && (
+                      <span>B2: {toLocalDate(s.bloque2_inicio) || "?"} a {toLocalDate(s.bloque2_fin) || "?"}</span>
+                    )}
+                  </div>
+                )}
+
+                {/* Row 3: date editing form */}
+                {editing === s.semestre && (
+                  <div className="mt-3 bg-gray-50 rounded-lg p-4 space-y-3">
+                    <p className="text-xs text-gray-600 font-medium">Fechas de bloque (el scraping se detiene al pasar la fecha fin)</p>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Bloque 1 - Inicio</label>
+                        <input type="date" value={editDates.bloque1_inicio}
+                          onChange={e => setEditDates(d => ({ ...d, bloque1_inicio: e.target.value }))}
+                          className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Bloque 1 - Fin</label>
+                        <input type="date" value={editDates.bloque1_fin}
+                          onChange={e => setEditDates(d => ({ ...d, bloque1_fin: e.target.value }))}
+                          className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Bloque 2 - Inicio</label>
+                        <input type="date" value={editDates.bloque2_inicio}
+                          onChange={e => setEditDates(d => ({ ...d, bloque2_inicio: e.target.value }))}
+                          className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Bloque 2 - Fin</label>
+                        <input type="date" value={editDates.bloque2_fin}
+                          onChange={e => setEditDates(d => ({ ...d, bloque2_fin: e.target.value }))}
+                          className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      </div>
                     </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    <button onClick={handleSaveDates}
+                      className="bg-brand text-white px-4 py-1.5 rounded-lg text-sm font-semibold hover:bg-brand-light">
+                      Guardar fechas
+                    </button>
+                  </div>
+                )}
+              </div>
+              );
+            })}
+          </div>
         )}
       </div>
 
+      {semesters.some(s => s.activo) && (
+        <button onClick={handleDeactivateAll}
+          className="text-xs px-3 py-1.5 rounded border border-red-300 text-red-600 hover:bg-red-50">
+          Desactivar todos los semestres
+        </button>
+      )}
+
       <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800">
-        <strong>Al inicio de cada semestre:</strong> Crea el nuevo semestre, actívalo y agrega los cursos
-        en la pestaña "Cursos" usando el botón "Agregar Curso" o importación masiva.
-        Cambia el bloque activo a mitad del semestre para filtrar automáticamente las asignaturas del bloque 1 al 2.
+        <strong>Al inicio de cada semestre:</strong> Crea el nuevo semestre, configura las fechas de bloque
+        (clic en "Fechas"), actívalo y agrega los cursos en la pestaña "Cursos".
+        El scraping y las alertas se detendrán automáticamente al pasar la fecha de fin del bloque activo.
       </div>
     </div>
   );
@@ -514,7 +756,7 @@ function TabUsuarios() {
   const [userMsg, setUserMsg] = useState("");
 
   useEffect(() => {
-    api.listUsers().then(setUsers).catch(() => {});
+    api.listUsers().then(setUsers).catch(() => setUserMsg("Error: No se pudieron cargar los usuarios"));
   }, []);
 
   const handleCreateUser = async (e) => {
@@ -560,7 +802,7 @@ function TabUsuarios() {
             <option value="admin">Admin</option>
           </select>
           <button type="submit"
-            className="bg-[#1B3A6B] text-white rounded-lg py-2 text-sm font-semibold hover:bg-blue-800">
+            className="bg-brand text-white rounded-lg py-2 text-sm font-semibold hover:bg-brand-light">
             Crear usuario
           </button>
         </form>
@@ -616,7 +858,7 @@ export default function Admin() {
             onClick={() => setActiveTab(tab)}
             className={`px-5 py-2.5 text-sm font-medium transition-colors -mb-px
               ${activeTab === tab
-                ? "border-b-2 border-[#1B3A6B] text-[#1B3A6B]"
+                ? "border-b-2 border-brand text-brand"
                 : "text-gray-500 hover:text-gray-700"}`}
           >
             {tab}

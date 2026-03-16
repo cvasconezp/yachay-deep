@@ -23,6 +23,7 @@ from .transformers import (
 )
 from ..models import Student, AvacAccess, TaskSubmission, Grade, ScrapingRun
 from ..models.course_config import CourseConfig, SemesterConfig
+from ..constants import EIB_GRUPO_SEDE
 from ..config import settings
 
 logger = logging.getLogger(__name__)
@@ -92,14 +93,24 @@ class ETLPipeline:
             semconfig = self._get_active_semester()
             codigos_activos = self._get_codigos_for_bloque(semconfig)
 
+            # Flag: si el semestre ya terminó, omitir scraping de AVAC/tareas
+            # pero permitir carga de histórico y recálculo ML
+            semestre_vigente = True
             if semconfig:
                 bloque_info = f"semestre={semconfig.semestre}, bloque={semconfig.bloque_actual}"
                 logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Config activa: {bloque_info}")
-                if codigos_activos:
+                if semconfig.semestre_finalizado:
+                    semestre_vigente = False
+                    logs.append(
+                        f"  ⚠️ Semestre {semconfig.semestre} finalizó el {semconfig.fecha_fin_actual}. "
+                        "Los indicadores de acceso AVAC no se actualizarán para evitar alertas falsas."
+                    )
+                elif codigos_activos:
                     logs.append(f"  → Filtrando por {len(codigos_activos)} cursos del bloque {semconfig.bloque_actual}")
                 else:
                     logs.append("  ⚠️ Sin cursos configurados para este bloque — procesando todos los CSVs")
             else:
+                semestre_vigente = False
                 logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Sin semestre activo — procesando todos los CSVs")
 
             # 1. Cargar y transformar fuentes
@@ -111,19 +122,24 @@ class ETLPipeline:
             df_datos_especificos = transform_datos_especificos(settings.DATA_PATH_DATOS_ESPECIFICOS)
             logs.append(f"  → {len(df_datos_especificos)} estudiantes con datos específicos EIB")
 
-            logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Leyendo IngresosAVAC...")
-            df_ingresos = transform_ingresos_avac(
-                settings.DATA_PATH_INGRESOS,
-                codigos_activos=codigos_activos,
-            )
-            logs.append(f"  → {len(df_ingresos)} registros de acceso AVAC")
+            if semestre_vigente:
+                logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Leyendo IngresosAVAC...")
+                df_ingresos = transform_ingresos_avac(
+                    settings.DATA_PATH_INGRESOS,
+                    codigos_activos=codigos_activos,
+                )
+                logs.append(f"  → {len(df_ingresos)} registros de acceso AVAC")
 
-            logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Leyendo Tareas...")
-            df_tareas = transform_estado_tareas(
-                settings.DATA_PATH_TAREAS,
-                codigos_activos=codigos_activos,
-            )
-            logs.append(f"  → {len(df_tareas)} registros de tareas")
+                logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Leyendo Tareas...")
+                df_tareas = transform_estado_tareas(
+                    settings.DATA_PATH_TAREAS,
+                    codigos_activos=codigos_activos,
+                )
+                logs.append(f"  → {len(df_tareas)} registros de tareas")
+            else:
+                logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] ⏸ Semestre finalizado — omitiendo lectura de IngresosAVAC y Tareas")
+                df_ingresos = pd.DataFrame()
+                df_tareas = pd.DataFrame()
 
             logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Leyendo Calificaciones...")
             df_calificaciones = transform_calificaciones(settings.DATA_PATH_CALIFICACIONES)
@@ -216,54 +232,64 @@ class ETLPipeline:
                     _filled_rep = df_calificaciones["numero_repitencias"].notna().sum()
                     logs.append(f"  → Enriquecido {_filled_rep}/{len(df_calificaciones)} calificaciones con NUMERO_REPITENCIAS del reporte")
 
-            # 2. Calcular indicadores
-            logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Calculando indicadores de riesgo...")
-            df_master = calcular_indicadores_estudiantes(df_ingresos, df_tareas, df_calificaciones)
+            if semestre_vigente:
+                # 2. Calcular indicadores
+                logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Calculando indicadores de riesgo...")
+                df_master = calcular_indicadores_estudiantes(df_ingresos, df_tareas, df_calificaciones)
 
-            # 3a. Crear registros base para todos los estudiantes del reporte
-            #     (aunque aún no tengan actividad AVAC)
-            # Limpiar cédulas 'nan' heredadas de corridas anteriores con el bug
-            self.db.execute(sa_text("UPDATE students SET cedula = NULL WHERE cedula = 'nan'"))
-            self.db.flush()
+                # 3a. Crear registros base para todos los estudiantes del reporte
+                #     (aunque aún no tengan actividad AVAC)
+                # Limpiar cédulas 'nan' heredadas de corridas anteriores con el bug
+                self.db.execute(sa_text("UPDATE students SET cedula = NULL WHERE cedula = 'nan'"))
+                self.db.flush()
 
-            if not df_personales.empty:
-                logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Sembrando estudiantes desde reporte.xlsx...")
-                n_seed = self._seed_students_from_personales(df_personales)
-                logs.append(f"  → {n_seed} estudiantes inicializados desde reporte")
+                if not df_personales.empty:
+                    logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Sembrando estudiantes desde reporte.xlsx...")
+                    n_seed = self._seed_students_from_personales(df_personales)
+                    logs.append(f"  → {n_seed} estudiantes inicializados desde reporte")
 
-            # 3a-bis. Deduplicar estudiantes con mismo nombre (merge orphans)
-            n_merged = self._merge_duplicate_students()
-            if n_merged:
-                logs.append(f"  → {n_merged} estudiantes duplicados fusionados")
+                # 3a-bis. Deduplicar estudiantes con mismo nombre (merge orphans)
+                n_merged = self._merge_duplicate_students()
+                if n_merged:
+                    logs.append(f"  → {n_merged} estudiantes duplicados fusionados")
 
-            # 3b. Upsert estudiantes con indicadores (actualiza los ya creados)
-            logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Actualizando indicadores de estudiantes...")
-            n = self._upsert_students(
-                df_ingresos, df_calificaciones, df_master,
-                df_personales, df_datos_especificos,
-            )
-            total_registros += n
-            logs.append(f"  → {n} estudiantes con indicadores actualizados")
-
-            # 4. Upsert accesos AVAC
-            logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Cargando accesos AVAC...")
-            n = self._upsert_avac_accesses(df_ingresos)
-            total_registros += n
-            logs.append(f"  → {n} registros de acceso")
-
-            # 5. Upsert tareas
-            if not df_tareas.empty:
-                logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Cargando submissions de tareas...")
-                n = self._upsert_task_submissions(df_tareas)
+                # 3b. Upsert estudiantes con indicadores (actualiza los ya creados)
+                logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Actualizando indicadores de estudiantes...")
+                n = self._upsert_students(
+                    df_ingresos, df_calificaciones, df_master,
+                    df_personales, df_datos_especificos,
+                )
                 total_registros += n
-                logs.append(f"  → {n} submissions de tareas")
+                logs.append(f"  → {n} estudiantes con indicadores actualizados")
+
+                # 4. Upsert accesos AVAC
+                logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Cargando accesos AVAC...")
+                n = self._upsert_avac_accesses(df_ingresos)
+                total_registros += n
+                logs.append(f"  → {n} registros de acceso")
+
+                # 5. Upsert tareas
+                if not df_tareas.empty:
+                    logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Cargando submissions de tareas...")
+                    n = self._upsert_task_submissions(df_tareas)
+                    total_registros += n
+                    logs.append(f"  → {n} submissions de tareas")
+
+            else:
+                logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] ⏸ Semestre finalizado — omitiendo cálculo de indicadores, accesos y tareas")
+                df_master = pd.DataFrame()
 
             # 6. Upsert calificaciones (semestre actual, sin período)
-            if not df_calificaciones.empty:
+            if semestre_vigente and not df_calificaciones.empty:
                 logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Cargando calificaciones...")
                 n = self._upsert_grades(df_calificaciones)
                 total_registros += n
                 logs.append(f"  → {n} registros de calificaciones")
+
+            # 6b. Calcular sede/centro de apoyo EIB por voto mayoritario de grupo
+            logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Calculando sedes EIB por grupo...")
+            n_sedes = self._compute_eib_sedes()
+            logs.append(f"  → {n_sedes} estudiantes EIB con sede asignada por grupo")
 
             # 7. Upsert calificaciones históricas (TableauHistorico P60–P67+)
             logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Leyendo calificaciones históricas (TableauHistorico)...")
@@ -274,6 +300,46 @@ class ETLPipeline:
                 n = self._upsert_grades_historico(df_cal_historico)
                 total_registros += n
                 logs.append(f"  → {n} registros históricos cargados")
+
+            # 8. Reentrenar modelos ML con datos históricos actualizados
+            try:
+                from ..ml.train import train_models
+                logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Reentrenando modelos ML (por carrera)...")
+                train_result = train_models(self.db)
+                if train_result.get("status") == "ok":
+                    carreras_modelo = len(train_result.get("carreras_con_modelo", []))
+                    carreras_fallback = len(train_result.get("carreras_fallback", []))
+                    logs.append(
+                        f"  → Modelos entrenados: {carreras_modelo} por carrera, "
+                        f"{carreras_fallback} usando global ({train_result.get('estudiantes', 0)} estudiantes)"
+                    )
+                else:
+                    logs.append(f"  ⚠️ Entrenamiento ML: {train_result.get('message', 'sin resultado')}")
+            except Exception as train_err:
+                logs.append(f"  ⚠️ Error en entrenamiento ML (no crítico): {train_err}")
+
+            # 9. Ejecutar predicciones ML con modelos recién entrenados
+            try:
+                from ..ml.predict import Predictor
+                predictor = Predictor.get_instance()
+                # Forzar recarga de modelos recién entrenados
+                predictor._loaded = False
+                if predictor.load_models():
+                    logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Ejecutando predicciones ML...")
+                    ml_result = predictor.predict_batch(self.db)
+                    if ml_result.get("status") == "ok":
+                        por_carrera = ml_result.get("por_carrera", 0)
+                        global_fb = ml_result.get("global_fallback", 0)
+                        logs.append(
+                            f"  → Predicciones actualizadas: {ml_result['updated']} estudiantes "
+                            f"({por_carrera} por carrera, {global_fb} global)"
+                        )
+                    else:
+                        logs.append(f"  ⚠️ ML: {ml_result.get('message', 'sin resultado')}")
+                else:
+                    logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Sin modelo ML — omitiendo predicciones")
+            except Exception as ml_err:
+                logs.append(f"  ⚠️ Error en predicciones ML (no crítico): {ml_err}")
 
             run.status = "success"
 
@@ -682,7 +748,68 @@ class ETLPipeline:
             student.nivel_riesgo = row.get("nivel_riesgo")
             student.porcentaje_tareas = _nan_to_none(row.get("porcentaje_tareas"))
 
+            # Promedio de calificaciones (del transformer, escala 0-100)
+            promedio_cal = _nan_to_none(row.get("promedio_notas"))
+            if promedio_cal is not None:
+                student.promedio_calificaciones = round(float(promedio_cal), 2)
+
             count += 1
+
+        self.db.commit()
+        return count
+
+    # Mapeo importado desde backend.constants (fuente única)
+
+    def _compute_eib_sedes(self) -> int:
+        """Asigna sede a estudiantes EIB por voto mayoritario del grupo en calificaciones.
+
+        Lógica idéntica al Excel original:
+        Si >50% de las materias del estudiante pertenecen a un grupo (1-6),
+        se asigna el centro de apoyo correspondiente.
+        Solo aplica para la carrera de Educación Intercultural Bilingüe.
+        """
+        from ..models.grade import Grade as _Grade
+        from collections import Counter
+
+        # Estudiantes EIB con calificaciones del semestre actual
+        eib_grades = (
+            self.db.query(_Grade.student_id, _Grade.grupo)
+            .filter(
+                _Grade.periodo.is_(None),
+                _Grade.grupo.isnot(None),
+                func.lower(_Grade.carrera).contains("intercultural"),
+            )
+            .all()
+        )
+        if not eib_grades:
+            return 0
+
+        # Agrupar grupos por estudiante
+        student_grupos: dict[int, list[int]] = {}
+        for sid, grupo_str in eib_grades:
+            m = re.search(r"(\d+)", str(grupo_str))
+            if m:
+                student_grupos.setdefault(sid, []).append(int(m.group(1)))
+
+        # Voto mayoritario (>50%)
+        count = 0
+        sids = list(student_grupos.keys())
+        students = self.db.query(Student).filter(Student.id.in_(sids)).all()
+        student_map = {s.id: s for s in students}
+
+        for sid, grupos in student_grupos.items():
+            student = student_map.get(sid)
+            if not student:
+                continue
+            counter = Counter(grupos)
+            most_common_grupo, freq = counter.most_common(1)[0]
+            if freq / len(grupos) > 0.5 and most_common_grupo in EIB_GRUPO_SEDE:
+                student.sede = EIB_GRUPO_SEDE[most_common_grupo]
+                count += 1
+            else:
+                # Grupos 7+ o sin mayoría clara
+                if not student.sede:
+                    student.sede = None
 
         self.db.commit()
         return count
