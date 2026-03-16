@@ -14,6 +14,25 @@ function getNoteStyle(nota, max = 40) {
   return               { bg: "bg-red-100",    text: "text-red-700",   border: "border-red-300" };
 }
 
+/**
+ * Mapea el diagnóstico computado (Framework_FichaEst §3.5) a colores + etiqueta.
+ * 4 estados: Aprobación | Riesgo Académico | Riesgo de Deserción | En riesgo
+ */
+function getDiagnosticoStyle(diagnostico) {
+  switch (diagnostico) {
+    case "Aprobación":
+      return { bg: "bg-green-100",  text: "text-green-800",  badge: "bg-green-500",  label: "Aprobación" };
+    case "Riesgo Académico":
+      return { bg: "bg-yellow-100", text: "text-yellow-800", badge: "bg-yellow-500", label: "Riesgo Académico" };
+    case "Riesgo de Deserción":
+      return { bg: "bg-orange-100", text: "text-orange-700", badge: "bg-orange-500", label: "Riesgo de Deserción" };
+    case "En riesgo":
+      return { bg: "bg-red-100",    text: "text-red-700",    badge: "bg-red-600",    label: "En riesgo" };
+    default:
+      return { bg: "bg-gray-100",   text: "text-gray-500",   badge: "bg-gray-400",   label: "Sin datos" };
+  }
+}
+
 /** Mantener compatibilidad con nivel_riesgo (Alto/Medio/Bajo) del ETL */
 function getRiesgoStyle(nivel) {
   if (nivel === "Alto")  return { bg: "bg-red-100",    text: "text-red-700",    label: "En riesgo" };
@@ -197,7 +216,7 @@ function MallaChip({ asignatura, nota_final, docente }) {
 // ── Sección header ────────────────────────────────────────────────────────────
 function SectionHeader({ children, className = "" }) {
   return (
-    <div className={`bg-brand-ice-light border-y border-gray-300 px-3 py-0.5 text-[10px] font-bold text-brand uppercase tracking-wide ${className}`}>
+    <div className={`bg-[#D6E4F0] border-y border-gray-300 px-3 py-0.5 text-[10px] font-bold text-[#1B3A6B] uppercase tracking-wide ${className}`}>
       {children}
     </div>
   );
@@ -211,21 +230,28 @@ export default function FichaEstudiante() {
   const [searchResults, setSearchResults] = useState([]);
   const [ficha, setFicha] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [showForm, setShowForm] = useState(false);
-  const [practicasOpen, setPracticasOpen] = useState(false);
-  const [xaiOpen, setXaiOpen] = useState(false);
-  const [xaiData, setXaiData] = useState(null);
-  const [xaiLoading, setXaiLoading] = useState(false);
-  const [recsOpen, setRecsOpen] = useState(false);
-  const [recsData, setRecsData] = useState(null);
-  const [recsLoading, setRecsLoading] = useState(false);
   const [carreras, setCarreras] = useState([]);
   const [selectedCarrera, setSelectedCarrera] = useState("");
   const searchTimeout = useRef(null);
+  const searchAbort = useRef(null);
+  const searchContainerRef = useRef(null);
 
   // Cargar lista de carreras al montar
   useEffect(() => {
     api.getCarreras().then(setCarreras).catch(() => {});
+  }, []);
+
+  // Cerrar dropdown al hacer click fuera
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target)) {
+        setSearchResults([]);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   useEffect(() => {
@@ -235,13 +261,18 @@ export default function FichaEstudiante() {
   // Re-buscar cuando cambia la carrera seleccionada
   const triggerSearch = (q, carrera) => {
     clearTimeout(searchTimeout.current);
+    if (searchAbort.current) searchAbort.current.abort();
     // Si hay carrera seleccionada, buscar incluso sin query (lista de carrera)
     if (!carrera && q.length < 2) { setSearchResults([]); return; }
     searchTimeout.current = setTimeout(async () => {
+      const controller = new AbortController();
+      searchAbort.current = controller;
       try {
-        const results = await api.searchStudents(q, carrera);
+        const results = await api.searchStudents(q, carrera, { signal: controller.signal });
         setSearchResults(results);
-      } catch (e) { console.error(e); }
+      } catch (e) {
+        if (e.name !== "AbortError") console.error(e);
+      }
     }, 300);
   };
 
@@ -257,11 +288,8 @@ export default function FichaEstudiante() {
 
   const loadFicha = async (id) => {
     setLoading(true);
+    setError(null);
     setSearchResults([]);
-    setXaiData(null);
-    setXaiOpen(false);
-    setRecsData(null);
-    setRecsOpen(false);
     try {
       const data = await api.getFicha(id);
       setFicha(data);
@@ -269,6 +297,7 @@ export default function FichaEstudiante() {
       navigate(`/ficha/${id}`, { replace: true });
     } catch (e) {
       console.error(e);
+      setError(e.message || "Error al cargar la ficha del estudiante");
     } finally {
       setLoading(false);
     }
@@ -285,39 +314,7 @@ export default function FichaEstudiante() {
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
-      alert("Error al exportar PDF: " + e.message);
-    }
-  };
-
-  const toggleXai = async () => {
-    if (xaiOpen) { setXaiOpen(false); return; }
-    setXaiOpen(true);
-    if (xaiData && xaiData.student_id === ficha?.id) return; // ya cargado
-    setXaiLoading(true);
-    try {
-      const data = await api.getPredictionStudent(ficha.id);
-      setXaiData({ ...data, student_id: ficha.id });
-    } catch (e) {
-      console.error("XAI error:", e);
-      setXaiData(null);
-    } finally {
-      setXaiLoading(false);
-    }
-  };
-
-  const toggleRecs = async () => {
-    if (recsOpen) { setRecsOpen(false); return; }
-    setRecsOpen(true);
-    if (recsData && recsData.student_id === ficha?.id) return;
-    setRecsLoading(true);
-    try {
-      const data = await api.getRecommendations(ficha.id);
-      setRecsData({ ...data, student_id: ficha.id });
-    } catch (e) {
-      console.error("Recommendations error:", e);
-      setRecsData(null);
-    } finally {
-      setRecsLoading(false);
+      setError("Error al exportar PDF: " + (e.message || "intenta de nuevo"));
     }
   };
 
@@ -345,6 +342,8 @@ export default function FichaEstudiante() {
     }) || null;
   };
 
+  // Diagnóstico computado (Framework §3.5) — tiene prioridad sobre nivel_riesgo
+  const diagStyle = ficha ? getDiagnosticoStyle(ficha.diagnostico_riesgo) : getDiagnosticoStyle(null);
   const riesgoStyle = ficha ? getRiesgoStyle(ficha.nivel_riesgo) : {};
 
   // Carrera EIB: sedes, centro de apoyo y SEDE_MAPPING solo aplican para EIB
@@ -390,7 +389,7 @@ export default function FichaEstudiante() {
         </select>
 
         {/* Buscador */}
-        <div className="relative flex-1">
+        <div className="relative flex-1" ref={searchContainerRef}>
           <input
             type="text"
             value={query}
@@ -416,236 +415,65 @@ export default function FichaEstudiante() {
         </div>
       </div>
 
+      {/* ── ERROR ─────────────────────────────────────────────────────── */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-4 flex items-center justify-between">
+          <span className="text-red-700 text-sm">{error}</span>
+          <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600 text-xs ml-4">Cerrar</button>
+        </div>
+      )}
+
       {/* ── FICHA COMPLETA ─────────────────────────────────────────────── */}
       {ficha && (
         <div className="border border-gray-400 rounded-md overflow-hidden shadow text-xs" style={{ fontFamily: "Calibri, Arial, sans-serif" }}>
 
-          {/* ═══ ENCABEZADO INSTITUCIONAL ═══ */}
-          <div className="bg-brand text-white">
-            {/* Barra superior: carrera + acciones */}
-            <div className="flex items-center justify-between px-5 py-1.5 border-b border-white/10">
-              <span className="text-[11px] font-semibold tracking-wide uppercase opacity-80">{ficha.carrera || "Monitoreo Estudiantil"}</span>
-              <div className="flex items-center gap-2">
-                <button onClick={handleExportPDF}
-                  className="bg-white/10 hover:bg-white/20 text-white px-3 py-1 rounded text-[11px] font-medium transition">
-                  PDF
-                </button>
-                <button onClick={() => setShowForm(true)}
-                  className="bg-white text-brand hover:bg-blue-50 px-3 py-1 rounded text-[11px] font-bold transition">
-                  + Intervención
-                </button>
-              </div>
+          {/* ═══ FILA 1: ENCABEZADO PRINCIPAL ═══ */}
+          <div className="bg-[#1B3A6B] text-white flex items-center justify-between px-4 py-2">
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-bold tracking-tight">{ficha.carrera || "Monitoreo Estudiantil"}</span>
             </div>
-            {/* Nombre del estudiante + datos de identidad */}
-            <div className="px-5 py-3">
-              <h2 className="text-lg font-bold tracking-wide uppercase leading-tight">{ficha.nombre || "—"}</h2>
-              <div className="flex items-center gap-4 mt-1.5 text-[13px] text-white/70">
-                <span>CI: <strong className="text-white/90">{ficha.cedula || "—"}</strong></span>
-                <span className="w-px h-3 bg-white/20" />
-                <span>Tel: <strong className="text-white/90">{ficha.telefono || "—"}</strong></span>
-                <span className="w-px h-3 bg-white/20" />
-                <span>Actualizado: <strong className="text-white/90">{updatedText}</strong></span>
-              </div>
-            </div>
-          </div>
-
-          {/* ═══ INDICADORES ═══ */}
-          <div className="bg-white border-b border-gray-200">
-            <div className="flex items-center justify-between px-4 py-1 bg-gray-50 border-b border-gray-100">
-              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Indicadores · Predicción IA</span>
-              <span className="text-[9px] text-gray-400">
-                Modelo ML por carrera · P60-P67
-                {ficha.prediccion_updated_at && (
-                  <> · {new Date(ficha.prediccion_updated_at).toLocaleDateString("es-EC")}</>
-                )}
-              </span>
-            </div>
-            <div className="flex items-stretch">
-              {/* Compromiso */}
-              <div className="flex-1 px-4 py-1.5 border-r border-gray-200 cursor-help" title="Indice de compromiso academico: acceso AVAC (30%), tareas entregadas (30%), rendimiento academico (25%), estado de matricula (15%). Alto >= 70%, Medio >= 40%, Bajo < 40%">
-                <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Compromiso</div>
-                <div className="flex items-baseline gap-1.5">
-                  <span className={`text-base font-bold ${compromisoColor}`}>{compromisoStr || "—"}</span>
-                  <span className={`text-[11px] font-semibold ${compromisoColor}`}>{compromisoLabel}</span>
-                </div>
-                {ficha.indice_compromiso != null && (
-                  <div className="mt-0.5 h-1 bg-gray-100 rounded-full overflow-hidden">
-                    <div className={`h-full rounded-full transition-all ${
-                      ficha.indice_compromiso >= 0.7 ? "bg-green-500" : ficha.indice_compromiso >= 0.4 ? "bg-yellow-400" : "bg-red-500"
-                    }`} style={{ width: `${Math.round(ficha.indice_compromiso * 100)}%` }} />
-                  </div>
-                )}
-              </div>
-              {/* Predicción Deserción */}
-              {ficha.prob_desercion != null && (() => {
-                const pctDes = Math.round(ficha.prob_desercion * 100);
-                const colorDes = pctDes >= 70 ? "text-red-600" : pctDes >= 40 ? "text-orange-600" : "text-green-600";
-                const barDes = pctDes >= 70 ? "bg-red-500" : pctDes >= 40 ? "bg-orange-400" : "bg-green-500";
-                return (
-                  <div className="flex-1 px-4 py-1.5 border-r border-gray-200 cursor-help" title="Probabilidad de desercion predicha por modelo ML entrenado con estudiantes de la misma carrera. Basado en: promedio, nota minima, dispersion de notas y materias reprobadas (P60-P67)">
-                    <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Predicción Deserción</div>
-                    <div className="flex items-baseline gap-1.5">
-                      <span className={`text-base font-bold ${colorDes}`}>{pctDes}%</span>
-                      <span className={`text-[11px] font-semibold ${colorDes}`}>{pctDes >= 70 ? "Alto" : pctDes >= 40 ? "Moderado" : "Bajo"}</span>
-                    </div>
-                    <div className="mt-0.5 h-1 bg-gray-100 rounded-full overflow-hidden">
-                      <div className={`h-full rounded-full transition-all ${barDes}`} style={{ width: `${pctDes}%` }} />
-                    </div>
-                  </div>
-                );
-              })()}
-              {/* Predicción Reprobación */}
-              {ficha.prob_reprobacion != null && (() => {
-                const pctRep = Math.round(ficha.prob_reprobacion * 100);
-                const colorRep = pctRep >= 70 ? "text-red-600" : pctRep >= 40 ? "text-orange-600" : "text-green-600";
-                const barRep = pctRep >= 70 ? "bg-red-500" : pctRep >= 40 ? "bg-orange-400" : "bg-green-500";
-                return (
-                  <div className="flex-1 px-4 py-1.5 cursor-help" title="Probabilidad de reprobar al menos una materia, predicha por modelo ML entrenado con estudiantes de la misma carrera (P60-P67)">
-                    <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Predicción Reprobación</div>
-                    <div className="flex items-baseline gap-1.5">
-                      <span className={`text-base font-bold ${colorRep}`}>{pctRep}%</span>
-                      <span className={`text-[11px] font-semibold ${colorRep}`}>{pctRep >= 70 ? "Alto" : pctRep >= 40 ? "Moderado" : "Bajo"}</span>
-                    </div>
-                    <div className="mt-0.5 h-1 bg-gray-100 rounded-full overflow-hidden">
-                      <div className={`h-full rounded-full transition-all ${barRep}`} style={{ width: `${pctRep}%` }} />
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-            {/* Botón XAI: Ver factores principales */}
-            {(ficha.prob_desercion != null || ficha.prob_reprobacion != null) && (
-              <button onClick={toggleXai}
-                className="w-full flex items-center justify-center gap-1.5 py-1 bg-gray-50 hover:bg-gray-100 border-t border-gray-100 text-[10px] text-brand font-semibold uppercase tracking-wider transition-colors">
-                <span>{xaiOpen ? "Ocultar" : "Ver"} factores principales</span>
-                <span className={`transition-transform duration-200 text-[8px] ${xaiOpen ? "rotate-180" : ""}`}>▾</span>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button onClick={handleExportPDF}
+                className="bg-white/10 hover:bg-white/20 text-white px-3 py-1 rounded text-xs font-medium transition">
+                📄 PDF
               </button>
-            )}
-            {/* Panel XAI expandido */}
-            {xaiOpen && (
-              <div className="border-t border-gray-200 bg-gray-50 px-4 py-2">
-                {xaiLoading ? (
-                  <div className="text-[11px] text-gray-400 text-center py-2">Cargando explicación...</div>
-                ) : !xaiData ? (
-                  <div className="text-[11px] text-gray-400 text-center py-2">Sin datos de explicación disponibles</div>
-                ) : (
-                  <div className="grid grid-cols-2 gap-3">
-                    {/* Factores Deserción */}
-                    {xaiData.explicacion_desercion && (
-                      <div>
-                        <div className="text-[9px] font-bold text-gray-500 uppercase tracking-wider mb-1">Factores · Deserción</div>
-                        {xaiData.explicacion_desercion.map((f, i) => {
-                          const abs = Math.abs(f.contribucion);
-                          const maxC = Math.abs(xaiData.explicacion_desercion[0]?.contribucion) || 1;
-                          const pct = Math.min(100, (abs / maxC) * 100);
-                          const isRisk = f.direccion === "incrementa";
-                          return (
-                            <div key={i} className="mb-1" title={`Valor: ${f.valor} · Media carrera: ${f.media_carrera}`}>
-                              <div className="flex items-center justify-between text-[10px]">
-                                <span className="text-gray-600">{f.label}</span>
-                                <span className={`font-semibold ${isRisk ? "text-red-600" : "text-green-600"}`}>
-                                  {f.valor} <span className="text-[8px] text-gray-400">(med: {f.media_carrera})</span>
-                                </span>
-                              </div>
-                              <div className="h-1 bg-gray-200 rounded-full overflow-hidden mt-0.5">
-                                <div className={`h-full rounded-full ${isRisk ? "bg-red-400" : "bg-green-400"}`}
-                                  style={{ width: `${pct}%` }} />
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                    {/* Factores Reprobación */}
-                    {xaiData.explicacion_reprobacion && (
-                      <div>
-                        <div className="text-[9px] font-bold text-gray-500 uppercase tracking-wider mb-1">Factores · Reprobación</div>
-                        {xaiData.explicacion_reprobacion.map((f, i) => {
-                          const abs = Math.abs(f.contribucion);
-                          const maxC = Math.abs(xaiData.explicacion_reprobacion[0]?.contribucion) || 1;
-                          const pct = Math.min(100, (abs / maxC) * 100);
-                          const isRisk = f.direccion === "incrementa";
-                          return (
-                            <div key={i} className="mb-1" title={`Valor: ${f.valor} · Media carrera: ${f.media_carrera}`}>
-                              <div className="flex items-center justify-between text-[10px]">
-                                <span className="text-gray-600">{f.label}</span>
-                                <span className={`font-semibold ${isRisk ? "text-red-600" : "text-green-600"}`}>
-                                  {f.valor} <span className="text-[8px] text-gray-400">(med: {f.media_carrera})</span>
-                                </span>
-                              </div>
-                              <div className="h-1 bg-gray-200 rounded-full overflow-hidden mt-0.5">
-                                <div className={`h-full rounded-full ${isRisk ? "bg-red-400" : "bg-green-400"}`}
-                                  style={{ width: `${pct}%` }} />
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
-                <div className="text-[8px] text-gray-400 text-center mt-1.5">
-                  Modelo: {xaiData?.model_used || "—"} · Comparado con estudiantes de la misma carrera
-                </div>
-              </div>
-            )}
+              <button onClick={() => setShowForm(true)}
+                className="bg-white text-[#1B3A6B] hover:bg-blue-50 px-3 py-1 rounded text-xs font-bold transition">
+                + Intervención
+              </button>
+            </div>
           </div>
 
-          {/* ═══ RECOMENDACIONES AUTOMÁTICAS (Fase 4) ═══ */}
-          <div className="border-t border-gray-200">
-            <button onClick={toggleRecs}
-              className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-gradient-to-r from-amber-50 to-orange-50 hover:from-amber-100 hover:to-orange-100 border-b border-gray-200 text-[10px] text-amber-700 font-semibold uppercase tracking-wider transition-colors">
-              <span className="text-xs">💡</span>
-              <span>{recsOpen ? "Ocultar" : "Ver"} recomendaciones de intervención</span>
-              <span className={`transition-transform duration-200 text-[8px] ${recsOpen ? "rotate-180" : ""}`}>▾</span>
-              {recsData?.total > 0 && !recsOpen && (
-                <span className="ml-1 bg-amber-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">{recsData.total}</span>
-              )}
-            </button>
-            {recsOpen && (
-              <div className="bg-amber-50/30 px-4 py-3">
-                {recsLoading ? (
-                  <div className="text-[11px] text-gray-400 text-center py-2">Generando recomendaciones...</div>
-                ) : !recsData?.recommendations?.length ? (
-                  <div className="text-[11px] text-gray-500 text-center py-2">Sin recomendaciones — el estudiante no presenta indicadores de alerta</div>
-                ) : (
-                  <div className="space-y-2">
-                    {recsData.recommendations.map((rec, i) => {
-                      const prioStyles = {
-                        urgente:    { border: "border-red-300", bg: "bg-red-50", badge: "bg-red-500 text-white", icon: "🔴" },
-                        importante: { border: "border-orange-300", bg: "bg-orange-50", badge: "bg-orange-400 text-white", icon: "🟠" },
-                        sugerida:   { border: "border-blue-200", bg: "bg-blue-50", badge: "bg-blue-400 text-white", icon: "🔵" },
-                      };
-                      const s = prioStyles[rec.prioridad] || prioStyles.sugerida;
-                      return (
-                        <div key={i} className={`border ${s.border} ${s.bg} rounded-lg p-3`}>
-                          <div className="flex items-start gap-2">
-                            <span className="text-sm flex-shrink-0 mt-0.5">{s.icon}</span>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${s.badge}`}>
-                                  {rec.prioridad}
-                                </span>
-                                <span className="text-[9px] text-gray-400 uppercase">{rec.categoria}</span>
-                              </div>
-                              <div className="text-[12px] font-semibold text-gray-800 leading-tight mb-1">{rec.accion}</div>
-                              <div className="text-[10px] text-gray-500 leading-relaxed mb-1.5">{rec.motivo}</div>
-                              <div className="flex items-center gap-3 text-[9px] text-gray-400">
-                                <span title="Medio sugerido">📨 {rec.medio}</span>
-                                <span title="Destinatario">👤 {rec.destinatario}</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-                <div className="text-[8px] text-gray-400 text-center mt-2">
-                  Analítica prescriptiva · Recomendaciones generadas automáticamente a partir del perfil de riesgo
+          {/* ═══ FILA 2: BANDA DE IDENTIDAD (amarillo) ═══ */}
+          <div className="bg-[#FFF2CC] border-b border-[#BF8F00]">
+            <div className="flex divide-x divide-[#BF8F00]">
+              <div className="px-3 py-1.5 text-center w-36 flex-shrink-0">
+                <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Cédula</div>
+                <div className="font-bold text-gray-800 text-sm mt-0.5">{ficha.cedula || "—"}</div>
+              </div>
+              <div className="px-3 py-1.5 text-center w-36 flex-shrink-0">
+                <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Teléfono</div>
+                <div className="font-bold text-gray-800 text-sm mt-0.5">{ficha.telefono || "—"}</div>
+              </div>
+              <div className="px-4 py-1.5 text-center flex-1">
+                <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Nombres y apellidos</div>
+                <div className="font-bold text-[#1B3A6B] text-base mt-0.5 uppercase">{ficha.nombre || "—"}</div>
+              </div>
+              <div className="px-3 py-1.5 text-center w-28 flex-shrink-0">
+                <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Actualizado</div>
+                <div className="font-semibold text-gray-700 text-sm mt-0.5">{updatedText}</div>
+              </div>
+              <div className="px-3 py-1.5 text-center w-36 flex-shrink-0">
+                <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Compromiso</div>
+                <div className={`font-bold text-sm mt-0.5 ${compromisoColor}`}>
+                  {compromisoLabel} {compromisoStr}
                 </div>
               </div>
-            )}
+              <div className={`px-3 py-1.5 text-center w-40 flex-shrink-0 ${diagStyle.bg} border-l border-[#BF8F00]`}>
+                <div className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Diagnóstico</div>
+                <div className={`font-bold text-xs mt-0.5 ${diagStyle.text}`}>{diagStyle.label}</div>
+              </div>
+            </div>
           </div>
 
           {/* ═══ CUERPO PRINCIPAL: 2 columnas ═══ */}
@@ -675,7 +503,6 @@ export default function FichaEstudiante() {
                   })()}
                   <PersonalRow label="Correo" value={ficha.correo} />
                   <PersonalRow label="Correo Ins." value={ficha.correo_institucional} />
-                  <PersonalRow label="Discapacidad" value={ficha?.discapacidad || "—"} />
                   <PersonalRow label="Fecha nac. y edad" value={
                     ficha?.fecha_nacimiento
                       ? `${parseLocalDate(ficha.fecha_nacimiento).toLocaleDateString("es-EC")} (${calcAge(ficha.fecha_nacimiento)} años)`
@@ -718,13 +545,12 @@ export default function FichaEstudiante() {
                     provincia={ficha.provincia}
                     ciudad={ficha.ciudad}
                     parroquia={ficha.parroquia}
-                    height={280}
-                    showTitle={false}
+                    height={140}
                   />
                 </div>
               ) : (
                 <div className="bg-gray-50 border border-gray-200 mx-2 my-2 rounded flex flex-col items-center justify-center text-center"
-                     style={{ height: "180px" }}>
+                     style={{ height: "130px" }}>
                   <svg viewBox="0 0 80 90" className="w-16 h-16 opacity-30" fill="#1B3A6B">
                     <path d="M38 5 L50 8 L60 15 L65 25 L62 38 L70 45 L72 55 L65 65 L55 72 L42 78 L30 75 L20 68 L15 55 L18 42 L12 32 L18 20 L28 12 Z" />
                     <circle cx="38" cy="40" r="5" fill="#F0B000" opacity="1"/>
@@ -740,28 +566,24 @@ export default function FichaEstudiante() {
               </table>
 
               {/* Datos socioeconómicos */}
-              <SectionHeader>Datos socioeconómicos</SectionHeader>
+              <SectionHeader>Estado académico</SectionHeader>
               <table className="w-full border-collapse">
                 <tbody>
-                  <PersonalRow label="Nivel de beca" value="—" />
                   <tr className={ficha.estado_matricula === "Matriculado" ? "bg-green-50" : "bg-red-50"}>
                     <td className="text-right text-[11px] text-gray-500 font-semibold px-2 py-0.5 border border-gray-200 bg-[#F2F2F2] whitespace-nowrap w-28">Pago matrícula</td>
                     <td className={`text-[11px] px-2 py-0.5 border border-gray-200 font-semibold ${ficha.estado_matricula === "Matriculado" ? "text-green-700" : "text-red-600"}`}>
                       {ficha.estado_matricula || "—"}
                     </td>
                   </tr>
-                  <PersonalRow label="Empleabilidad" value="—" />
-                  <PersonalRow label="Madre o padre" value="—" />
                 </tbody>
               </table>
-
             </div>
 
             {/* ─── SECCIÓN DERECHA ─── */}
             <div className="flex-1 overflow-hidden flex flex-col">
 
               {/* Barra de info: sede (solo EIB) / nivel / carrera */}
-              <div className="flex divide-x divide-white/20 bg-brand text-white">
+              <div className="flex divide-x divide-white/20 bg-[#1B3A6B] text-white">
                 {isEIB && (
                   <div className="px-3 py-1.5 text-center flex-1">
                     <div className="text-[9px] opacity-50 uppercase tracking-wider">Centro de Apoyo</div>
@@ -991,15 +813,15 @@ export default function FichaEstudiante() {
               )}
 
               {/* Fila resumen de KPIs */}
-              <div className="grid grid-cols-2 divide-x divide-gray-200 border-t border-gray-200 bg-[#F9F9F9]">
+              <div className="grid grid-cols-4 divide-x divide-gray-200 border-t border-gray-200 bg-[#F9F9F9]">
                 <div className="py-2 px-3 text-center">
-                  <div className="text-[9px] text-gray-400 uppercase tracking-wider">Dias sin AVAC</div>
+                  <div className="text-[9px] text-gray-400 uppercase tracking-wider">Días sin AVAC</div>
                   <div className={`font-bold text-sm mt-0.5 ${
                     ficha.dias_sin_acceso == null ? "text-gray-400"
                     : ficha.dias_sin_acceso > 14 ? "text-red-600"
                     : ficha.dias_sin_acceso > 7 ? "text-orange-500"
                     : "text-green-600"}`}>
-                    {ficha.dias_sin_acceso != null ? `${Math.round(ficha.dias_sin_acceso)}d` : "---"}
+                    {ficha.dias_sin_acceso != null ? `${Math.round(ficha.dias_sin_acceso)}d` : "—"}
                   </div>
                 </div>
                 <div className="py-2 px-3 text-center">
@@ -1009,9 +831,10 @@ export default function FichaEstudiante() {
                     : ficha.porcentaje_tareas < 50 ? "text-red-600"
                     : ficha.porcentaje_tareas < 75 ? "text-orange-500"
                     : "text-green-600"}`}>
-                    {ficha.porcentaje_tareas != null ? `${Math.round(ficha.porcentaje_tareas)}%` : "---"}
+                    {ficha.porcentaje_tareas != null ? `${Math.round(ficha.porcentaje_tareas)}%` : "—"}
                   </div>
                 </div>
+                {/* Compromiso y Diagnóstico ya se muestran en la banda superior */}
               </div>
 
               {/* ══ MALLA CURRICULAR HISTÓRICA (TableauHistorico P60–P67+) ══ */}
@@ -1042,7 +865,7 @@ export default function FichaEstudiante() {
                           return (
                             <div key={periodo} className="flex-shrink-0 flex flex-col" style={{ minWidth: "80px" }}>
                               {/* Encabezado de período */}
-                              <div className="bg-brand text-white text-center rounded-t px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider">
+                              <div className="bg-[#1B3A6B] text-white text-center rounded-t px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider">
                                 {periodo}
                               </div>
                               {/* Chips de asignaturas */}
@@ -1151,58 +974,19 @@ export default function FichaEstudiante() {
             </div>
           </div>
 
-          {/* ═══ PRÁCTICAS PREPROFESIONALES (desplegable) ═══ */}
+          {/* ═══ PRÁCTICAS PREPROFESIONALES (próximamente) ═══ */}
           <div className="border-t border-gray-300">
-            <button
-              onClick={() => setPracticasOpen(p => !p)}
-              className="w-full bg-brand text-white px-4 py-1 text-[10px] font-bold uppercase tracking-wider flex items-center justify-between hover:bg-brand-light transition-colors"
-            >
-              <span>Prácticas Preprofesionales</span>
-              <span className={`transition-transform duration-200 ${practicasOpen ? "rotate-180" : ""}`}>▾</span>
-            </button>
-            {practicasOpen && (
-              <div className="grid grid-cols-2 divide-x divide-gray-300 bg-white">
-                <table className="border-collapse w-full">
-                  <tbody>
-                    {[
-                      ["Nombre práctica", "—"],
-                      ["IE Práctica", "—"],
-                      ["Ubicación IE", "—"],
-                      ["Distrito AMIE", "—"],
-                      ["Jurisdicción", "—"],
-                      ["Nombre autoridad", "—"],
-                      ["Cargo", "—"],
-                      ["Celular", "—"],
-                    ].map(([label, val]) => (
-                      <tr key={label}>
-                        <td className="bg-[#F2F2F2] border border-gray-200 text-right text-[11px] font-semibold text-gray-500 px-2 py-0.5 w-32 whitespace-nowrap">{label}</td>
-                        <td className="border border-gray-200 text-[11px] px-2 py-0.5 text-gray-300 italic">{val}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <div className="p-3">
-                  <div className="grid grid-cols-2 gap-2 text-[11px]">
-                    <div>
-                      <div className="bg-[#F2F2F2] text-center py-0.5 font-bold text-gray-600 border border-gray-200 mb-1">Sin membrete</div>
-                      <div className="text-center text-[#BF8F00] border border-gray-200 py-0.5 cursor-pointer hover:bg-yellow-50">Carta de solicitud</div>
-                      <div className="text-center text-[#BF8F00] border border-gray-200 py-0.5 cursor-pointer hover:bg-yellow-50 mt-0.5">Carta de solicitud</div>
-                    </div>
-                    <div>
-                      <div className="bg-[#F2F2F2] text-center py-0.5 font-bold text-gray-600 border border-gray-200 mb-1">Membretado</div>
-                      <div className="text-center text-[#BF8F00] border border-gray-200 py-0.5 cursor-pointer hover:bg-yellow-50">Carta de solicitud</div>
-                      <div className="text-center text-[#BF8F00] border border-gray-200 py-0.5 cursor-pointer hover:bg-yellow-50 mt-0.5">Carta de solicitud</div>
-                    </div>
-                    <div className="col-span-2 text-center text-[#BF8F00] border border-gray-200 py-0.5 cursor-pointer hover:bg-yellow-50">Carta compromiso</div>
-                  </div>
-                </div>
-              </div>
-            )}
+            <div className="bg-[#1B3A6B] text-white px-4 py-1 text-[10px] font-bold uppercase tracking-wider">
+              Prácticas Preprofesionales
+            </div>
+            <div className="bg-white py-4 text-center text-[11px] text-gray-400 italic">
+              Módulo en desarrollo — próximamente
+            </div>
           </div>
 
           {/* ═══ SEGUIMIENTO E INTERVENCIONES ═══ */}
           <div className="border-t border-gray-300">
-            <div className="bg-brand text-white flex items-center justify-between px-4 py-1">
+            <div className="bg-[#1B3A6B] text-white flex items-center justify-between px-4 py-1">
               <span className="text-[10px] font-bold uppercase tracking-wider">
                 Seguimiento e Intervenciones ({ficha.total_intervenciones || 0})
               </span>
@@ -1251,7 +1035,7 @@ export default function FichaEstudiante() {
           </div>
 
           {/* ═══ PIE DE PÁGINA ═══ */}
-          <div className="bg-brand text-white text-center py-1.5 text-[9px] opacity-60 tracking-wide">
+          <div className="bg-[#1B3A6B] text-white text-center py-1.5 text-[9px] opacity-60 tracking-wide">
             Yachay Deep — Carlos Vásconez P. © &nbsp;|&nbsp; {today}
           </div>
 
