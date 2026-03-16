@@ -93,14 +93,24 @@ class ETLPipeline:
             semconfig = self._get_active_semester()
             codigos_activos = self._get_codigos_for_bloque(semconfig)
 
+            # Flag: si el semestre ya terminó, omitir scraping de AVAC/tareas
+            # pero permitir carga de histórico y recálculo ML
+            semestre_vigente = True
             if semconfig:
                 bloque_info = f"semestre={semconfig.semestre}, bloque={semconfig.bloque_actual}"
                 logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Config activa: {bloque_info}")
-                if codigos_activos:
+                if semconfig.semestre_finalizado:
+                    semestre_vigente = False
+                    logs.append(
+                        f"  ⚠️ Semestre {semconfig.semestre} finalizó el {semconfig.fecha_fin_actual}. "
+                        "Los indicadores de acceso AVAC no se actualizarán para evitar alertas falsas."
+                    )
+                elif codigos_activos:
                     logs.append(f"  → Filtrando por {len(codigos_activos)} cursos del bloque {semconfig.bloque_actual}")
                 else:
                     logs.append("  ⚠️ Sin cursos configurados para este bloque — procesando todos los CSVs")
             else:
+                semestre_vigente = False
                 logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Sin semestre activo — procesando todos los CSVs")
 
             # 1. Cargar y transformar fuentes
@@ -112,19 +122,24 @@ class ETLPipeline:
             df_datos_especificos = transform_datos_especificos(settings.DATA_PATH_DATOS_ESPECIFICOS)
             logs.append(f"  → {len(df_datos_especificos)} estudiantes con datos específicos EIB")
 
-            logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Leyendo IngresosAVAC...")
-            df_ingresos = transform_ingresos_avac(
-                settings.DATA_PATH_INGRESOS,
-                codigos_activos=codigos_activos,
-            )
-            logs.append(f"  → {len(df_ingresos)} registros de acceso AVAC")
+            if semestre_vigente:
+                logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Leyendo IngresosAVAC...")
+                df_ingresos = transform_ingresos_avac(
+                    settings.DATA_PATH_INGRESOS,
+                    codigos_activos=codigos_activos,
+                )
+                logs.append(f"  → {len(df_ingresos)} registros de acceso AVAC")
 
-            logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Leyendo Tareas...")
-            df_tareas = transform_estado_tareas(
-                settings.DATA_PATH_TAREAS,
-                codigos_activos=codigos_activos,
-            )
-            logs.append(f"  → {len(df_tareas)} registros de tareas")
+                logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Leyendo Tareas...")
+                df_tareas = transform_estado_tareas(
+                    settings.DATA_PATH_TAREAS,
+                    codigos_activos=codigos_activos,
+                )
+                logs.append(f"  → {len(df_tareas)} registros de tareas")
+            else:
+                logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] ⏸ Semestre finalizado — omitiendo lectura de IngresosAVAC y Tareas")
+                df_ingresos = pd.DataFrame()
+                df_tareas = pd.DataFrame()
 
             logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Leyendo Calificaciones...")
             df_calificaciones = transform_calificaciones(settings.DATA_PATH_CALIFICACIONES)
@@ -217,50 +232,55 @@ class ETLPipeline:
                     _filled_rep = df_calificaciones["numero_repitencias"].notna().sum()
                     logs.append(f"  → Enriquecido {_filled_rep}/{len(df_calificaciones)} calificaciones con NUMERO_REPITENCIAS del reporte")
 
-            # 2. Calcular indicadores
-            logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Calculando indicadores de riesgo...")
-            df_master = calcular_indicadores_estudiantes(df_ingresos, df_tareas, df_calificaciones)
+            if semestre_vigente:
+                # 2. Calcular indicadores
+                logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Calculando indicadores de riesgo...")
+                df_master = calcular_indicadores_estudiantes(df_ingresos, df_tareas, df_calificaciones)
 
-            # 3a. Crear registros base para todos los estudiantes del reporte
-            #     (aunque aún no tengan actividad AVAC)
-            # Limpiar cédulas 'nan' heredadas de corridas anteriores con el bug
-            self.db.execute(sa_text("UPDATE students SET cedula = NULL WHERE cedula = 'nan'"))
-            self.db.flush()
+                # 3a. Crear registros base para todos los estudiantes del reporte
+                #     (aunque aún no tengan actividad AVAC)
+                # Limpiar cédulas 'nan' heredadas de corridas anteriores con el bug
+                self.db.execute(sa_text("UPDATE students SET cedula = NULL WHERE cedula = 'nan'"))
+                self.db.flush()
 
-            if not df_personales.empty:
-                logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Sembrando estudiantes desde reporte.xlsx...")
-                n_seed = self._seed_students_from_personales(df_personales)
-                logs.append(f"  → {n_seed} estudiantes inicializados desde reporte")
+                if not df_personales.empty:
+                    logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Sembrando estudiantes desde reporte.xlsx...")
+                    n_seed = self._seed_students_from_personales(df_personales)
+                    logs.append(f"  → {n_seed} estudiantes inicializados desde reporte")
 
-            # 3a-bis. Deduplicar estudiantes con mismo nombre (merge orphans)
-            n_merged = self._merge_duplicate_students()
-            if n_merged:
-                logs.append(f"  → {n_merged} estudiantes duplicados fusionados")
+                # 3a-bis. Deduplicar estudiantes con mismo nombre (merge orphans)
+                n_merged = self._merge_duplicate_students()
+                if n_merged:
+                    logs.append(f"  → {n_merged} estudiantes duplicados fusionados")
 
-            # 3b. Upsert estudiantes con indicadores (actualiza los ya creados)
-            logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Actualizando indicadores de estudiantes...")
-            n = self._upsert_students(
-                df_ingresos, df_calificaciones, df_master,
-                df_personales, df_datos_especificos,
-            )
-            total_registros += n
-            logs.append(f"  → {n} estudiantes con indicadores actualizados")
-
-            # 4. Upsert accesos AVAC
-            logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Cargando accesos AVAC...")
-            n = self._upsert_avac_accesses(df_ingresos)
-            total_registros += n
-            logs.append(f"  → {n} registros de acceso")
-
-            # 5. Upsert tareas
-            if not df_tareas.empty:
-                logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Cargando submissions de tareas...")
-                n = self._upsert_task_submissions(df_tareas)
+                # 3b. Upsert estudiantes con indicadores (actualiza los ya creados)
+                logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Actualizando indicadores de estudiantes...")
+                n = self._upsert_students(
+                    df_ingresos, df_calificaciones, df_master,
+                    df_personales, df_datos_especificos,
+                )
                 total_registros += n
-                logs.append(f"  → {n} submissions de tareas")
+                logs.append(f"  → {n} estudiantes con indicadores actualizados")
+
+                # 4. Upsert accesos AVAC
+                logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Cargando accesos AVAC...")
+                n = self._upsert_avac_accesses(df_ingresos)
+                total_registros += n
+                logs.append(f"  → {n} registros de acceso")
+
+                # 5. Upsert tareas
+                if not df_tareas.empty:
+                    logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Cargando submissions de tareas...")
+                    n = self._upsert_task_submissions(df_tareas)
+                    total_registros += n
+                    logs.append(f"  → {n} submissions de tareas")
+
+            else:
+                logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] ⏸ Semestre finalizado — omitiendo cálculo de indicadores, accesos y tareas")
+                df_master = pd.DataFrame()
 
             # 6. Upsert calificaciones (semestre actual, sin período)
-            if not df_calificaciones.empty:
+            if semestre_vigente and not df_calificaciones.empty:
                 logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Cargando calificaciones...")
                 n = self._upsert_grades(df_calificaciones)
                 total_registros += n
