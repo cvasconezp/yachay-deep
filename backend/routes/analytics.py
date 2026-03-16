@@ -679,7 +679,10 @@ def get_resumen_datos(
     base_q = db.query(Student)
     if carrera:
         base_q = base_q.filter(func.lower(Student.carrera).contains(carrera.lower()))
-    if periodo_filter != "todos" and grade_student_ids:
+    if periodo_filter != "todos":
+        # Siempre filtrar por estudiantes con calificaciones en el período,
+        # incluso si grade_student_ids está vacío (retornará 0 estudiantes).
+        # Esto evita inflar conteos con estudiantes sin datos en el período.
         base_q = base_q.filter(Student.id.in_(grade_student_ids))
     students = base_q.all()
 
@@ -828,7 +831,7 @@ def get_resumen_datos(
         interv_base_q = interv_base_q.filter(func.lower(Intervention.carrera).contains(carrera.lower()))
 
     # Filtrar intervenciones solo de estudiantes con calificaciones en el período
-    if periodo_filter != "todos" and grade_student_ids:
+    if periodo_filter != "todos":
         interv_base_q = interv_base_q.filter(Intervention.student_id.in_(grade_student_ids))
 
     total_intervenciones = interv_base_q.count()

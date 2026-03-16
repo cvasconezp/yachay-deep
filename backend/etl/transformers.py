@@ -950,7 +950,7 @@ def transform_calificaciones_historico(carpeta: str) -> pd.DataFrame:
     Columnas: Sede, Campus, Carrera, Asignatura, Grupo, Estudiante, Docente, Nota Final
     Escala de Nota Final: 0–100
 
-    Filtra por Carrera que contenga 'INTERCULTURAL' para quedarse solo con EIB.
+    Incluye todas las carreras (sin filtro).
     """
     carpeta_path = Path(carpeta)
 
