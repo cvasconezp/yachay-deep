@@ -22,6 +22,13 @@ export default function InterventionForm({ student, onClose, onSaved }) {
 
   const update = (field, value) => setForm(f => ({ ...f, [field]: value }));
 
+  const isDirty = form.medio || form.motivo || form.observacion || form.resultado;
+
+  const handleCancel = () => {
+    if (isDirty && !confirm("Tienes datos sin guardar. ¿Cerrar de todos modos?")) return;
+    onClose();
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.medio || !form.motivo || !form.estado) {
@@ -45,8 +52,8 @@ export default function InterventionForm({ student, onClose, onSaved }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={handleCancel}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="px-6 py-5 border-b border-gray-100">
           <h2 className="text-lg font-bold text-gray-900">Registrar Intervención</h2>
           <p className="text-sm text-gray-500 mt-0.5">{student.nombre}</p>
@@ -160,7 +167,7 @@ export default function InterventionForm({ student, onClose, onSaved }) {
           )}
 
           <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onClose} className="flex-1 border border-gray-300 text-gray-700 rounded-lg py-2.5 text-sm font-medium hover:bg-gray-50">
+            <button type="button" onClick={handleCancel} className="flex-1 border border-gray-300 text-gray-700 rounded-lg py-2.5 text-sm font-medium hover:bg-gray-50">
               Cancelar
             </button>
             <button type="submit" disabled={saving} className="flex-1 bg-brand text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-brand-light disabled:opacity-60">
