@@ -79,6 +79,9 @@ class ApiClient {
   listInterventions(studentId) { return this.get(`/interventions/?student_id=${studentId}`); }
   interventionStats() { return this.get("/interventions/stats"); }
 
+  // Analytics
+  getPeriodosDisponibles() { return this.get("/analytics/periodos"); }
+
   // Dashboard
   getRiskDashboard(params = {}) {
     const qs = new URLSearchParams(params).toString();
