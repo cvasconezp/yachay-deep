@@ -107,7 +107,14 @@ def get_asignaturas_analytics(
     query = query.group_by(Grade.asignatura, Grade.carrera, Grade.docente, Grade.nivel, Grade.grupo)
 
     if carrera:
-        query = query.filter(func.lower(Grade.carrera).contains(carrera.lower()))
+        # Filtrar por Student.carrera (fuente canónica) en vez de Grade.carrera
+        carrera_student_ids = [s.id for s, in db.query(Student.id).filter(
+            func.lower(Student.carrera).contains(carrera.lower())
+        ).all()]
+        if carrera_student_ids:
+            query = query.filter(Grade.student_id.in_(carrera_student_ids))
+        else:
+            return []
     if nivel:
         query = query.filter(Grade.nivel == nivel)
 
@@ -333,8 +340,16 @@ def get_docentes_analytics(
     )
     docente_query, _ = _apply_periodo_filter(docente_query, periodo)
     docente_query = docente_query.distinct()
+    # Pre-filtrar student_ids por Student.carrera (fuente canónica)
+    _carrera_sids = None
     if carrera:
-        docente_query = docente_query.filter(func.lower(Grade.carrera).contains(carrera.lower()))
+        _carrera_sids = [s.id for s, in db.query(Student.id).filter(
+            func.lower(Student.carrera).contains(carrera.lower())
+        ).all()]
+        if _carrera_sids:
+            docente_query = docente_query.filter(Grade.student_id.in_(_carrera_sids))
+        else:
+            return []
 
     docentes = [d.docente for d in docente_query.all()]
 
@@ -343,8 +358,8 @@ def get_docentes_analytics(
         # Estadísticas agregadas de este docente
         grades_q = db.query(Grade).filter(Grade.docente == docente_name)
         grades_q, _ = _apply_periodo_filter(grades_q, periodo)
-        if carrera:
-            grades_q = grades_q.filter(func.lower(Grade.carrera).contains(carrera.lower()))
+        if carrera and _carrera_sids:
+            grades_q = grades_q.filter(Grade.student_id.in_(_carrera_sids))
 
         all_grades = grades_q.all()
         if not all_grades:
@@ -641,11 +656,18 @@ def get_resumen_datos(
     """
     today = date.today()
 
+    # --- Pre-filtrar student_ids por Student.carrera (fuente canónica) ---
+    _carrera_sids = None
+    if carrera:
+        _carrera_sids = set(s.id for s, in db.query(Student.id).filter(
+            func.lower(Student.carrera).contains(carrera.lower())
+        ).all())
+
     # --- Calificaciones del período seleccionado ---
     grades_q = db.query(Grade)
     grades_q, periodo_filter = _apply_periodo_filter(grades_q, periodo)
-    if carrera:
-        grades_q = grades_q.filter(func.lower(Grade.carrera).contains(carrera.lower()))
+    if carrera and _carrera_sids:
+        grades_q = grades_q.filter(Grade.student_id.in_(_carrera_sids))
     grades = grades_q.all()
 
     # Obtener IDs de estudiantes que tienen calificaciones en este período
@@ -681,8 +703,8 @@ def get_resumen_datos(
         Grade.docente.isnot(None), Grade.docente != ""
     )
     docentes_q, _ = _apply_periodo_filter(docentes_q, periodo)
-    if carrera:
-        docentes_q = docentes_q.filter(func.lower(Grade.carrera).contains(carrera.lower()))
+    if carrera and _carrera_sids:
+        docentes_q = docentes_q.filter(Grade.student_id.in_(_carrera_sids))
     total_docentes = docentes_q.scalar() or 0
 
     # --- Cálculos globales ---
@@ -851,12 +873,14 @@ def get_resumen_datos(
             carreras_map[c] = []
         carreras_map[c].append(s)
 
-    # Docentes por carrera (del período seleccionado)
-    docentes_carrera_q_base = db.query(Grade.carrera, func.count(distinct(Grade.docente))).filter(
+    # Docentes por carrera (del período seleccionado) — usar Student.carrera como fuente canónica
+    docentes_carrera_q_base = db.query(
+        Student.carrera, func.count(distinct(Grade.docente))
+    ).join(Grade, Grade.student_id == Student.id).filter(
         Grade.docente.isnot(None), Grade.docente != ""
     )
     docentes_carrera_q_base, _ = _apply_periodo_filter(docentes_carrera_q_base, periodo)
-    docentes_carrera_q = docentes_carrera_q_base.group_by(Grade.carrera).all()
+    docentes_carrera_q = docentes_carrera_q_base.group_by(Student.carrera).all()
     docentes_por_carrera = {r[0]: r[1] for r in docentes_carrera_q}
 
     # Intervenciones por carrera con detalle motivo
@@ -910,6 +934,13 @@ def get_comparativa(
             periodos.append(p)
     periodos.append("actual")  # Agregar período actual al final
 
+    # Pre-filtrar student_ids por Student.carrera (fuente canónica)
+    _comp_carrera_sids = None
+    if carrera:
+        _comp_carrera_sids = set(s.id for s, in db.query(Student.id).filter(
+            func.lower(Student.carrera).contains(carrera.lower())
+        ).all())
+
     result = []
     for per in periodos:
         # Query de calificaciones del período
@@ -918,8 +949,8 @@ def get_comparativa(
             g_q = g_q.filter(Grade.periodo.is_(None))
         else:
             g_q = g_q.filter(Grade.periodo == per)
-        if carrera:
-            g_q = g_q.filter(func.lower(Grade.carrera).contains(carrera.lower()))
+        if carrera and _comp_carrera_sids:
+            g_q = g_q.filter(Grade.student_id.in_(_comp_carrera_sids))
 
         grades = g_q.all()
         if not grades:
