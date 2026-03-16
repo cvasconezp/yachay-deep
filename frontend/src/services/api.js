@@ -116,7 +116,7 @@ class ApiClient {
     const form = new FormData();
     form.append("file", file);
     const token = this.getToken();
-    return fetch(`${this.base}/admin/etl/upload-and-run`, {
+    return fetch(`${this.baseUrl}/admin/etl/upload-and-run`, {
       method: "POST",
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: form,
