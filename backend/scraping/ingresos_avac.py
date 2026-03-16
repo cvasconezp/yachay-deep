@@ -1,6 +1,6 @@
 """
 Scraping de IngresosAVAC — adaptado para modo headless en GitHub Actions.
-Soporta 2FA TOTP automático con pyotp (GitHub Secret: AVAC_TOTP_SECRET).
+Login via flujo OAuth de Microsoft (Azure AD) con TOTP automático (pyotp).
 Los cursos se leen de la base de datos (tabla course_configs), no hardcodeados.
 """
 import os
@@ -16,12 +16,23 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 
+def _log_page_state(driver, context: str):
+    """Captura estado de la página para diagnóstico cuando algo falla."""
+    logger.error(f"[{context}] URL actual: {driver.current_url}")
+    logger.error(f"[{context}] Título: {driver.title}")
+    snippet = driver.page_source[:2000] if driver.page_source else "(vacío)"
+    logger.error(f"[{context}] HTML (primeros 2000 chars):\n{snippet}")
+
+
 def get_session_headless(username: str, password: str, base_url: str, totp_secret: str = None) -> requests.Session:
     """
-    Login automático headless con Selenium + 2FA TOTP.
+    Login automático headless vía flujo OAuth de Microsoft (Azure AD).
 
-    Para obtener el TOTP secret: en tu app autenticadora, busca la opción
-    'Ver clave' o 'Export account' — el secret es la cadena base32 (~32 caracteres).
+    Flujo: AVAC login → "Usuarios de la UPS" → Microsoft email → password → TOTP → redirect a AVAC.
+
+    Requiere AVAC_TOTP_SECRET: el secret base32 de Microsoft Authenticator.
+    Para obtenerlo: mysignins.microsoft.com → Información de seguridad → Agregar método
+    → Aplicación de autenticación → "Quiero usar otra app" → copiar el secret/clave.
     Guárdalo como GitHub Secret: AVAC_TOTP_SECRET
     """
     from selenium import webdriver
@@ -29,7 +40,14 @@ def get_session_headless(username: str, password: str, base_url: str, totp_secre
     from selenium.webdriver.common.by import By
     from selenium.webdriver.support.ui import WebDriverWait
     from selenium.webdriver.support import expected_conditions as EC
+    from selenium.common.exceptions import TimeoutException
     import time as _time
+
+    if not totp_secret:
+        raise ValueError(
+            "AVAC_TOTP_SECRET es requerido para login automático con Microsoft. "
+            "Configura un método TOTP en mysignins.microsoft.com y guarda el secret como GitHub Secret."
+        )
 
     logger.info("🚀 Iniciando Chrome headless...")
     opt = Options()
@@ -44,68 +62,193 @@ def get_session_headless(username: str, password: str, base_url: str, totp_secre
     driver = webdriver.Chrome(options=opt)
     try:
         login_url = f"{base_url}/login/index.php"
+        wait = WebDriverWait(driver, 30)
+        wait_short = WebDriverWait(driver, 10)
+
+        # ── Paso 1: Cargar página de login AVAC ──
         logger.info(f"Navegando a {login_url}")
         driver.get(login_url)
-        logger.info(f"Página cargada — URL actual: {driver.current_url}, título: {driver.title}")
-        wait = WebDriverWait(driver, 20)
+        logger.info(f"Página cargada — URL: {driver.current_url}, título: {driver.title}")
 
-        # Paso 1: usuario y contraseña
+        # ── Paso 2: Detectar tipo de login (directo Moodle vs OAuth federado) ──
+        # Si hay campo #username directo, es login Moodle clásico
+        # Si hay botón "Usuarios de la UPS", es login OAuth federado
         try:
-            username_field = wait.until(EC.presence_of_element_located((By.ID, "username")))
-        except Exception as e:
-            # Diagnóstico: capturar qué vio Chrome realmente
-            logger.error(f"No se encontró el campo #username. URL actual: {driver.current_url}")
-            logger.error(f"Título de la página: {driver.title}")
-            page_snippet = driver.page_source[:2000] if driver.page_source else "(vacío)"
-            logger.error(f"Contenido de la página (primeros 2000 chars):\n{page_snippet}")
-            raise
-        driver.find_element(By.ID, "password").send_keys(password)
-        username_field.send_keys(username)
-        driver.find_element(By.ID, "loginbtn").click()
+            username_field = wait_short.until(
+                EC.presence_of_element_located((By.ID, "username"))
+            )
+            # Login Moodle clásico
+            logger.info("Login Moodle directo detectado")
+            username_field.send_keys(username)
+            driver.find_element(By.ID, "password").send_keys(password)
+            driver.find_element(By.ID, "loginbtn").click()
+            _time.sleep(2)
+        except TimeoutException:
+            # No hay #username → buscar botón OAuth "Usuarios de la UPS"
+            logger.info("Login federado detectado — buscando botón 'Usuarios de la UPS'...")
+            try:
+                # El botón puede ser un enlace con texto o un potentialidp link
+                oauth_btn = None
+                for selector in [
+                    "a.btn-login",
+                    "a.login-identityprovider-btn",
+                    ".potentialidp a",
+                    "a[href*='auth/oidc']",
+                    "a[href*='oauth2']",
+                    "a[href*='saml']",
+                ]:
+                    try:
+                        oauth_btn = driver.find_element(By.CSS_SELECTOR, selector)
+                        break
+                    except Exception:
+                        pass
+
+                if oauth_btn is None:
+                    # Fallback: buscar por texto
+                    links = driver.find_elements(By.TAG_NAME, "a")
+                    for link in links:
+                        if "UPS" in link.text or "Usuarios" in link.text:
+                            oauth_btn = link
+                            break
+
+                if oauth_btn is None:
+                    _log_page_state(driver, "No se encontró botón OAuth")
+                    raise RuntimeError(
+                        "No se encontró el botón 'Usuarios de la UPS' ni el formulario de login directo"
+                    )
+
+                logger.info(f"Clic en: '{oauth_btn.text.strip()}'")
+                oauth_btn.click()
+
+                # ── Paso 3: Microsoft login — ingresar email ──
+                logger.info("Esperando página de login Microsoft...")
+                email_field = wait.until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='email'], input[name='loginfmt']"))
+                )
+                logger.info(f"Campo email encontrado — URL: {driver.current_url}")
+                email_field.clear()
+                email_field.send_keys(username)
+
+                # Clic en "Siguiente"
+                next_btn = wait.until(
+                    EC.element_to_be_clickable((By.CSS_SELECTOR, "input[type='submit'], #idSIButton9"))
+                )
+                next_btn.click()
+                _time.sleep(2)
+
+                # ── Paso 4: Seleccionar tipo de cuenta (si aparece) ──
+                # Microsoft a veces pregunta "Cuenta profesional o educativa" vs "Cuenta personal"
+                try:
+                    work_account = wait_short.until(
+                        EC.element_to_be_clickable((By.CSS_SELECTOR, "#aadTile, #aadTileTitle, div[data-test-id='aadTile']"))
+                    )
+                    logger.info("Seleccionando cuenta profesional/educativa...")
+                    work_account.click()
+                    _time.sleep(2)
+                except TimeoutException:
+                    pass  # No apareció selector de tipo de cuenta
+
+                # ── Paso 5: Ingresar contraseña ──
+                logger.info("Esperando campo de contraseña...")
+                try:
+                    password_field = wait.until(
+                        EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='password'], input[name='passwd']"))
+                    )
+                    password_field.clear()
+                    password_field.send_keys(password)
+
+                    submit_btn = wait.until(
+                        EC.element_to_be_clickable((By.CSS_SELECTOR, "input[type='submit'], #idSIButton9, span[class='submit']"))
+                    )
+                    submit_btn.click()
+                    logger.info("Contraseña enviada")
+                    _time.sleep(2)
+                except TimeoutException:
+                    _log_page_state(driver, "No se encontró campo de contraseña")
+                    raise
+
+            except RuntimeError:
+                raise
+            except TimeoutException:
+                _log_page_state(driver, "Timeout en flujo OAuth Microsoft")
+                raise
+            except Exception as e:
+                _log_page_state(driver, f"Error inesperado en OAuth: {type(e).__name__}")
+                raise
+
+        # ── Paso 6: MFA — TOTP o "Stay signed in?" ──
+        logger.info("Verificando si se requiere MFA...")
         _time.sleep(2)
 
-        # Paso 2: detectar pantalla 2FA (Moodle usa varios selectores según el plugin)
+        # Detectar pantalla TOTP de Microsoft o Moodle
         totp_field = None
-        for selector in [
-            "#otp", "#totpcode", "input[name='verificationcode']",
+        totp_selectors = [
+            "input[name='otc']",           # Microsoft Authenticator TOTP
+            "#idTxtBx_SAOTCC_OTC",         # Microsoft "Enter code"
+            "input[name='totp']",
+            "#otp", "#totpcode",
+            "input[name='verificationcode']",
             "input[type='text'][autocomplete='one-time-code']",
-            "input[name='passcode']", "input[name='totp']",
-        ]:
+            "input[name='passcode']",
+        ]
+        for selector in totp_selectors:
             try:
                 totp_field = driver.find_element(By.CSS_SELECTOR, selector)
-                break
+                if totp_field.is_displayed():
+                    break
+                totp_field = None
             except Exception:
                 pass
 
         if totp_field:
-            logger.info("🔐 Pantalla 2FA detectada — generando código TOTP...")
-            if not totp_secret:
-                raise ValueError(
-                    "AVAC requiere 2FA pero AVAC_TOTP_SECRET no está definido en variables de entorno. "
-                    "Consulta DEPLOY.md sección '2FA' para obtener el secret de tu app autenticadora."
-                )
+            logger.info("🔐 Pantalla MFA/TOTP detectada — generando código...")
             try:
                 import pyotp
             except ImportError:
                 raise ImportError("Instala pyotp: pip install pyotp")
 
             code = pyotp.TOTP(totp_secret).now()
-            logger.info(f"🔑 Código TOTP generado (válido 30s): {code[:2]}****")
+            logger.info(f"🔑 Código TOTP generado: {code[:2]}****")
             totp_field.clear()
             totp_field.send_keys(code)
 
-            for btn in ["button[type='submit']", "input[type='submit']", "#loginbtn"]:
+            # Clic en verificar/submit
+            for btn_sel in [
+                "input[type='submit']", "#idSubmit_SAOTCC_Continue",
+                "button[type='submit']", "#idSIButton9",
+            ]:
                 try:
-                    driver.find_element(By.CSS_SELECTOR, btn).click()
-                    break
+                    btn = driver.find_element(By.CSS_SELECTOR, btn_sel)
+                    if btn.is_displayed():
+                        btn.click()
+                        break
                 except Exception:
                     pass
-            _time.sleep(2)
+            _time.sleep(3)
+        else:
+            logger.info("No se detectó pantalla TOTP (puede que no sea necesario)")
 
-        # Verificar login exitoso
-        wait.until(EC.presence_of_element_located(
-            (By.CSS_SELECTOR, ".usermenu, .usertext, #user-menu-toggle, [data-region='usermenu']")
-        ))
+        # ── Paso 7: "Stay signed in?" / "Mantener la sesión iniciada?" ──
+        try:
+            stay_btn = wait_short.until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "#idSIButton9, #idBtn_Back, input[value='Yes'], input[value='No']"))
+            )
+            logger.info(f"Pantalla 'Stay signed in' detectada — aceptando...")
+            stay_btn.click()
+            _time.sleep(2)
+        except TimeoutException:
+            pass  # No apareció
+
+        # ── Paso 8: Verificar login exitoso en AVAC ──
+        logger.info(f"Esperando redirect a AVAC... URL actual: {driver.current_url}")
+        try:
+            wait.until(EC.presence_of_element_located(
+                (By.CSS_SELECTOR, ".usermenu, .usertext, #user-menu-toggle, [data-region='usermenu'], .userbutton")
+            ))
+        except TimeoutException:
+            _log_page_state(driver, "Login no completado — no se detectó menú de usuario en AVAC")
+            raise RuntimeError("Login completó el flujo OAuth pero AVAC no muestra sesión activa")
+
         logger.info("✅ Login exitoso. Transfiriendo sesión a modo HTTP rápido...")
 
         session = requests.Session()
