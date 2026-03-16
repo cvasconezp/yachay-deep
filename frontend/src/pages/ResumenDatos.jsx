@@ -58,12 +58,12 @@ export default function ResumenDatos() {
       if (filtroPeriodo && filtroPeriodo !== "actual") params.periodo = filtroPeriodo;
       const compParams = {};
       if (filtroCarrera) compParams.carrera = filtroCarrera;
-      const [result, compData] = await Promise.all([
+      const [result, compData] = await Promise.allSettled([
         api.getResumenDatos(params),
         api.getComparativa(compParams),
       ]);
-      setData(result);
-      setComparativa(compData);
+      if (result.status === "fulfilled") setData(result.value);
+      if (compData.status === "fulfilled") setComparativa(compData.value);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -516,7 +516,7 @@ export default function ResumenDatos() {
                             </div>
                             {Object.keys(c.intervenciones.por_motivo || {}).length > 0 && (
                               <div className="space-y-1">
-                                {Object.entries(c.intervenciones?.por_motivo || {}).sort((a, b) => b[1] - a[1]).map(([mot, cnt]) => (
+                                {Object.entries(c.intervenciones.por_motivo).sort((a, b) => b[1] - a[1]).map(([mot, cnt]) => (
                                   <MiniBar key={mot} label={mot} value={cnt} total={c.intervenciones.total} color="bg-blue-400" />
                                 ))}
                               </div>

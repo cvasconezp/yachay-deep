@@ -6,7 +6,6 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
-from slowapi.errors import RateLimitExceeded
 import logging
 
 from .config import settings, validate_security_settings
@@ -101,17 +100,6 @@ app = FastAPI(
     redoc_url="/redoc" if settings.DEBUG else None,
 )
 
-# Rate limiting — registrar el state en la app para slowapi
-from .auth.routes import limiter
-app.state.limiter = limiter
-
-
-@app.exception_handler(RateLimitExceeded)
-async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
-    return JSONResponse(
-        status_code=429,
-        content={"detail": "Demasiados intentos. Intente de nuevo en un momento."},
-    )
 
 # CORS — permite el frontend en Vercel
 app.add_middleware(

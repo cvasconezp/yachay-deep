@@ -984,10 +984,7 @@ def transform_calificaciones_historico(carpeta: str) -> pd.DataFrame:
             if "nota final"  in col_lower: rename_map[col_lower["nota final"]]  = "nota_final"
             df = df.rename(columns=rename_map)
 
-            # Filtrar solo EIB (carrera contiene 'INTERCULTURAL')
-            if "carrera" in df.columns:
-                df = df[df["carrera"].str.contains("INTERCULTURAL", case=False, na=False)].copy()
-            else:
+            if "carrera" not in df.columns:
                 logger.warning(f"  {archivo.name}: columna 'Carrera' no encontrada")
                 continue
 
