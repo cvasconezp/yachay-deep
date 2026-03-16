@@ -10,8 +10,10 @@ function TabSistema() {
   const [status, setStatus] = useState(null);
   const [runs, setRuns] = useState([]);
   const [etlLoading, setEtlLoading] = useState(false);
+  const [uploadLoading, setUploadLoading] = useState(false);
   const [msg, setMsg] = useState("");
   const [etlMsg, setEtlMsg] = useState("");
+  const [uploadMsg, setUploadMsg] = useState("");
   const [mlStatus, setMlStatus] = useState(null);
   const [mlLoading, setMlLoading] = useState(false);
   const [mlMsg, setMlMsg] = useState("");
@@ -85,6 +87,47 @@ function TabSistema() {
           {etlMsg && (
             <div className={`text-sm mt-3 px-4 py-2 rounded-lg ${etlMsg.startsWith("Error") ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
               {etlMsg}
+            </div>
+          )}
+        </div>
+
+        <div className="mt-4 pt-4 border-t border-gray-100">
+          <label className="block text-sm font-semibold text-gray-700 mb-2">
+            Subir datos y ejecutar ETL
+          </label>
+          <p className="text-xs text-gray-400 mb-2">
+            Sube un archivo ZIP con los CSVs de calificaciones históricas (TableauHistorico/), IngresosAVAC/, Tareas/ y Reportes/.
+            Se extraen a la carpeta data/ del servidor y se ejecuta el ETL automáticamente.
+          </p>
+          <div className="flex items-center gap-3">
+            <input
+              type="file"
+              accept=".zip"
+              id="etl-zip-upload"
+              className="text-sm file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+              disabled={uploadLoading}
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                setUploadLoading(true);
+                setUploadMsg("");
+                try {
+                  const result = await api.uploadAndRunETL(file);
+                  setUploadMsg(result.message || "ZIP subido y ETL iniciado");
+                  setTimeout(() => api.getETLRuns().then(setRuns), 3000);
+                } catch (err) {
+                  setUploadMsg("Error: " + err.message);
+                } finally {
+                  setUploadLoading(false);
+                  e.target.value = "";
+                }
+              }}
+            />
+            {uploadLoading && <span className="text-sm text-blue-600 animate-pulse">Subiendo y ejecutando...</span>}
+          </div>
+          {uploadMsg && (
+            <div className={`text-sm mt-3 px-4 py-2 rounded-lg ${uploadMsg.startsWith("Error") ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
+              {uploadMsg}
             </div>
           )}
         </div>

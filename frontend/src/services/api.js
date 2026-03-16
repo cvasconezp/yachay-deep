@@ -112,6 +112,19 @@ class ApiClient {
   triggerETL() { return this.post("/admin/etl/run", {}); }
   getETLRuns() { return this.get("/admin/etl/runs"); }
   getSystemStatus() { return this.get("/admin/system/status"); }
+  uploadAndRunETL(file) {
+    const form = new FormData();
+    form.append("file", file);
+    const token = this.getToken();
+    return fetch(`${this.base}/admin/etl/upload-and-run`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    }).then(async (r) => {
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
+      return r.json();
+    });
+  }
 
   // Export
   exportFichaPDF(studentId) { return this.get(`/export/ficha/${studentId}/pdf`); }
