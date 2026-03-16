@@ -57,15 +57,18 @@ jobs:
       # Ejemplo Google Drive: https://drive.google.com/uc?export=download&id=FILE_ID
       # ──────────────────────────────────────────────────────────────────────────────────
       - name: Descargar datos estáticos (TableauHistorico, Reportes, DatosEspecificos)
-        if: ${{ secrets.STATIC_DATA_URL != '' }}
+        env:
+          STATIC_DATA_URL: ${{ secrets.STATIC_DATA_URL }}
         run: |
+          if [ -z "$STATIC_DATA_URL" ]; then
+            echo "⏭️ STATIC_DATA_URL no configurado, omitiendo descarga de datos estáticos."
+            exit 0
+          fi
           echo "📥 Descargando archivos estáticos desde STATIC_DATA_URL..."
           curl -fsSL -o static_data.zip "$STATIC_DATA_URL"
           unzip -o static_data.zip -d data/
           echo "✅ Archivos estáticos extraídos:"
           ls -R data/TableauHistorico/ data/Reportes/ data/DatosEspecificos/ 2>/dev/null || true
-        env:
-          STATIC_DATA_URL: ${{ secrets.STATIC_DATA_URL }}
 
       - name: Ejecutar scraping + ETL
         env:
