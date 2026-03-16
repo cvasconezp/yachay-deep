@@ -99,7 +99,6 @@ jobs:
           path: |
             data/IngresosAVAC/cursos_no_encontrados.csv
             data/IngresosAVAC/errores.log
-          if-no-files-found: ignore
           retention-days: 30
 
       - name: Notificar éxito
