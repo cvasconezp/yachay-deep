@@ -54,22 +54,14 @@ def _semester_ended() -> bool:
     try:
         sem = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
         if sem is None:
-            logger.warning("No hay semestre activo configurado — omitiendo scraping.")
+            logger.warning("No hay semestre activo configurado")
             return True  # sin semestre activo, no ejecutar scraping
-        if sem.fecha_fin_actual is None:
-            logger.warning(
-                f"⚠️ Semestre {sem.semestre} no tiene fechas de bloque configuradas. "
-                "Configure bloque1_fin/bloque2_fin en Admin → Configuración de Semestre "
-                "para activar la protección post-semestre. Continuando scraping..."
-            )
-            return False
         if sem.semestre_finalizado:
             logger.warning(
                 f"Semestre {sem.semestre} finalizó el {sem.fecha_fin_actual}. "
                 "Omitiendo scraping para evitar alertas falsas post-semestre."
             )
             return True
-        logger.info(f"Semestre {sem.semestre} vigente (fin bloque: {sem.fecha_fin_actual})")
         return False
     finally:
         db.close()
