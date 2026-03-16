@@ -108,7 +108,7 @@ def get_asignaturas_analytics(
 
     if carrera:
         # Filtrar por Student.carrera (fuente canónica) en vez de Grade.carrera
-        carrera_student_ids = [s.id for s, in db.query(Student.id).filter(
+        carrera_student_ids = [s_id for (s_id,) in db.query(Student.id).filter(
             func.lower(Student.carrera).contains(carrera.lower())
         ).all()]
         if carrera_student_ids:
@@ -343,7 +343,7 @@ def get_docentes_analytics(
     # Pre-filtrar student_ids por Student.carrera (fuente canónica)
     _carrera_sids = None
     if carrera:
-        _carrera_sids = [s.id for s, in db.query(Student.id).filter(
+        _carrera_sids = [s_id for (s_id,) in db.query(Student.id).filter(
             func.lower(Student.carrera).contains(carrera.lower())
         ).all()]
         if _carrera_sids:
@@ -659,7 +659,7 @@ def get_resumen_datos(
     # --- Pre-filtrar student_ids por Student.carrera (fuente canónica) ---
     _carrera_sids = None
     if carrera:
-        _carrera_sids = set(s.id for s, in db.query(Student.id).filter(
+        _carrera_sids = set(s_id for (s_id,) in db.query(Student.id).filter(
             func.lower(Student.carrera).contains(carrera.lower())
         ).all())
 
@@ -937,7 +937,7 @@ def get_comparativa(
     # Pre-filtrar student_ids por Student.carrera (fuente canónica)
     _comp_carrera_sids = None
     if carrera:
-        _comp_carrera_sids = set(s.id for s, in db.query(Student.id).filter(
+        _comp_carrera_sids = set(s_id for (s_id,) in db.query(Student.id).filter(
             func.lower(Student.carrera).contains(carrera.lower())
         ).all())
 
