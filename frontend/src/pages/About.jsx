@@ -5,8 +5,8 @@ const PODCASTS = [
   {
     title: "El Excel que frena el abandono universitario",
     description:
-      "El origen de Yachay Deep: cómo un sistema construido en Excel con macros VBA evolucionó hacia una plataforma web de inteligencia académica preventiva.",
-    file: "/El_Excel_que_frena_el_abandono_universitario.m4a",
+      "El origen de Yachay Deep: como un sistema construido en Excel con macros VBA evolucionó hacia una plataforma web de inteligencia académica preventiva.",
+    file: "/El_Excel_que_frena_el_abandono_universitario_02.mp3",
   },
   {
     title: "IA para evitar el abandono universitario",
@@ -268,7 +268,7 @@ export default function About() {
                     onPlay={() => setPlayingIdx(i)}
                     preload="none"
                   >
-                    <source src={pod.file} type="audio/mp4" />
+                    <source src={pod.file} type={pod.file.endsWith('.mp3') ? 'audio/mpeg' : pod.file.endsWith('.wav') ? 'audio/wav' : 'audio/mp4'} />
                     Su navegador no soporta el elemento de audio.
                   </audio>
                 </div>
