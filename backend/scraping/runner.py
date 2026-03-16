@@ -23,20 +23,25 @@ def run_scraping(mode: str = "full"):
     from .ingresos_avac import scrape_ingresos
     from .estado_tareas import scrape_tareas
     from ..config import settings
+    from ..database import SessionLocal
 
     results = {}
+    db = SessionLocal()
 
-    if mode in ("ingresos", "full"):
-        logger.info("=" * 50)
-        logger.info("SCRAPING: IngresosAVAC")
-        logger.info("=" * 50)
-        results["ingresos"] = scrape_ingresos(output_dir=settings.DATA_PATH_INGRESOS)
+    try:
+        if mode in ("ingresos", "full"):
+            logger.info("=" * 50)
+            logger.info("SCRAPING: IngresosAVAC")
+            logger.info("=" * 50)
+            results["ingresos"] = scrape_ingresos(output_dir=settings.DATA_PATH_INGRESOS, db=db)
 
-    if mode in ("tareas", "full"):
-        logger.info("=" * 50)
-        logger.info("SCRAPING: Estado Tareas")
-        logger.info("=" * 50)
-        results["tareas"] = scrape_tareas(output_dir=settings.DATA_PATH_TAREAS)
+        if mode in ("tareas", "full"):
+            logger.info("=" * 50)
+            logger.info("SCRAPING: Estado Tareas")
+            logger.info("=" * 50)
+            results["tareas"] = scrape_tareas(output_dir=settings.DATA_PATH_TAREAS, db=db)
+    finally:
+        db.close()
 
     return results
 

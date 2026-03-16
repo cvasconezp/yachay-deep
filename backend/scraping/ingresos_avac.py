@@ -176,7 +176,7 @@ def scrape_ingresos(output_dir: str, codigos: list = None, base_url: str = None,
             start_time = time.time()
             resp = session.get(f"{base_url}/course/search.php?search={codigo_curso}", timeout=30)
             soup = BeautifulSoup(resp.content, "html.parser", from_encoding="utf-8")
-            enlace = soup.select_one(".coursebox a[href*='id=']")
+            enlace = soup.select_one(".coursebox a[href*='view.php?id=']")
 
             if not enlace:
                 no_encontrados.append(codigo_curso)
