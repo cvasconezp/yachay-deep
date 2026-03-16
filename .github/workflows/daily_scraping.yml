@@ -89,8 +89,7 @@ jobs:
           DATA_PATH_DATOS_ESPECIFICOS: ./data/DatosEspecificos
 
         run: |
-          cd backend
-          python -m scraping.runner --mode ${{ inputs.mode || 'full' }}
+          python -m backend.scraping.runner --mode ${{ inputs.mode || 'full' }}
 
       - name: Subir logs como artefacto
         if: always()
