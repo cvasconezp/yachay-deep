@@ -38,14 +38,27 @@ def get_session_headless(username: str, password: str, base_url: str, totp_secre
     opt.add_argument("--disable-dev-shm-usage")
     opt.add_argument("--disable-gpu")
     opt.add_argument("--window-size=1920,1080")
+    opt.add_argument("--disable-extensions")
+    opt.add_argument("--disable-software-rasterizer")
 
     driver = webdriver.Chrome(options=opt)
     try:
-        driver.get(f"{base_url}/login/index.php")
+        login_url = f"{base_url}/login/index.php"
+        logger.info(f"Navegando a {login_url}")
+        driver.get(login_url)
+        logger.info(f"Página cargada — URL actual: {driver.current_url}, título: {driver.title}")
         wait = WebDriverWait(driver, 20)
 
         # Paso 1: usuario y contraseña
-        username_field = wait.until(EC.presence_of_element_located((By.ID, "username")))
+        try:
+            username_field = wait.until(EC.presence_of_element_located((By.ID, "username")))
+        except Exception as e:
+            # Diagnóstico: capturar qué vio Chrome realmente
+            logger.error(f"No se encontró el campo #username. URL actual: {driver.current_url}")
+            logger.error(f"Título de la página: {driver.title}")
+            page_snippet = driver.page_source[:2000] if driver.page_source else "(vacío)"
+            logger.error(f"Contenido de la página (primeros 2000 chars):\n{page_snippet}")
+            raise
         driver.find_element(By.ID, "password").send_keys(password)
         username_field.send_keys(username)
         driver.find_element(By.ID, "loginbtn").click()
