@@ -32,9 +32,30 @@ async def lifespan(app: FastAPI):
     create_tables()
     upgrade_tables()   # agrega columnas nuevas sin borrar datos
     _create_default_admin()
+    _cleanup_stuck_etl_runs()
     logger.info("✅ Base de datos lista")
     yield
     logger.info("Apagando Yachay Deep API")
+
+
+def _cleanup_stuck_etl_runs():
+    """Marca como 'failed' cualquier ETL run que quedó en 'running' de un reinicio anterior."""
+    from .database import SessionLocal
+    from .models.scraping_run import ScrapingRun
+    from datetime import datetime, timezone
+
+    db = SessionLocal()
+    try:
+        stuck = db.query(ScrapingRun).filter(ScrapingRun.status == "running").all()
+        for run in stuck:
+            run.status = "failed"
+            run.finished_at = datetime.now(timezone.utc)
+            run.log_output = (run.log_output or "") + "\n[STARTUP] Marcado como failed: el servidor reinició mientras el ETL estaba en ejecución."
+        if stuck:
+            db.commit()
+            logger.warning(f"⚠️ {len(stuck)} ETL run(s) atascados marcados como 'failed' tras reinicio")
+    finally:
+        db.close()
 
 
 def _create_default_admin():
