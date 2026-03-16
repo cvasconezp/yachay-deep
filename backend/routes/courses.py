@@ -200,3 +200,27 @@ def set_bloque(semestre: str, payload: BloqueUpdate, db: Session = Depends(get_d
     s.bloque_actual = payload.bloque
     db.commit()
     return {"semestre": semestre, "bloque_actual": payload.bloque}
+
+
+@router.post("/semester/deactivate-all", dependencies=[Depends(require_admin)])
+def deactivate_all_semesters(db: Session = Depends(get_db)):
+    """Desactiva todos los semestres. Útil al finalizar un período académico
+    para detener scraping y alertas de AVAC."""
+    db.query(SemesterConfig).update({"activo": False})
+    db.commit()
+    return {"message": "Todos los semestres desactivados. El scraping diario y las alertas de AVAC se detendrán."}
+
+
+@router.get("/semester/{semestre}/status", dependencies=[Depends(get_current_user)])
+def semester_status(semestre: str, db: Session = Depends(get_db)):
+    """Devuelve el estado del semestre incluyendo si ya finalizó."""
+    s = db.query(SemesterConfig).filter(SemesterConfig.semestre == semestre).first()
+    if not s:
+        raise HTTPException(status_code=404, detail="Semestre no encontrado")
+    return {
+        "semestre": s.semestre,
+        "activo": s.activo,
+        "bloque_actual": s.bloque_actual,
+        "fecha_fin_actual": str(s.fecha_fin_actual) if s.fecha_fin_actual else None,
+        "semestre_finalizado": s.semestre_finalizado,
+    }
