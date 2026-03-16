@@ -68,15 +68,14 @@ def _normalizar(texto):
 # SCRAPING DE REPORTE GENERAL (CALIFICACIONES)
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _procesar_reporte_general(session, url_reporte, es_especial=False):
+def _procesar_reporte_general(soup, es_especial=False):
     """
-    Lee la tabla de calificaciones del curso y extrae Total del Curso por alumno.
+    Procesa el HTML de calificaciones del curso y extrae Total del Curso por alumno.
     Para cursos especiales también extrae totales de unidad.
+    Recibe un BeautifulSoup ya parseado (evita requests duplicadas).
     """
     datos = {}
     try:
-        resp = session.get(url_reporte, timeout=30)
-        soup = BeautifulSoup(resp.content, "html.parser", from_encoding="utf-8")
 
         headers = soup.select(
             "table#user-grades tr.heading th, table.generaltable tr th.header"
@@ -147,6 +146,7 @@ def scrape_tareas(output_dir: str, codigos=None, base_url: str = None, db=None):
         db: SQLAlchemy session (para leer CourseConfig)
     """
     from .ingresos_avac import get_active_codigos, get_session_headless
+    from ..config import settings as _settings
 
     base_url = base_url or _settings.AVAC_BASE_URL
     output_path = Path(output_dir)
@@ -160,8 +160,6 @@ def scrape_tareas(output_dir: str, codigos=None, base_url: str = None, db=None):
         logger.warning("No hay códigos de cursos activos para scrapear tareas.")
         return {"codigos_procesados": 0, "errores": []}
 
-    # Iniciar sesión (usar settings centralizado en vez de os.getenv directo)
-    from ..config import settings as _settings
     username = _settings.AVAC_USERNAME
     password = _settings.AVAC_PASSWORD
     totp_secret = _settings.AVAC_TOTP_SECRET
@@ -199,14 +197,14 @@ def scrape_tareas(output_dir: str, codigos=None, base_url: str = None, db=None):
             if not id_curso:
                 continue
 
-            # B. Datos generales (totales de calificaciones)
+            # B. Datos generales (totales de calificaciones) — una sola request
             url_calif = f"{base_url}/grade/report/index.php?id={id_curso}"
-            datos_estudiantes = _procesar_reporte_general(session, url_calif, es_especial=False)
+            resp_calif = session.get(url_calif, timeout=30)
+            soup_calif = BeautifulSoup(resp_calif.content, "html.parser", from_encoding="utf-8")
+            datos_estudiantes = _procesar_reporte_general(soup_calif, es_especial=False)
             logger.info(f"  {codigo_curso}: {len(datos_estudiantes)} alumnos en tabla general")
 
             # C. Detalles de tareas por unidad
-            resp_calif = session.get(url_calif, timeout=30)
-            soup_calif = BeautifulSoup(resp_calif.text, "html.parser")
             links_tareas = soup_calif.select("th a[href*='/mod/assign/view.php?id=']")
 
             tareas_ids_vistos = set()
