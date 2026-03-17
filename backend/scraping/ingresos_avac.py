@@ -18,11 +18,19 @@ logger = logging.getLogger(__name__)
 
 def get_session_headless(username: str, password: str, base_url: str, totp_secret: str = None) -> requests.Session:
     """
-    Login automático headless con Selenium + 2FA TOTP.
+    Login automático headless via Microsoft SSO (Azure AD / Entra ID).
 
-    Para obtener el TOTP secret: en tu app autenticadora, busca la opción
-    'Ver clave' o 'Export account' — el secret es la cadena base32 (~32 caracteres).
-    Guárdalo como GitHub Secret: AVAC_TOTP_SECRET
+    Flujo real de AVAC UPS:
+      1. AVAC /login/index.php → clic "Usuarios de la UPS" (OAuth redirect)
+      2. Microsoft login → ingresa email (AVAC_USERNAME = correo UPS)
+      3. Selector de cuenta → "Cuenta profesional o educativa"
+      4. Página UPS → ingresa contraseña (AVAC_PASSWORD = App Password de Microsoft)
+         Con App Password el MFA se salta automáticamente.
+      5. "¿Mantener sesión?" → Sí
+      6. Redirect de vuelta a AVAC → logueado
+
+    IMPORTANTE: AVAC_PASSWORD debe ser un App Password de Microsoft (no la contraseña normal)
+    para evitar el MFA interactivo. Crear en: https://mysignins.microsoft.com/security-info
     """
     from selenium import webdriver
     from selenium.webdriver.chrome.options import Options
@@ -40,66 +48,109 @@ def get_session_headless(username: str, password: str, base_url: str, totp_secre
     opt.add_argument("--window-size=1920,1080")
 
     driver = webdriver.Chrome(options=opt)
-    try:
-        driver.get(f"{base_url}/login/index.php")
-        wait = WebDriverWait(driver, 20)
+    wait = WebDriverWait(driver, 30)
 
-        # Paso 1: usuario y contraseña
-        username_field = wait.until(EC.presence_of_element_located((By.ID, "username")))
-        driver.find_element(By.ID, "password").send_keys(password)
-        username_field.send_keys(username)
-        driver.find_element(By.ID, "loginbtn").click()
+    try:
+        # ── Paso 1: Ir a AVAC login y clic en "Usuarios de la UPS" ──
+        logger.info("📄 Cargando página de login AVAC...")
+        driver.get(f"{base_url}/login/index.php")
+
+        # El botón de SSO puede ser un link o botón con texto "Usuarios de la UPS"
+        sso_button = wait.until(EC.element_to_be_clickable((
+            By.XPATH,
+            "//a[contains(text(),'Usuarios de la UPS')] | "
+            "//button[contains(text(),'Usuarios de la UPS')] | "
+            "//div[contains(@class,'potentialidp')]//a"
+        )))
+        logger.info("🔗 Clic en 'Usuarios de la UPS' (redirect a Microsoft SSO)...")
+        sso_button.click()
+
+        # ── Paso 2: Microsoft login — ingresar email ──
+        logger.info("📧 Esperando página de login Microsoft...")
+        email_field = wait.until(EC.presence_of_element_located((
+            By.CSS_SELECTOR, "input[name='loginfmt']"
+        )))
+        email_field.clear()
+        email_field.send_keys(username)
+        driver.find_element(By.CSS_SELECTOR, "input[type='submit']").click()
         _time.sleep(2)
 
-        # Paso 2: detectar pantalla 2FA (Moodle usa varios selectores según el plugin)
-        totp_field = None
-        for selector in [
-            "#otp", "#totpcode", "input[name='verificationcode']",
-            "input[type='text'][autocomplete='one-time-code']",
-            "input[name='passcode']", "input[name='totp']",
-        ]:
-            try:
-                totp_field = driver.find_element(By.CSS_SELECTOR, selector)
-                break
-            except Exception:
-                pass
-
-        if totp_field:
-            logger.info("🔐 Pantalla 2FA detectada — generando código TOTP...")
-            if not totp_secret:
-                raise ValueError(
-                    "AVAC requiere 2FA pero AVAC_TOTP_SECRET no está definido en variables de entorno. "
-                    "Consulta DEPLOY.md sección '2FA' para obtener el secret de tu app autenticadora."
-                )
-            try:
-                import pyotp
-            except ImportError:
-                raise ImportError("Instala pyotp: pip install pyotp")
-
-            code = pyotp.TOTP(totp_secret).now()
-            logger.info(f"🔑 Código TOTP generado (válido 30s): {code[:2]}****")
-            totp_field.clear()
-            totp_field.send_keys(code)
-
-            for btn in ["button[type='submit']", "input[type='submit']", "#loginbtn"]:
-                try:
-                    driver.find_element(By.CSS_SELECTOR, btn).click()
-                    break
-                except Exception:
-                    pass
+        # ── Paso 3: Selector de cuenta (si aparece) ──
+        # "Cuenta profesional o educativa" vs "Cuenta personal"
+        try:
+            work_account = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((
+                By.CSS_SELECTOR, "#aadTile, [data-test-id='aadTile']"
+            )))
+            logger.info("👔 Seleccionando 'Cuenta profesional o educativa'...")
+            work_account.click()
             _time.sleep(2)
+        except Exception:
+            logger.info("ℹ️  No apareció selector de cuenta (directo a password)")
 
-        # Verificar login exitoso
-        wait.until(EC.presence_of_element_located(
-            (By.CSS_SELECTOR, ".usermenu, .usertext, #user-menu-toggle, [data-region='usermenu']")
-        ))
-        logger.info("✅ Login exitoso. Transfiriendo sesión a modo HTTP rápido...")
+        # ── Paso 4: Ingresar contraseña (App Password) ──
+        logger.info("🔑 Ingresando contraseña (App Password)...")
+        password_field = wait.until(EC.presence_of_element_located((
+            By.CSS_SELECTOR, "input[name='passwd']"
+        )))
+        password_field.clear()
+        password_field.send_keys(password)
+        driver.find_element(By.CSS_SELECTOR, "input[type='submit']").click()
+        _time.sleep(3)
 
+        # ── Paso 5: "¿Mantener sesión iniciada?" → Sí ──
+        try:
+            stay_signed_in = WebDriverWait(driver, 10).until(EC.element_to_be_clickable((
+                By.CSS_SELECTOR, "input[type='submit'][value='Sí'], "
+                                 "input[type='submit'][value='Yes'], "
+                                 "#idSIButton9"
+            )))
+            logger.info("🏠 Clic en 'Sí' (mantener sesión)...")
+            stay_signed_in.click()
+            _time.sleep(3)
+        except Exception:
+            logger.info("ℹ️  No apareció pantalla 'mantener sesión'")
+
+        # ── Paso 6: Esperar redirect de vuelta a AVAC ──
+        logger.info("⏳ Esperando redirect a AVAC...")
+        wait.until(lambda d: base_url.split("//")[1].split("/")[0] in d.current_url)
+        logger.info(f"🌐 URL actual: {driver.current_url}")
+
+        # Verificar login exitoso en AVAC (buscar menú de usuario)
+        wait.until(EC.presence_of_element_located((
+            By.CSS_SELECTOR,
+            ".usermenu, .usertext, #user-menu-toggle, "
+            "[data-region='usermenu'], .userbutton, .logininfo"
+        )))
+        logger.info("✅ Login exitoso en AVAC. Transfiriendo sesión a modo HTTP rápido...")
+
+        # Transferir cookies de Selenium a requests.Session
         session = requests.Session()
         for cookie in driver.get_cookies():
             session.cookies.set(cookie["name"], cookie["value"])
-        session.headers.update({"User-Agent": driver.execute_script("return navigator.userAgent;")})
+        session.headers.update({
+            "User-Agent": driver.execute_script("return navigator.userAgent;")
+        })
         return session
+
+    except Exception as e:
+        # Capturar diagnóstico antes de cerrar
+        logger.error(f"❌ Error en login: {e}")
+        logger.error(f"   URL actual: {driver.current_url}")
+        try:
+            page_title = driver.title
+            logger.error(f"   Título de página: {page_title}")
+            # Guardar screenshot para debug
+            screenshot_path = "/tmp/avac_login_error.png"
+            driver.save_screenshot(screenshot_path)
+            logger.error(f"   Screenshot guardado en: {screenshot_path}")
+            # Guardar HTML para debug
+            html_path = "/tmp/avac_login_error.html"
+            with open(html_path, "w", encoding="utf-8") as f:
+                f.write(driver.page_source)
+            logger.error(f"   HTML guardado en: {html_path}")
+        except Exception:
+            pass
+        raise
 
     finally:
         driver.quit()
