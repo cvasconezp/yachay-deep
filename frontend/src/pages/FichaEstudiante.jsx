@@ -14,6 +14,25 @@ function getNoteStyle(nota, max = 40) {
   return               { bg: "bg-red-100",    text: "text-red-700",   border: "border-red-300" };
 }
 
+/**
+ * Mapea el diagnóstico computado (Framework_FichaEst §3.5) a colores + etiqueta.
+ * 4 estados: Aprobación | Riesgo Académico | Riesgo de Deserción | En riesgo
+ */
+function getDiagnosticoStyle(diagnostico) {
+  switch (diagnostico) {
+    case "Aprobación":
+      return { bg: "bg-green-100",  text: "text-green-800",  badge: "bg-green-500",  label: "Aprobación" };
+    case "Riesgo Académico":
+      return { bg: "bg-yellow-100", text: "text-yellow-800", badge: "bg-yellow-500", label: "Riesgo Académico" };
+    case "Riesgo de Deserción":
+      return { bg: "bg-orange-100", text: "text-orange-700", badge: "bg-orange-500", label: "Riesgo de Deserción" };
+    case "En riesgo":
+      return { bg: "bg-red-100",    text: "text-red-700",    badge: "bg-red-600",    label: "En riesgo" };
+    default:
+      return { bg: "bg-gray-100",   text: "text-gray-500",   badge: "bg-gray-400",   label: "Sin datos" };
+  }
+}
+
 /** Mantener compatibilidad con nivel_riesgo (Alto/Medio/Bajo) del ETL */
 function getRiesgoStyle(nivel) {
   if (nivel === "Alto")  return { bg: "bg-red-100",    text: "text-red-700",    label: "En riesgo" };
@@ -197,7 +216,7 @@ function MallaChip({ asignatura, nota_final, docente }) {
 // ── Sección header ────────────────────────────────────────────────────────────
 function SectionHeader({ children, className = "" }) {
   return (
-    <div className={`bg-brand-ice-light border-y border-gray-300 px-3 py-0.5 text-[10px] font-bold text-brand uppercase tracking-wide ${className}`}>
+    <div className={`bg-[#D6E4F0] border-y border-gray-300 px-3 py-0.5 text-[10px] font-bold text-[#1B3A6B] uppercase tracking-wide ${className}`}>
       {children}
     </div>
   );
@@ -211,15 +230,28 @@ export default function FichaEstudiante() {
   const [searchResults, setSearchResults] = useState([]);
   const [ficha, setFicha] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [showForm, setShowForm] = useState(false);
-  const [practicasOpen, setPracticasOpen] = useState(false);
   const [carreras, setCarreras] = useState([]);
   const [selectedCarrera, setSelectedCarrera] = useState("");
   const searchTimeout = useRef(null);
+  const searchAbort = useRef(null);
+  const searchContainerRef = useRef(null);
 
   // Cargar lista de carreras al montar
   useEffect(() => {
     api.getCarreras().then(setCarreras).catch(() => {});
+  }, []);
+
+  // Cerrar dropdown al hacer click fuera
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target)) {
+        setSearchResults([]);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   useEffect(() => {
@@ -229,13 +261,18 @@ export default function FichaEstudiante() {
   // Re-buscar cuando cambia la carrera seleccionada
   const triggerSearch = (q, carrera) => {
     clearTimeout(searchTimeout.current);
+    if (searchAbort.current) searchAbort.current.abort();
     // Si hay carrera seleccionada, buscar incluso sin query (lista de carrera)
     if (!carrera && q.length < 2) { setSearchResults([]); return; }
     searchTimeout.current = setTimeout(async () => {
+      const controller = new AbortController();
+      searchAbort.current = controller;
       try {
-        const results = await api.searchStudents(q, carrera);
+        const results = await api.searchStudents(q, carrera, { signal: controller.signal });
         setSearchResults(results);
-      } catch (e) { console.error(e); }
+      } catch (e) {
+        if (e.name !== "AbortError") console.error(e);
+      }
     }, 300);
   };
 
@@ -251,6 +288,7 @@ export default function FichaEstudiante() {
 
   const loadFicha = async (id) => {
     setLoading(true);
+    setError(null);
     setSearchResults([]);
     try {
       const data = await api.getFicha(id);
@@ -259,6 +297,7 @@ export default function FichaEstudiante() {
       navigate(`/ficha/${id}`, { replace: true });
     } catch (e) {
       console.error(e);
+      setError(e.message || "Error al cargar la ficha del estudiante");
     } finally {
       setLoading(false);
     }
@@ -266,13 +305,17 @@ export default function FichaEstudiante() {
 
   const handleExportPDF = async () => {
     if (!ficha) return;
-    const blob = await api.exportFichaPDF(ficha.id);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `ficha_${(ficha.nombre || ficha.id).toString().replace(/\s+/g, "_")}.pdf`;
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      const blob = await api.exportFichaPDF(ficha.id);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `ficha_${(ficha.nombre || ficha.id).toString().replace(/\s+/g, "_")}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError("Error al exportar PDF: " + (e.message || "intenta de nuevo"));
+    }
   };
 
   // Construir mapa de cursos AVAC
@@ -299,6 +342,8 @@ export default function FichaEstudiante() {
     }) || null;
   };
 
+  // Diagnóstico computado (Framework §3.5) — tiene prioridad sobre nivel_riesgo
+  const diagStyle = ficha ? getDiagnosticoStyle(ficha.diagnostico_riesgo) : getDiagnosticoStyle(null);
   const riesgoStyle = ficha ? getRiesgoStyle(ficha.nivel_riesgo) : {};
 
   // Carrera EIB: sedes, centro de apoyo y SEDE_MAPPING solo aplican para EIB
@@ -344,7 +389,7 @@ export default function FichaEstudiante() {
         </select>
 
         {/* Buscador */}
-        <div className="relative flex-1">
+        <div className="relative flex-1" ref={searchContainerRef}>
           <input
             type="text"
             value={query}
@@ -369,6 +414,14 @@ export default function FichaEstudiante() {
           )}
         </div>
       </div>
+
+      {/* ── ERROR ─────────────────────────────────────────────────────── */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-4 flex items-center justify-between">
+          <span className="text-red-700 text-sm">{error}</span>
+          <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600 text-xs ml-4">Cerrar</button>
+        </div>
+      )}
 
       {/* ── FICHA COMPLETA ─────────────────────────────────────────────── */}
       {ficha && (
@@ -496,7 +549,6 @@ export default function FichaEstudiante() {
                   })()}
                   <PersonalRow label="Correo" value={ficha.correo} />
                   <PersonalRow label="Correo Ins." value={ficha.correo_institucional} />
-                  <PersonalRow label="Discapacidad" value={ficha?.discapacidad || "—"} />
                   <PersonalRow label="Fecha nac. y edad" value={
                     ficha?.fecha_nacimiento
                       ? `${parseLocalDate(ficha.fecha_nacimiento).toLocaleDateString("es-EC")} (${calcAge(ficha.fecha_nacimiento)} años)`
@@ -539,13 +591,12 @@ export default function FichaEstudiante() {
                     provincia={ficha.provincia}
                     ciudad={ficha.ciudad}
                     parroquia={ficha.parroquia}
-                    height={280}
-                    showTitle={false}
+                    height={140}
                   />
                 </div>
               ) : (
                 <div className="bg-gray-50 border border-gray-200 mx-2 my-2 rounded flex flex-col items-center justify-center text-center"
-                     style={{ height: "180px" }}>
+                     style={{ height: "130px" }}>
                   <svg viewBox="0 0 80 90" className="w-16 h-16 opacity-30" fill="#1B3A6B">
                     <path d="M38 5 L50 8 L60 15 L65 25 L62 38 L70 45 L72 55 L65 65 L55 72 L42 78 L30 75 L20 68 L15 55 L18 42 L12 32 L18 20 L28 12 Z" />
                     <circle cx="38" cy="40" r="5" fill="#F0B000" opacity="1"/>
@@ -561,28 +612,24 @@ export default function FichaEstudiante() {
               </table>
 
               {/* Datos socioeconómicos */}
-              <SectionHeader>Datos socioeconómicos</SectionHeader>
+              <SectionHeader>Estado académico</SectionHeader>
               <table className="w-full border-collapse">
                 <tbody>
-                  <PersonalRow label="Nivel de beca" value="—" />
                   <tr className={ficha.estado_matricula === "Matriculado" ? "bg-green-50" : "bg-red-50"}>
                     <td className="text-right text-[11px] text-gray-500 font-semibold px-2 py-0.5 border border-gray-200 bg-[#F2F2F2] whitespace-nowrap w-28">Pago matrícula</td>
                     <td className={`text-[11px] px-2 py-0.5 border border-gray-200 font-semibold ${ficha.estado_matricula === "Matriculado" ? "text-green-700" : "text-red-600"}`}>
                       {ficha.estado_matricula || "—"}
                     </td>
                   </tr>
-                  <PersonalRow label="Empleabilidad" value="—" />
-                  <PersonalRow label="Madre o padre" value="—" />
                 </tbody>
               </table>
-
             </div>
 
             {/* ─── SECCIÓN DERECHA ─── */}
             <div className="flex-1 overflow-hidden flex flex-col">
 
               {/* Barra de info: sede (solo EIB) / nivel / carrera */}
-              <div className="flex divide-x divide-white/20 bg-brand text-white">
+              <div className="flex divide-x divide-white/20 bg-[#1B3A6B] text-white">
                 {isEIB && (
                   <div className="px-3 py-1.5 text-center flex-1">
                     <div className="text-[9px] opacity-50 uppercase tracking-wider">Centro de Apoyo</div>
@@ -812,15 +859,15 @@ export default function FichaEstudiante() {
               )}
 
               {/* Fila resumen de KPIs */}
-              <div className="grid grid-cols-2 divide-x divide-gray-200 border-t border-gray-200 bg-[#F9F9F9]">
+              <div className="grid grid-cols-4 divide-x divide-gray-200 border-t border-gray-200 bg-[#F9F9F9]">
                 <div className="py-2 px-3 text-center">
-                  <div className="text-[9px] text-gray-400 uppercase tracking-wider">Dias sin AVAC</div>
+                  <div className="text-[9px] text-gray-400 uppercase tracking-wider">Días sin AVAC</div>
                   <div className={`font-bold text-sm mt-0.5 ${
                     ficha.dias_sin_acceso == null ? "text-gray-400"
                     : ficha.dias_sin_acceso > 14 ? "text-red-600"
                     : ficha.dias_sin_acceso > 7 ? "text-orange-500"
                     : "text-green-600"}`}>
-                    {ficha.dias_sin_acceso != null ? `${Math.round(ficha.dias_sin_acceso)}d` : "---"}
+                    {ficha.dias_sin_acceso != null ? `${Math.round(ficha.dias_sin_acceso)}d` : "—"}
                   </div>
                 </div>
                 <div className="py-2 px-3 text-center">
@@ -830,9 +877,10 @@ export default function FichaEstudiante() {
                     : ficha.porcentaje_tareas < 50 ? "text-red-600"
                     : ficha.porcentaje_tareas < 75 ? "text-orange-500"
                     : "text-green-600"}`}>
-                    {ficha.porcentaje_tareas != null ? `${Math.round(ficha.porcentaje_tareas)}%` : "---"}
+                    {ficha.porcentaje_tareas != null ? `${Math.round(ficha.porcentaje_tareas)}%` : "—"}
                   </div>
                 </div>
+                {/* Compromiso y Diagnóstico ya se muestran en la banda superior */}
               </div>
 
               {/* ══ MALLA CURRICULAR HISTÓRICA (TableauHistorico P60–P67+) ══ */}
@@ -863,7 +911,7 @@ export default function FichaEstudiante() {
                           return (
                             <div key={periodo} className="flex-shrink-0 flex flex-col" style={{ minWidth: "80px" }}>
                               {/* Encabezado de período */}
-                              <div className="bg-brand text-white text-center rounded-t px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider">
+                              <div className="bg-[#1B3A6B] text-white text-center rounded-t px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider">
                                 {periodo}
                               </div>
                               {/* Chips de asignaturas */}
@@ -972,58 +1020,19 @@ export default function FichaEstudiante() {
             </div>
           </div>
 
-          {/* ═══ PRÁCTICAS PREPROFESIONALES (desplegable) ═══ */}
+          {/* ═══ PRÁCTICAS PREPROFESIONALES (próximamente) ═══ */}
           <div className="border-t border-gray-300">
-            <button
-              onClick={() => setPracticasOpen(p => !p)}
-              className="w-full bg-brand text-white px-4 py-1 text-[10px] font-bold uppercase tracking-wider flex items-center justify-between hover:bg-brand-light transition-colors"
-            >
-              <span>Prácticas Preprofesionales</span>
-              <span className={`transition-transform duration-200 ${practicasOpen ? "rotate-180" : ""}`}>▾</span>
-            </button>
-            {practicasOpen && (
-              <div className="grid grid-cols-2 divide-x divide-gray-300 bg-white">
-                <table className="border-collapse w-full">
-                  <tbody>
-                    {[
-                      ["Nombre práctica", "—"],
-                      ["IE Práctica", "—"],
-                      ["Ubicación IE", "—"],
-                      ["Distrito AMIE", "—"],
-                      ["Jurisdicción", "—"],
-                      ["Nombre autoridad", "—"],
-                      ["Cargo", "—"],
-                      ["Celular", "—"],
-                    ].map(([label, val]) => (
-                      <tr key={label}>
-                        <td className="bg-[#F2F2F2] border border-gray-200 text-right text-[11px] font-semibold text-gray-500 px-2 py-0.5 w-32 whitespace-nowrap">{label}</td>
-                        <td className="border border-gray-200 text-[11px] px-2 py-0.5 text-gray-300 italic">{val}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <div className="p-3">
-                  <div className="grid grid-cols-2 gap-2 text-[11px]">
-                    <div>
-                      <div className="bg-[#F2F2F2] text-center py-0.5 font-bold text-gray-600 border border-gray-200 mb-1">Sin membrete</div>
-                      <div className="text-center text-[#BF8F00] border border-gray-200 py-0.5 cursor-pointer hover:bg-yellow-50">Carta de solicitud</div>
-                      <div className="text-center text-[#BF8F00] border border-gray-200 py-0.5 cursor-pointer hover:bg-yellow-50 mt-0.5">Carta de solicitud</div>
-                    </div>
-                    <div>
-                      <div className="bg-[#F2F2F2] text-center py-0.5 font-bold text-gray-600 border border-gray-200 mb-1">Membretado</div>
-                      <div className="text-center text-[#BF8F00] border border-gray-200 py-0.5 cursor-pointer hover:bg-yellow-50">Carta de solicitud</div>
-                      <div className="text-center text-[#BF8F00] border border-gray-200 py-0.5 cursor-pointer hover:bg-yellow-50 mt-0.5">Carta de solicitud</div>
-                    </div>
-                    <div className="col-span-2 text-center text-[#BF8F00] border border-gray-200 py-0.5 cursor-pointer hover:bg-yellow-50">Carta compromiso</div>
-                  </div>
-                </div>
-              </div>
-            )}
+            <div className="bg-[#1B3A6B] text-white px-4 py-1 text-[10px] font-bold uppercase tracking-wider">
+              Prácticas Preprofesionales
+            </div>
+            <div className="bg-white py-4 text-center text-[11px] text-gray-400 italic">
+              Módulo en desarrollo — próximamente
+            </div>
           </div>
 
           {/* ═══ SEGUIMIENTO E INTERVENCIONES ═══ */}
           <div className="border-t border-gray-300">
-            <div className="bg-brand text-white flex items-center justify-between px-4 py-1">
+            <div className="bg-[#1B3A6B] text-white flex items-center justify-between px-4 py-1">
               <span className="text-[10px] font-bold uppercase tracking-wider">
                 Seguimiento e Intervenciones ({ficha.total_intervenciones || 0})
               </span>
@@ -1072,7 +1081,7 @@ export default function FichaEstudiante() {
           </div>
 
           {/* ═══ PIE DE PÁGINA ═══ */}
-          <div className="bg-brand text-white text-center py-1.5 text-[9px] opacity-60 tracking-wide">
+          <div className="bg-[#1B3A6B] text-white text-center py-1.5 text-[9px] opacity-60 tracking-wide">
             Yachay Deep — Carlos Vásconez P. © &nbsp;|&nbsp; {today}
           </div>
 
