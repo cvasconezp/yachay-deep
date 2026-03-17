@@ -28,18 +28,22 @@ PAUSE_AFTER_CLICK = 2  # pausa mínima después de click para que la página rea
 def get_session_headless(username: str, password: str, base_url: str, totp_secret: str = None) -> requests.Session:
     """
     Login automático headless via Microsoft SSO (Azure AD / Entra ID).
-    Flujo real de AVAC UPS:
+    Flujo real de AVAC UPS (documentado 2026-03-17):
       1. AVAC /login/index.php → clic "Usuarios de la UPS" (OAuth redirect)
-      2. Microsoft login → ingresa email (AVAC_USERNAME = correo UPS)
-      3. Selector de cuenta → "Cuenta profesional o educativa"
-      4. Página UPS → ingresa contraseña (AVAC_PASSWORD = App Password de Microsoft)
+      2. Microsoft login → ingresa email → clic "Siguiente" (<button>, no <input>)
+      3. Selector de cuenta → "Cuenta profesional o educativa" (botón genérico, sin #aadTile)
+      4. Página UPS → ingresa contraseña (App Password) → clic "Iniciar sesión" (<button>)
          Con App Password el MFA se salta automáticamente.
-      5. "¿Mantener sesión?" → Sí
-      6. Redirect de vuelta a AVAC → logueado
+      5. "¿Mantener sesión?" → "Sí" (<button type="submit">)
+      6. Redirect de vuelta a AVAC → logueado (button "Menú de usuario")
 
     IMPORTANTE: AVAC_PASSWORD debe ser un App Password de Microsoft (no la contraseña
     normal) para evitar el MFA interactivo.
     Crear en: https://mysignins.microsoft.com/security-info
+
+    NOTA SELECTORES: Microsoft SSO usa <button type="submit">, NO <input type="submit">.
+    Todos los selectores deben incluir ambos: button[type='submit'], input[type='submit'].
+    Los textos están en español: "Siguiente", "Iniciar sesión", "Sí".
     """
     from selenium import webdriver
     from selenium.webdriver.chrome.options import Options
@@ -69,7 +73,7 @@ def get_session_headless(username: str, password: str, base_url: str, totp_secre
             "//button[contains(.,'Usuarios de la UPS')] | "
             "//div[contains(@class,'potentialidp')]//a"
         )))
-        logger.info("🔗 Paso 1 OK: Clic en 'Usuarios de la UPS' (redirect a Microsoft SSO)...")
+        logger.info("🔗 Paso 1 OK: Clic en 'Usuarios de la UPS'...")
         sso_button.click()
 
         # ── Paso 2: Microsoft login — ingresar email ────────────────────
@@ -81,23 +85,30 @@ def get_session_headless(username: str, password: str, base_url: str, totp_secre
         email_field.send_keys(username)
         logger.info("📧 Paso 2: Email ingresado, esperando botón 'Siguiente'...")
 
-        # FIX Run #14/#16: Esperar a que el botón "Siguiente" sea clickeable.
-        # El botón existe en DOM pero la animación de Microsoft lo hace
-        # no-interactable por unos milisegundos.
+        # FIX: Microsoft usa <button type="submit">, NO <input type="submit">
         next_button = wait.until(EC.element_to_be_clickable((
             By.CSS_SELECTOR,
+            "input[type='submit']#idSIButton9, "
+            "button[type='submit']#idSIButton9, "
             "input[type='submit'][value='Next'], "
             "input[type='submit'][value='Siguiente'], "
-            "input#idSIButton9"
+            "button[type='submit']"
         )))
         next_button.click()
         logger.info("📧 Paso 2 OK: Clic en 'Siguiente'")
         _time.sleep(PAUSE_AFTER_CLICK)
 
         # ── Paso 3: Selector de cuenta (si aparece) ─────────────────────
+        # Realidad: NO usa #aadTile — es un <button> genérico con texto
+        # "Cuenta profesional o educativa"
         try:
             work_account = WebDriverWait(driver, WAIT_SHORT).until(EC.element_to_be_clickable((
-                By.CSS_SELECTOR, "#aadTile, [data-test-id='aadTile']"
+                By.XPATH,
+                "//*[@id='aadTile'] | "
+                "//*[@data-test-id='aadTile'] | "
+                "//button[contains(.,'rofesional')] | "
+                "//button[contains(.,'Work or school')] | "
+                "//div[contains(.,'rofesional') and @role='button']"
             )))
             logger.info("👔 Paso 3: Seleccionando 'Cuenta profesional o educativa'...")
             work_account.click()
@@ -115,24 +126,29 @@ def get_session_headless(username: str, password: str, base_url: str, totp_secre
         password_field.send_keys(password)
         logger.info("🔑 Paso 4: Contraseña ingresada, esperando botón 'Iniciar sesión'...")
 
-        # FIX: Mismo patrón que Paso 2 — esperar clickeable antes de hacer clic
+        # FIX: Microsoft usa <button type="submit">, NO <input type="submit">
         sign_in_button = wait.until(EC.element_to_be_clickable((
             By.CSS_SELECTOR,
+            "input[type='submit']#idSIButton9, "
+            "button[type='submit']#idSIButton9, "
             "input[type='submit'][value='Sign in'], "
             "input[type='submit'][value='Iniciar sesión'], "
-            "input#idSIButton9"
+            "button[type='submit']"
         )))
         sign_in_button.click()
         logger.info("🔑 Paso 4 OK: Clic en 'Iniciar sesión'")
         _time.sleep(PAUSE_AFTER_CLICK + 1)
 
         # ── Paso 5: "¿Mantener sesión iniciada?" → Sí ───────────────────
+        # Realidad: <button type="submit">Sí</button>, NO <input>
         try:
             stay_signed_in = WebDriverWait(driver, WAIT_MEDIUM).until(EC.element_to_be_clickable((
                 By.CSS_SELECTOR,
+                "input[type='submit']#idSIButton9, "
+                "button[type='submit']#idSIButton9, "
                 "input[type='submit'][value='Sí'], "
                 "input[type='submit'][value='Yes'], "
-                "input#idSIButton9"
+                "button[type='submit']"
             )))
             logger.info("🏠 Paso 5: Clic en 'Sí' (mantener sesión)...")
             stay_signed_in.click()
@@ -146,11 +162,12 @@ def get_session_headless(username: str, password: str, base_url: str, totp_secre
         wait.until(lambda d: base_url.split("//")[1].split("/")[0] in d.current_url)
         logger.info(f"🌐 Paso 6: URL actual: {driver.current_url}")
 
-        # Verificar login exitoso en AVAC (buscar menú de usuario)
+        # Verificar login exitoso en AVAC
         wait.until(EC.presence_of_element_located((
             By.CSS_SELECTOR,
             ".usermenu, .usertext, #user-menu-toggle, "
-            "[data-region='usermenu'], .userbutton, .logininfo"
+            "[data-region='usermenu'], .userbutton, .logininfo, "
+            "[aria-label='Menú de usuario']"
         )))
         logger.info("✅ Paso 6 OK: Login exitoso en AVAC. Transfiriendo sesión a modo HTTP rápido...")
 
@@ -164,19 +181,14 @@ def get_session_headless(username: str, password: str, base_url: str, totp_secre
         return session
 
     except Exception as e:
-        # Capturar diagnóstico antes de cerrar
         logger.error(f"❌ Error en login: {e}")
         try:
             logger.error(f"   URL actual: {driver.current_url}")
             page_title = driver.title
             logger.error(f"   Título de página: {page_title}")
-
-            # Guardar screenshot para debug
             screenshot_path = "/tmp/avac_login_error.png"
             driver.save_screenshot(screenshot_path)
             logger.error(f"   Screenshot guardado en: {screenshot_path}")
-
-            # Guardar HTML para debug
             html_path = "/tmp/avac_login_error.html"
             with open(html_path, "w", encoding="utf-8") as f:
                 f.write(driver.page_source)
@@ -234,7 +246,6 @@ def scrape_ingresos(output_dir: str, codigos: list = None, base_url: str = None,
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
-    # Obtener lista de cursos — primero desde BD, fallback a parámetro
     if codigos is None:
         codigos = get_active_codigos(db)
 
