@@ -234,6 +234,8 @@ export default function FichaEstudiante() {
   const [showForm, setShowForm] = useState(false);
   const [carreras, setCarreras] = useState([]);
   const [selectedCarrera, setSelectedCarrera] = useState("");
+  const [prediccion, setPrediccion] = useState(null);
+  const [recomendaciones, setRecomendaciones] = useState([]);
   const searchTimeout = useRef(null);
   const searchAbort = useRef(null);
   const searchContainerRef = useRef(null);
@@ -256,6 +258,28 @@ export default function FichaEstudiante() {
 
   useEffect(() => {
     if (studentId) loadFicha(studentId);
+  }, [studentId]);
+
+  useEffect(() => {
+    if (!studentId) return;
+    const loadPrediction = async () => {
+      try {
+        const data = await api.getPrediction(studentId);
+        setPrediccion(data);
+      } catch (err) {
+        console.error('Error cargando predicción:', err);
+      }
+    };
+    const loadRecomendaciones = async () => {
+      try {
+        const data = await api.getRecommendations(studentId);
+        setRecomendaciones(Array.isArray(data) ? data : (data?.recomendaciones || []));
+      } catch (err) {
+        console.error('Error cargando recomendaciones:', err);
+      }
+    };
+    loadPrediction();
+    loadRecomendaciones();
   }, [studentId]);
 
   // Re-buscar cuando cambia la carrera seleccionada
@@ -521,6 +545,95 @@ export default function FichaEstudiante() {
               })()}
             </div>
           </div>
+
+          {/* ===== Explicación del Riesgo (XAI) ===== */}
+          {prediccion?.xai && (
+          <div className="mt-4 space-y-3">
+            <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wide flex items-center gap-2">
+              <span>🔍</span> Explicación del Riesgo
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {prediccion.xai.desercion?.length > 0 && (
+              <div className="bg-white rounded-xl border border-red-100 shadow-sm p-4">
+                <p className="text-xs font-bold text-red-700 mb-3 uppercase">Factores · Deserción</p>
+                <div className="space-y-3">
+                  {prediccion.xai.desercion.slice(0,3).map((f,i) => {
+                    const nm = {promedio_notas:'Promedio Calificaciones',num_reprobadas:'Materias Reprobadas',pct_reprobadas:'% Reprobadas',nota_min:'Nota Mínima',std_notas:'Dispersión Notas',num_zeros:'Materias con Cero'};
+                    const sube = f.direccion==='aumenta';
+                    const pct = Math.min(100, Math.round(Math.abs(f.impacto||0)*100));
+                    return (
+                    <div key={i}>
+                      <div className="flex justify-between text-xs mb-0.5">
+                        <span className="font-medium text-gray-700">{nm[f.feature]||f.feature}</span>
+                        <span className={sube?'text-red-500':'text-emerald-500'}>{sube?'↑ riesgo':'↓ riesgo'}</span>
+                      </div>
+                      <p className="text-xs text-gray-400 mb-1">Valor: {typeof f.valor==='number'?f.valor.toFixed(2):f.valor} · Media: {typeof f.media_carrera==='number'?f.media_carrera.toFixed(2):f.media_carrera}</p>
+                      <div className="h-1.5 bg-gray-100 rounded-full">
+                        <div className={'h-1.5 rounded-full ' + (sube?'bg-red-400':'bg-emerald-400')} style={{width: pct + '%'}}/>
+                      </div>
+                    </div>
+                    );
+                  })}
+                </div>
+              </div>
+              )}
+              {prediccion.xai.reprobacion?.length > 0 && (
+              <div className="bg-white rounded-xl border border-orange-100 shadow-sm p-4">
+                <p className="text-xs font-bold text-orange-700 mb-3 uppercase">Factores · Reprobación</p>
+                <div className="space-y-3">
+                  {prediccion.xai.reprobacion.slice(0,3).map((f,i) => {
+                    const nm = {promedio_notas:'Promedio Calificaciones',num_reprobadas:'Materias Reprobadas',pct_reprobadas:'% Reprobadas',nota_min:'Nota Mínima',std_notas:'Dispersión Notas',num_zeros:'Materias con Cero'};
+                    const sube = f.direccion==='aumenta';
+                    const pct = Math.min(100, Math.round(Math.abs(f.impacto||0)*100));
+                    return (
+                    <div key={i}>
+                      <div className="flex justify-between text-xs mb-0.5">
+                        <span className="font-medium text-gray-700">{nm[f.feature]||f.feature}</span>
+                        <span className={sube?'text-orange-500':'text-emerald-500'}>{sube?'↑ riesgo':'↓ riesgo'}</span>
+                      </div>
+                      <p className="text-xs text-gray-400 mb-1">Valor: {typeof f.valor==='number'?f.valor.toFixed(2):f.valor} · Media: {typeof f.media_carrera==='number'?f.media_carrera.toFixed(2):f.media_carrera}</p>
+                      <div className="h-1.5 bg-gray-100 rounded-full">
+                        <div className={'h-1.5 rounded-full ' + (sube?'bg-orange-400':'bg-emerald-400')} style={{width: pct + '%'}}/>
+                      </div>
+                    </div>
+                    );
+                  })}
+                </div>
+              </div>
+              )}
+            </div>
+          </div>
+          )}
+
+          {/* ===== Recomendaciones Automáticas ===== */}
+          {recomendaciones.length > 0 && (
+          <div className="mt-4">
+            <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wide flex items-center gap-2 mb-3">
+              <span>💡</span> Recomendaciones Automáticas
+            </h3>
+            <div className="space-y-2">
+              {recomendaciones.map((rec, i) => {
+                const clrs = {urgente:'border-red-200 bg-red-50',importante:'border-amber-200 bg-amber-50',sugerida:'border-blue-200 bg-blue-50'};
+                const bdgs = {urgente:'bg-red-100 text-red-700',importante:'bg-amber-100 text-amber-700',sugerida:'bg-blue-100 text-blue-700'};
+                const medioKey = (rec.medio||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
+                const icnMap = {email:'📧',tutoria:'👥',sistema:'🖥️',notificacion:'🔔',llamada:'📞'};
+                const icon = icnMap[medioKey]||'📌';
+                const prio = rec.priority||rec.prioridad||'sugerida';
+                return (
+                <div key={i} className={'rounded-lg border p-3 ' + (clrs[prio]||'border-gray-200 bg-gray-50')}>
+                  <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                    <span className={'text-xs font-semibold px-1.5 py-0.5 rounded-full ' + (bdgs[prio]||'bg-gray-100 text-gray-600')}>{prio}</span>
+                    <span className="text-xs text-gray-500">{icon} {rec.medio}</span>
+                    {rec.destinatario && <span className="text-xs text-gray-400">→ {rec.destinatario}</span>}
+                  </div>
+                  <p className="text-sm font-medium text-gray-800">{rec.accion}</p>
+                  {rec.motivo && <p className="text-xs text-gray-500 mt-0.5">{rec.motivo}</p>}
+                </div>
+                );
+              })}
+            </div>
+          </div>
+          )}
 
           {/* ═══ CUERPO PRINCIPAL: 2 columnas ═══ */}
           <div className="flex divide-x divide-gray-300 bg-white">
