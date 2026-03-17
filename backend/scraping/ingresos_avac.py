@@ -13,19 +13,204 @@ from bs4 import BeautifulSoup
 from urllib.parse import urlparse, parse_qs
 from pathlib import Path
 
-
 logger = logging.getLogger(__name__)
 
-
-# ─── Constantes de espera ────────────────────────────────────────────────────
+# ─── Constantes de espera ──────────────────────────────────────────────────────
 # En GitHub Actions la latencia varía mucho. Usar waits explícitos, no sleeps.
-WAIT_LONG = 30      # timeout para pasos críticos (login, redirect)
-WAIT_MEDIUM = 15    # timeout para pasos intermedios
-WAIT_SHORT = 5      # timeout para pasos opcionales (selector de cuenta)
+WAIT_LONG   = 30   # timeout para pasos críticos (login, redirect)
+WAIT_MEDIUM = 15   # timeout para pasos intermedios
+WAIT_SHORT  = 5    # timeout para pasos opcionales (selector de cuenta)
 PAUSE_AFTER_CLICK = 2  # pausa mínima después de click para que la página reaccione
 
+# ─── Mapeos de columnas AVAC (español / inglés) ───────────────────────────────
+# AVAC (Moodle) puede usar distintos nombres de columna según versión/idioma.
+# Mapeamos a nombres internos para no depender de posición fija.
+_COL_MAPS = {
+    "nombre":        ["nombre", "name", "apellido(s), nombre(s)", "apellidos y nombre"],
+    "correo":        ["correo electrónico", "email address", "dirección de correo electrónico",
+                      "correo", "email", "mail"],
+    "ultimo_acceso": ["último acceso al sitio", "last access to site", "último acceso",
+                      "last access", "acceso"],
+    "estado":        ["estado", "status", "roles", "rol"],
+}
 
-def get_session_headless(username: str, password: str, base_url: str, totp_secret: str = None) -> requests.Session:
+
+def _match_header(header: str, candidates: list) -> bool:
+    h = header.strip().lower()
+    return any(c in h for c in candidates)
+
+
+def _parse_participants_table(soup: BeautifulSoup) -> list:
+    """
+    Parsea la tabla generaltable de participantes de forma robusta:
+    - Lee encabezados <th> y mapea columnas por nombre, no por posición.
+    - Detecta el correo por nombre de columna; cae a búsqueda de '@' como fallback.
+    - Filtra filas sin correo válido.
+    FIX: antes se usaban índices fijos (celdas[0..5]) que fallaban si AVAC
+    cambiaba el orden de columnas.
+    """
+    table = soup.select_one("table.generaltable")
+    if not table:
+        return []
+
+    # Leer encabezados
+    raw_headers = [th.get_text(strip=True) for th in table.select("thead tr th")]
+    if not raw_headers:
+        # Algunas versiones de Moodle ponen la cabecera en tbody
+        first_row = table.select_one("tbody tr")
+        if first_row:
+            raw_headers = [td.get_text(strip=True) for td in first_row.find_all(["th", "td"])]
+
+    # Detectar índice de cada columna de interés
+    idx = {"nombre": None, "correo": None, "ultimo_acceso": None, "estado": None}
+    for i, hdr in enumerate(raw_headers):
+        for key, candidates in _COL_MAPS.items():
+            if idx[key] is None and _match_header(hdr, candidates):
+                idx[key] = i
+                break
+
+    registros = []
+    for fila in table.select("tbody tr"):
+        celdas = fila.find_all("td")
+        if not celdas:
+            continue
+
+        # Obtener correo por columna detectada, o fallback a escanear celdas
+        if idx["correo"] is not None and idx["correo"] < len(celdas):
+            correo = celdas[idx["correo"]].get_text(strip=True)
+        else:
+            correo = next(
+                (c.get_text(strip=True) for c in celdas if "@" in c.get_text()),
+                ""
+            )
+
+        if not correo or "@" not in correo:
+            continue  # no es una fila de alumno con correo válido
+
+        def _get(key, fallback_idx=0):
+            i = idx[key]
+            if i is not None and i < len(celdas):
+                return celdas[i].get_text(strip=True)
+            if fallback_idx < len(celdas):
+                return celdas[fallback_idx].get_text(strip=True)
+            return ""
+
+        registros.append({
+            "Nombre":         _get("nombre", 0),
+            "Correo":         correo,
+            "Último acceso":  _get("ultimo_acceso"),
+            "Estado":         _get("estado"),
+        })
+
+    return registros
+
+
+# ─── Retry helper ─────────────────────────────────────────────────────────────
+def _get_with_retry(session: requests.Session, url: str,
+                    retries: int = 3, timeout: int = 30) -> requests.Response:
+    """
+    GET con reintentos exponenciales.
+    FIX: antes no había retry — un timeout puntual perdía el curso entero.
+    """
+    last_exc = None
+    for attempt in range(1, retries + 1):
+        try:
+            resp = session.get(url, timeout=timeout)
+            resp.raise_for_status()
+            return resp
+        except Exception as e:
+            last_exc = e
+            if attempt < retries:
+                wait = 2 * attempt
+                logger.warning(f"⚠️  Intento {attempt}/{retries} fallido para {url}: {e} — reintentando en {wait}s")
+                time.sleep(wait)
+    raise last_exc
+
+
+# ─── Login helpers ────────────────────────────────────────────────────────────
+
+def _resolve_totp(driver, wait, totp_secret: str, step_label: str):
+    """
+    Maneja MFA/TOTP: si hay pantalla de Authenticator push, cambia a TOTP.
+    Extrae en función reutilizable para Paso 4.5 y Paso 4.6.
+    FIX: en Paso 4.6 original no existía este bloque — si el segundo login
+    pedía MFA por push, el scraping fallaba sin diagnóstico.
+    """
+    import time as _time
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+
+    totp_inputs = driver.find_elements(By.CSS_SELECTOR, "input[name='otc']")
+
+    if not totp_inputs:
+        logger.info(f"🔐 {step_label}: Pantalla de Authenticator push. Intentando cambiar a TOTP...")
+        try:
+            alt_method_link = WebDriverWait(driver, WAIT_SHORT).until(
+                EC.element_to_be_clickable((
+                    By.CSS_SELECTOR,
+                    "#signInAnotherWay, a#signInAnotherWay"
+                ))
+            )
+            alt_method_link.click()
+            logger.info(f"🔐 {step_label}: Clic en 'Otro método de verificación'")
+            _time.sleep(PAUSE_AFTER_CLICK)
+
+            totp_option = WebDriverWait(driver, WAIT_SHORT).until(
+                EC.element_to_be_clickable((
+                    By.XPATH,
+                    "//*[contains(.,'código de verificación')] | "
+                    "//*[contains(.,'verification code')] | "
+                    "//*[contains(.,'authenticator app')] | "
+                    "//*[contains(.,'app de autenticación')] | "
+                    "//*[@data-value='PhoneAppOTP']"
+                ))
+            )
+            totp_option.click()
+            logger.info(f"🔐 {step_label}: Seleccionada opción TOTP")
+            _time.sleep(PAUSE_AFTER_CLICK)
+
+            totp_inputs = WebDriverWait(driver, WAIT_SHORT).until(
+                lambda d: d.find_elements(By.CSS_SELECTOR, "input[name='otc']")
+            )
+        except Exception as switch_err:
+            logger.warning(f"🔐 {step_label}: No se pudo cambiar a TOTP: {switch_err}")
+
+    if totp_inputs and totp_secret:
+        import pyotp
+        from selenium.webdriver.support.ui import WebDriverWait
+        from selenium.webdriver.support import expected_conditions as EC
+        totp_code = pyotp.TOTP(totp_secret).now()
+        logger.info(f"🔐 {step_label}: Ingresando código TOTP...")
+        totp_inputs[0].clear()
+        totp_inputs[0].send_keys(totp_code)
+        verify_button = WebDriverWait(driver, WAIT_LONG).until(EC.element_to_be_clickable((
+            By.CSS_SELECTOR,
+            "input[type='submit']#idSIButton9, "
+            "button[type='submit']#idSIButton9, "
+            "button[type='submit']"
+        )))
+        verify_button.click()
+        logger.info(f"🔐 {step_label} OK: Código TOTP enviado y verificado")
+        _time.sleep(PAUSE_AFTER_CLICK + 1)
+    elif totp_inputs and not totp_secret:
+        raise RuntimeError(
+            f"MFA requerido (TOTP) en {step_label} pero AVAC_TOTP_SECRET no está configurado. "
+            "Configúralo en GitHub Secrets con el secret base32 de tu app autenticadora. "
+            "Para obtenerlo: Seguridad → App Authenticator → 'No puedo usar la app' → "
+            "copiar el código secreto que se muestra al configurar manualmente."
+        )
+    else:
+        raise RuntimeError(
+            f"MFA requerido en {step_label} pero no se pudo acceder al método TOTP. "
+            "Opciones: (1) Configurar TOTP y poner el secret en AVAC_TOTP_SECRET, "
+            f"o (2) Usar un App Password en AVAC_PASSWORD. "
+            f"URL actual: {driver.current_url}"
+        )
+
+
+def get_session_headless(username: str, password: str, base_url: str,
+                         totp_secret: str = None) -> requests.Session:
     """
     Login automático headless via Microsoft SSO (Azure AD / Entra ID).
     Flujo real de AVAC UPS (documentado 2026-03-17):
@@ -33,7 +218,7 @@ def get_session_headless(username: str, password: str, base_url: str, totp_secre
       2. Microsoft login → ingresa email → clic "Siguiente" (<button>, no <input>)
       3. Selector de cuenta → "Cuenta profesional o educativa" (botón genérico, sin #aadTile)
       4. Página UPS → ingresa contraseña → clic "Iniciar sesión" (<button>)
-      4.5. Si aparece MFA → TOTP automático con pyotp (si AVAC_TOTP_SECRET configurado)
+     4.5. Si aparece MFA → TOTP automático con pyotp (si AVAC_TOTP_SECRET configurado)
       5. "¿Mantener sesión?" → "Sí" (<button type="submit">)
       6. Redirect de vuelta a AVAC → logueado (button "Menú de usuario")
 
@@ -62,12 +247,9 @@ def get_session_headless(username: str, password: str, base_url: str, totp_secre
     wait = WebDriverWait(driver, WAIT_LONG)
 
     try:
-        # ── Paso 1: Ir a AVAC login y clic en "Usuarios de la UPS" ──────────
+        # ── Paso 1: Ir a AVAC login y clic en "Usuarios de la UPS" ────────────
         logger.info("📄 Paso 1: Cargando página de login AVAC...")
         driver.get(f"{base_url}/login/index.php")
-
-        # El botón de SSO es un <a> con texto "Usuarios de la UPS"
-        # Nota: usar '.' en vez de 'text()' porque el <a> contiene un <img> hijo
         sso_button = wait.until(EC.element_to_be_clickable((
             By.XPATH,
             "//a[contains(.,'Usuarios de la UPS')] | "
@@ -77,7 +259,7 @@ def get_session_headless(username: str, password: str, base_url: str, totp_secre
         logger.info("🔗 Paso 1 OK: Clic en 'Usuarios de la UPS' (redirect a Microsoft SSO)...")
         sso_button.click()
 
-        # ── Paso 2: Microsoft login — ingresar email ────────────────────────
+        # ── Paso 2: Microsoft login — ingresar email ──────────────────────────
         logger.info("📧 Paso 2: Esperando página de login Microsoft...")
         email_field = wait.until(EC.presence_of_element_located((
             By.CSS_SELECTOR, "input[name='loginfmt']"
@@ -85,9 +267,6 @@ def get_session_headless(username: str, password: str, base_url: str, totp_secre
         email_field.clear()
         email_field.send_keys(username)
         logger.info("📧 Paso 2: Email ingresado, esperando botón 'Siguiente'...")
-
-        # FIX: Microsoft usa <button type="submit">, NO <input type="submit">
-        # Texto real: "Siguiente" (español). Incluir ambos tag types por si cambia.
         next_button = wait.until(EC.element_to_be_clickable((
             By.CSS_SELECTOR,
             "input[type='submit']#idSIButton9, "
@@ -100,10 +279,7 @@ def get_session_headless(username: str, password: str, base_url: str, totp_secre
         logger.info("📧 Paso 2 OK: Clic en 'Siguiente'")
         _time.sleep(PAUSE_AFTER_CLICK)
 
-        # ── Paso 3: Selector de cuenta (si aparece) ─────────────────────────
-        # "Parece que este correo se usa con más de una cuenta"
-        # Realidad: NO usa #aadTile — es un <button> genérico dentro de un <list>
-        # con texto "Cuenta profesional o educativa"
+        # ── Paso 3: Selector de cuenta (si aparece) ───────────────────────────
         try:
             work_account = WebDriverWait(driver, WAIT_SHORT).until(EC.element_to_be_clickable((
                 By.XPATH,
@@ -119,9 +295,9 @@ def get_session_headless(username: str, password: str, base_url: str, totp_secre
             logger.info("👔 Paso 3 OK")
             _time.sleep(PAUSE_AFTER_CLICK)
         except Exception:
-            logger.info("ℹ️ Paso 3: No apareció selector de cuenta (directo a password)")
+            logger.info("ℹ️  Paso 3: No apareció selector de cuenta (directo a password)")
 
-        # ── Paso 4: Ingresar contraseña ────────────────────────────────────
+        # ── Paso 4: Ingresar contraseña ───────────────────────────────────────
         logger.info("🔑 Paso 4: Esperando campo de contraseña...")
         password_field = wait.until(EC.presence_of_element_located((
             By.CSS_SELECTOR, "input[name='passwd']"
@@ -129,9 +305,6 @@ def get_session_headless(username: str, password: str, base_url: str, totp_secre
         password_field.clear()
         password_field.send_keys(password)
         logger.info("🔑 Paso 4: Contraseña ingresada, esperando botón 'Iniciar sesión'...")
-
-        # FIX: Mismo patrón que Paso 2 — Microsoft usa <button>, no <input>
-        # Texto real: "Iniciar sesión" (español)
         sign_in_button = wait.until(EC.element_to_be_clickable((
             By.CSS_SELECTOR,
             "input[type='submit']#idSIButton9, "
@@ -142,16 +315,11 @@ def get_session_headless(username: str, password: str, base_url: str, totp_secre
         )))
         sign_in_button.click()
         logger.info("🔑 Paso 4 OK: Clic en 'Iniciar sesión'")
-        _time.sleep(PAUSE_AFTER_CLICK + 1)  # Microsoft toma más tiempo aquí
+        _time.sleep(PAUSE_AFTER_CLICK + 1)
 
-        # ── Paso 4.5: Manejar MFA/TOTP si aparece ─────────────────────────
-        # Si la contraseña no es App Password, Microsoft pedirá MFA.
-        # Soportamos TOTP automático con pyotp.
-        # Detectores: input[name='otc'] = campo TOTP directo,
-        #   #idDiv_SAOTCAS_Description = pantalla "Aprobar solicitud" (Authenticator push),
-        #   #idRichContext_DisplaySign = pantalla de "number matching"
+        # ── Paso 4.5: Manejar MFA/TOTP si aparece ────────────────────────────
         try:
-            mfa_indicator = WebDriverWait(driver, WAIT_SHORT).until(
+            WebDriverWait(driver, WAIT_SHORT).until(
                 EC.presence_of_element_located((
                     By.CSS_SELECTOR,
                     "input[name='otc'], "
@@ -160,115 +328,38 @@ def get_session_headless(username: str, password: str, base_url: str, totp_secre
                     "#idRichContext_DisplaySign"
                 ))
             )
-            logger.info("🔐 Paso 4.5: MFA detectado. Verificando tipo de MFA...")
+            logger.info("🔐 Paso 4.5: MFA detectado.")
             logger.info(f"🔐 Paso 4.5: URL={driver.current_url}, Título={driver.title}")
-
-            # Verificar si hay campo TOTP disponible directamente
-            totp_inputs = driver.find_elements(By.CSS_SELECTOR, "input[name='otc']")
-
-            if not totp_inputs:
-                # Estamos en pantalla de Authenticator push — cambiar a TOTP
-                logger.info("🔐 Paso 4.5: Pantalla de Authenticator push. Intentando cambiar a TOTP...")
-                try:
-                    # Clic en "No puedo usar mi app Microsoft Authenticator ahora mismo"
-                    alt_method_link = WebDriverWait(driver, WAIT_SHORT).until(
-                        EC.element_to_be_clickable((
-                            By.CSS_SELECTOR,
-                            "#signInAnotherWay, "
-                            "a#signInAnotherWay"
-                        ))
-                    )
-                    alt_method_link.click()
-                    logger.info("🔐 Paso 4.5: Clic en 'Otro método de verificación'")
-                    _time.sleep(PAUSE_AFTER_CLICK)
-
-                    # Seleccionar opción TOTP / código de verificación
-                    totp_option = WebDriverWait(driver, WAIT_SHORT).until(
-                        EC.element_to_be_clickable((
-                            By.XPATH,
-                            "//*[contains(.,'código de verificación')] | "
-                            "//*[contains(.,'verification code')] | "
-                            "//*[contains(.,'authenticator app')] | "
-                            "//*[contains(.,'app de autenticación')] | "
-                            "//*[@data-value='PhoneAppOTP']"
-                        ))
-                    )
-                    totp_option.click()
-                    logger.info("🔐 Paso 4.5: Seleccionada opción TOTP")
-                    _time.sleep(PAUSE_AFTER_CLICK)
-
-                    # Ahora debería aparecer el campo TOTP
-                    totp_inputs = WebDriverWait(driver, WAIT_SHORT).until(
-                        lambda d: d.find_elements(By.CSS_SELECTOR, "input[name='otc']")
-                    )
-                except Exception as switch_err:
-                    logger.warning(f"🔐 Paso 4.5: No se pudo cambiar a TOTP: {switch_err}")
-
-            if totp_inputs and totp_secret:
-                import pyotp
-                totp_code = pyotp.TOTP(totp_secret).now()
-                logger.info("🔐 Paso 4.5: Ingresando código TOTP...")
-                totp_inputs[0].clear()
-                totp_inputs[0].send_keys(totp_code)
-
-                verify_button = wait.until(EC.element_to_be_clickable((
-                    By.CSS_SELECTOR,
-                    "input[type='submit']#idSIButton9, "
-                    "button[type='submit']#idSIButton9, "
-                    "button[type='submit']"
-                )))
-                verify_button.click()
-                logger.info("🔐 Paso 4.5 OK: Código TOTP enviado y verificado")
-                _time.sleep(PAUSE_AFTER_CLICK + 1)
-            elif totp_inputs and not totp_secret:
-                raise RuntimeError(
-                    "MFA requerido (TOTP) pero AVAC_TOTP_SECRET no está configurado. "
-                    "Configúralo en GitHub Secrets con el secret base32 de tu app autenticadora. "
-                    "Para obtenerlo: Seguridad → App Authenticator → 'No puedo usar la app' → "
-                    "copiar el código secreto que se muestra al configurar manualmente."
-                )
-            else:
-                raise RuntimeError(
-                    "MFA requerido pero no se pudo acceder al método TOTP. "
-                    "Opciones: (1) Configurar TOTP y poner el secret en AVAC_TOTP_SECRET, "
-                    "o (2) Usar un App Password en AVAC_PASSWORD. "
-                    f"URL actual: {driver.current_url}"
-                )
-
+            _resolve_totp(driver, wait, totp_secret, "Paso 4.5")
         except RuntimeError:
             raise
         except Exception:
-            logger.info("ℹ️ Paso 4.5: No apareció MFA (password aceptado sin MFA)")
+            logger.info("ℹ️  Paso 4.5: No apareció MFA (password aceptado sin MFA)")
 
-        # ── Paso 4.6: Manejar segundo login en /common/login ────────────────
+        # ── Paso 4.6: Manejar segundo login en /common/login ──────────────────
         # Después del login en el tenant específico, el flujo OAuth de AVAC
         # puede redirigir a login.microsoftonline.com/common/login para una
-        # segunda autenticación. Detectamos esto y re-ingresamos credenciales.
+        # segunda autenticación. FIX: ahora incluye manejo completo de MFA.
         if 'login.microsoftonline.com/common' in driver.current_url:
             logger.info(f"🔄 Paso 4.6: Segundo login detectado en /common/login")
             logger.info(f"🔄 Paso 4.6: URL={driver.current_url}, Título={driver.title}")
 
-            # Puede haber campo de email
             try:
                 email_field2 = WebDriverWait(driver, WAIT_SHORT).until(
-                    EC.presence_of_element_located((
-                        By.CSS_SELECTOR, "input[name='loginfmt']"
-                    ))
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "input[name='loginfmt']"))
                 )
                 email_field2.clear()
                 email_field2.send_keys(username)
                 logger.info("🔄 Paso 4.6: Email re-ingresado, clic en 'Siguiente'...")
                 next_btn2 = wait.until(EC.element_to_be_clickable((
                     By.CSS_SELECTOR,
-                    "button[type='submit']#idSIButton9, "
-                    "button[type='submit']"
+                    "button[type='submit']#idSIButton9, button[type='submit']"
                 )))
                 next_btn2.click()
                 _time.sleep(PAUSE_AFTER_CLICK)
             except Exception:
                 logger.info("🔄 Paso 4.6: No hay campo de email (directo a password o selector)")
 
-            # Puede haber selector de cuenta
             try:
                 work_acct2 = WebDriverWait(driver, WAIT_SHORT).until(
                     EC.element_to_be_clickable((
@@ -284,68 +375,50 @@ def get_session_headless(username: str, password: str, base_url: str, totp_secre
             except Exception:
                 pass
 
-            # Campo de contraseña
             try:
                 pwd_field2 = WebDriverWait(driver, WAIT_MEDIUM).until(
-                    EC.presence_of_element_located((
-                        By.CSS_SELECTOR, "input[name='passwd']"
-                    ))
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "input[name='passwd']"))
                 )
                 pwd_field2.clear()
                 pwd_field2.send_keys(password)
                 logger.info("🔄 Paso 4.6: Contraseña re-ingresada, clic en 'Iniciar sesión'...")
                 signin_btn2 = wait.until(EC.element_to_be_clickable((
                     By.CSS_SELECTOR,
-                    "button[type='submit']#idSIButton9, "
-                    "button[type='submit']"
+                    "button[type='submit']#idSIButton9, button[type='submit']"
                 )))
                 signin_btn2.click()
                 logger.info("🔄 Paso 4.6 OK: Credenciales re-ingresadas en /common/login")
                 _time.sleep(PAUSE_AFTER_CLICK + 1)
-
-                # Manejar MFA en segundo login si aparece
-                if totp_secret:
-                    try:
-                        totp_input2 = WebDriverWait(driver, WAIT_SHORT).until(
-                            EC.presence_of_element_located((
-                                By.CSS_SELECTOR, "input[name='otc']"
-                            ))
-                        )
-                        import pyotp
-                        totp_code2 = pyotp.TOTP(totp_secret).now()
-                        totp_input2.clear()
-                        totp_input2.send_keys(totp_code2)
-                        verify_btn2 = wait.until(EC.element_to_be_clickable((
-                            By.CSS_SELECTOR,
-                            "button[type='submit']#idSIButton9, "
-                            "button[type='submit']"
-                        )))
-                        verify_btn2.click()
-                        logger.info("🔄 Paso 4.6: TOTP resuelto en segundo login")
-                        _time.sleep(PAUSE_AFTER_CLICK + 1)
-                    except Exception:
-                        logger.info("🔄 Paso 4.6: No apareció MFA en segundo login")
-
             except Exception as e:
                 logger.warning(f"🔄 Paso 4.6: No se encontró campo de password: {e}")
 
-        # ── Paso 5: "¿Mantener sesión iniciada?" → Sí ───────────────────────
-        # Verificar que estamos en la página correcta antes de hacer clic.
-        # Realidad: <button type="submit">Sí</button>, NO <input>
-        # Esta página tiene el texto "¿Mantener la sesión iniciada?" o "Stay signed in?"
+            # FIX: MFA en segundo login — igual que Paso 4.5, usando _resolve_totp
+            try:
+                WebDriverWait(driver, WAIT_SHORT).until(
+                    EC.presence_of_element_located((
+                        By.CSS_SELECTOR,
+                        "input[name='otc'], "
+                        "#idDiv_SAOTCC_Description, "
+                        "#idDiv_SAOTCAS_Description, "
+                        "#idRichContext_DisplaySign"
+                    ))
+                )
+                logger.info("🔐 Paso 4.6: MFA detectado en segundo login.")
+                _resolve_totp(driver, wait, totp_secret, "Paso 4.6")
+            except RuntimeError:
+                raise
+            except Exception:
+                logger.info("ℹ️  Paso 4.6: No apareció MFA en segundo login")
+
+        # ── Paso 5: "¿Mantener sesión iniciada?" → Sí ─────────────────────────
         try:
-            # Esperar a que aparezca el texto de "mantener sesión" O el botón submit
-            kmsi_page = WebDriverWait(driver, WAIT_MEDIUM).until(
+            WebDriverWait(driver, WAIT_MEDIUM).until(
                 EC.presence_of_element_located((
                     By.CSS_SELECTOR,
-                    "#KmsiiFrame, "
-                    "[data-bind*='kmpiFrame'], "
-                    "#idSIButton9, "
-                    "#idBtn_Back"
+                    "#KmsiiFrame, [data-bind*='kmpiFrame'], #idSIButton9, #idBtn_Back"
                 ))
             )
             logger.info(f"🏠 Paso 5: Página detectada. URL={driver.current_url}")
-
             stay_signed_in = WebDriverWait(driver, WAIT_SHORT).until(EC.element_to_be_clickable((
                 By.CSS_SELECTOR,
                 "input[type='submit']#idSIButton9, "
@@ -359,18 +432,14 @@ def get_session_headless(username: str, password: str, base_url: str, totp_secre
             logger.info("🏠 Paso 5 OK")
             _time.sleep(PAUSE_AFTER_CLICK + 1)
         except Exception:
-            logger.info(f"ℹ️ Paso 5: No apareció pantalla 'mantener sesión'. URL={driver.current_url}")
+            logger.info(f"ℹ️  Paso 5: No apareció pantalla 'mantener sesión'. URL={driver.current_url}")
 
-        # ── Paso 6: Esperar redirect de vuelta a AVAC ────────────────────────
+        # ── Paso 6: Esperar redirect de vuelta a AVAC ─────────────────────────
         logger.info(f"⏳ Paso 6: Esperando redirect a AVAC... URL actual={driver.current_url}")
         avac_host = base_url.split("//")[1].split("/")[0]
-
-        # Esperar hasta 60 segundos — el redirect OAuth puede tener varios saltos
         WebDriverWait(driver, 60).until(lambda d: avac_host in d.current_url)
         logger.info(f"🌐 Paso 6: URL actual: {driver.current_url}")
 
-        # Verificar login exitoso en AVAC
-        # Realidad: button "Menú de usuario" con clase .userbutton
         wait.until(EC.presence_of_element_located((
             By.CSS_SELECTOR,
             ".usermenu, .usertext, #user-menu-toggle, "
@@ -379,7 +448,6 @@ def get_session_headless(username: str, password: str, base_url: str, totp_secre
         )))
         logger.info("✅ Paso 6 OK: Login exitoso en AVAC. Transfiriendo sesión a modo HTTP rápido...")
 
-        # Transferir cookies de Selenium a requests.Session
         session = requests.Session()
         for cookie in driver.get_cookies():
             session.cookies.set(cookie["name"], cookie["value"])
@@ -389,23 +457,17 @@ def get_session_headless(username: str, password: str, base_url: str, totp_secre
         return session
 
     except Exception as e:
-        # Capturar diagnóstico antes de cerrar
         logger.error(f"❌ Error en login: {e}")
         try:
-            logger.error(f"   URL actual: {driver.current_url}")
-            page_title = driver.title
-            logger.error(f"   Título de página: {page_title}")
-
-            # Guardar screenshot para debug
+            logger.error(f"  URL actual: {driver.current_url}")
+            logger.error(f"  Título de página: {driver.title}")
             screenshot_path = "/tmp/avac_login_error.png"
             driver.save_screenshot(screenshot_path)
-            logger.error(f"   Screenshot guardado en: {screenshot_path}")
-
-            # Guardar HTML para debug
+            logger.error(f"  Screenshot guardado en: {screenshot_path}")
             html_path = "/tmp/avac_login_error.html"
             with open(html_path, "w", encoding="utf-8") as f:
                 f.write(driver.page_source)
-            logger.error(f"   HTML guardado en: {html_path}")
+            logger.error(f"  HTML guardado en: {html_path}")
         except Exception:
             pass
         raise
@@ -417,7 +479,6 @@ def get_session_manual(base_url: str) -> requests.Session:
     """Login manual — para uso local sin credenciales en env."""
     from selenium import webdriver
     from selenium.webdriver.chrome.options import Options
-
     opt = Options()
     opt.add_argument("--no-sandbox")
     driver = webdriver.Chrome(options=opt)
@@ -451,7 +512,8 @@ def get_active_codigos(db=None) -> list:
         return []
 
 
-def scrape_ingresos(output_dir: str, codigos: list = None, base_url: str = None, db=None) -> dict:
+def scrape_ingresos(output_dir: str, codigos: list = None,
+                    base_url: str = None, db=None) -> dict:
     """Scraping principal de ingresos AVAC."""
     from ..config import settings
 
@@ -459,17 +521,15 @@ def scrape_ingresos(output_dir: str, codigos: list = None, base_url: str = None,
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
-    # Obtener lista de cursos — primero desde BD, fallback a parámetro
     if codigos is None:
         codigos = get_active_codigos(db)
-
     if not codigos:
         logger.error("❌ No hay cursos configurados. Agrega cursos en Admin → Configuración de Cursos.")
         return {"procesados": 0, "errores": [{"error": "Sin cursos configurados"}], "no_encontrados": []}
 
-    username = settings.AVAC_USERNAME
-    password = settings.AVAC_PASSWORD
-    totp_secret = settings.AVAC_TOTP_SECRET
+    username     = settings.AVAC_USERNAME
+    password     = settings.AVAC_PASSWORD
+    totp_secret  = settings.AVAC_TOTP_SECRET
 
     if username and password:
         logger.info("🔑 Modo automático (credenciales desde variables de entorno)")
@@ -483,40 +543,33 @@ def scrape_ingresos(output_dir: str, codigos: list = None, base_url: str = None,
     for index, codigo_curso in enumerate(codigos, 1):
         try:
             start_time = time.time()
-            resp = session.get(f"{base_url}/course/search.php?search={codigo_curso}", timeout=30)
+
+            resp = _get_with_retry(session, f"{base_url}/course/search.php?search={codigo_curso}")
             soup = BeautifulSoup(resp.content, "html.parser", from_encoding="utf-8")
             enlace = soup.select_one(".coursebox a[href*='view.php?id=']")
 
             if not enlace:
                 no_encontrados.append(codigo_curso)
-                logger.warning(f"⚠️ [{index}/{len(codigos)}] Curso {codigo_curso} no encontrado en AVAC")
+                logger.warning(f"⚠️  [{index}/{len(codigos)}] Curso {codigo_curso} no encontrado en AVAC")
                 continue
 
             course_id = parse_qs(urlparse(enlace.get("href")).query).get("id", [None])[0]
-            resp_part = session.get(f"{base_url}/user/index.php?id={course_id}&perpage=5000", timeout=30)
+
+            resp_part = _get_with_retry(session, f"{base_url}/user/index.php?id={course_id}&perpage=5000")
             soup_part = BeautifulSoup(resp_part.content, "html.parser", from_encoding="utf-8")
 
-            registros = []
-            for fila in soup_part.select("table.generaltable tbody tr"):
-                if "@" not in fila.get_text():
-                    continue
-                celdas = fila.find_all("td")
-                if len(celdas) >= 6:
-                    registros.append({
-                        "Nombre": celdas[0].get_text(strip=True),
-                        "Correo": celdas[1].get_text(strip=True),
-                        "Último acceso": celdas[4].get_text(strip=True),
-                        "Estado": celdas[5].get_text(strip=True),
-                    })
+            # FIX: parseo robusto por nombre de columna, no por posición
+            registros = _parse_participants_table(soup_part)
 
             if registros:
                 df = pd.DataFrame(registros)
-                df["Código Curso"] = codigo_curso
+                df["Código Curso"]     = codigo_curso
                 df["Fecha Extracción"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 df.to_csv(output_path / f"ingresosAVAC_{codigo_curso}.csv", index=False, encoding="utf-8-sig")
-
-            procesados += 1
-            logger.info(f"[{index}/{len(codigos)}] ✅ {codigo_curso}: {len(registros)} alumnos en {round(time.time()-start_time,2)}s")
+                procesados += 1
+                logger.info(f"[{index}/{len(codigos)}] ✅ {codigo_curso}: {len(registros)} alumnos en {round(time.time()-start_time, 2)}s")
+            else:
+                logger.warning(f"[{index}/{len(codigos)}] ⚠️  {codigo_curso}: tabla vacía o sin alumnos con correo")
 
         except Exception as e:
             logger.error(f"❌ Error en {codigo_curso}: {e}")
