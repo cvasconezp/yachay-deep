@@ -92,7 +92,7 @@ jobs:
         run: |
           python -m backend.scraping.runner --mode ${{ inputs.mode || 'full' }}
 
-      - name: Subir logs como artefacto
+      - name: Subir logs y diagnóstico como artefacto
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -100,6 +100,8 @@ jobs:
           path: |
             data/IngresosAVAC/cursos_no_encontrados.csv
             data/IngresosAVAC/errores.log
+            /tmp/avac_login_error.png
+            /tmp/avac_login_error.html
           retention-days: 30
 
       - name: Notificar éxito
