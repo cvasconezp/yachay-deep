@@ -75,6 +75,7 @@ jobs:
           # Credenciales AVAC — configuradas en GitHub Secrets
           AVAC_USERNAME: ${{ secrets.AVAC_USERNAME }}
           AVAC_PASSWORD: ${{ secrets.AVAC_PASSWORD }}
+          AVAC_TOTP_SECRET: ${{ secrets.AVAC_TOTP_SECRET }}
           AVAC_BASE_URL: ${{ secrets.AVAC_BASE_URL || 'https://avac.ups.edu.ec/grado67' }}
 
           # Base de datos Railway
