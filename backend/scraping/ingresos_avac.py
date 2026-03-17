@@ -56,10 +56,12 @@ def get_session_headless(username: str, password: str, base_url: str, totp_secre
         driver.get(f"{base_url}/login/index.php")
 
         # El botón de SSO puede ser un link o botón con texto "Usuarios de la UPS"
+        # Nota: usar '.' en vez de 'text()' porque el <a> contiene un <img> hijo
+        # y text() solo revisa el primer nodo de texto directo.
         sso_button = wait.until(EC.element_to_be_clickable((
             By.XPATH,
-            "//a[contains(text(),'Usuarios de la UPS')] | "
-            "//button[contains(text(),'Usuarios de la UPS')] | "
+            "//a[contains(.,'Usuarios de la UPS')] | "
+            "//button[contains(.,'Usuarios de la UPS')] | "
             "//div[contains(@class,'potentialidp')]//a"
         )))
         logger.info("🔗 Clic en 'Usuarios de la UPS' (redirect a Microsoft SSO)...")
