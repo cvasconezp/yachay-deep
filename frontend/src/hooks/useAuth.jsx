@@ -1,91 +1,62 @@
 /**
  * Hook de autenticación para Yachay Deep.
  *
- * REMEDIACIÓN:
- *   [BUG-01] Race condition resuelta: storage event + verificación periódica JWT
- *   [SEC-02] Fase 1: verificación local de expiración del token
+ * [SEC-02] Fase 2: HttpOnly cookies — el token ya NO se guarda en localStorage.
+ * El backend setea una cookie HttpOnly en /auth/login y la borra en /auth/logout.
+ * El frontend solo necesita enviar credentials: "include" en cada fetch.
+ *
+ * [BUG-01] Race condition resuelta: polling periódico de /auth/me.
  */
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../services/api";
 
 const AuthContext = createContext(null);
-const TOKEN_KEY = "yd_token";
-const TOKEN_CHECK_MS = 60_000;
-
-function decodeJwtPayload(token) {
-  try {
-    const b64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
-    return JSON.parse(atob(b64));
-  } catch { return null; }
-}
-
-function isTokenExpired(token) {
-  const p = decodeJwtPayload(token);
-  if (!p || !p.exp) return true;
-  return Date.now() >= (p.exp * 1000) - 30_000;
-}
+const SESSION_CHECK_MS = 120_000; // verificar sesión cada 2 min
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const intervalRef = useRef(null);
 
-  // Cargar usuario al montar
+  // Cargar usuario al montar (la cookie HttpOnly se envía automáticamente)
   useEffect(() => {
-    const token = localStorage.getItem(TOKEN_KEY);
-    if (token && !isTokenExpired(token)) {
-      api.me()
-        .then(setUser)
-        .catch(() => { localStorage.removeItem(TOKEN_KEY); setUser(null); })
-        .finally(() => setLoading(false));
-    } else {
-      if (token) localStorage.removeItem(TOKEN_KEY);
-      setLoading(false);
-    }
+    api.me()
+      .then(setUser)
+      .catch(() => setUser(null))
+      .finally(() => setLoading(false));
   }, []);
 
-  // [BUG-01] FIX: Verificación periódica de expiración
+  // [BUG-01] FIX: Verificación periódica de sesión via /auth/me
+  // Con HttpOnly cookies no podemos leer el token localmente,
+  // así que verificamos la sesión con un ping periódico al backend.
   useEffect(() => {
     intervalRef.current = setInterval(() => {
-      const token = localStorage.getItem(TOKEN_KEY);
-      if (!token || isTokenExpired(token)) {
-        localStorage.removeItem(TOKEN_KEY);
-        setUser(null);
-      }
-    }, TOKEN_CHECK_MS);
+      api.me().catch(() => setUser(null));
+    }, SESSION_CHECK_MS);
     return () => clearInterval(intervalRef.current);
   }, []);
 
-  // [BUG-01] FIX: Sincronización entre pestañas
+  // Listener para 401 centralizado (interceptor en api.js)
   useEffect(() => {
-    const onStorage = (e) => {
-      if (e.key === TOKEN_KEY) {
-        if (!e.newValue) { setUser(null); }
-        else if (e.newValue !== e.oldValue) {
-          api.me().then(setUser).catch(() => { localStorage.removeItem(TOKEN_KEY); setUser(null); });
-        }
-      }
-    };
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
-  }, []);
-
-  // Listener 401 centralizado
-  useEffect(() => {
-    const onUnauth = () => { localStorage.removeItem(TOKEN_KEY); setUser(null); };
+    const onUnauth = () => setUser(null);
     window.addEventListener("yd:unauthorized", onUnauth);
     return () => window.removeEventListener("yd:unauthorized", onUnauth);
   }, []);
 
   const login = useCallback(async (email, password) => {
     const data = await api.login(email, password);
-    localStorage.setItem(TOKEN_KEY, data.access_token);
+    // El token viene en la HttpOnly cookie (set por el backend).
+    // Solo guardamos el user del body de la respuesta.
     setUser(data.user);
     return data.user;
   }, []);
 
-  const logout = useCallback(() => {
-    localStorage.removeItem(TOKEN_KEY);
+  const logout = useCallback(async () => {
+    try {
+      await api.logout(); // POST /auth/logout → borra cookie HttpOnly
+    } catch {
+      // Si falla, igual limpiar estado local
+    }
     setUser(null);
   }, []);
 

@@ -43,6 +43,14 @@ class Settings(BaseSettings):
     # App
     APP_NAME: str = "Yachay Deep"
     DEBUG: bool = False
+
+    # [SEC-02] Cookie config for HttpOnly JWT
+    COOKIE_DOMAIN: Optional[str] = None          # None = auto (current domain)
+    COOKIE_SECURE: bool = True                    # False for localhost dev
+    COOKIE_SAMESITE: str = "lax"                  # "lax" para navegación normal, "strict" para máxima seguridad
+
+    # Sentry DSN (optional, for error monitoring)
+    SENTRY_DSN: Optional[str] = None
     # CORS_ORIGINS: set via env as JSON array ["url"] or comma-separated "url1,url2"
     # Default covers local dev + Vercel production
     CORS_ORIGINS: list[str] = ["http://localhost:3000", "https://yachay-deep.vercel.app"]

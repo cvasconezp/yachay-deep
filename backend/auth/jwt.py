@@ -1,8 +1,14 @@
+"""
+JWT utilities para Yachay Deep.
+
+[SEC-02] Fase 2: Soporta token desde HttpOnly cookie ('yd_token')
+         ademas del header Authorization: Bearer (backward compat).
+"""
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
@@ -11,7 +17,9 @@ from ..database import get_db
 from ..models.user import User
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
+
+COOKIE_NAME = "yd_token"
 
 
 def hash_password(password: str) -> str:
@@ -24,17 +32,42 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
+    expire = datetime.now(timezone.utc) + (
+        expires_delta or timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
+def _extract_token(request: Request, bearer_token: Optional[str]) -> Optional[str]:
+    """
+    [SEC-02] Extrae token JWT con prioridad:
+      1. HttpOnly cookie 'yd_token' (mas seguro, inmune a XSS)
+      2. Header Authorization: Bearer (backward compat para API consumers)
+    """
+    cookie_token = request.cookies.get(COOKIE_NAME)
+    if cookie_token:
+        return cookie_token
+    if bearer_token:
+        return bearer_token
+    return None
+
+
+def get_current_user(
+    request: Request,
+    bearer_token: Optional[str] = Depends(oauth2_scheme),
+    db: Session = Depends(get_db),
+) -> User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="No autenticado",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
+    token = _extract_token(request, bearer_token)
+    if not token:
+        raise credentials_exception
+
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         sub = payload.get("sub")

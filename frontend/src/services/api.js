@@ -1,6 +1,13 @@
+/**
+ * Cliente API — Yachay Deep
+ *
+ * [SEC-02] Fase 2: HttpOnly cookies. Usa credentials:"include" en vez de
+ *          localStorage token. El backend setea/borra la cookie.
+ * [SEC-07/BUG-03] Sanitización de mensajes de error.
+ */
+
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
-// [SEC-07/BUG-03] FIX: Sanitización de mensajes de error
 function sanitizeErrorMessage(raw) {
   if (typeof raw !== "string") return "Error desconocido";
   return raw.replace(/<[^>]*>/g, "").replace(/[<>'"]/g, "").slice(0, 500);
@@ -11,29 +18,21 @@ class ApiClient {
     this.baseUrl = BASE_URL;
   }
 
-  getToken() {
-    return localStorage.getItem("yd_token");
-  }
-
   async request(path, options = {}) {
-    const token = this.getToken();
     const isFormData = options.body instanceof FormData;
     const headers = {
       ...(isFormData ? {} : { "Content-Type": "application/json" }),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     };
 
+    // [SEC-02] credentials: "include" envía la HttpOnly cookie automáticamente
     const response = await fetch(`${this.baseUrl}${path}`, {
       ...options,
       headers,
+      credentials: "include",
     });
 
     if (response.status === 401) {
-      const currentToken = this.getToken();
-      if (currentToken && currentToken === token) {
-        localStorage.removeItem("yd_token");
-      }
       window.dispatchEvent(new CustomEvent("yd:unauthorized"));
       throw new Error("No autenticado");
     }
@@ -61,43 +60,45 @@ class ApiClient {
   delete(path) { return this.request(path, { method: "DELETE" }); }
 
   async getBlob(path) {
-    const token = this.getToken();
     const response = await fetch(`${this.baseUrl}${path}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      credentials: "include",
     });
     if (response.status === 401) {
-      localStorage.removeItem("yd_token");
       window.dispatchEvent(new CustomEvent("yd:unauthorized"));
       throw new Error("No autenticado");
     }
     if (!response.ok) {
       const err = await response.json().catch(() => ({ detail: "Error al descargar" }));
-      throw new Error(err.detail || `HTTP ${response.status}`);
+      throw new Error(sanitizeErrorMessage(err.detail || `HTTP ${response.status}`));
     }
     return response.blob();
   }
 
-  // Auth
+  // ── Auth ──
   login(email, password) {
     const form = new FormData();
     form.append("username", email);
     form.append("password", password);
     return this.request("/auth/login", { method: "POST", body: form, headers: {} });
   }
+  logout() { return this.request("/auth/logout", { method: "POST" }); }
   me() { return this.get("/auth/me"); }
   createUser(data) { return this.post("/auth/users", data); }
   listUsers() { return this.get("/auth/users"); }
 
-  // Students
+  // ── Students (PERF-01: paginado) ──
   searchStudents(q, carrera = "", options = {}) {
     const params = new URLSearchParams();
     if (q) params.set("q", q);
     if (carrera) params.set("carrera", carrera);
-    return this.get(`/students/search?${params.toString()}`, options);
+    if (options.page) params.set("page", options.page);
+    if (options.limit) params.set("limit", options.limit);
+    if (options.nivel_riesgo) params.set("nivel_riesgo", options.nivel_riesgo);
+    return this.get(`/students/search?${params.toString()}`);
   }
   getFicha(studentId) { return this.get(`/students/${studentId}/ficha`); }
 
-  // Interventions
+  // ── Interventions ──
   createIntervention(data) { return this.post("/interventions/", data); }
   listInterventions(studentId) { return this.get(`/interventions/?student_id=${studentId}`); }
   interventionStats() { return this.get("/interventions/stats"); }
@@ -107,10 +108,43 @@ class ApiClient {
     return this.get(`/interventions/dashboard${qs ? "?" + qs : ""}`);
   }
 
-  // Analytics
+  // ── Analytics ──
   getPeriodosDisponibles() { return this.get("/analytics/periodos"); }
+  getAsignaturasAnalytics(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.get(`/analytics/asignaturas${qs ? "?" + qs : ""}`);
+  }
+  getAsignaturaDetalle(asignatura, docente, periodo) {
+    const params = new URLSearchParams();
+    if (docente) params.set("docente", docente);
+    if (periodo && periodo !== "actual") params.set("periodo", periodo);
+    const qs = params.toString();
+    return this.get(`/analytics/asignaturas/${encodeURIComponent(asignatura)}/detalle${qs ? "?" + qs : ""}`);
+  }
+  getDocentesAnalytics(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.get(`/analytics/docentes${qs ? "?" + qs : ""}`);
+  }
+  getDocenteDetalle(docenteNombre, periodo) {
+    const params = new URLSearchParams();
+    if (periodo && periodo !== "actual") params.set("periodo", periodo);
+    const qs = params.toString();
+    return this.get(`/analytics/docentes/${encodeURIComponent(docenteNombre)}/detalle${qs ? "?" + qs : ""}`);
+  }
+  getTutoriasPorAsignatura(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.get(`/analytics/tutorias/por-asignatura${qs ? "?" + qs : ""}`);
+  }
+  getResumenDatos(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.get(`/analytics/resumen${qs ? "?" + qs : ""}`);
+  }
+  getComparativa(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.get(`/analytics/comparativa${qs ? "?" + qs : ""}`);
+  }
 
-  // Dashboard
+  // ── Dashboard ──
   getRiskDashboard(params = {}) {
     const qs = new URLSearchParams(params).toString();
     return this.get(`/dashboard/risk${qs ? "?" + qs : ""}`);
@@ -121,25 +155,24 @@ class ApiClient {
   }
   getCarreras() { return this.get("/dashboard/carreras"); }
 
-  // Admin
+  // ── Admin ──
   triggerETL() { return this.post("/admin/etl/run", {}); }
   getETLRuns() { return this.get("/admin/etl/runs"); }
   getSystemStatus() { return this.get("/admin/system/status"); }
   uploadAndRunETL(file) {
     const form = new FormData();
     form.append("file", file);
-    const token = this.getToken();
     return fetch(`${this.baseUrl}/admin/etl/upload-and-run`, {
       method: "POST",
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      credentials: "include",
       body: form,
     }).then(async (r) => {
-      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || r.statusText);
+      if (!r.ok) throw new Error(sanitizeErrorMessage((await r.json().catch(() => ({}))).detail || r.statusText));
       return r.json();
     });
   }
 
-  // Export
+  // ── Export ──
   exportFichaPDF(studentId) { return this.get(`/export/ficha/${studentId}/pdf`); }
   getExportColumnas() { return this.get("/export/columnas-disponibles"); }
   exportEstudiantesExcel(params) {
@@ -152,48 +185,7 @@ class ApiClient {
     return this.getBlob(`/export/intervenciones/excel${qs ? "?" + qs : ""}`);
   }
 
-  // Analytics — Asignaturas
-  getAsignaturasAnalytics(params = {}) {
-    const qs = new URLSearchParams(params).toString();
-    return this.get(`/analytics/asignaturas${qs ? "?" + qs : ""}`);
-  }
-  getAsignaturaDetalle(asignatura, docente, periodo) {
-    const params = new URLSearchParams();
-    if (docente) params.set("docente", docente);
-    if (periodo && periodo !== "actual") params.set("periodo", periodo);
-    const qs = params.toString();
-    return this.get(`/analytics/asignaturas/${encodeURIComponent(asignatura)}/detalle${qs ? "?" + qs : ""}`);
-  }
-
-  // Analytics — Docentes
-  getDocentesAnalytics(params = {}) {
-    const qs = new URLSearchParams(params).toString();
-    return this.get(`/analytics/docentes${qs ? "?" + qs : ""}`);
-  }
-  getDocenteDetalle(docenteNombre, periodo) {
-    const params = new URLSearchParams();
-    if (periodo && periodo !== "actual") params.set("periodo", periodo);
-    const qs = params.toString();
-    return this.get(`/analytics/docentes/${encodeURIComponent(docenteNombre)}/detalle${qs ? "?" + qs : ""}`);
-  }
-
-  // Analytics — Tutorías
-  getTutoriasPorAsignatura(params = {}) {
-    const qs = new URLSearchParams(params).toString();
-    return this.get(`/analytics/tutorias/por-asignatura${qs ? "?" + qs : ""}`);
-  }
-
-  // Analytics — Resumen de Datos
-  getResumenDatos(params = {}) {
-    const qs = new URLSearchParams(params).toString();
-    return this.get(`/analytics/resumen${qs ? "?" + qs : ""}`);
-  }
-  getComparativa(params = {}) {
-    const qs = new URLSearchParams(params).toString();
-    return this.get(`/analytics/comparativa${qs ? "?" + qs : ""}`);
-  }
-
-  // Predictions — ML
+  // ── Predictions / ML ──
   trainModel() { return this.post("/predictions/train", {}); }
   runPredictions() { return this.post("/predictions/run", {}); }
   getPredictionStatus() { return this.get("/predictions/status"); }

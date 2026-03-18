@@ -1,6 +1,8 @@
 """
 Yachay Deep — API Backend
 FastAPI application entry point
+
+[SEC-02] Fase 2: HttpOnly cookies + Sentry integration
 """
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,6 +11,18 @@ from contextlib import asynccontextmanager
 import logging
 
 from .config import settings, validate_security_settings
+
+# ── Sentry (opcional) ──
+if settings.SENTRY_DSN:
+    try:
+        import sentry_sdk
+        sentry_sdk.init(
+            dsn=settings.SENTRY_DSN,
+            traces_sample_rate=0.2,
+            environment="production" if not settings.DEBUG else "development",
+        )
+    except ImportError:
+        logging.getLogger(__name__).warning("sentry-sdk no instalado. pip install sentry-sdk[fastapi]")
 from .database import create_tables, upgrade_tables
 from .auth.routes import router as auth_router
 from .routes.students import router as students_router

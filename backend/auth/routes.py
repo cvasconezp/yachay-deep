@@ -1,15 +1,22 @@
+"""
+Auth routes — [SEC-02] Fase 2: HttpOnly cookie JWT.
+Login SET-COOKIE HttpOnly+Secure+SameSite. Logout borra cookie.
+Bearer header sigue funcionando como fallback (API consumers).
+"""
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
+from ..config import settings
 from ..database import get_db
 from ..models.user import User, UserRole
-from .jwt import verify_password, create_access_token, hash_password, get_current_user, require_admin
+from .jwt import verify_password, create_access_token, hash_password, get_current_user, require_admin, COOKIE_NAME
 
 import logging
 logger = logging.getLogger(__name__)
@@ -50,9 +57,10 @@ class UserResponse(BaseModel):
         from_attributes = True
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login")
 @limiter.limit("5/minute")
 def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    """[SEC-02] Login con HttpOnly cookie + Bearer token (backward compat)."""
     user = db.query(User).filter(User.email == form_data.username.lower()).first()
     if not user or not verify_password(form_data.password, user.hashed_password):
         safe_email = form_data.username.lower().replace('\n', '').replace('\r', '')[:100]
@@ -68,11 +76,32 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db
     db.commit()
 
     token = create_access_token({"sub": str(user.id)})
-    return {
+
+    # [SEC-02] Respuesta con HttpOnly cookie + token en body (backward compat)
+    response = JSONResponse(content={
         "access_token": token,
         "token_type": "bearer",
         "user": {"id": user.id, "email": user.email, "nombre": user.nombre, "role": user.role},
-    }
+    })
+    response.set_cookie(
+        key=COOKIE_NAME,
+        value=token,
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite=settings.COOKIE_SAMESITE,
+        domain=settings.COOKIE_DOMAIN,
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        path="/",
+    )
+    return response
+
+
+@router.post("/logout")
+def logout():
+    """[SEC-02] Borra la HttpOnly cookie."""
+    response = JSONResponse(content={"detail": "Sesión cerrada"})
+    response.delete_cookie(key=COOKIE_NAME, path="/")
+    return response
 
 
 @router.get("/me", response_model=UserResponse)
