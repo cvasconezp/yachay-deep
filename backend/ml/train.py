@@ -204,6 +204,9 @@ def _train_single_target(df, target_col: str, model_name: str) -> dict:
     stats_path.write_text(json.dumps(xai_stats, indent=2, ensure_ascii=False))
     logger.info(f"  XAI stats guardadas: {stats_path}")
 
+    # [GAP-F2-02] Persistir modelo + stats en PostgreSQL
+    _persist_model_to_db(model_name, model_path, xai_stats)
+
     return {
         "status": "ok",
         "best_model": best_name,
@@ -215,6 +218,31 @@ def _train_single_target(df, target_col: str, model_name: str) -> dict:
         "positive_rate_train": round(float(y_train.mean()), 4),
         "all_models": model_metrics,
     }
+
+
+def _persist_model_to_db(model_name: str, model_path: Path, xai_stats: dict):
+    """[GAP-F2-02] Guarda modelo + stats en PostgreSQL para sobrevivir redeploys."""
+    try:
+        from ..database import SessionLocal
+        from ..models.ml_model_store import MLModelStore
+
+        db = SessionLocal()
+        try:
+            model_bytes = model_path.read_bytes()
+            stats_json = json.dumps(xai_stats, ensure_ascii=False)
+
+            existing = db.query(MLModelStore).filter(MLModelStore.name == model_name).first()
+            if existing:
+                existing.model_data = model_bytes
+                existing.metadata_json = stats_json
+            else:
+                db.add(MLModelStore(name=model_name, model_data=model_bytes, metadata_json=stats_json))
+            db.commit()
+            logger.info(f"  [DB] Modelo '{model_name}' persistido en PostgreSQL ({len(model_bytes)} bytes)")
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning(f"  [DB] No se pudo persistir '{model_name}' en BD: {e}")
 
 
 # --- CLI entrypoint ---

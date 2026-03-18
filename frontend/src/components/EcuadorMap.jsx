@@ -69,7 +69,7 @@ function cantonColor(index, total) {
 }
 
 // ── Componente ───────────────────────────────────────────────────────────────
-export default function EcuadorMap({ provincia, ciudad, parroquia, height = 160, showTitle = true }) {
+export default function EcuadorMap({ provincia, ciudad, parroquia, height = 160, showTitle = false }) {
   const matchedProvName = findProvince(provincia);
   const provData = matchedProvName ? ECUADOR_CANTONES[matchedProvName] : null;
   const matchedCanton = findCanton(provData, ciudad, parroquia);
@@ -98,10 +98,10 @@ export default function EcuadorMap({ provincia, ciudad, parroquia, height = 160,
   const strokeInt = scale * 0.003;
   const strokeExt = scale * 0.008;
   const strokeVec = scale * 0.002;
-  const strokeResalt = scale * 0.012;
-  const fontTitulo = scale * 0.055;
-  const fontCanton = scale * 0.022;
-  const fontResalt = scale * 0.038;
+  const strokeResalt = scale * 0.015;
+  const fontTitulo = scale * 0.05;
+  const fontCanton = scale * 0.025;
+  const fontResalt = scale * 0.042;
 
   const cantonDisplayName = matchedCanton ? humanizeName(matchedCanton.name) : null;
   const ciudadDisplay = ciudad || cantonDisplayName || "";

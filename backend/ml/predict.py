@@ -52,7 +52,11 @@ class Predictor:
         return cls._instance
 
     def load_models(self) -> bool:
-        """Carga modelos desde disco. Retorna True si al menos uno se cargo."""
+        """
+        Carga modelos con prioridad:
+          1. Disco local (rápido, pero se pierde en redeploys)
+          2. PostgreSQL (persistente, [GAP-F2-02])
+        """
         meta_path = MODELS_DIR / "metadata.json"
         mapping_path = MODELS_DIR / "carrera_mapping.json"
 
@@ -64,12 +68,10 @@ class Predictor:
 
         loaded_any = False
 
-        # Cargar todos los modelos disponibles
+        # 1) Intentar cargar desde disco
         for joblib_file in MODELS_DIR.glob("*.joblib"):
-            name = joblib_file.stem  # e.g. "global_desercion", "eib_desercion"
+            name = joblib_file.stem
             model = joblib.load(joblib_file)
-
-            # Determinar key y tipo
             if name.endswith("_desercion"):
                 key = name[:-len("_desercion")]
                 self.models.setdefault(key, {})["desercion"] = model
@@ -79,30 +81,18 @@ class Predictor:
                 self.models.setdefault(key, {})["reprobacion"] = model
                 loaded_any = True
 
-        # Cargar estadísticas XAI
         for stats_file in MODELS_DIR.glob("*_stats.json"):
-            name = stats_file.stem  # e.g. "global_desercion_stats"
-            name = name[:-len("_stats")]  # "global_desercion"
+            name = stats_file.stem[:-len("_stats")]
             if name.endswith("_desercion"):
                 key = name[:-len("_desercion")]
-                self.stats.setdefault(key, {})["desercion"] = json.loads(
-                    stats_file.read_text(encoding="utf-8")
-                )
+                self.stats.setdefault(key, {})["desercion"] = json.loads(stats_file.read_text(encoding="utf-8"))
             elif name.endswith("_reprobacion"):
                 key = name[:-len("_reprobacion")]
-                self.stats.setdefault(key, {})["reprobacion"] = json.loads(
-                    stats_file.read_text(encoding="utf-8")
-                )
+                self.stats.setdefault(key, {})["reprobacion"] = json.loads(stats_file.read_text(encoding="utf-8"))
 
-        # Compatibilidad: cargar modelos antiguos (desercion.joblib, reprobacion.joblib)
-        old_des = MODELS_DIR / "desercion.joblib"
-        old_rep = MODELS_DIR / "reprobacion.joblib"
-        if old_des.exists() and "global" not in self.models:
-            self.models.setdefault("global", {})["desercion"] = joblib.load(old_des)
-            loaded_any = True
-        if old_rep.exists() and "global" not in self.models.get("global", {}):
-            self.models.setdefault("global", {})["reprobacion"] = joblib.load(old_rep)
-            loaded_any = True
+        # 2) [GAP-F2-02] Si no hay modelos en disco, restaurar desde PostgreSQL
+        if not loaded_any:
+            loaded_any = self._load_from_db()
 
         self._loaded = loaded_any
         if loaded_any:
@@ -114,6 +104,60 @@ class Predictor:
         if carrera and carrera in self.carrera_mapping:
             return self.carrera_mapping[carrera]
         return "global"
+
+    def _load_from_db(self) -> bool:
+        """[GAP-F2-02] Restaura modelos desde PostgreSQL cuando el disco está vacío."""
+        try:
+            from ..database import SessionLocal
+            from ..models.ml_model_store import MLModelStore
+            import io
+
+            db = SessionLocal()
+            try:
+                rows = db.query(MLModelStore).all()
+                if not rows:
+                    return False
+
+                MODELS_DIR.mkdir(exist_ok=True)
+                loaded = False
+
+                for row in rows:
+                    name = row.name
+                    # Restaurar .joblib a disco
+                    model_path = MODELS_DIR / f"{name}.joblib"
+                    model_path.write_bytes(row.model_data)
+                    model = joblib.load(model_path)
+
+                    if name.endswith("_desercion"):
+                        key = name[:-len("_desercion")]
+                        self.models.setdefault(key, {})["desercion"] = model
+                        loaded = True
+                    elif name.endswith("_reprobacion"):
+                        key = name[:-len("_reprobacion")]
+                        self.models.setdefault(key, {})["reprobacion"] = model
+                        loaded = True
+
+                    # Restaurar stats JSON
+                    if row.metadata_json:
+                        stats = json.loads(row.metadata_json)
+                        stats_path = MODELS_DIR / f"{name}_stats.json"
+                        stats_path.write_text(row.metadata_json)
+
+                        if name.endswith("_desercion"):
+                            key = name[:-len("_desercion")]
+                            self.stats.setdefault(key, {})["desercion"] = stats
+                        elif name.endswith("_reprobacion"):
+                            key = name[:-len("_reprobacion")]
+                            self.stats.setdefault(key, {})["reprobacion"] = stats
+
+                if loaded:
+                    logger.info(f"[DB] Modelos restaurados desde PostgreSQL: {len(rows)} archivos")
+                return loaded
+            finally:
+                db.close()
+        except Exception as e:
+            logger.warning(f"[DB] No se pudo restaurar modelos desde BD: {e}")
+            return False
 
     @property
     def is_loaded(self) -> bool:

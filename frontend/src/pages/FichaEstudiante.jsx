@@ -510,7 +510,7 @@ export default function FichaEstudiante() {
             </div>
             <div className="grid grid-cols-3 divide-x divide-gray-100">
               {/* Compromiso */}
-              <div className="px-6 py-3 cursor-help" title="Indice de compromiso: acceso AVAC (30%), tareas (30%), rendimiento (25%), matrícula (15%)">
+              <div className="px-5 py-2 cursor-help" title="Indice de compromiso: acceso AVAC (30%), tareas (30%), rendimiento (25%), matrícula (15%)">
                 <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mb-1">Compromiso</div>
                 <div className="flex items-end gap-2">
                   <span className={`text-2xl font-bold leading-none ${compromisoColor}`}>{compromisoStr || "—"}</span>
@@ -531,7 +531,7 @@ export default function FichaEstudiante() {
                 const barDes = pctDes >= 70 ? "bg-red-500" : pctDes >= 40 ? "bg-orange-400" : "bg-green-500";
                 const labelDes = pctDes == null ? "—" : pctDes >= 70 ? "Alto" : pctDes >= 40 ? "Moderado" : "Bajo";
                 return (
-                  <div className="px-6 py-3 cursor-help" title="Probabilidad de deserción predicha por modelo ML">
+                  <div className="px-5 py-2 cursor-help" title="Probabilidad de deserción predicha por modelo ML">
                     <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mb-1">Predicción Deserción</div>
                     <div className="flex items-end gap-2">
                       <span className={`text-2xl font-bold leading-none ${colorDes}`}>{pctDes != null ? `${pctDes}%` : "—"}</span>
@@ -552,7 +552,7 @@ export default function FichaEstudiante() {
                 const barRep = pctRep >= 70 ? "bg-red-500" : pctRep >= 40 ? "bg-orange-400" : "bg-green-500";
                 const labelRep = pctRep == null ? "—" : pctRep >= 70 ? "Alto" : pctRep >= 40 ? "Moderado" : "Bajo";
                 return (
-                  <div className="px-6 py-3 cursor-help" title="Probabilidad de reprobar al menos una materia">
+                  <div className="px-5 py-2 cursor-help" title="Probabilidad de reprobar al menos una materia">
                     <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mb-1">Predicción Reprobación</div>
                     <div className="flex items-end gap-2">
                       <span className={`text-2xl font-bold leading-none ${colorRep}`}>{pctRep != null ? `${pctRep}%` : "—"}</span>
