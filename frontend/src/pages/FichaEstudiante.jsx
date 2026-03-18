@@ -665,11 +665,8 @@ export default function FichaEstudiante() {
               </details>
               )}
 
-              {/* ── Escenarios Contrafactuales (OCULTO — en entrenamiento) ── */}
-              {/* Los resultados actuales son demasiado obvios ("sube tus notas de 0 a 90").
-                  Se reactiva cuando el modelo contrafactual genere escenarios más accionables
-                  (ej: cambios parciales, priorización por factibilidad, plazos sugeridos). */}
-              {false && contrafactual?.contrafactual_desercion?.cambios?.length > 0 && (
+              {/* ── Escenarios Contrafactuales v2 (reactivado con factibilidad) ── */}
+              {contrafactual?.contrafactual_desercion?.cambios?.length > 0 && (
               <details className="group">
                 <summary className="flex items-center justify-between px-4 py-2 cursor-pointer hover:bg-blue-50/50 transition select-none">
                   <span className="text-[11px] font-bold text-gray-600 uppercase tracking-wide flex items-center gap-1.5">
@@ -695,15 +692,26 @@ export default function FichaEstudiante() {
                         {sc.data.factible && <span className="text-green-500 text-[10px]">✓</span>}
                       </div>
                     </div>
-                    {sc.data.cambios.map((c, ci) => (
-                    <div key={ci} className="flex items-start gap-1.5 text-xs mb-1">
-                      <span className="text-blue-500 mt-0.5">▸</span>
-                      <div>
-                        <span className="font-medium text-gray-800">{c.accion}</span>
-                        <span className="text-gray-400 ml-1">(-{Math.round((c.impacto_individual||0)*100)}%)</span>
+                    {sc.data.cambios.map((c, ci) => {
+                      const factColors = {alta:'bg-green-100 text-green-700',media:'bg-amber-100 text-amber-700',baja:'bg-gray-100 text-gray-500'};
+                      return (
+                      <div key={ci} className="flex items-start gap-1.5 text-xs mb-1.5">
+                        <span className="text-blue-500 mt-0.5">▸</span>
+                        <div className="flex-1">
+                          <span className="font-medium text-gray-800">{c.accion}</span>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="text-gray-400">-{Math.round((c.impacto_individual||0)*100)}% riesgo</span>
+                            {c.factibilidad && (
+                              <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${factColors[c.factibilidad]||'bg-gray-100 text-gray-500'}`}>
+                                {c.factibilidad}
+                              </span>
+                            )}
+                            {c.plazo && <span className="text-[9px] text-gray-400">{c.plazo}</span>}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                    ))}
+                      );
+                    })}
                     {sc.data.factible && (
                     <p className="text-[10px] text-green-600 mt-1.5 font-medium">
                       ✓ Riesgo: {Math.round((sc.data.prob_original||0)*100)}% → {Math.round((sc.data.prob_contrafactual||0)*100)}%

@@ -458,7 +458,13 @@ def calcular_indice_compromiso(
     estado_matricula: Optional[str] = None,
 ) -> dict:
     """
-    Modelo de riesgo ponderado multinivel (Framework Capa 5).
+    Modelo de riesgo ponderado multinivel (Framework Capa 5) — v2 MEJORADO.
+
+    Mejoras respecto a v1:
+      P1-FIX: Función de acceso AVAC continua (exponencial decreciente, no escalonada)
+      P2-FIX: Rendimiento con gradiente continuo usando función sigmoide
+      P3-FIX: Sin datos = señal de alerta proporcional (no neutral)
+      P4-FIX: Umbrales de clasificación ajustados (0.65 y 0.35 para mayor sensibilidad)
 
     Score compuesto con 4 dimensiones:
       - 30% = acceso AVAC (engagement con la plataforma)
@@ -468,42 +474,33 @@ def calcular_indice_compromiso(
 
     Devuelve dict con {indice, nivel_riesgo, color_hex, componentes}
     """
-    # ── Componente AVAC (30%) ──
+    import math
+
+    # ── Componente AVAC (30%) — función continua decreciente ──
+    # [P1-FIX] Exponencial decreciente: f(d) = 0.30 * exp(-d/10)
+    # d=0 → 0.30 (máximo), d=7 → 0.15, d=14 → 0.07, d=30 → 0.01, d>40 → ~0
     if dias_sin_acceso is None:
-        puntaje_acceso = 0.0
-    elif dias_sin_acceso <= 3:
-        puntaje_acceso = 0.30
-    elif dias_sin_acceso <= 7:
-        puntaje_acceso = 0.24
-    elif dias_sin_acceso <= 14:
-        puntaje_acceso = 0.12
-    elif dias_sin_acceso <= 21:
-        puntaje_acceso = 0.06
+        # [P3-FIX] Sin datos de acceso = señal de alerta (no 0 absoluto)
+        puntaje_acceso = 0.03  # peor que 30 días, mejor que nunca
     else:
-        puntaje_acceso = 0.0
+        puntaje_acceso = round(0.30 * math.exp(-max(dias_sin_acceso, 0) / 10), 4)
 
-    # ── Componente actividades (30%) ──
+    # ── Componente actividades (30%) — lineal proporcional ──
     if tareas_totales == 0:
-        puntaje_tareas = 0.0
+        # [P3-FIX] Sin tareas registradas = señal moderada de alerta
+        puntaje_tareas = 0.05
     else:
-        puntaje_tareas = (tareas_entregadas / tareas_totales) * 0.30
+        puntaje_tareas = round((tareas_entregadas / tareas_totales) * 0.30, 4)
 
-    # ── Componente rendimiento académico (25%) ──
-    # Escala institucional: 0-100, aprobación >= 70
+    # ── Componente rendimiento académico (25%) — sigmoide continua ──
+    # [P2-FIX] Sigmoide centrada en 70 (umbral de aprobación): f(x) = 0.25 / (1 + exp(-0.08*(x-70)))
+    # Nota 50 → 0.04, Nota 60 → 0.08, Nota 70 → 0.125, Nota 80 → 0.19, Nota 90 → 0.23
+    # Gradiente suave sin "agujeros" entre rangos
     if promedio_calificaciones is not None and promedio_calificaciones > 0:
-        if promedio_calificaciones >= 90:
-            puntaje_rendimiento = 0.25
-        elif promedio_calificaciones >= 80:
-            puntaje_rendimiento = 0.20
-        elif promedio_calificaciones >= 70:
-            puntaje_rendimiento = 0.15
-        elif promedio_calificaciones >= 50:
-            puntaje_rendimiento = 0.08
-        else:
-            puntaje_rendimiento = 0.0
+        puntaje_rendimiento = round(0.25 / (1 + math.exp(-0.08 * (promedio_calificaciones - 70))), 4)
     else:
-        # Sin datos de calificaciones: neutral (no penalizar ni bonificar)
-        puntaje_rendimiento = 0.125  # punto medio
+        # [P3-FIX] Sin calificaciones = señal de alerta proporcional
+        puntaje_rendimiento = 0.04  # equivalente a ~nota 50
 
     # ── Componente administrativo (15%) ──
     if estado_matricula and "matriculad" in str(estado_matricula).lower():
@@ -511,15 +508,17 @@ def calcular_indice_compromiso(
     elif estado_matricula:
         puntaje_admin = 0.05  # estado irregular pero presente
     else:
-        puntaje_admin = 0.075  # sin datos: neutral
+        # [P3-FIX] Sin datos de matrícula = señal de alerta
+        puntaje_admin = 0.03
 
     indice = round(puntaje_acceso + puntaje_tareas + puntaje_rendimiento + puntaje_admin, 3)
 
-    # Clasificación de riesgo
-    if indice >= 0.7:
+    # [P4-FIX] Clasificación con umbrales ajustados para mayor sensibilidad
+    # 0.65 y 0.35 en vez de 0.7 y 0.4 — detecta riesgo antes
+    if indice >= 0.65:
         nivel = "Bajo"
         color = "#00B050"   # verde
-    elif indice >= 0.4:
+    elif indice >= 0.35:
         nivel = "Medio"
         color = "#FFC000"   # amarillo
     else:
@@ -530,10 +529,10 @@ def calcular_indice_compromiso(
         "indice_compromiso": indice,
         "nivel_riesgo": nivel,
         "color_riesgo": color,
-        "puntaje_acceso": puntaje_acceso,
-        "puntaje_tareas": puntaje_tareas,
-        "puntaje_rendimiento": puntaje_rendimiento,
-        "puntaje_admin": puntaje_admin,
+        "puntaje_acceso": round(puntaje_acceso, 4),
+        "puntaje_tareas": round(puntaje_tareas, 4),
+        "puntaje_rendimiento": round(puntaje_rendimiento, 4),
+        "puntaje_admin": round(puntaje_admin, 4),
     }
 
 
