@@ -101,6 +101,37 @@ def build_features(db: Session) -> pd.DataFrame:
     # Label reprobacion: 1 si tiene alguna nota < 70
     features["reprobo"] = (features["num_reprobadas"] > 0).astype(int)
 
+    # [GAP-F5-02] Feature de retroalimentación: ¿tuvo intervención en período anterior?
+    # Esto cierra el feedback loop: intervenciones → modelo aprende de ellas
+    try:
+        interv_query = text("""
+            SELECT i.student_id, g.periodo
+            FROM interventions i
+            JOIN grades g ON g.student_id = i.student_id AND g.periodo IS NOT NULL
+            GROUP BY i.student_id, g.periodo
+        """)
+        interv_rows = db.execute(interv_query).fetchall()
+        if interv_rows:
+            interv_df = pd.DataFrame(interv_rows, columns=["student_id", "periodo"])
+            interv_set = set(zip(interv_df["student_id"], interv_df["periodo"]))
+
+            def tuvo_intervencion_previa(row):
+                per = row["periodo"]
+                sid = row["student_id"]
+                if per in PERIODOS_ORDENADOS:
+                    idx = PERIODOS_ORDENADOS.index(per)
+                    if idx > 0:
+                        prev = PERIODOS_ORDENADOS[idx - 1]
+                        return 1 if (sid, prev) in interv_set else 0
+                return 0
+
+            features["tuvo_intervencion"] = features.apply(tuvo_intervencion_previa, axis=1)
+        else:
+            features["tuvo_intervencion"] = 0
+    except Exception as e:
+        logger.warning(f"No se pudo calcular feature de intervenciones: {e}")
+        features["tuvo_intervencion"] = 0
+
     carreras = features["carrera"].dropna().nunique()
     logger.info(
         f"Features construidas: {len(features)} registros, "
