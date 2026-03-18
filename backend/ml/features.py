@@ -115,9 +115,14 @@ def build_current_features(db: Session) -> pd.DataFrame:
     """
     Construye features para estudiantes del semestre actual (periodo IS NULL).
     Incluye carrera del estudiante para seleccionar modelo correcto.
+
+    [GAP-F2-01] Enriquecido con variables conductuales de la tabla students:
+    dias_sin_acceso, porcentaje_tareas, indice_compromiso.
+    Estas features mejoran la predicción según la literatura de Learning Analytics.
     """
     query = text("""
-        SELECT g.student_id, g.nota_final, s.carrera
+        SELECT g.student_id, g.nota_final, s.carrera,
+               s.dias_sin_acceso, s.porcentaje_tareas, s.indice_compromiso
         FROM grades g
         JOIN students s ON s.id = g.student_id
         WHERE g.periodo IS NULL
@@ -127,7 +132,10 @@ def build_current_features(db: Session) -> pd.DataFrame:
     if not rows:
         return pd.DataFrame()
 
-    df = pd.DataFrame(rows, columns=["student_id", "nota_final", "carrera"])
+    df = pd.DataFrame(rows, columns=[
+        "student_id", "nota_final", "carrera",
+        "dias_sin_acceso", "porcentaje_tareas", "indice_compromiso",
+    ])
     df["nota_final"] = pd.to_numeric(df["nota_final"], errors="coerce").fillna(0)
 
     # Carrera por estudiante (la más frecuente en grades actuales)
@@ -136,6 +144,13 @@ def build_current_features(db: Session) -> pd.DataFrame:
         .agg(lambda x: x.mode().iloc[0] if not x.mode().empty else None)
         .to_dict()
     )
+
+    # [GAP-F2-01] Variables conductuales por estudiante (tomar primera fila, son iguales)
+    conductual = df.groupby("student_id").agg(
+        dias_sin_acceso=("dias_sin_acceso", "first"),
+        porcentaje_tareas=("porcentaje_tareas", "first"),
+        indice_compromiso=("indice_compromiso", "first"),
+    ).reset_index()
 
     grouped = df.groupby("student_id")
     features = grouped.agg(
@@ -152,9 +167,16 @@ def build_current_features(db: Session) -> pd.DataFrame:
     features["pct_reprobadas"] = features["num_reprobadas"] / features["num_asignaturas"]
     features["carrera"] = features["student_id"].map(carrera_por_estudiante)
 
+    # [GAP-F2-01] Merge variables conductuales
+    features = features.merge(conductual, on="student_id", how="left")
+    features["dias_sin_acceso"] = features["dias_sin_acceso"].fillna(0)
+    features["porcentaje_tareas"] = features["porcentaje_tareas"].fillna(50)  # neutral default
+    features["indice_compromiso"] = features["indice_compromiso"].fillna(0.5)
+
     return features
 
 
+# Features originales (8) — compatibles con modelos históricos
 FEATURE_COLUMNS = [
     "promedio_notas",
     "num_asignaturas",
@@ -164,4 +186,13 @@ FEATURE_COLUMNS = [
     "nota_max",
     "std_notas",
     "num_zeros",
+]
+
+# [GAP-F2-01] Features extendidas con variables conductuales
+# Disponibles solo para semestre actual (build_current_features).
+# Los modelos se re-entrenarán progresivamente para usarlas.
+EXTENDED_FEATURE_COLUMNS = FEATURE_COLUMNS + [
+    "dias_sin_acceso",
+    "porcentaje_tareas",
+    "indice_compromiso",
 ]

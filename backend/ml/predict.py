@@ -28,6 +28,10 @@ FEATURE_LABELS = {
     "nota_max": "Nota máxima",
     "std_notas": "Dispersión de notas",
     "num_zeros": "Materias con nota cero",
+    # [GAP-F2-01] Features conductuales
+    "dias_sin_acceso": "Días sin acceso al AVAC",
+    "porcentaje_tareas": "Porcentaje de tareas entregadas",
+    "indice_compromiso": "Índice de compromiso académico",
 }
 
 
@@ -243,6 +247,8 @@ class Predictor:
                 "direccion": direction,
             })
 
+        # [GAP-F3-01] Filtrar factores con contribución insignificante
+        contributions = [c for c in contributions if abs(c["contribucion"]) >= 0.01]
         contributions.sort(key=lambda x: abs(x["contribucion"]), reverse=True)
         return contributions[:top_n]
 
@@ -302,5 +308,43 @@ class Predictor:
             result["explicacion_reprobacion"] = self._compute_explanations(
                 features, model_key, "reprobacion"
             )
+
+        # [GAP-F3-02] Contexto conductual adicional (no depende del modelo ML)
+        # Enriquece las explicaciones con indicadores intuitivos para tutores
+        if student:
+            contexto = []
+            if student.dias_sin_acceso is not None and student.dias_sin_acceso > 7:
+                sev = "critica" if student.dias_sin_acceso >= 14 else "alerta"
+                contexto.append({
+                    "factor": "Inactividad AVAC",
+                    "descripcion": f"{student.dias_sin_acceso} dias sin acceder al aula virtual",
+                    "valor": student.dias_sin_acceso,
+                    "severidad": sev,
+                })
+            if student.porcentaje_tareas is not None and student.porcentaje_tareas < 60:
+                sev = "critica" if student.porcentaje_tareas < 40 else "alerta"
+                contexto.append({
+                    "factor": "Entrega de tareas baja",
+                    "descripcion": f"Solo ha entregado el {round(student.porcentaje_tareas)}% de tareas",
+                    "valor": round(student.porcentaje_tareas, 1),
+                    "severidad": sev,
+                })
+            if student.indice_compromiso is not None and student.indice_compromiso < 0.55:
+                sev = "critica" if student.indice_compromiso < 0.3 else "alerta"
+                contexto.append({
+                    "factor": "Compromiso academico bajo",
+                    "descripcion": f"Indice de compromiso: {round(student.indice_compromiso * 100)}%",
+                    "valor": round(student.indice_compromiso, 3),
+                    "severidad": sev,
+                })
+            if student.estado_matricula and "matriculad" not in student.estado_matricula.lower():
+                contexto.append({
+                    "factor": "Matricula pendiente",
+                    "descripcion": f"Estado: {student.estado_matricula}",
+                    "valor": student.estado_matricula,
+                    "severidad": "critica",
+                })
+            if contexto:
+                result["contexto_conductual"] = contexto
 
         return result

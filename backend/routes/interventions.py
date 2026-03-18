@@ -116,6 +116,13 @@ def create_intervention(
         derivar_bienestar=payload.derivar_bienestar,
         tipo_evento_critico=payload.tipo_evento_critico,
         reporte_bienestar=payload.reporte_bienestar,
+        # [GAP-F5-01] Snapshot de indicadores al momento de la intervención
+        snapshot_compromiso=student.indice_compromiso,
+        snapshot_dias_sin_acceso=student.dias_sin_acceso,
+        snapshot_porcentaje_tareas=student.porcentaje_tareas,
+        snapshot_prob_desercion=student.prob_desercion,
+        snapshot_prob_reprobacion=student.prob_reprobacion,
+        snapshot_nivel_riesgo=student.nivel_riesgo,
     )
     db.add(intervention)
     db.commit()
@@ -363,4 +370,98 @@ def interventions_dashboard(
                 for r in por_carrera
             ],
         },
+    }
+
+
+@router.get("/{intervention_id}/impact")
+def get_intervention_impact(
+    intervention_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    [GAP-F5-01] Mide el impacto de una intervención:
+    compara los indicadores snapshot (al crear) vs los actuales del estudiante.
+    Esto cierra el ciclo: detección → intervención → evaluación de impacto.
+    """
+    intervention = db.query(Intervention).filter(Intervention.id == intervention_id).first()
+    if not intervention:
+        raise HTTPException(status_code=404, detail="Intervención no encontrada")
+
+    student = db.query(Student).filter(Student.id == intervention.student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Estudiante no encontrado")
+
+    # Si no hay snapshot, la intervención fue creada antes de esta feature
+    if intervention.snapshot_compromiso is None and intervention.snapshot_dias_sin_acceso is None:
+        return {
+            "intervention_id": intervention_id,
+            "student_id": student.id,
+            "mensaje": "Sin datos de snapshot — intervención creada antes de esta funcionalidad",
+            "disponible": False,
+        }
+
+    def _delta(antes, ahora):
+        if antes is None or ahora is None:
+            return None
+        return round(ahora - antes, 4)
+
+    antes = {
+        "compromiso": intervention.snapshot_compromiso,
+        "dias_sin_acceso": intervention.snapshot_dias_sin_acceso,
+        "porcentaje_tareas": intervention.snapshot_porcentaje_tareas,
+        "prob_desercion": intervention.snapshot_prob_desercion,
+        "prob_reprobacion": intervention.snapshot_prob_reprobacion,
+        "nivel_riesgo": intervention.snapshot_nivel_riesgo,
+    }
+    ahora = {
+        "compromiso": student.indice_compromiso,
+        "dias_sin_acceso": student.dias_sin_acceso,
+        "porcentaje_tareas": student.porcentaje_tareas,
+        "prob_desercion": student.prob_desercion,
+        "prob_reprobacion": student.prob_reprobacion,
+        "nivel_riesgo": student.nivel_riesgo,
+    }
+    cambio = {
+        "compromiso": _delta(antes["compromiso"], ahora["compromiso"]),
+        "dias_sin_acceso": _delta(antes["dias_sin_acceso"], ahora["dias_sin_acceso"]),
+        "porcentaje_tareas": _delta(antes["porcentaje_tareas"], ahora["porcentaje_tareas"]),
+        "prob_desercion": _delta(antes["prob_desercion"], ahora["prob_desercion"]),
+        "prob_reprobacion": _delta(antes["prob_reprobacion"], ahora["prob_reprobacion"]),
+    }
+
+    # Determinar si hubo mejora general
+    mejoras = 0
+    total_evaluados = 0
+    if cambio["compromiso"] is not None:
+        total_evaluados += 1
+        if cambio["compromiso"] > 0:
+            mejoras += 1
+    if cambio["dias_sin_acceso"] is not None:
+        total_evaluados += 1
+        if cambio["dias_sin_acceso"] < 0:  # menos días sin acceso = mejora
+            mejoras += 1
+    if cambio["porcentaje_tareas"] is not None:
+        total_evaluados += 1
+        if cambio["porcentaje_tareas"] > 0:
+            mejoras += 1
+    if cambio["prob_desercion"] is not None:
+        total_evaluados += 1
+        if cambio["prob_desercion"] < 0:  # menor prob = mejora
+            mejoras += 1
+
+    mejoro = mejoras > (total_evaluados / 2) if total_evaluados > 0 else None
+
+    return {
+        "intervention_id": intervention_id,
+        "student_id": student.id,
+        "nombre": student.nombre,
+        "fecha_intervencion": intervention.created_at.isoformat() if intervention.created_at else None,
+        "antes": antes,
+        "ahora": ahora,
+        "cambio": cambio,
+        "mejoro": mejoro,
+        "indicadores_mejorados": mejoras,
+        "indicadores_evaluados": total_evaluados,
+        "disponible": True,
     }

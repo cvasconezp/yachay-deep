@@ -66,6 +66,13 @@ def upgrade_tables():
             ("tipo_evento_critico", "VARCHAR"),
             ("reporte_bienestar", "TEXT"),
             ("email_enviado", "BOOLEAN"),
+            # [GAP-F5-01] Snapshot de indicadores al crear intervención
+            ("snapshot_compromiso", "FLOAT"),
+            ("snapshot_dias_sin_acceso", "INTEGER"),
+            ("snapshot_porcentaje_tareas", "FLOAT"),
+            ("snapshot_prob_desercion", "FLOAT"),
+            ("snapshot_prob_reprobacion", "FLOAT"),
+            ("snapshot_nivel_riesgo", "VARCHAR"),
         ],
     }
 

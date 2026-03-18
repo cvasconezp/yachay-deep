@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Text, Boolean
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Text, Boolean, Float
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from ..database import Base
@@ -30,6 +30,15 @@ class Intervention(Base):
     tipo_evento_critico = Column(String, nullable=True)   # Enfermedad / Pérdida laboral / etc
     reporte_bienestar = Column(Text, nullable=True)       # Descripción detallada del caso
     email_enviado = Column(Boolean, nullable=True, default=False)
+
+    # [GAP-F5-01] Snapshot de indicadores al momento de la intervención
+    # Permite medir impacto: comparar estos valores con los actuales del estudiante
+    snapshot_compromiso = Column(Float, nullable=True)
+    snapshot_dias_sin_acceso = Column(Integer, nullable=True)
+    snapshot_porcentaje_tareas = Column(Float, nullable=True)
+    snapshot_prob_desercion = Column(Float, nullable=True)
+    snapshot_prob_reprobacion = Column(Float, nullable=True)
+    snapshot_nivel_riesgo = Column(String, nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
