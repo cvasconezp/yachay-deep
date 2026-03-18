@@ -296,7 +296,8 @@ export default function FichaEstudiante() {
       searchAbort.current = controller;
       try {
         const results = await api.searchStudents(q, carrera, { signal: controller.signal });
-        setSearchResults(results);
+        // PERF-01 fix: endpoint ahora devuelve {items, total, ...} en vez de array plano
+        setSearchResults(Array.isArray(results) ? results : (results?.items || []));
       } catch (e) {
         if (e.name !== "AbortError") console.error(e);
       }
@@ -608,109 +609,129 @@ export default function FichaEstudiante() {
           </div>
           )}
 
-          {/* ===== Contexto Conductual (GAP-F3-02) ===== */}
-          {prediccion?.contexto_conductual?.length > 0 && (
-          <div className="mt-4">
-            <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wide flex items-center gap-2 mb-3">
-              <span>⚡</span> Alertas Conductuales
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-              {prediccion.contexto_conductual.map((ctx, i) => {
-                const sev = ctx.severidad === "critica"
-                  ? "border-red-300 bg-red-50 text-red-800"
-                  : "border-amber-300 bg-amber-50 text-amber-800";
-                const icon = ctx.severidad === "critica" ? "🔴" : "🟡";
-                return (
-                <div key={i} className={`rounded-lg border p-3 ${sev}`}>
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <span>{icon}</span>
-                    <span className="text-xs font-bold uppercase">{ctx.factor}</span>
-                  </div>
-                  <p className="text-sm">{ctx.descripcion}</p>
-                </div>
-                );
-              })}
-            </div>
-          </div>
-          )}
+          {/* ===== PANEL IA: Acordeones desplegables ===== */}
+          {(prediccion?.contexto_conductual?.length > 0 || contrafactual?.contrafactual_desercion?.cambios?.length > 0 || recomendaciones.length > 0) && (
+          <div className="border-t border-gray-200 bg-[#FAFBFF]">
+            <div className="divide-y divide-gray-200">
 
-          {/* ===== Contrafactuales: "¿Qué debe cambiar?" ===== */}
-          {contrafactual?.contrafactual_desercion?.cambios?.length > 0 && (
-          <div className="mt-4">
-            <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wide flex items-center gap-2 mb-3">
-              <span>🔄</span> Escenarios Contrafactuales
-              <span className="text-xs font-normal text-gray-400 normal-case">¿Qué tendría que cambiar para reducir el riesgo?</span>
-            </h3>
-            {[
-              { data: contrafactual.contrafactual_desercion, label: "Deserción", color: "red" },
-              { data: contrafactual.contrafactual_reprobacion, label: "Reprobación", color: "orange" },
-            ].filter(s => s.data?.cambios?.length > 0).map((scenario, si) => (
-            <div key={si} className={`bg-white rounded-xl border border-${scenario.color}-100 shadow-sm p-4 mb-3`}>
-              <div className="flex items-center justify-between mb-3">
-                <p className={`text-xs font-bold text-${scenario.color}-700 uppercase`}>
-                  Escenario · {scenario.label}
-                </p>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-500">
-                    {Math.round((scenario.data.prob_original || 0) * 100)}%
+              {/* ── Alertas Conductuales (acordeón) ── */}
+              {prediccion?.contexto_conductual?.length > 0 && (
+              <details open className="group">
+                <summary className="flex items-center justify-between px-4 py-2 cursor-pointer hover:bg-blue-50/50 transition select-none">
+                  <span className="text-[11px] font-bold text-gray-600 uppercase tracking-wide flex items-center gap-1.5">
+                    <span>⚡</span> Alertas Conductuales
+                    <span className="bg-red-100 text-red-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full ml-1">
+                      {prediccion.contexto_conductual.length}
+                    </span>
                   </span>
-                  <span className="text-gray-400">→</span>
-                  <span className={`text-xs font-bold ${scenario.data.factible ? 'text-green-600' : 'text-amber-600'}`}>
-                    {Math.round((scenario.data.prob_contrafactual || 0) * 100)}%
-                  </span>
-                  {scenario.data.factible && <span className="text-green-500 text-xs">✓ Viable</span>}
+                  <span className="text-gray-400 text-xs group-open:rotate-180 transition-transform">▼</span>
+                </summary>
+                <div className="px-4 pb-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                  {prediccion.contexto_conductual.map((ctx, i) => {
+                    const sev = ctx.severidad === "critica"
+                      ? "border-red-300 bg-red-50 text-red-800"
+                      : "border-amber-300 bg-amber-50 text-amber-800";
+                    const icon = ctx.severidad === "critica" ? "🔴" : "🟡";
+                    return (
+                    <div key={i} className={`rounded-lg border p-2.5 ${sev}`}>
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <span className="text-sm">{icon}</span>
+                        <span className="text-[10px] font-bold uppercase">{ctx.factor}</span>
+                      </div>
+                      <p className="text-xs">{ctx.descripcion}</p>
+                    </div>
+                    );
+                  })}
                 </div>
-              </div>
-              <div className="space-y-2">
-                {scenario.data.cambios.map((cambio, ci) => (
-                <div key={ci} className="flex items-start gap-2 text-sm">
-                  <span className="text-blue-500 mt-0.5">▸</span>
-                  <div>
-                    <p className="font-medium text-gray-800">{cambio.accion}</p>
-                    <p className="text-xs text-gray-400">
-                      Impacto individual: -{Math.round((cambio.impacto_individual || 0) * 100)}% en probabilidad
-                    </p>
-                  </div>
-                </div>
-                ))}
-              </div>
-              {scenario.data.factible && (
-              <p className="text-xs text-green-600 mt-3 font-medium">
-                ✓ Con estos cambios, el riesgo bajaría de {Math.round((scenario.data.prob_original||0)*100)}% a {Math.round((scenario.data.prob_contrafactual||0)*100)}%
-                (reducción de {Math.round((scenario.data.reduccion_total||0)*100)} puntos)
-              </p>
+              </details>
               )}
-            </div>
-            ))}
-          </div>
-          )}
 
-          {/* ===== Recomendaciones Automáticas ===== */}
-          {recomendaciones.length > 0 && (
-          <div className="mt-4">
-            <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wide flex items-center gap-2 mb-3">
-              <span>💡</span> Recomendaciones Automáticas
-            </h3>
-            <div className="space-y-2">
-              {recomendaciones.map((rec, i) => {
-                const clrs = {urgente:'border-red-200 bg-red-50',importante:'border-amber-200 bg-amber-50',sugerida:'border-blue-200 bg-blue-50'};
-                const bdgs = {urgente:'bg-red-100 text-red-700',importante:'bg-amber-100 text-amber-700',sugerida:'bg-blue-100 text-blue-700'};
-                const medioKey = (rec.medio||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
-                const icnMap = {email:'📧',tutoria:'👥',sistema:'🖥️',notificacion:'🔔',llamada:'📞'};
-                const icon = icnMap[medioKey]||'📌';
-                const prio = rec.priority||rec.prioridad||'sugerida';
-                return (
-                <div key={i} className={'rounded-lg border p-3 ' + (clrs[prio]||'border-gray-200 bg-gray-50')}>
-                  <div className="flex flex-wrap items-center gap-1.5 mb-1">
-                    <span className={'text-xs font-semibold px-1.5 py-0.5 rounded-full ' + (bdgs[prio]||'bg-gray-100 text-gray-600')}>{prio}</span>
-                    <span className="text-xs text-gray-500">{icon} {rec.medio}</span>
-                    {rec.destinatario && <span className="text-xs text-gray-400">→ {rec.destinatario}</span>}
+              {/* ── Escenarios Contrafactuales (acordeón) ── */}
+              {contrafactual?.contrafactual_desercion?.cambios?.length > 0 && (
+              <details className="group">
+                <summary className="flex items-center justify-between px-4 py-2 cursor-pointer hover:bg-blue-50/50 transition select-none">
+                  <span className="text-[11px] font-bold text-gray-600 uppercase tracking-wide flex items-center gap-1.5">
+                    <span>🔄</span> Escenarios Contrafactuales
+                    <span className="text-[10px] font-normal text-gray-400 normal-case ml-1">¿Qué cambiar para reducir el riesgo?</span>
+                  </span>
+                  <span className="text-gray-400 text-xs group-open:rotate-180 transition-transform">▼</span>
+                </summary>
+                <div className="px-4 pb-3 space-y-2">
+                  {[
+                    { data: contrafactual.contrafactual_desercion, label: "Deserción", border: "border-red-200", title: "text-red-700" },
+                    { data: contrafactual.contrafactual_reprobacion, label: "Reprobación", border: "border-orange-200", title: "text-orange-700" },
+                  ].filter(s => s.data?.cambios?.length > 0).map((sc, si) => (
+                  <div key={si} className={`bg-white rounded-lg border ${sc.border} p-3`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className={`text-[10px] font-bold ${sc.title} uppercase`}>Escenario · {sc.label}</span>
+                      <div className="flex items-center gap-1.5 text-xs">
+                        <span className="text-gray-500">{Math.round((sc.data.prob_original||0)*100)}%</span>
+                        <span className="text-gray-300">→</span>
+                        <span className={`font-bold ${sc.data.factible ? 'text-green-600' : 'text-amber-600'}`}>
+                          {Math.round((sc.data.prob_contrafactual||0)*100)}%
+                        </span>
+                        {sc.data.factible && <span className="text-green-500 text-[10px]">✓</span>}
+                      </div>
+                    </div>
+                    {sc.data.cambios.map((c, ci) => (
+                    <div key={ci} className="flex items-start gap-1.5 text-xs mb-1">
+                      <span className="text-blue-500 mt-0.5">▸</span>
+                      <div>
+                        <span className="font-medium text-gray-800">{c.accion}</span>
+                        <span className="text-gray-400 ml-1">(-{Math.round((c.impacto_individual||0)*100)}%)</span>
+                      </div>
+                    </div>
+                    ))}
+                    {sc.data.factible && (
+                    <p className="text-[10px] text-green-600 mt-1.5 font-medium">
+                      ✓ Riesgo: {Math.round((sc.data.prob_original||0)*100)}% → {Math.round((sc.data.prob_contrafactual||0)*100)}%
+                      (−{Math.round((sc.data.reduccion_total||0)*100)} puntos)
+                    </p>
+                    )}
                   </div>
-                  <p className="text-sm font-medium text-gray-800">{rec.accion}</p>
-                  {rec.motivo && <p className="text-xs text-gray-500 mt-0.5">{rec.motivo}</p>}
+                  ))}
                 </div>
-                );
-              })}
+              </details>
+              )}
+
+              {/* ── Recomendaciones Automáticas (acordeón) ── */}
+              {recomendaciones.length > 0 && (
+              <details className="group">
+                <summary className="flex items-center justify-between px-4 py-2 cursor-pointer hover:bg-blue-50/50 transition select-none">
+                  <span className="text-[11px] font-bold text-gray-600 uppercase tracking-wide flex items-center gap-1.5">
+                    <span>💡</span> Recomendaciones
+                    <span className="bg-amber-100 text-amber-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full ml-1">
+                      {recomendaciones.length}
+                    </span>
+                    {recomendaciones.some(r => (r.prioridad||r.priority) === 'urgente') && (
+                      <span className="bg-red-100 text-red-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                        {recomendaciones.filter(r => (r.prioridad||r.priority) === 'urgente').length} urgentes
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-gray-400 text-xs group-open:rotate-180 transition-transform">▼</span>
+                </summary>
+                <div className="px-4 pb-3 space-y-1.5">
+                  {recomendaciones.map((rec, i) => {
+                    const clrs = {urgente:'border-red-200 bg-red-50',importante:'border-amber-200 bg-amber-50',sugerida:'border-blue-200 bg-blue-50'};
+                    const bdgs = {urgente:'bg-red-100 text-red-700',importante:'bg-amber-100 text-amber-700',sugerida:'bg-blue-100 text-blue-700'};
+                    const prio = rec.priority||rec.prioridad||'sugerida';
+                    return (
+                    <div key={i} className={'rounded-lg border p-2.5 ' + (clrs[prio]||'border-gray-200 bg-gray-50')}>
+                      <div className="flex flex-wrap items-center gap-1 mb-0.5">
+                        <span className={'text-[10px] font-semibold px-1.5 py-0.5 rounded-full ' + (bdgs[prio]||'bg-gray-100 text-gray-600')}>{prio}</span>
+                        <span className="text-[10px] text-gray-500">{rec.medio}</span>
+                        {rec.destinatario && <span className="text-[10px] text-gray-400">→ {rec.destinatario}</span>}
+                      </div>
+                      <p className="text-xs font-medium text-gray-800">{rec.accion}</p>
+                      {rec.motivo && <p className="text-[10px] text-gray-500 mt-0.5">{rec.motivo}</p>}
+                    </div>
+                    );
+                  })}
+                </div>
+              </details>
+              )}
+
             </div>
           </div>
           )}
