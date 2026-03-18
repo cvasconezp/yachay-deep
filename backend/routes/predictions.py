@@ -158,11 +158,16 @@ def get_counterfactual(
             predictor, features, model_key, "reprobacion", target_prob
         )
 
+    # Contrafactual conductual (siempre disponible, basado en compromiso)
+    from ..ml.counterfactual_conductual import generate_behavioral_counterfactual
+    cf_conductual = generate_behavioral_counterfactual(db, student_id)
+
     return {
         "student_id": student_id,
         "target_prob": target_prob,
         "contrafactual_desercion": cf_desercion,
         "contrafactual_reprobacion": cf_reprobacion,
+        "contrafactual_conductual": cf_conductual,
     }
 
 

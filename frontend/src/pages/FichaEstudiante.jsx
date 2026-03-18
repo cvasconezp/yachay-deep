@@ -724,6 +724,50 @@ export default function FichaEstudiante() {
               </details>
               )}
 
+              {/* ── Contrafactuales Conductuales (siempre visible si hay datos) ── */}
+              {contrafactual?.contrafactual_conductual?.escenarios?.length > 0 && (
+              <details open className="group">
+                <summary className="flex items-center justify-between px-4 py-2 cursor-pointer hover:bg-blue-50/50 transition select-none">
+                  <span className="text-[11px] font-bold text-gray-600 uppercase tracking-wide flex items-center gap-1.5">
+                    <span>🎯</span> ¿Qué puede hacer el estudiante?
+                    <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full ml-1">
+                      {contrafactual.contrafactual_conductual.escenarios.length}
+                    </span>
+                  </span>
+                  <span className="text-gray-400 text-xs group-open:rotate-180 transition-transform">▼</span>
+                </summary>
+                <div className="px-4 pb-3 space-y-2">
+                  {contrafactual.contrafactual_conductual.escenarios.map((esc, i) => {
+                    const factColors = {alta:'border-green-200 bg-green-50',media:'border-amber-200 bg-amber-50',baja:'border-gray-200 bg-gray-50'};
+                    const badgeColors = {alta:'bg-green-100 text-green-700',media:'bg-amber-100 text-amber-700',baja:'bg-gray-100 text-gray-500'};
+                    return (
+                    <div key={i} className={`rounded-lg border p-3 ${factColors[esc.factibilidad] || 'border-gray-200 bg-gray-50'}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1">
+                          <p className="text-xs font-medium text-gray-800">{esc.accion}</p>
+                          <div className="flex items-center gap-2 mt-1.5">
+                            <span className="text-[10px] text-gray-500">Compromiso:</span>
+                            <span className="text-[11px] font-bold text-gray-600">{esc.compromiso_actual}%</span>
+                            <span className="text-gray-300">→</span>
+                            <span className="text-[11px] font-bold text-green-600">{esc.compromiso_nuevo}%</span>
+                            <span className="text-[10px] text-green-600 font-medium">(+{esc.ganancia}pp)</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 mt-1">
+                            <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${badgeColors[esc.factibilidad] || ''}`}>
+                              {esc.factibilidad}
+                            </span>
+                            <span className="text-[9px] text-gray-400">{esc.plazo}</span>
+                            <span className="text-[9px] text-gray-400">→ Riesgo: {esc.nivel_riesgo_nuevo}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    );
+                  })}
+                </div>
+              </details>
+              )}
+
               {/* ── Recomendaciones Automáticas (acordeón) ── */}
               {recomendaciones.length > 0 && (
               <details className="group">
