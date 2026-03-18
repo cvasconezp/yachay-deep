@@ -31,7 +31,7 @@ jobs:
           cache: "pip"
 
       - name: Instalar Chrome para Selenium
-        uses: browser-actions/setup-chrome@v1
+        uses: browser-actions/setup-chrome@v2
 
       - name: Instalar dependencias Python
         run: |
