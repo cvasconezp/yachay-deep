@@ -255,17 +255,34 @@ class FichaEstudiante(BaseModel):
         from_attributes = True
 
 
+# ─── Schemas paginación [PERF-01] ────────────────────────────────────────────
+
+class PaginatedStudents(BaseModel):
+    """Respuesta paginada de estudiantes."""
+    items: list[StudentSummary]
+    total: int
+    page: int
+    pages: int
+    limit: int
+
+    class Config:
+        from_attributes = True
+
+
 # ─── Endpoints ───────────────────────────────────────────────────────────────
 
-@router.get("/search", response_model=list[StudentSummary])
+@router.get("/search", response_model=PaginatedStudents)
 def search_students(
     q: str = Query("", description="Nombre, correo institucional, cédula o teléfono"),
     carrera: str = Query("", description="Filtrar por carrera (vacío = todas)"),
-    limit: int = Query(20, le=100),
+    nivel_riesgo: str = Query("", description="Filtrar por nivel de riesgo: Alto, Medio, Bajo"),
+    page: int = Query(1, ge=1, description="Página (empieza en 1)"),
+    limit: int = Query(50, ge=1, le=200, description="Resultados por página"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
+    [PERF-01] Búsqueda paginada de estudiantes.
     Búsqueda triple: nombre / correo / cédula.
     Si se pasa carrera, filtra por carrera (y permite q vacío para listar).
     """
@@ -274,6 +291,10 @@ def search_students(
     # Filtro por carrera
     if carrera.strip():
         query = query.filter(func.lower(Student.carrera) == carrera.strip().lower())
+
+    # Filtro por nivel de riesgo
+    if nivel_riesgo.strip():
+        query = query.filter(Student.nivel_riesgo == nivel_riesgo.strip())
 
     # Filtro de búsqueda textual
     q_lower = q.lower().strip()
@@ -286,12 +307,19 @@ def search_students(
                 func.lower(Student.telefono).contains(q_lower),
             )
         )
-    elif not carrera.strip():
-        # Sin carrera y sin query suficiente: no retornar nada
-        return []
+    elif not carrera.strip() and not nivel_riesgo.strip():
+        return PaginatedStudents(items=[], total=0, page=1, pages=0, limit=limit)
 
-    results = query.order_by(Student.nombre).limit(limit).all()
-    return results
+    # [PERF-01] Paginación server-side
+    total = query.count()
+    offset = (page - 1) * limit
+    pages = (total + limit - 1) // limit  # ceil division
+
+    results = query.order_by(Student.nombre).offset(offset).limit(limit).all()
+
+    return PaginatedStudents(
+        items=results, total=total, page=page, pages=pages, limit=limit,
+    )
 
 
 @router.get("/{student_id}/ficha", response_model=FichaEstudiante)

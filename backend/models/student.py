@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Float, Text, Date, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, Float, Text, Date, Boolean, Index
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from ..database import Base
@@ -6,6 +6,11 @@ from ..database import Base
 
 class Student(Base):
     __tablename__ = "students"
+    # [PERF-02] Índices compuestos para queries frecuentes del dashboard y analytics
+    __table_args__ = (
+        Index("idx_student_risk_level", "nivel_riesgo"),
+        Index("idx_student_carrera_riesgo", "carrera", "nivel_riesgo"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     cedula = Column(String, unique=True, index=True, nullable=True)
