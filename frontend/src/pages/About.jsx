@@ -55,7 +55,9 @@ const FRAMEWORK_PHASES = [
     items: [
       "Contribuciones por feature (coeficientes / importancias)",
       "Comparación con media de carrera",
-      "Factores que incrementan o reducen el riesgo del estudiante",
+      "Alertas conductuales: inactividad AVAC, tareas, compromiso",
+      "Escenarios contrafactuales: ¿qué cambiar para reducir el riesgo?",
+      "Análisis What-If interactivo",
     ],
   },
   {
@@ -63,19 +65,22 @@ const FRAMEWORK_PHASES = [
     title: "Recomendaciones automáticas",
     status: "completed",
     items: [
-      "Motor de recomendaciones basado en reglas y XAI",
-      "Sugerencias de intervención priorizadas (urgente / importante / sugerida)",
+      "10 categorías de recomendación con 3 niveles de prioridad",
+      "Motor basado en reglas, predicciones ML y factores XAI",
       "Derivación a Bienestar Estudiantil con notificación por correo",
+      "Exportación Excel con columnas configurables",
     ],
   },
   {
     phase: "Fase 5",
-    title: "Integración LMS completa",
-    status: "upcoming",
+    title: "Intervenciones inteligentes y ciclo cerrado",
+    status: "completed",
     items: [
-      "APIs de Moodle/Canvas",
-      "Actualización en tiempo real",
-      "Trazabilidad institucional completa",
+      "Registro de intervenciones con trazabilidad completa",
+      "Snapshots de indicadores al crear intervención",
+      "Medición de impacto: antes vs después de la intervención",
+      "Feedback loop ML: el modelo aprende de intervenciones previas",
+      "Dashboard de intervenciones con filtros y exportación",
     ],
   },
 ];

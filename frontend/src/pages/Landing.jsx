@@ -47,11 +47,11 @@ const PHASES = [
   { phase: "Fase 2", title: "Analítica predictiva", status: "completed",
     desc: "Modelos de machine learning (Logistic Regression, Random Forest) entrenados con 8 períodos históricos." },
   { phase: "Fase 3", title: "Explicación del riesgo (XAI)", status: "completed",
-    desc: "Cada predicción incluye los 3 factores principales que la explican, comparados con la media de la carrera." },
+    desc: "Factores explicativos, alertas conductuales, escenarios contrafactuales y análisis What-If para cada estudiante." },
   { phase: "Fase 4", title: "Recomendaciones automáticas", status: "completed",
-    desc: "10 categorías de recomendación priorizadas (urgente / importante / sugerida) con acción, motivo y destinatario." },
-  { phase: "Fase 5", title: "Intervenciones de ciclo cerrado", status: "completed",
-    desc: "Registro, seguimiento, derivación a Bienestar Estudiantil y trazabilidad completa de cada intervención." },
+    desc: "10 categorías de recomendación priorizadas con acción, motivo, medio y destinatario. Exportación Excel configurable." },
+  { phase: "Fase 5", title: "Intervenciones inteligentes y ciclo cerrado", status: "completed",
+    desc: "Registro con snapshots, medición de impacto antes/después, feedback loop ML y derivación a Bienestar Estudiantil." },
 ];
 
 const NIVELES = [
