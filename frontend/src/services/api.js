@@ -190,7 +190,21 @@ class ApiClient {
   runPredictions() { return this.post("/predictions/run", {}); }
   getPredictionStatus() { return this.get("/predictions/status"); }
   getPredictionStudent(studentId) { return this.get(`/predictions/student/${studentId}`); }
+  getPrediction(studentId) { return this.getPredictionStudent(studentId); } // alias
   getRecommendations(studentId) { return this.get(`/predictions/student/${studentId}/recommendations`); }
+  getCounterfactual(studentId, target = "ambos") {
+    return this.get(`/predictions/student/${studentId}/counterfactual?target=${target}`);
+  }
+  whatIf(studentId, changes) {
+    return this.request(`/predictions/student/${studentId}/what-if`, {
+      method: "POST", body: JSON.stringify(changes)
+    });
+  }
+
+  // ── Intervention Impact ──
+  getInterventionImpact(interventionId) {
+    return this.get(`/interventions/${interventionId}/impact`);
+  }
 }
 
 export const api = new ApiClient();

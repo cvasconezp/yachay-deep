@@ -236,6 +236,7 @@ export default function FichaEstudiante() {
   const [selectedCarrera, setSelectedCarrera] = useState("");
   const [prediccion, setPrediccion] = useState(null);
   const [recomendaciones, setRecomendaciones] = useState([]);
+  const [contrafactual, setContrafactual] = useState(null);
   const searchTimeout = useRef(null);
   const searchAbort = useRef(null);
   const searchContainerRef = useRef(null);
@@ -280,6 +281,8 @@ export default function FichaEstudiante() {
     };
     loadPrediction();
     loadRecomendaciones();
+    // Cargar contrafactuales
+    api.getCounterfactual(studentId).then(setContrafactual).catch(() => {});
   }, [studentId]);
 
   // Re-buscar cuando cambia la carrera seleccionada
@@ -602,6 +605,83 @@ export default function FichaEstudiante() {
               </div>
               )}
             </div>
+          </div>
+          )}
+
+          {/* ===== Contexto Conductual (GAP-F3-02) ===== */}
+          {prediccion?.contexto_conductual?.length > 0 && (
+          <div className="mt-4">
+            <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wide flex items-center gap-2 mb-3">
+              <span>⚡</span> Alertas Conductuales
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+              {prediccion.contexto_conductual.map((ctx, i) => {
+                const sev = ctx.severidad === "critica"
+                  ? "border-red-300 bg-red-50 text-red-800"
+                  : "border-amber-300 bg-amber-50 text-amber-800";
+                const icon = ctx.severidad === "critica" ? "🔴" : "🟡";
+                return (
+                <div key={i} className={`rounded-lg border p-3 ${sev}`}>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span>{icon}</span>
+                    <span className="text-xs font-bold uppercase">{ctx.factor}</span>
+                  </div>
+                  <p className="text-sm">{ctx.descripcion}</p>
+                </div>
+                );
+              })}
+            </div>
+          </div>
+          )}
+
+          {/* ===== Contrafactuales: "¿Qué debe cambiar?" ===== */}
+          {contrafactual?.contrafactual_desercion?.cambios?.length > 0 && (
+          <div className="mt-4">
+            <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wide flex items-center gap-2 mb-3">
+              <span>🔄</span> Escenarios Contrafactuales
+              <span className="text-xs font-normal text-gray-400 normal-case">¿Qué tendría que cambiar para reducir el riesgo?</span>
+            </h3>
+            {[
+              { data: contrafactual.contrafactual_desercion, label: "Deserción", color: "red" },
+              { data: contrafactual.contrafactual_reprobacion, label: "Reprobación", color: "orange" },
+            ].filter(s => s.data?.cambios?.length > 0).map((scenario, si) => (
+            <div key={si} className={`bg-white rounded-xl border border-${scenario.color}-100 shadow-sm p-4 mb-3`}>
+              <div className="flex items-center justify-between mb-3">
+                <p className={`text-xs font-bold text-${scenario.color}-700 uppercase`}>
+                  Escenario · {scenario.label}
+                </p>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-500">
+                    {Math.round((scenario.data.prob_original || 0) * 100)}%
+                  </span>
+                  <span className="text-gray-400">→</span>
+                  <span className={`text-xs font-bold ${scenario.data.factible ? 'text-green-600' : 'text-amber-600'}`}>
+                    {Math.round((scenario.data.prob_contrafactual || 0) * 100)}%
+                  </span>
+                  {scenario.data.factible && <span className="text-green-500 text-xs">✓ Viable</span>}
+                </div>
+              </div>
+              <div className="space-y-2">
+                {scenario.data.cambios.map((cambio, ci) => (
+                <div key={ci} className="flex items-start gap-2 text-sm">
+                  <span className="text-blue-500 mt-0.5">▸</span>
+                  <div>
+                    <p className="font-medium text-gray-800">{cambio.accion}</p>
+                    <p className="text-xs text-gray-400">
+                      Impacto individual: -{Math.round((cambio.impacto_individual || 0) * 100)}% en probabilidad
+                    </p>
+                  </div>
+                </div>
+                ))}
+              </div>
+              {scenario.data.factible && (
+              <p className="text-xs text-green-600 mt-3 font-medium">
+                ✓ Con estos cambios, el riesgo bajaría de {Math.round((scenario.data.prob_original||0)*100)}% a {Math.round((scenario.data.prob_contrafactual||0)*100)}%
+                (reducción de {Math.round((scenario.data.reduccion_total||0)*100)} puntos)
+              </p>
+              )}
+            </div>
+            ))}
           </div>
           )}
 

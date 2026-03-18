@@ -27,6 +27,10 @@ export default function Intervenciones() {
   const [editForm, setEditForm] = useState({});
   const [saving, setSaving] = useState(false);
 
+  // Impact modal
+  const [impactData, setImpactData] = useState(null);
+  const [impactLoading, setImpactLoading] = useState(false);
+
   // Export
   const [exportOpen, setExportOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -390,12 +394,32 @@ export default function Intervenciones() {
                       }) : "—"}
                     </td>
                     <td className="px-3 py-2.5 text-center">
-                      <button
-                        onClick={(e) => openEdit(inv, e)}
-                        className="text-blue-600 hover:text-blue-800 text-xs font-medium hover:underline"
-                      >
-                        Editar
-                      </button>
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={(e) => openEdit(inv, e)}
+                          className="text-blue-600 hover:text-blue-800 text-xs font-medium hover:underline"
+                        >
+                          Editar
+                        </button>
+                        <button
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            setImpactLoading(true);
+                            try {
+                              const data = await api.getInterventionImpact(inv.id);
+                              setImpactData(data);
+                            } catch (err) {
+                              setImpactData({ disponible: false, mensaje: err.message });
+                            } finally {
+                              setImpactLoading(false);
+                            }
+                          }}
+                          className="text-emerald-600 hover:text-emerald-800 text-xs font-medium hover:underline"
+                          title="Ver impacto de esta intervención"
+                        >
+                          Impacto
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -498,6 +522,91 @@ export default function Intervenciones() {
                 {saving ? "Guardando..." : "Guardar cambios"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== Modal de Impacto de Intervención ===== */}
+      {impactData && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setImpactData(null)}>
+          <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full mx-4 p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                <span>📊</span> Impacto de la Intervención
+              </h3>
+              <button onClick={() => setImpactData(null)} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
+            </div>
+
+            {!impactData.disponible ? (
+              <div className="text-center py-8 text-gray-400">
+                <div className="text-3xl mb-2">📭</div>
+                <p className="text-sm">{impactData.mensaje || "Sin datos de impacto disponibles"}</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {impactData.nombre && (
+                  <p className="text-sm text-gray-600">
+                    Estudiante: <span className="font-medium text-gray-900">{impactData.nombre}</span>
+                    {impactData.fecha_intervencion && (
+                      <span className="text-gray-400"> · {new Date(impactData.fecha_intervencion).toLocaleDateString("es-EC")}</span>
+                    )}
+                  </p>
+                )}
+
+                {/* Indicadores antes vs ahora */}
+                <div className="grid grid-cols-3 gap-3 text-center">
+                  <div className="text-xs font-bold text-gray-400 uppercase">Indicador</div>
+                  <div className="text-xs font-bold text-gray-400 uppercase">Al crear</div>
+                  <div className="text-xs font-bold text-gray-400 uppercase">Ahora</div>
+
+                  {[
+                    { label: "Compromiso", key: "compromiso", format: v => v != null ? `${Math.round(v*100)}%` : "—", good: v => v > 0 },
+                    { label: "Días sin acceso", key: "dias_sin_acceso", format: v => v != null ? `${v}d` : "—", good: v => v < 0 },
+                    { label: "Tareas", key: "porcentaje_tareas", format: v => v != null ? `${Math.round(v)}%` : "—", good: v => v > 0 },
+                    { label: "P(Deserción)", key: "prob_desercion", format: v => v != null ? `${Math.round(v*100)}%` : "—", good: v => v < 0 },
+                    { label: "P(Reprobación)", key: "prob_reprobacion", format: v => v != null ? `${Math.round(v*100)}%` : "—", good: v => v < 0 },
+                  ].map(({ label, key, format, good }) => {
+                    const antes = impactData.antes?.[key];
+                    const ahora = impactData.ahora?.[key];
+                    const delta = impactData.cambio?.[key];
+                    const improved = delta != null && good(delta);
+                    return [
+                      <div key={`${key}-label`} className="text-xs text-gray-700 font-medium text-left">{label}</div>,
+                      <div key={`${key}-antes`} className="text-xs text-gray-500">{format(antes)}</div>,
+                      <div key={`${key}-ahora`} className={`text-xs font-bold ${improved ? "text-green-600" : delta != null && delta !== 0 ? "text-red-600" : "text-gray-600"}`}>
+                        {format(ahora)}
+                        {delta != null && delta !== 0 && (
+                          <span className="ml-1 text-[10px]">({improved ? "↑" : "↓"})</span>
+                        )}
+                      </div>,
+                    ];
+                  })}
+                </div>
+
+                {/* Veredicto */}
+                <div className={`rounded-lg p-3 text-center text-sm font-medium ${
+                  impactData.mejoro === true ? "bg-green-50 text-green-700 border border-green-200" :
+                  impactData.mejoro === false ? "bg-red-50 text-red-700 border border-red-200" :
+                  "bg-gray-50 text-gray-500 border border-gray-200"
+                }`}>
+                  {impactData.mejoro === true
+                    ? `✓ El estudiante mejoró en ${impactData.indicadores_mejorados} de ${impactData.indicadores_evaluados} indicadores`
+                    : impactData.mejoro === false
+                    ? `✗ No se detectó mejora significativa tras la intervención`
+                    : "Sin datos suficientes para evaluar impacto"}
+                </div>
+
+                {/* Riesgo antes vs ahora */}
+                {(impactData.antes?.nivel_riesgo || impactData.ahora?.nivel_riesgo) && (
+                  <div className="flex items-center justify-center gap-3 text-sm">
+                    <span className="text-gray-500">Riesgo:</span>
+                    <span className="font-medium">{impactData.antes?.nivel_riesgo || "—"}</span>
+                    <span className="text-gray-300">→</span>
+                    <span className="font-bold">{impactData.ahora?.nivel_riesgo || "—"}</span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
