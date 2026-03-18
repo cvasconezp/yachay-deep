@@ -114,7 +114,7 @@ export default function EcuadorMap({ provincia, ciudad, parroquia, height = 160,
   });
 
   return (
-    <div className="relative" style={{ height }}>
+    <div className="relative w-full" style={{ height: height || "100%" }}>
       <svg viewBox={viewBox} className="w-full h-full" preserveAspectRatio="xMidYMid meet">
         <defs>
           {/* Sombra para canton resaltado */}

@@ -1,11 +1,26 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../services/api";
 import { RiskBadge, CompromisoBar, PredictionBadge } from "../components/RiskBadge";
-import { StatCard } from "../components/StatCard";
 import { PeriodSelector } from "../components/PeriodSelector";
+import ExportExcelButton from "../components/ExportExcelButton";
 
 const RISK_ORDER = { Alto: 0, Medio: 1, Bajo: 2 };
+
+// Columnas disponibles para exportar
+const EXPORT_COLUMNS = [
+  { key: "nombre", label: "Nombre" },
+  { key: "correo_institucional", label: "Correo institucional" },
+  { key: "cedula", label: "Cédula" },
+  { key: "carrera", label: "Carrera" },
+  { key: "nivel_riesgo", label: "Nivel de riesgo" },
+  { key: "dias_sin_acceso", label: "Días sin AVAC" },
+  { key: "indice_compromiso", label: "Compromiso" },
+  { key: "porcentaje_tareas", label: "% Tareas" },
+  { key: "prob_desercion", label: "Prob. deserción" },
+  { key: "prob_reprobacion", label: "Prob. reprobación" },
+  { key: "total_intervenciones", label: "Intervenciones" },
+];
 
 export default function Dashboard() {
   const [students, setStudents] = useState([]);
@@ -14,6 +29,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [filtros, setFiltros] = useState({ carrera: "", nivel_riesgo: "", solo_sin_intervencion: false, periodo: "actual" });
+  const [cardFilter, setCardFilter] = useState(null); // Filtro dinámico por tarjeta
   const navigate = useNavigate();
 
   const loadData = useCallback(async () => {
@@ -45,7 +61,7 @@ export default function Dashboard() {
       setCarreras(carrerasData);
     } catch (e) {
       console.error(e);
-      setError(e.message || "No se pudieron cargar los datos. Verifique su conexión e intente de nuevo.");
+      setError(e.message || "No se pudieron cargar los datos.");
     } finally {
       setLoading(false);
     }
@@ -55,24 +71,74 @@ export default function Dashboard() {
 
   const riskCounts = stats?.por_nivel_riesgo?.reduce((acc, r) => ({ ...acc, [r.nivel]: r.total }), {}) || {};
 
+  // Filtrado dinámico por tarjeta
+  const filteredStudents = useMemo(() => {
+    if (!cardFilter) return students;
+    switch (cardFilter) {
+      case "alto": return students.filter(s => s.nivel_riesgo === "Alto");
+      case "medio": return students.filter(s => s.nivel_riesgo === "Medio");
+      case "bajo": return students.filter(s => s.nivel_riesgo === "Bajo" || !s.nivel_riesgo);
+      case "intervenciones": return students.filter(s => s.total_intervenciones > 0);
+      default: return students;
+    }
+  }, [students, cardFilter]);
+
+  // Tarjetas de resumen interactivas
+  const cards = [
+    { key: null, label: "Total monitoreados", value: stats?.total_estudiantes ?? "—", color: "text-blue-700", bg: "bg-blue-50 border-blue-200" },
+    { key: "alto", label: "Riesgo Alto", value: riskCounts["Alto"] ?? 0, color: "text-red-700", bg: "bg-red-50 border-red-200" },
+    { key: "medio", label: "Riesgo Medio", value: riskCounts["Medio"] ?? 0, color: "text-yellow-700", bg: "bg-yellow-50 border-yellow-200" },
+    { key: "intervenciones", label: "Intervenciones", value: stats?.total_intervenciones ?? 0, color: "text-green-700", bg: "bg-green-50 border-green-200" },
+  ];
+
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-1">Dashboard de Riesgo</h1>
-      <p className="text-gray-500 text-sm mb-6">Estudiantes identificados con indicadores de riesgo académico</p>
+      <div className="flex items-center justify-between mb-1">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Dashboard de Riesgo</h1>
+          <p className="text-gray-500 text-sm">Estudiantes identificados con indicadores de riesgo académico</p>
+        </div>
+        <ExportExcelButton data={filteredStudents} columns={EXPORT_COLUMNS} filename="dashboard_riesgo" />
+      </div>
 
       {error && (
-        <div className="bg-red-50 text-red-700 border border-red-200 rounded-lg px-4 py-3 text-sm mb-4">
+        <div className="bg-red-50 text-red-700 border border-red-200 rounded-lg px-4 py-3 text-sm mb-4 mt-4">
           {error}
         </div>
       )}
 
-      {/* Tarjetas de resumen */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <StatCard label="Total monitoreados" value={stats?.total_estudiantes ?? "—"} color="blue" />
-        <StatCard label="Riesgo Alto" value={riskCounts["Alto"] ?? 0} color="red" />
-        <StatCard label="Riesgo Medio" value={riskCounts["Medio"] ?? 0} color="yellow" />
-        <StatCard label="Intervenciones" value={stats?.total_intervenciones ?? 0} color="green" />
+      {/* Tarjetas interactivas */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 my-5">
+        {cards.map(card => {
+          const isActive = cardFilter === card.key;
+          return (
+            <div
+              key={card.key ?? "total"}
+              onClick={() => setCardFilter(isActive ? null : card.key)}
+              className={`rounded-xl border px-4 py-3 cursor-pointer transition-all duration-200
+                ${isActive ? "ring-2 ring-blue-500 shadow-md scale-[1.02]" : "hover:shadow-sm"}
+                ${card.bg}`}
+              title={isActive ? "Click para quitar filtro" : card.key ? `Click para filtrar por ${card.label}` : ""}
+            >
+              <div className={`text-2xl font-bold ${card.color}`}>{card.value}</div>
+              <div className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mt-0.5">{card.label}</div>
+              {isActive && <div className="text-[9px] text-blue-600 font-medium mt-1">✓ Filtro activo</div>}
+            </div>
+          );
+        })}
       </div>
+
+      {/* Botón limpiar filtro de tarjeta */}
+      {cardFilter && (
+        <div className="mb-3">
+          <button
+            onClick={() => setCardFilter(null)}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs text-gray-500 hover:text-red-600 hover:bg-red-50 border border-gray-200 transition-colors"
+          >
+            ✕ Limpiar filtro de tarjeta · Mostrando: {filteredStudents.length} de {students.length}
+          </button>
+        </div>
+      )}
 
       {/* Filtros */}
       <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4 flex flex-wrap gap-3 items-end">
@@ -118,7 +184,7 @@ export default function Dashboard() {
         </label>
 
         <div className="ml-auto text-sm text-gray-500">
-          {students.length} estudiantes
+          {filteredStudents.length} estudiantes
         </div>
       </div>
 
@@ -128,13 +194,11 @@ export default function Dashboard() {
           <div className="text-center py-20">
             <p className="text-red-600 font-medium mb-2">Error al cargar datos</p>
             <p className="text-gray-500 text-sm mb-4">{error}</p>
-            <button onClick={loadData} className="text-sm text-blue-600 hover:text-blue-800 font-medium">
-              Reintentar
-            </button>
+            <button onClick={loadData} className="text-sm text-blue-600 hover:text-blue-800 font-medium">Reintentar</button>
           </div>
         ) : loading ? (
           <div className="flex items-center justify-center py-20 text-gray-400">Cargando...</div>
-        ) : students.length === 0 ? (
+        ) : filteredStudents.length === 0 ? (
           <div className="text-center py-20 text-gray-400">No hay estudiantes con los filtros seleccionados</div>
         ) : (
           <table className="w-full text-sm">
@@ -143,15 +207,15 @@ export default function Dashboard() {
                 <th className="text-left px-4 py-3 font-semibold text-gray-700">Estudiante</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-700">Carrera</th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-700">Riesgo</th>
-                <th className="text-center px-4 py-3 font-semibold text-gray-700 cursor-help" title="Días transcurridos desde el último acceso del estudiante al Aula Virtual (AVAC)">Días sin AVAC</th>
-                <th className="px-4 py-3 font-semibold text-gray-700 w-36 cursor-help" title="Índice de compromiso académico: acceso AVAC (30%), tareas entregadas (30%), rendimiento académico (25%), estado de matrícula (15%). Alto >= 70%, Medio >= 40%, Bajo < 40%">Compromiso</th>
-                <th className="text-center px-4 py-3 font-semibold text-gray-700 cursor-help" title="Probabilidad de deserción predicha por modelo ML entrenado con datos históricos P60-P67. Basado en: promedio, nota mínima, dispersión de notas y materias reprobadas">Pred. Deserción</th>
+                <th className="text-center px-4 py-3 font-semibold text-gray-700">Días sin AVAC</th>
+                <th className="px-4 py-3 font-semibold text-gray-700 w-36">Compromiso</th>
+                <th className="text-center px-4 py-3 font-semibold text-gray-700">Pred. Deserción</th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-700">Intervenciones</th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-700">Última</th>
               </tr>
             </thead>
             <tbody>
-              {students.map((s, i) => (
+              {filteredStudents.map((s) => (
                 <tr
                   key={s.id}
                   onClick={() => navigate(`/ficha/${s.id}`)}
@@ -188,5 +252,3 @@ export default function Dashboard() {
     </div>
   );
 }
-
-

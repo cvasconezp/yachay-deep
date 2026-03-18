@@ -1,9 +1,26 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../services/api";
 import { RiskBadge, CompromisoBar } from "../components/RiskBadge";
 import { SummaryCard } from "../components/StatCard";
 import { PeriodSelector } from "../components/PeriodSelector";
+import ExportExcelButton from "../components/ExportExcelButton";
+
+const ASIG_EXPORT_COLS = [
+  { key: "asignatura", label: "Asignatura" },
+  { key: "docente", label: "Docente" },
+  { key: "carrera", label: "Carrera" },
+  { key: "nivel", label: "Nivel" },
+  { key: "total_estudiantes", label: "Total estudiantes" },
+  { key: "promedio_general", label: "Promedio general" },
+  { key: "aprobados", label: "Aprobados" },
+  { key: "reprobados", label: "Reprobados" },
+  { key: "porcentaje_aprobacion", label: "% Aprobación" },
+  { key: "total_repitentes", label: "Repitentes" },
+  { key: "estudiantes_riesgo_alto", label: "Riesgo Alto" },
+  { key: "promedio_compromiso", label: "Compromiso promedio" },
+  { key: "total_intervenciones", label: "Intervenciones" },
+];
 
 export default function Asignaturas() {
   const [asignaturas, setAsignaturas] = useState([]);
@@ -54,10 +71,13 @@ export default function Asignaturas() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-1">Analítica de Asignaturas</h1>
-      <p className="text-gray-500 text-sm mb-6">
-        Vista agregada por materia: promedios, aprobación, reprobación, repitencia y materias críticas
-      </p>
+      <div className="flex items-center justify-between mb-1">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Analítica de Asignaturas</h1>
+          <p className="text-gray-500 text-sm">Vista agregada por materia: promedios, aprobación, reprobación, repitencia y materias críticas</p>
+        </div>
+        <ExportExcelButton data={asignaturas} columns={ASIG_EXPORT_COLS} filename="analitica_asignaturas" />
+      </div>
 
       {error && (
         <div className="bg-red-50 text-red-700 border border-red-200 rounded-lg px-4 py-3 text-sm mb-4">

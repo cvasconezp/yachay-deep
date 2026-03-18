@@ -4,6 +4,20 @@ import { api } from "../services/api";
 import { RiskBadge, CompromisoBar } from "../components/RiskBadge";
 import { SummaryCard } from "../components/StatCard";
 import { PeriodSelector } from "../components/PeriodSelector";
+import ExportExcelButton from "../components/ExportExcelButton";
+
+const DOC_EXPORT_COLS = [
+  { key: "docente", label: "Docente" },
+  { key: "total_asignaturas", label: "Asignaturas" },
+  { key: "total_estudiantes", label: "Estudiantes" },
+  { key: "promedio_general", label: "Promedio general" },
+  { key: "porcentaje_aprobacion", label: "% Aprobación" },
+  { key: "porcentaje_reprobacion", label: "% Reprobación" },
+  { key: "estudiantes_riesgo_alto", label: "Riesgo Alto" },
+  { key: "estudiantes_riesgo_medio", label: "Riesgo Medio" },
+  { key: "promedio_compromiso", label: "Compromiso promedio" },
+  { key: "total_intervenciones", label: "Intervenciones" },
+];
 
 export default function Docentes() {
   const [docentes, setDocentes] = useState([]);
@@ -52,10 +66,13 @@ export default function Docentes() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-1">Analítica Docente</h1>
-      <p className="text-gray-500 text-sm mb-6">
-        Ficha docente: asignaturas, estudiantes, concentración de riesgo por curso
-      </p>
+      <div className="flex items-center justify-between mb-1">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Analítica Docente</h1>
+          <p className="text-gray-500 text-sm">Ficha docente: asignaturas, estudiantes, concentración de riesgo por curso</p>
+        </div>
+        <ExportExcelButton data={docentes} columns={DOC_EXPORT_COLS} filename="analitica_docentes" />
+      </div>
 
       {error && (
         <div className="bg-red-50 text-red-700 border border-red-200 rounded-lg px-4 py-3 text-sm mb-4">

@@ -4,6 +4,15 @@ import { api } from "../services/api";
 import { RiskBadge } from "../components/RiskBadge";
 import { SummaryCard } from "../components/StatCard";
 import { PeriodSelector } from "../components/PeriodSelector";
+import ExportExcelButton from "../components/ExportExcelButton";
+
+const TUT_EXPORT_COLS = [
+  { key: "asignatura", label: "Asignatura" },
+  { key: "docente", label: "Docente" },
+  { key: "carrera", label: "Carrera" },
+  { key: "nivel", label: "Nivel" },
+  { key: "total_en_riesgo", label: "Total en riesgo" },
+];
 
 export default function Tutorias() {
   const [tutorias, setTutorias] = useState([]);
@@ -58,10 +67,13 @@ export default function Tutorias() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-1">Tutorías por Asignatura</h1>
-      <p className="text-gray-500 text-sm mb-6">
-        Listas de convocatoria a tutoría agrupadas por materia con motivos de riesgo
-      </p>
+      <div className="flex items-center justify-between mb-1">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Tutorías por Asignatura</h1>
+          <p className="text-gray-500 text-sm">Listas de convocatoria a tutoría agrupadas por materia con motivos de riesgo</p>
+        </div>
+        <ExportExcelButton data={tutorias} columns={TUT_EXPORT_COLS} filename="tutorias_asignatura" />
+      </div>
 
       {error && (
         <div className="bg-red-50 text-red-700 border border-red-200 rounded-lg px-4 py-3 text-sm mb-4">

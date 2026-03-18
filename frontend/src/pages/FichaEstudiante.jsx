@@ -817,19 +817,19 @@ export default function FichaEstudiante() {
                 </tbody>
               </table>
 
-              {/* Mapa coroplético de Ecuador */}
+              {/* Mapa coroplético de Ecuador — ancho completo, alto proporcional */}
               {(ficha.provincia || ficha.ciudad || ficha.parroquia) ? (
-                <div className="mx-2 my-2 rounded overflow-hidden border border-gray-200">
+                <div className="border-y border-gray-200 bg-[#F4F7FA]" style={{ aspectRatio: "4/3" }}>
                   <EcuadorMap
                     provincia={ficha.provincia}
                     ciudad={ficha.ciudad}
                     parroquia={ficha.parroquia}
-                    height={140}
+                    height="100%"
                   />
                 </div>
               ) : (
-                <div className="bg-gray-50 border border-gray-200 mx-2 my-2 rounded flex flex-col items-center justify-center text-center"
-                     style={{ height: "130px" }}>
+                <div className="bg-gray-50 border-y border-gray-200 flex flex-col items-center justify-center text-center"
+                     style={{ aspectRatio: "4/3" }}>
                   <svg viewBox="0 0 80 90" className="w-16 h-16 opacity-30" fill="#1B3A6B">
                     <path d="M38 5 L50 8 L60 15 L65 25 L62 38 L70 45 L72 55 L65 65 L55 72 L42 78 L30 75 L20 68 L15 55 L18 42 L12 32 L18 20 L28 12 Z" />
                     <circle cx="38" cy="40" r="5" fill="#F0B000" opacity="1"/>
