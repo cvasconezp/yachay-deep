@@ -1,5 +1,11 @@
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
+// [SEC-07/BUG-03] FIX: Sanitización de mensajes de error
+function sanitizeErrorMessage(raw) {
+  if (typeof raw !== "string") return "Error desconocido";
+  return raw.replace(/<[^>]*>/g, "").replace(/[<>'"]/g, "").slice(0, 500);
+}
+
 class ApiClient {
   constructor() {
     this.baseUrl = BASE_URL;
@@ -38,7 +44,7 @@ class ApiClient {
       const message = Array.isArray(detail)
         ? detail.map(e => e.msg || e.message || JSON.stringify(e)).join("; ")
         : (typeof detail === "string" ? detail : `HTTP ${response.status}`);
-      throw new Error(message);
+      throw new Error(sanitizeErrorMessage(message));
     }
 
     if (response.headers.get("content-type")?.includes("application/pdf")) {

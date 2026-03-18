@@ -54,6 +54,13 @@ def _cleanup_stuck_etl_runs():
         if stuck:
             db.commit()
             logger.warning(f"⚠️ {len(stuck)} ETL run(s) atascados marcados como 'failed' tras reinicio")
+    except Exception as e:
+        # [BUG-04] FIX: manejo explícito de excepciones con rollback
+        logger.error(f"❌ Error limpiando ETL runs atascados: {e}")
+        try:
+            db.rollback()
+        except Exception:
+            pass
     finally:
         db.close()
 
@@ -69,16 +76,13 @@ def _create_default_admin():
     admin_pass = os.environ.get("ADMIN_PASSWORD")
 
     if not admin_email or not admin_pass:
-        if not settings.DEBUG:
-            logger.warning(
-                "⚠️ ADMIN_EMAIL y ADMIN_PASSWORD no configurados. "
-                "No se creará usuario admin por defecto en producción."
-            )
-            return
-        # Solo en DEBUG: usar credenciales de desarrollo
-        admin_email = admin_email or "admin@yachay.edu.ec"
-        admin_pass = admin_pass or "dev12345"
-        logger.warning("⚠️ Usando credenciales admin de desarrollo (DEBUG=True).")
+        # [SEC-01] FIX: Credenciales hardcodeadas eliminadas.
+        # Ya NO se usan valores por defecto, ni siquiera en DEBUG.
+        logger.warning(
+            "⚠️ ADMIN_EMAIL y/o ADMIN_PASSWORD no configurados. "
+            "No se creará usuario admin. Configura ambas variables de entorno."
+        )
+        return
 
     db = SessionLocal()
     try:
@@ -150,6 +154,18 @@ async def add_security_headers(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=()"
+    # [SEC-08] FIX: Content-Security-Policy
+    csp_origins = " ".join(settings.CORS_ORIGINS)
+    response.headers["Content-Security-Policy"] = (
+        f"default-src 'self'; "
+        f"script-src 'self' 'unsafe-inline'; "
+        f"style-src 'self' 'unsafe-inline'; "
+        f"img-src 'self' data: https: blob:; "
+        f"font-src 'self'; "
+        f"connect-src 'self' {csp_origins}; "
+        f"frame-ancestors 'none'"
+    )
     if not settings.DEBUG:
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
@@ -157,6 +173,18 @@ async def add_security_headers(request: Request, call_next):
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok"}
+    """Health check mejorado: verifica conexión a BD."""
+    from sqlalchemy import text
+    try:
+        from .database import SessionLocal
+        db = SessionLocal()
+        db.execute(text("SELECT 1"))
+        db.close()
+        return {"status": "ok", "database": "connected"}
+    except Exception as e:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "degraded", "database": "error", "detail": str(e)},
+        )
 
 
