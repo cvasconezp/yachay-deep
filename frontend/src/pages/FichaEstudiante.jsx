@@ -665,8 +665,11 @@ export default function FichaEstudiante() {
               </details>
               )}
 
-              {/* ── Escenarios Contrafactuales (acordeón) ── */}
-              {contrafactual?.contrafactual_desercion?.cambios?.length > 0 && (
+              {/* ── Escenarios Contrafactuales (OCULTO — en entrenamiento) ── */}
+              {/* Los resultados actuales son demasiado obvios ("sube tus notas de 0 a 90").
+                  Se reactiva cuando el modelo contrafactual genere escenarios más accionables
+                  (ej: cambios parciales, priorización por factibilidad, plazos sugeridos). */}
+              {false && contrafactual?.contrafactual_desercion?.cambios?.length > 0 && (
               <details className="group">
                 <summary className="flex items-center justify-between px-4 py-2 cursor-pointer hover:bg-blue-50/50 transition select-none">
                   <span className="text-[11px] font-bold text-gray-600 uppercase tracking-wide flex items-center gap-1.5">

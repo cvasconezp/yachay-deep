@@ -83,6 +83,17 @@ const FRAMEWORK_PHASES = [
       "Dashboard de intervenciones con filtros y exportación",
     ],
   },
+  {
+    phase: "Fase 6",
+    title: "Integración LMS completa",
+    status: "upcoming",
+    items: [
+      "APIs de Moodle/Canvas para captura automática de datos AVAC",
+      "Actualización en tiempo real sin scraping",
+      "Notificaciones push/WhatsApp automatizadas",
+      "Trazabilidad institucional completa",
+    ],
+  },
 ];
 
 const CAPAS = [

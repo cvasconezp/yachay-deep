@@ -8,7 +8,7 @@ const STATS = [
   { value: "2,300+", label: "Estudiantes monitoreados" },
   { value: "18", label: "Carreras virtuales" },
   { value: "8", label: "Períodos académicos" },
-  { value: "5", label: "Fases implementadas" },
+  { value: "5+1", label: "Fases (5 implementadas + 1 en desarrollo)" },
 ];
 
 const CAPAS = [
@@ -52,6 +52,8 @@ const PHASES = [
     desc: "10 categorías de recomendación priorizadas con acción, motivo, medio y destinatario. Exportación Excel configurable." },
   { phase: "Fase 5", title: "Intervenciones inteligentes y ciclo cerrado", status: "completed",
     desc: "Registro con snapshots, medición de impacto antes/después, feedback loop ML y derivación a Bienestar Estudiantil." },
+  { phase: "Fase 6", title: "Integración LMS completa", status: "upcoming",
+    desc: "APIs de Moodle/Canvas, actualización en tiempo real, notificaciones automatizadas y trazabilidad institucional." },
 ];
 
 const NIVELES = [

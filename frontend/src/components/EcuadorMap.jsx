@@ -95,8 +95,8 @@ export default function EcuadorMap({ provincia, ciudad, parroquia, height = 160,
   const viewBox = `${vx} ${vy} ${vw} ${vh}`;
 
   const scale = Math.max(bw, bh);
-  const strokeInt = scale * 0.003;
-  const strokeExt = scale * 0.008;
+  const strokeInt = scale * 0.0015;
+  const strokeExt = scale * 0.004;
   const strokeVec = scale * 0.002;
   const strokeResalt = scale * 0.015;
   const fontTitulo = scale * 0.05;
@@ -188,17 +188,7 @@ export default function EcuadorMap({ provincia, ciudad, parroquia, height = 160,
           </g>
         )}
 
-        {/* Etiquetas de otros cantones (sutiles) */}
-        {cantones.filter(c => !matchedCanton || norm(c.name) !== norm(matchedCanton.name)).map((canton, i) => (
-          <text
-            key={`lbl-${i}`} x={canton.cx} y={canton.cy}
-            fontSize={fontCanton} fontFamily="system-ui, -apple-system, sans-serif"
-            fill="#475569" fontWeight="400" textAnchor="middle" dominantBaseline="central"
-            stroke="white" strokeWidth={fontCanton * 0.3} paintOrder="stroke" opacity={0.7}
-          >
-            {humanizeName(canton.name)}
-          </text>
-        ))}
+        {/* Etiquetas de otros cantones — ELIMINADAS para limpieza visual */}
 
         {/* Titulo: nombre de la provincia */}
         {showTitle && (
