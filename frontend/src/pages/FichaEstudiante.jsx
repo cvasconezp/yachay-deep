@@ -456,38 +456,51 @@ export default function FichaEstudiante() {
         <div className="border border-gray-400 rounded-md overflow-hidden shadow text-xs" style={{ fontFamily: "Calibri, Arial, sans-serif" }}>
 
           {/* ═══ ENCABEZADO INSTITUCIONAL ═══ */}
-          <div className="bg-brand text-white">
+          <div className="bg-gradient-to-r from-[#0F2444] to-[#1B3A6B] text-white">
             {/* Barra superior: carrera + acciones */}
-            <div className="flex items-center justify-between px-5 py-1.5 border-b border-white/10">
-              <span className="text-[11px] font-semibold tracking-wide uppercase opacity-80">{ficha.carrera || "Monitoreo Estudiantil"}</span>
+            <div className="flex items-center justify-between px-6 py-2 border-b border-white/10">
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-bold tracking-widest uppercase text-white/60">{ficha.carrera || "Monitoreo Estudiantil"}</span>
+                {isEIB && sedeDisplay !== "—" && (
+                  <span className="bg-white/10 text-white/80 text-[10px] px-2 py-0.5 rounded-full font-medium">{sedeDisplay}</span>
+                )}
+              </div>
               <div className="flex items-center gap-2">
                 <button onClick={handleExportPDF}
-                  className="bg-white/10 hover:bg-white/20 text-white px-3 py-1 rounded text-[11px] font-medium transition">
+                  className="bg-white/10 hover:bg-white/20 text-white px-4 py-1.5 rounded-lg text-xs font-medium transition border border-white/10">
                   PDF
                 </button>
                 <button onClick={() => setShowForm(true)}
-                  className="bg-white text-brand hover:bg-blue-50 px-3 py-1 rounded text-[11px] font-bold transition">
+                  className="bg-[#E8A838] hover:bg-[#F0B000] text-[#0F2444] px-4 py-1.5 rounded-lg text-xs font-bold transition shadow-sm">
                   + Intervención
                 </button>
               </div>
             </div>
             {/* Nombre del estudiante + datos de identidad */}
-            <div className="px-5 py-3">
-              <h2 className="text-lg font-bold tracking-wide uppercase leading-tight">{ficha.nombre || "—"}</h2>
-              <div className="flex items-center gap-4 mt-1.5 text-[13px] text-white/70">
-                <span>CI: <strong className="text-white/90">{ficha.cedula || "—"}</strong></span>
-                <span className="w-px h-3 bg-white/20" />
-                <span>Tel: <strong className="text-white/90">{ficha.telefono || "—"}</strong></span>
-                <span className="w-px h-3 bg-white/20" />
-                <span>Actualizado: <strong className="text-white/90">{updatedText}</strong></span>
+            <div className="px-6 py-4">
+              <h2 className="text-xl font-bold tracking-wide uppercase leading-tight">{ficha.nombre || "—"}</h2>
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-1 mt-2 text-sm text-white/60">
+                <span>CI: <strong className="text-white/90 font-semibold">{ficha.cedula || "—"}</strong></span>
+                <span className="hidden sm:inline w-px h-3 bg-white/20" />
+                <span>Tel: <strong className="text-white/90 font-semibold">{ficha.telefono || "—"}</strong></span>
+                <span className="hidden sm:inline w-px h-3 bg-white/20" />
+                <span>Actualizado: <strong className="text-white/90 font-semibold">{updatedText}</strong></span>
+                {formatNivel(ficha.nivel_academico, ficha.calificaciones) && (
+                  <>
+                    <span className="hidden sm:inline w-px h-3 bg-white/20" />
+                    <span className="bg-white/15 text-white px-2.5 py-0.5 rounded-full text-xs font-semibold">
+                      {formatNivel(ficha.nivel_academico, ficha.calificaciones)}
+                    </span>
+                  </>
+                )}
               </div>
             </div>
           </div>
 
-          {/* ═══ INDICADORES ═══ */}
+          {/* ═══ INDICADORES — GRID EJECUTIVO ═══ */}
           <div className="bg-white border-b border-gray-200">
-            <div className="flex items-center justify-between px-4 py-1 bg-gray-50 border-b border-gray-100">
-              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Indicadores · Predicción IA</span>
+            <div className="flex items-center justify-between px-6 py-1.5 bg-gray-50/80 border-b border-gray-100">
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Indicadores · Predicción IA</span>
               <span className="text-[9px] text-gray-400">
                 Modelo ML · P60-P67
                 {ficha.prediccion_updated_at && (
@@ -495,55 +508,61 @@ export default function FichaEstudiante() {
                 )}
               </span>
             </div>
-            <div className="flex items-stretch">
+            <div className="grid grid-cols-3 divide-x divide-gray-100">
               {/* Compromiso */}
-              <div className="flex-1 px-4 py-1.5 border-r border-gray-200 cursor-help" title="Indice de compromiso academico: acceso AVAC (30%), tareas entregadas (30%), rendimiento academico (25%), estado de matricula (15%). Alto >= 70%, Medio >= 40%, Bajo < 40%">
-                <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Compromiso</div>
-                <div className="flex items-baseline gap-1.5">
-                  <span className={`text-base font-bold ${compromisoColor}`}>{compromisoStr || "—"}</span>
-                  <span className={`text-[11px] font-semibold ${compromisoColor}`}>{compromisoLabel}</span>
+              <div className="px-6 py-3 cursor-help" title="Indice de compromiso: acceso AVAC (30%), tareas (30%), rendimiento (25%), matrícula (15%)">
+                <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mb-1">Compromiso</div>
+                <div className="flex items-end gap-2">
+                  <span className={`text-2xl font-bold leading-none ${compromisoColor}`}>{compromisoStr || "—"}</span>
+                  <span className={`text-xs font-semibold ${compromisoColor} mb-0.5`}>{compromisoLabel}</span>
                 </div>
                 {ficha.indice_compromiso != null && (
-                  <div className="mt-0.5 h-1 bg-gray-100 rounded-full overflow-hidden">
-                    <div className={`h-full rounded-full transition-all ${
+                  <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full transition-all duration-500 ${
                       ficha.indice_compromiso >= 0.7 ? "bg-green-500" : ficha.indice_compromiso >= 0.4 ? "bg-yellow-400" : "bg-red-500"
                     }`} style={{ width: `${Math.round(ficha.indice_compromiso * 100)}%` }} />
                   </div>
                 )}
               </div>
               {/* Predicción Deserción */}
-              {ficha.prob_desercion != null && (() => {
-                const pctDes = Math.round(ficha.prob_desercion * 100);
-                const colorDes = pctDes >= 70 ? "text-red-600" : pctDes >= 40 ? "text-orange-600" : "text-green-600";
+              {(() => {
+                const pctDes = ficha.prob_desercion != null ? Math.round(ficha.prob_desercion * 100) : null;
+                const colorDes = pctDes == null ? "text-gray-300" : pctDes >= 70 ? "text-red-600" : pctDes >= 40 ? "text-orange-600" : "text-green-600";
                 const barDes = pctDes >= 70 ? "bg-red-500" : pctDes >= 40 ? "bg-orange-400" : "bg-green-500";
+                const labelDes = pctDes == null ? "—" : pctDes >= 70 ? "Alto" : pctDes >= 40 ? "Moderado" : "Bajo";
                 return (
-                  <div className="flex-1 px-4 py-1.5 border-r border-gray-200 cursor-help" title="Probabilidad de desercion predicha por modelo ML. Basado en: promedio, nota minima, dispersion de notas y materias reprobadas. Comparado contra patrones historicos P60-P67">
-                    <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Predicción Deserción</div>
-                    <div className="flex items-baseline gap-1.5">
-                      <span className={`text-base font-bold ${colorDes}`}>{pctDes}%</span>
-                      <span className={`text-[11px] font-semibold ${colorDes}`}>{pctDes >= 70 ? "Alto" : pctDes >= 40 ? "Moderado" : "Bajo"}</span>
+                  <div className="px-6 py-3 cursor-help" title="Probabilidad de deserción predicha por modelo ML">
+                    <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mb-1">Predicción Deserción</div>
+                    <div className="flex items-end gap-2">
+                      <span className={`text-2xl font-bold leading-none ${colorDes}`}>{pctDes != null ? `${pctDes}%` : "—"}</span>
+                      <span className={`text-xs font-semibold ${colorDes} mb-0.5`}>{labelDes}</span>
                     </div>
-                    <div className="mt-0.5 h-1 bg-gray-100 rounded-full overflow-hidden">
-                      <div className={`h-full rounded-full transition-all ${barDes}`} style={{ width: `${pctDes}%` }} />
-                    </div>
+                    {pctDes != null && (
+                      <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full transition-all duration-500 ${barDes}`} style={{ width: `${pctDes}%` }} />
+                      </div>
+                    )}
                   </div>
                 );
               })()}
               {/* Predicción Reprobación */}
-              {ficha.prob_reprobacion != null && (() => {
-                const pctRep = Math.round(ficha.prob_reprobacion * 100);
-                const colorRep = pctRep >= 70 ? "text-red-600" : pctRep >= 40 ? "text-orange-600" : "text-green-600";
+              {(() => {
+                const pctRep = ficha.prob_reprobacion != null ? Math.round(ficha.prob_reprobacion * 100) : null;
+                const colorRep = pctRep == null ? "text-gray-300" : pctRep >= 70 ? "text-red-600" : pctRep >= 40 ? "text-orange-600" : "text-green-600";
                 const barRep = pctRep >= 70 ? "bg-red-500" : pctRep >= 40 ? "bg-orange-400" : "bg-green-500";
+                const labelRep = pctRep == null ? "—" : pctRep >= 70 ? "Alto" : pctRep >= 40 ? "Moderado" : "Bajo";
                 return (
-                  <div className="flex-1 px-4 py-1.5 cursor-help" title="Probabilidad de reprobar al menos una materia, predicha por modelo ML con datos historicos P60-P67">
-                    <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Predicción Reprobación</div>
-                    <div className="flex items-baseline gap-1.5">
-                      <span className={`text-base font-bold ${colorRep}`}>{pctRep}%</span>
-                      <span className={`text-[11px] font-semibold ${colorRep}`}>{pctRep >= 70 ? "Alto" : pctRep >= 40 ? "Moderado" : "Bajo"}</span>
+                  <div className="px-6 py-3 cursor-help" title="Probabilidad de reprobar al menos una materia">
+                    <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mb-1">Predicción Reprobación</div>
+                    <div className="flex items-end gap-2">
+                      <span className={`text-2xl font-bold leading-none ${colorRep}`}>{pctRep != null ? `${pctRep}%` : "—"}</span>
+                      <span className={`text-xs font-semibold ${colorRep} mb-0.5`}>{labelRep}</span>
                     </div>
-                    <div className="mt-0.5 h-1 bg-gray-100 rounded-full overflow-hidden">
-                      <div className={`h-full rounded-full transition-all ${barRep}`} style={{ width: `${pctRep}%` }} />
-                    </div>
+                    {pctRep != null && (
+                      <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full transition-all duration-500 ${barRep}`} style={{ width: `${pctRep}%` }} />
+                      </div>
+                    )}
                   </div>
                 );
               })()}
@@ -737,10 +756,10 @@ export default function FichaEstudiante() {
           )}
 
           {/* ═══ CUERPO PRINCIPAL: 2 columnas ═══ */}
-          <div className="flex divide-x divide-gray-300 bg-white">
+          <div className="flex divide-x divide-gray-200 bg-white">
 
             {/* ─── COLUMNA IZQUIERDA ─── */}
-            <div className="flex-shrink-0 bg-white" style={{ width: "260px" }}>
+            <div className="flex-shrink-0 bg-white" style={{ width: "300px" }}>
 
               {/* Datos personales */}
               <SectionHeader>Datos personales</SectionHeader>
@@ -1073,28 +1092,27 @@ export default function FichaEstudiante() {
               )}
 
               {/* Fila resumen de KPIs */}
-              <div className="grid grid-cols-4 divide-x divide-gray-200 border-t border-gray-200 bg-[#F9F9F9]">
-                <div className="py-2 px-3 text-center">
-                  <div className="text-[9px] text-gray-400 uppercase tracking-wider">Días sin AVAC</div>
-                  <div className={`font-bold text-sm mt-0.5 ${
-                    ficha.dias_sin_acceso == null ? "text-gray-400"
+              <div className="grid grid-cols-2 divide-x divide-gray-200 border-t border-gray-200 bg-gradient-to-r from-gray-50 to-white">
+                <div className="py-3 px-4 text-center">
+                  <div className="text-[9px] text-gray-400 uppercase tracking-widest font-semibold">Días sin AVAC</div>
+                  <div className={`font-bold text-lg mt-0.5 ${
+                    ficha.dias_sin_acceso == null ? "text-gray-300"
                     : ficha.dias_sin_acceso > 14 ? "text-red-600"
                     : ficha.dias_sin_acceso > 7 ? "text-orange-500"
                     : "text-green-600"}`}>
                     {ficha.dias_sin_acceso != null ? `${Math.round(ficha.dias_sin_acceso)}d` : "—"}
                   </div>
                 </div>
-                <div className="py-2 px-3 text-center">
-                  <div className="text-[9px] text-gray-400 uppercase tracking-wider">Tareas entregadas</div>
-                  <div className={`font-bold text-sm mt-0.5 ${
-                    ficha.porcentaje_tareas == null ? "text-gray-400"
+                <div className="py-3 px-4 text-center">
+                  <div className="text-[9px] text-gray-400 uppercase tracking-widest font-semibold">Tareas entregadas</div>
+                  <div className={`font-bold text-lg mt-0.5 ${
+                    ficha.porcentaje_tareas == null ? "text-gray-300"
                     : ficha.porcentaje_tareas < 50 ? "text-red-600"
                     : ficha.porcentaje_tareas < 75 ? "text-orange-500"
                     : "text-green-600"}`}>
                     {ficha.porcentaje_tareas != null ? `${Math.round(ficha.porcentaje_tareas)}%` : "—"}
                   </div>
                 </div>
-                {/* Compromiso y Diagnóstico ya se muestran en la banda superior */}
               </div>
 
               {/* ══ MALLA CURRICULAR HISTÓRICA (TableauHistorico P60–P67+) ══ */}
@@ -1295,8 +1313,8 @@ export default function FichaEstudiante() {
           </div>
 
           {/* ═══ PIE DE PÁGINA ═══ */}
-          <div className="bg-[#1B3A6B] text-white text-center py-1.5 text-[9px] opacity-60 tracking-wide">
-            Yachay Deep — Carlos Vásconez P. © &nbsp;|&nbsp; {today}
+          <div className="bg-gradient-to-r from-[#0F2444] to-[#1B3A6B] text-white/50 text-center py-2 text-[9px] tracking-widest uppercase">
+            Yachay Deep — Pacha Tech © &nbsp;·&nbsp; {today}
           </div>
 
         </div>
