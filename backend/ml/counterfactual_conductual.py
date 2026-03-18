@@ -159,6 +159,80 @@ def generate_behavioral_counterfactual(
                 "plazo": "administrativo",
             })
 
+    # ── Escenario 5: Tutoría con docente (materias con bajo rendimiento) ──
+    # Buscar materias con nota baja o sin acceso AVAC prolongado
+    from ..models.grade import Grade
+    from ..models.avac_access import AvacAccess
+
+    materias_criticas = (
+        db.query(Grade)
+        .filter(
+            Grade.student_id == student_id,
+            Grade.periodo.is_(None),  # semestre actual
+        )
+        .all()
+    )
+
+    for materia in materias_criticas:
+        necesita_tutoria = False
+        motivo = ""
+
+        if materia.nota_final is not None and materia.nota_final < 70:
+            necesita_tutoria = True
+            motivo = f"nota actual {materia.nota_final}/100"
+        elif materia.nota_final is not None and materia.nota_final == 0:
+            necesita_tutoria = True
+            motivo = "nota cero (posible abandono de materia)"
+
+        # También verificar si tiene muchos días sin acceso a esa materia
+        if not necesita_tutoria:
+            acceso = (
+                db.query(AvacAccess)
+                .filter(
+                    AvacAccess.student_id == student_id,
+                )
+                .first()
+            )
+            if acceso and acceso.dias_sin_acceso and acceso.dias_sin_acceso > 21:
+                necesita_tutoria = True
+                motivo = f"{int(acceso.dias_sin_acceso)} días sin acceso al AVAC"
+
+        if necesita_tutoria and materia.docente:
+            # Simular impacto: si mejora esta materia, cuánto sube el compromiso
+            notas_actuales = [m.nota_final for m in materias_criticas if m.nota_final is not None]
+            if notas_actuales:
+                promedio_actual = sum(notas_actuales) / len(notas_actuales)
+                # Simular que esta materia sube a 70 (mínimo aprobación)
+                notas_simuladas = [n if n != materia.nota_final else max(n or 0, 70) for n in notas_actuales]
+                promedio_simulado = sum(notas_simuladas) / len(notas_simuladas)
+                nuevo_compromiso = _simular_compromiso(dias, tareas, promedio_simulado, matricula)
+                delta = nuevo_compromiso - compromiso_simulado_base
+
+                if delta > 0.005:  # al menos 0.5% de mejora
+                    nuevo_nivel = "Bajo" if nuevo_compromiso >= 0.65 else "Medio" if nuevo_compromiso >= 0.35 else "Alto"
+                    docente_nombre = materia.docente.strip().title() if materia.docente else "el docente"
+                    asignatura_nombre = materia.asignatura.strip().title() if materia.asignatura else "la materia"
+
+                    escenarios.append({
+                        "accion": f"Asistir a tutoría de {asignatura_nombre} con {docente_nombre}",
+                        "variable": "tutoria",
+                        "valor_actual": motivo,
+                        "valor_simulado": f"Nota objetivo: ≥70 (aprobación)",
+                        "compromiso_actual": round(compromiso_simulado_base * 100),
+                        "compromiso_nuevo": round(nuevo_compromiso * 100),
+                        "ganancia": round(delta * 100),
+                        "nivel_riesgo_nuevo": nuevo_nivel,
+                        "factibilidad": "alta",
+                        "plazo": "próxima semana",
+                        # Datos para notificación
+                        "tipo": "tutoria",
+                        "asignatura": materia.asignatura,
+                        "docente": materia.docente,
+                        "student_id": student_id,
+                        "motivo_tutoria": motivo,
+                    })
+                    break  # solo la materia más crítica
+
     if not escenarios:
         return None
 

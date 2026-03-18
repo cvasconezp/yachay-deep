@@ -760,6 +760,35 @@ export default function FichaEstudiante() {
                             <span className="text-[9px] text-gray-400">→ Riesgo: {esc.nivel_riesgo_nuevo}</span>
                           </div>
                         </div>
+                        {/* Botón Notificar Tutoría (solo para escenarios tipo tutoría) */}
+                        {esc.tipo === "tutoria" && (
+                          <button
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              const btn = e.currentTarget;
+                              btn.disabled = true;
+                              btn.textContent = "Enviando...";
+                              try {
+                                const res = await api.notifyTutoria({
+                                  student_id: esc.student_id,
+                                  asignatura: esc.asignatura,
+                                  docente: esc.docente,
+                                  motivo: esc.motivo_tutoria || esc.valor_actual,
+                                });
+                                btn.textContent = res.email_enviado ? "✓ Notificado" : "✓ Registrado";
+                                btn.className = btn.className.replace("bg-blue-600", "bg-green-600").replace("hover:bg-blue-700", "");
+                              } catch (err) {
+                                btn.textContent = "Error";
+                                btn.disabled = false;
+                                console.error(err);
+                              }
+                            }}
+                            className="flex-shrink-0 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-medium px-3 py-1.5 rounded-lg transition-colors shadow-sm whitespace-nowrap"
+                            title="Enviar notificación de tutoría al estudiante y registrar intervención"
+                          >
+                            📧 Notificar tutoría
+                          </button>
+                        )}
                       </div>
                     </div>
                     );

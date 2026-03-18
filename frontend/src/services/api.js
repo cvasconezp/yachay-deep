@@ -205,6 +205,11 @@ class ApiClient {
   getInterventionImpact(interventionId) {
     return this.get(`/interventions/${interventionId}/impact`);
   }
+
+  // ── Notify Tutoria ──
+  notifyTutoria(data) {
+    return this.post("/predictions/notify-tutoria", data);
+  }
 }
 
 export const api = new ApiClient();

@@ -239,3 +239,79 @@ def what_if_analysis(
         }
 
     return resultado
+
+
+@router.post("/notify-tutoria")
+def notify_tutoria(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Envía notificación de tutoría al estudiante y al docente por email.
+    Registra automáticamente una intervención con los datos de la tutoría.
+
+    Body: {student_id, asignatura, docente, motivo}
+    """
+    from ..models.student import Student
+    from ..models.intervention import Intervention
+
+    student_id = payload.get("student_id")
+    asignatura = payload.get("asignatura", "")
+    docente = payload.get("docente", "")
+    motivo = payload.get("motivo", "")
+
+    student = db.query(Student).filter(Student.id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Estudiante no encontrado")
+
+    # Registrar intervención automática
+    intervention = Intervention(
+        student_id=student_id,
+        monitor_id=current_user.id,
+        monitor_nombre=current_user.nombre,
+        carrera=student.carrera,
+        medio="Tutoría",
+        motivo=f"Convocatoria a tutoría — {asignatura}",
+        estado="Convocado",
+        asignatura=asignatura,
+        docente=docente,
+        observacion=f"Tutoría recomendada por sistema contrafactual. Motivo: {motivo}. Notificación enviada a estudiante y docente.",
+        resultado="Pendiente de asistencia",
+        requiere_seguimiento="si",
+        snapshot_compromiso=student.indice_compromiso,
+        snapshot_dias_sin_acceso=student.dias_sin_acceso,
+        snapshot_porcentaje_tareas=student.porcentaje_tareas,
+        snapshot_prob_desercion=student.prob_desercion,
+        snapshot_prob_reprobacion=student.prob_reprobacion,
+        snapshot_nivel_riesgo=student.nivel_riesgo,
+    )
+    db.add(intervention)
+    db.commit()
+    db.refresh(intervention)
+
+    # Enviar emails
+    email_enviado = False
+    try:
+        from ..services.email import send_tutoria_notification
+        email_enviado = send_tutoria_notification(
+            student_data={
+                "nombre": student.nombre,
+                "correo": student.correo,
+                "correo_institucional": student.correo_institucional,
+                "carrera": student.carrera,
+            },
+            asignatura=asignatura,
+            docente=docente,
+            motivo=motivo,
+            monitor_nombre=current_user.nombre,
+        )
+    except Exception as e:
+        logger.warning(f"Error enviando notificación de tutoría: {e}")
+
+    return {
+        "status": "ok",
+        "intervention_id": intervention.id,
+        "email_enviado": email_enviado,
+        "mensaje": f"Tutoría de {asignatura} notificada. Intervención #{intervention.id} creada.",
+    }

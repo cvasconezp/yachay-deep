@@ -137,3 +137,84 @@ def _build_report_html(student: dict, intervention: dict, monitor: str) -> str:
     </body>
     </html>
     """
+
+
+def send_tutoria_notification(
+    student_data: dict,
+    asignatura: str,
+    docente: str,
+    motivo: str,
+    monitor_nombre: str,
+) -> bool:
+    """
+    Envía notificación de tutoría al correo institucional del estudiante.
+    Informa que debe asistir a tutoría sincrónica con el docente.
+    """
+    from ..config import settings
+
+    if not settings.SMTP_HOST or not settings.SMTP_USER:
+        logger.warning("SMTP no configurado — notificación de tutoría no enviada")
+        return False
+
+    correo_estudiante = student_data.get("correo_institucional") or student_data.get("correo")
+    if not correo_estudiante:
+        logger.warning("Estudiante sin correo — notificación no enviada")
+        return False
+
+    nombre = html_escape(student_data.get("nombre", "Estudiante"))
+    asig = html_escape(asignatura)
+    doc = html_escape(docente)
+    mot = html_escape(motivo)
+    monitor = html_escape(monitor_nombre)
+    fecha = datetime.now().strftime("%d/%m/%Y %H:%M")
+
+    html_body = f"""
+    <html>
+    <body style="font-family: Calibri, Arial, sans-serif; background: #f4f7fa; padding: 20px;">
+        <div style="max-width: 600px; margin: auto; background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+            <div style="background: linear-gradient(135deg, #0F2444, #1B3A6B); color: white; padding: 20px 24px;">
+                <h2 style="margin: 0; font-size: 18px;">Convocatoria a Tutoría Académica</h2>
+                <p style="margin: 4px 0 0; opacity: 0.7; font-size: 13px;">Yachay Deep — Monitoreo Académico</p>
+            </div>
+            <div style="padding: 24px;">
+                <p style="font-size: 14px; color: #333;">Estimado/a <strong>{nombre}</strong>,</p>
+                <p style="font-size: 14px; color: #555; line-height: 1.6;">
+                    Se le convoca a una <strong>tutoría sincrónica</strong> en la asignatura
+                    <strong style="color: #1B3A6B;">{asig}</strong> con el/la docente
+                    <strong style="color: #1B3A6B;">{doc}</strong>.
+                </p>
+                <div style="background: #FFF8E1; border-left: 4px solid #E8A838; padding: 12px 16px; margin: 16px 0; border-radius: 4px;">
+                    <p style="margin: 0; font-size: 13px; color: #7B6124;"><strong>Motivo:</strong> {mot}</p>
+                </div>
+                <p style="font-size: 14px; color: #555;">
+                    Por favor coordine con su docente el horario de la tutoría.
+                    Su participación es importante para mejorar su desempeño académico.
+                </p>
+                <div style="border-top: 1px solid #e5e7eb; padding-top: 14px; margin-top: 20px; font-size: 12px; color: #9ca3af;">
+                    <p style="margin: 2px 0;">Convocado por: <strong>{monitor}</strong></p>
+                    <p style="margin: 2px 0;">Fecha: {fecha}</p>
+                    <p style="margin: 8px 0 0; font-style: italic;">Este correo fue generado por el sistema Yachay Deep.</p>
+                </div>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = f"Convocatoria a Tutoría — {asignatura}"
+        msg["From"] = settings.SMTP_FROM or settings.SMTP_USER
+        msg["To"] = correo_estudiante
+        msg.attach(MIMEText(html_body, "html", "utf-8"))
+
+        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15) as server:
+            server.starttls()
+            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+            server.sendmail(msg["From"], [correo_estudiante], msg.as_string())
+
+        logger.info(f"Notificación de tutoría enviada a {correo_estudiante} ({asignatura})")
+        return True
+    except Exception as e:
+        logger.error(f"Error enviando notificación de tutoría: {e}")
+        return False
