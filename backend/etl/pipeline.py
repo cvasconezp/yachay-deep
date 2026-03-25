@@ -5,6 +5,7 @@ Soporta filtrado por bloque activo usando SemesterConfig.
 """
 import logging
 import re
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, List
@@ -35,6 +36,28 @@ def _clean_str(val) -> str:
     """Convierte a string limpio; retorna '' si el valor es NaN/None/nan."""
     s = str(val or "").strip()
     return "" if s.lower() in ("nan", "none", "null") else s
+
+
+def _normalize_name(nombre: str) -> str:
+    """
+    Normaliza un nombre para comparación: elimina tildes, diéresis y caracteres
+    especiales, colapsa espacios múltiples y convierte a mayúsculas.
+
+    Ejemplos:
+        "ACHIÑA INUCA RUBY MARITHZA" → "ACHINA INUCA RUBY MARITHZA"
+        "GARCÍA  LÓPEZ  MARÍA" → "GARCIA LOPEZ MARIA"
+        "PÉREZ ÑUÑEZ ANA" → "PEREZ NUNEZ ANA"
+    """
+    if not nombre:
+        return ""
+    # Paso 1: mayúsculas y colapsar espacios
+    s = re.sub(r"\s+", " ", nombre.strip().upper())
+    # Paso 2: descomponer Unicode (NFD) para separar letras base de diacríticos
+    # Ej: "Ñ" → "N" + "~" (combining tilde), "á" → "a" + "´" (combining acute)
+    s = unicodedata.normalize("NFD", s)
+    # Paso 3: eliminar los diacríticos (categoría Unicode "Mn" = Mark, Nonspacing)
+    s = "".join(c for c in s if unicodedata.category(c) != "Mn")
+    return s
 
 
 class ETLPipeline:
@@ -483,22 +506,72 @@ class ETLPipeline:
         self.db.commit()
         return count
 
+    def _find_student_by_name(self, nombre: str) -> Optional["Student"]:
+        """
+        Busca un estudiante por nombre con 3 niveles de fallback:
+          1. Búsqueda exacta por nombre
+          2. Búsqueda colapsando dobles espacios en la BD
+          3. Búsqueda por nombre normalizado sin tildes (ACHIÑA → ACHINA)
+
+        Si encuentra con nombre diferente, corrige el nombre en la BD al canónico.
+        """
+        if not nombre:
+            return None
+
+        # Nivel 1: búsqueda exacta
+        student = self.db.query(Student).filter(Student.nombre == nombre).first()
+        if student:
+            return student
+
+        # Nivel 2: colapsando dobles espacios
+        student = (
+            self.db.query(Student)
+            .filter(func.replace(Student.nombre, "  ", " ") == nombre)
+            .first()
+        )
+        if student:
+            if student.nombre != nombre:
+                student.nombre = nombre
+            return student
+
+        # Nivel 3: búsqueda sin tildes (ACHIÑA == ACHINA)
+        nombre_sin_tildes = _normalize_name(nombre)
+        all_candidates = self.db.query(Student).filter(Student.nombre.isnot(None)).all()
+        for candidate in all_candidates:
+            if _normalize_name(candidate.nombre) == nombre_sin_tildes:
+                # Encontrado por tildes — preferir la versión sin tildes como canónica
+                # (los sistemas institucionales generalmente usan ASCII)
+                nombre_limpio = _normalize_name(nombre)
+                if candidate.nombre != nombre_limpio:
+                    logger.info(f"  Nombre corregido: '{candidate.nombre}' → '{nombre_limpio}' (tildes eliminadas)")
+                    candidate.nombre = nombre_limpio
+                return candidate
+
+        return None
+
     def _merge_duplicate_students(self) -> int:
         """
-        Detecta y fusiona estudiantes duplicados creados por desajuste de nombres.
+        Detecta y fusiona estudiantes duplicados en DOS pasadas:
 
-        Escenario típico: _seed_students_from_personales crea Student A con
-        correo_institucional + datos personales. Luego _upsert_grades no lo
-        encuentra (nombre con doble espacio) y crea Student B con solo
-        nombre + carrera (sin correo_institucional).
+        PASADA 1 — Orphans sin correo:
+        Busca estudiantes sin correo_institucional (orphans) y los fusiona con
+        el estudiante "bueno" que SÍ tiene correo y el mismo nombre normalizado.
 
-        Estrategia: para cada Student sin correo_institucional, buscar otro
-        con el mismo nombre normalizado que SÍ tenga correo. Si existe,
-        mover grades/accesos/tareas del orphan al "bueno" y eliminar el orphan.
+        PASADA 2 — Duplicados por tildes/diacríticos:
+        Busca estudiantes con nombres que solo difieren por tildes o caracteres
+        especiales. Ej: "ACHIÑA INUCA" vs "ACHINA INUCA" son la misma persona.
+        Se queda con el que tiene más datos (correo, cédula) y fusiona el otro.
+
+        En ambas pasadas se mueven grades, accesos AVAC, tareas, intervenciones
+        y alertas del duplicado al registro principal antes de eliminarlo.
         """
         from ..models.grade import Grade
+        from ..models.alert_event import AlertEvent
+        from ..models import Intervention
 
-        # Buscar orphans: Students sin correo_institucional
+        merged = 0
+
+        # ── PASADA 1: Orphans sin correo ─────────────────────────────────────
         orphans = (
             self.db.query(Student)
             .filter(
@@ -506,18 +579,13 @@ class ETLPipeline:
             )
             .all()
         )
-        if not orphans:
-            return 0
 
-        merged = 0
         for orphan in orphans:
             if not orphan.nombre:
                 continue
 
-            # Normalizar nombre del orphan
             nombre_norm = re.sub(r"\s+", " ", orphan.nombre.strip().upper())
 
-            # Buscar el "bueno" con correo_institucional y mismo nombre normalizado
             good = (
                 self.db.query(Student)
                 .filter(
@@ -531,31 +599,86 @@ class ETLPipeline:
             if not good:
                 continue
 
-            # Mover grades del orphan al good
-            self.db.query(Grade).filter(Grade.student_id == orphan.id).update(
-                {Grade.student_id: good.id}, synchronize_session=False
-            )
-            # Mover accesos AVAC
-            self.db.query(AvacAccess).filter(AvacAccess.student_id == orphan.id).update(
-                {AvacAccess.student_id: good.id}, synchronize_session=False
-            )
-            # Mover tareas
-            self.db.query(TaskSubmission).filter(TaskSubmission.student_id == orphan.id).update(
-                {TaskSubmission.student_id: good.id}, synchronize_session=False
-            )
+            merged += self._absorb_student(good, orphan)
 
-            # Copiar datos del orphan que el good no tiene
-            if not good.carrera and orphan.carrera:
-                good.carrera = orphan.carrera
+        # ── PASADA 2: Duplicados por tildes/diacríticos ───────────────────────
+        # Construir mapa nombre_normalizado_sin_tildes → [students]
+        all_students = self.db.query(Student).filter(Student.nombre.isnot(None)).all()
+        name_groups: dict[str, list] = {}
+        for s in all_students:
+            key = _normalize_name(s.nombre)
+            if key:
+                name_groups.setdefault(key, []).append(s)
 
-            # Eliminar el orphan
-            self.db.delete(orphan)
-            merged += 1
-            logger.info(f"  Fusionado orphan '{orphan.nombre}' (id={orphan.id}) → '{good.nombre}' (id={good.id}, correo={good.correo_institucional})")
+        for key, group in name_groups.items():
+            if len(group) < 2:
+                continue
+
+            # Elegir el "mejor" registro: prioridad a quien tiene correo + cédula + más datos
+            group.sort(key=lambda s: (
+                bool(s.correo_institucional),  # preferir con correo
+                bool(s.cedula),                # preferir con cédula
+                s.id,                          # preferir ID más bajo (creado antes)
+            ), reverse=True)
+
+            best = group[0]
+            for dup in group[1:]:
+                logger.info(f"  Duplicado por tildes: '{dup.nombre}' (id={dup.id}) → '{best.nombre}' (id={best.id})")
+                merged += self._absorb_student(best, dup)
 
         if merged:
             self.db.flush()
             self.db.commit()
+
+        return merged
+
+    def _absorb_student(self, good: "Student", orphan: "Student") -> int:
+        """
+        Fusiona un estudiante duplicado (orphan) en el registro principal (good).
+        Mueve todos los datos relacionados y elimina el duplicado.
+        Retorna 1 si se fusionó, 0 si no.
+        """
+        from ..models.grade import Grade
+        from ..models.alert_event import AlertEvent
+        from ..models import Intervention
+
+        # Mover calificaciones
+        self.db.query(Grade).filter(Grade.student_id == orphan.id).update(
+            {Grade.student_id: good.id}, synchronize_session=False
+        )
+        # Mover accesos AVAC
+        self.db.query(AvacAccess).filter(AvacAccess.student_id == orphan.id).update(
+            {AvacAccess.student_id: good.id}, synchronize_session=False
+        )
+        # Mover tareas
+        self.db.query(TaskSubmission).filter(TaskSubmission.student_id == orphan.id).update(
+            {TaskSubmission.student_id: good.id}, synchronize_session=False
+        )
+        # Mover intervenciones
+        self.db.query(Intervention).filter(Intervention.student_id == orphan.id).update(
+            {Intervention.student_id: good.id}, synchronize_session=False
+        )
+        # Mover alertas
+        self.db.query(AlertEvent).filter(AlertEvent.student_id == orphan.id).update(
+            {AlertEvent.student_id: good.id}, synchronize_session=False
+        )
+
+        # Copiar datos del orphan que el good no tiene
+        if not good.carrera and orphan.carrera:
+            good.carrera = orphan.carrera
+        if not good.cedula and orphan.cedula:
+            good.cedula = orphan.cedula
+        if not good.correo_institucional and orphan.correo_institucional:
+            good.correo_institucional = orphan.correo_institucional
+        if not good.telefono and orphan.telefono:
+            good.telefono = orphan.telefono
+
+        logger.info(f"  Fusionado: '{orphan.nombre}' (id={orphan.id}) → '{good.nombre}' (id={good.id})")
+
+        # Eliminar el duplicado
+        self.db.delete(orphan)
+        self.db.flush()
+        return 1
 
         return merged
 
@@ -950,18 +1073,7 @@ class ETLPipeline:
             if not nombre:
                 continue
 
-            # Buscar por nombre exacto (ya normalizado sin dobles espacios)
-            student = self.db.query(Student).filter(Student.nombre == nombre).first()
-            if not student:
-                # Fallback: buscar colapsando espacios en BD (por si hay registros viejos)
-                student = (
-                    self.db.query(Student)
-                    .filter(func.replace(Student.nombre, "  ", " ") == nombre)
-                    .first()
-                )
-                if student and student.nombre != nombre:
-                    # Corregir el nombre con doble espacio en BD
-                    student.nombre = nombre
+            student = self._find_student_by_name(nombre)
             if not student:
                 student = Student(
                     nombre=nombre,
@@ -1045,19 +1157,8 @@ class ETLPipeline:
 
             periodo = str(row.get("periodo", "")).strip() or None
 
-            # Buscar estudiante por nombre (normalizado sin dobles espacios)
-            student = self.db.query(Student).filter(Student.nombre == nombre).first()
+            student = self._find_student_by_name(nombre)
             if not student:
-                # Fallback: buscar colapsando espacios en BD
-                student = (
-                    self.db.query(Student)
-                    .filter(func.replace(Student.nombre, "  ", " ") == nombre)
-                    .first()
-                )
-                if student and student.nombre != nombre:
-                    student.nombre = nombre
-            if not student:
-                # Crear estudiante mínimo si no existe (puede enriquecerse en runs posteriores)
                 student = Student(
                     nombre=nombre,
                     carrera=str(row.get("carrera", "")).strip() or None,
@@ -1065,7 +1166,6 @@ class ETLPipeline:
                 self.db.add(student)
                 self.db.flush()
 
-            # Actualizar carrera si el estudiante no la tiene aún
             if not student.carrera and row.get("carrera"):
                 student.carrera = str(row.get("carrera", "")).strip()
 
