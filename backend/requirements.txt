@@ -20,5 +20,5 @@ beautifulsoup4==4.12.3
 lxml==5.3.0
 aiofiles==25.1.0
 scikit-learn==1.5.2
-joblib==1.4.2
+joblib==1.5.3
 slowapi==0.1.9
