@@ -232,28 +232,30 @@ class ETLPipeline:
                     _filled_rep = df_calificaciones["numero_repitencias"].notna().sum()
                     logs.append(f"  → Enriquecido {_filled_rep}/{len(df_calificaciones)} calificaciones con NUMERO_REPITENCIAS del reporte")
 
+            # 2a. Sembrar datos personales desde reporte.xlsx SIEMPRE
+            #     (nivel_academico, grupo, cédula, carrera, etc.)
+            #     Esto debe ejecutarse independientemente de si el semestre está vigente,
+            #     porque el reporte es la fuente de verdad para datos demográficos.
+            # Limpiar cédulas 'nan' heredadas de corridas anteriores con el bug
+            self.db.execute(sa_text("UPDATE students SET cedula = NULL WHERE cedula = 'nan'"))
+            self.db.flush()
+
+            if not df_personales.empty:
+                logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Sembrando estudiantes desde reporte.xlsx...")
+                n_seed = self._seed_students_from_personales(df_personales)
+                logs.append(f"  → {n_seed} estudiantes inicializados desde reporte")
+
+            # Deduplicar estudiantes con mismo nombre (merge orphans)
+            n_merged = self._merge_duplicate_students()
+            if n_merged:
+                logs.append(f"  → {n_merged} estudiantes duplicados fusionados")
+
             if semestre_vigente:
-                # 2. Calcular indicadores
+                # 2b. Calcular indicadores
                 logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Calculando indicadores de riesgo...")
                 df_master = calcular_indicadores_estudiantes(df_ingresos, df_tareas, df_calificaciones)
 
-                # 3a. Crear registros base para todos los estudiantes del reporte
-                #     (aunque aún no tengan actividad AVAC)
-                # Limpiar cédulas 'nan' heredadas de corridas anteriores con el bug
-                self.db.execute(sa_text("UPDATE students SET cedula = NULL WHERE cedula = 'nan'"))
-                self.db.flush()
-
-                if not df_personales.empty:
-                    logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Sembrando estudiantes desde reporte.xlsx...")
-                    n_seed = self._seed_students_from_personales(df_personales)
-                    logs.append(f"  → {n_seed} estudiantes inicializados desde reporte")
-
-                # 3a-bis. Deduplicar estudiantes con mismo nombre (merge orphans)
-                n_merged = self._merge_duplicate_students()
-                if n_merged:
-                    logs.append(f"  → {n_merged} estudiantes duplicados fusionados")
-
-                # 3b. Upsert estudiantes con indicadores (actualiza los ya creados)
+                # 3. Upsert estudiantes con indicadores (actualiza los ya creados)
                 logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Actualizando indicadores de estudiantes...")
                 n = self._upsert_students(
                     df_ingresos, df_calificaciones, df_master,
@@ -280,7 +282,9 @@ class ETLPipeline:
                 df_master = pd.DataFrame()
 
             # 6. Upsert calificaciones (semestre actual, sin período)
-            if semestre_vigente and not df_calificaciones.empty:
+            #    Se ejecuta siempre que haya calificaciones (incluyendo fallback de
+            #    TableauHistorico) para que Grade.nivel quede poblado desde el reporte.
+            if not df_calificaciones.empty:
                 logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Cargando calificaciones...")
                 n = self._upsert_grades(df_calificaciones)
                 total_registros += n
@@ -412,19 +416,29 @@ class ETLPipeline:
             if estado and not student.estado_matricula:
                 student.estado_matricula = estado
 
+            # ── Datos personales del reporte institucional ──────────────
+            # Estos SIEMPRE se actualizan (no solo para nuevos) porque el
+            # reporte es la fuente de verdad para datos demográficos,
+            # nivel académico y grupo.
+
             # Nivel académico del reporte (moda de NIVEL por estudiante)
+            # SIEMPRE actualizar — el reporte es fuente de verdad
             nivel_val = pr.get("nivel_academico")
             if nivel_val is not None and pd.notna(nivel_val):
                 try:
                     niv = int(nivel_val)
-                    if 1 <= niv <= 12 and not student.nivel_academico:
+                    if 1 <= niv <= 12:
                         student.nivel_academico = niv
                 except (ValueError, TypeError):
                     pass
 
-            # ── Datos personales del reporte institucional ──────────────
-            # Estos SIEMPRE se actualizan (no solo para nuevos) porque el
-            # reporte es la fuente de verdad para datos demográficos.
+            # Grupo académico — SIEMPRE actualizar desde el reporte
+            grupo_val = pr.get("grupo")
+            if grupo_val is not None and pd.notna(grupo_val):
+                grupo_str = str(grupo_val).strip()
+                if grupo_str and grupo_str.lower() not in ("nan", "none", ""):
+                    student.grupo = grupo_str
+
             fn = pr.get("fecha_nacimiento")
             if fn is not None and pd.notna(fn):
                 try:
@@ -438,12 +452,6 @@ class ETLPipeline:
                     val_str = str(val).strip()
                     if val_str and val_str.lower() not in ("nan", "none", ""):
                         setattr(student, col, val_str)
-
-            grupo_val = pr.get("grupo")
-            if grupo_val is not None and pd.notna(grupo_val):
-                grupo_str = str(grupo_val).strip()
-                if grupo_str and grupo_str.lower() not in ("nan", "none", ""):
-                    student.grupo = grupo_str
 
             if is_new:
                 count += 1
