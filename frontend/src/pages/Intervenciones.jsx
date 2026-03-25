@@ -31,6 +31,10 @@ export default function Intervenciones() {
   const [impactData, setImpactData] = useState(null);
   const [impactLoading, setImpactLoading] = useState(false);
 
+  // Delete modal
+  const [deleteItem, setDeleteItem] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+
   // Export
   const [exportOpen, setExportOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -69,6 +73,24 @@ export default function Intervenciones() {
 
   const updateFiltro = (key, value) => {
     setFiltros(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handleDelete = async (inv, e) => {
+    e.stopPropagation();
+    setDeleteItem(inv);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteItem) return;
+    setDeleting(true);
+    try {
+      await api.deleteIntervention(deleteItem.id);
+      setDeleteItem(null);
+      loadData();
+    } catch (e) {
+      alert(e.message);
+      setDeleting(false);
+    }
   };
 
   const openEdit = (inv, e) => {
@@ -419,6 +441,13 @@ export default function Intervenciones() {
                         >
                           Impacto
                         </button>
+                        <button
+                          onClick={(e) => handleDelete(inv, e)}
+                          className="text-red-600 hover:text-red-800 text-xs font-medium"
+                          title="Eliminar intervención"
+                        >
+                          Eliminar
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -607,6 +636,35 @@ export default function Intervenciones() {
                 )}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ===== Modal de Confirmación para Eliminar ===== */}
+      {deleteItem && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => !deleting && setDeleteItem(null)}>
+          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full mx-4 p-6" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-gray-900 mb-2">Eliminar intervención</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              ¿Estás seguro de que deseas eliminar esta intervención de <span className="font-medium">{deleteItem.nombre}</span>? Esta acción no se puede deshacer.
+            </p>
+
+            <div className="flex items-center justify-end gap-3">
+              <button
+                onClick={() => setDeleteItem(null)}
+                disabled={deleting}
+                className="text-sm text-gray-500 hover:text-gray-700 font-medium disabled:opacity-60"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmDelete}
+                disabled={deleting}
+                className="bg-red-600 hover:bg-red-700 disabled:bg-gray-300 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors"
+              >
+                {deleting ? "Eliminando..." : "Eliminar"}
+              </button>
+            </div>
           </div>
         </div>
       )}

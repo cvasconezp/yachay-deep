@@ -16,6 +16,7 @@ export default function InterventionForm({ student, onClose, onSaved }) {
     derivar_bienestar: false,
     tipo_evento_critico: "",
     reporte_bienestar: "",
+    periodo: "",
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -81,6 +82,16 @@ export default function InterventionForm({ student, onClose, onSaved }) {
               <option value="">Seleccionar...</option>
               {ESTADOS.map(e => <option key={e} value={e}>{e}</option>)}
             </select>
+          </FormField>
+
+          <FormField label="Período">
+            <input
+              type="text"
+              value={form.periodo}
+              onChange={e => update("periodo", e.target.value)}
+              className={inputClass}
+              placeholder="P67, P68, etc. (opcional)"
+            />
           </FormField>
 
           <div className="grid grid-cols-2 gap-4">

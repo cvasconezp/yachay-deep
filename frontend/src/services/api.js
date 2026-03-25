@@ -103,6 +103,7 @@ class ApiClient {
   listInterventions(studentId) { return this.get(`/interventions/?student_id=${studentId}`); }
   interventionStats() { return this.get("/interventions/stats"); }
   updateIntervention(id, data) { return this.patch(`/interventions/${id}`, data); }
+  deleteIntervention(id) { return this.delete(`/interventions/${id}`); }
   getInterventionsDashboard(params = {}) {
     const qs = new URLSearchParams(params).toString();
     return this.get(`/interventions/dashboard${qs ? "?" + qs : ""}`);
@@ -184,6 +185,17 @@ class ApiClient {
     const qs = new URLSearchParams(params).toString();
     return this.getBlob(`/export/intervenciones/excel${qs ? "?" + qs : ""}`);
   }
+
+  // ── Docente Tracking ──
+  getDocenteTracking() { return this.get("/analytics/docente-tracking"); }
+  getDocenteTrackingDetalle(docente) { return this.get(`/analytics/docente-tracking/${encodeURIComponent(docente)}`); }
+  getDocenteTrackingResumen() { return this.get("/analytics/docente-tracking/resumen"); }
+
+  // ── Alerts ──
+  getAlertCount() { return this.get("/alerts/count"); }
+  getAlertsPending() { return this.get("/alerts/pending"); }
+  markAlertRead(id) { return this.patch(`/alerts/${id}/read`, {}); }
+  generateAlerts() { return this.post("/alerts/generate", {}); }
 
   // ── Predictions / ML ──
   trainModel() { return this.post("/predictions/train", {}); }

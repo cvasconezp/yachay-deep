@@ -55,6 +55,15 @@ def build_features(db: Session) -> pd.DataFrame:
         .to_dict()
     )
 
+    # [BUG-06] FIX: Mapeo de nivel_academico para no etiquetar graduados como desertores
+    # Obtener el nivel académico de cada estudiante desde la tabla students
+    nivel_query = text("""
+        SELECT id, nivel_academico FROM students
+    """)
+    nivel_rows = db.execute(nivel_query).fetchall()
+    nivel_por_estudiante = {row[0]: row[1] for row in nivel_rows}
+
+
     # Agrupar por estudiante-periodo
     grouped = df.groupby(["student_id", "periodo"])
     features = grouped.agg(
@@ -90,11 +99,23 @@ def build_features(db: Session) -> pd.DataFrame:
         return None
 
     # Label desercion: 1 si no aparece en periodo siguiente
+    # [BUG-06] FIX: No etiquetar como deserto si el estudiante ha alcanzado nivel_academico >= 8 (graduado)
     def label_desercion(row):
         nxt = periodo_siguiente(row["periodo"])
         if nxt is None:
             return None  # ultimo periodo, no se puede evaluar
-        return 0 if row["student_id"] in estudiantes_por_periodo.get(nxt, set()) else 1
+
+        # Verificar si el estudiante está en el siguiente periodo
+        if row["student_id"] in estudiantes_por_periodo.get(nxt, set()):
+            return 0  # Sigue matriculado en siguiente periodo
+
+        # Si no está en siguiente periodo, verificar si es graduado
+        nivel_ac = nivel_por_estudiante.get(row["student_id"])
+        if nivel_ac is not None and nivel_ac >= 8:
+            return 0  # Graduado, no es deserción (es egreso)
+
+        # No está en siguiente periodo y no es graduado → deserción
+        return 1
 
     features["deserto"] = features.apply(label_desercion, axis=1)
 

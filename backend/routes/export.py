@@ -236,6 +236,7 @@ INTERVENTION_COLUMNS = {
     "reporte_bienestar": {"label": "Reporte Bienestar", "getter": lambda inv, _: inv.reporte_bienestar},
     "email_enviado": {"label": "Email Bienestar enviado", "getter": lambda inv, _: "Sí" if inv.email_enviado else "No"},
     "monitor_nombre": {"label": "Monitor", "getter": lambda inv, _: inv.monitor_nombre},
+    "periodo": {"label": "Período", "getter": lambda inv, _: inv.periodo},
     "fecha": {"label": "Fecha", "getter": lambda inv, _: inv.created_at.strftime("%d/%m/%Y %H:%M") if inv.created_at else None},
 }
 

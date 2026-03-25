@@ -8,8 +8,10 @@ import Dashboard from "./pages/Dashboard";
 import FichaEstudiante from "./pages/FichaEstudiante";
 import Asignaturas from "./pages/Asignaturas";
 import Docentes from "./pages/Docentes";
+import SeguimientoDocente from "./pages/SeguimientoDocente";
 import Tutorias from "./pages/Tutorias";
 import Intervenciones from "./pages/Intervenciones";
+import Alertas from "./pages/Alertas";
 import ResumenDatos from "./pages/ResumenDatos";
 import Admin from "./pages/Admin";
 import About from "./pages/About";
@@ -35,8 +37,10 @@ export default function App() {
           <Route path="/ficha/:studentId" element={<PrivateRoute><FichaEstudiante /></PrivateRoute>} />
           <Route path="/asignaturas" element={<PrivateRoute><Asignaturas /></PrivateRoute>} />
           <Route path="/docentes" element={<PrivateRoute><Docentes /></PrivateRoute>} />
+          <Route path="/seguimiento-docente" element={<PrivateRoute><SeguimientoDocente /></PrivateRoute>} />
           <Route path="/tutorias" element={<PrivateRoute><Tutorias /></PrivateRoute>} />
           <Route path="/intervenciones" element={<PrivateRoute><Intervenciones /></PrivateRoute>} />
+          <Route path="/alertas" element={<PrivateRoute><Alertas /></PrivateRoute>} />
           <Route path="/resumen" element={<PrivateRoute><ResumenDatos /></PrivateRoute>} />
           <Route path="/about" element={<PrivateRoute><About /></PrivateRoute>} />
           <Route path="/admin" element={<PrivateRoute adminOnly><Admin /></PrivateRoute>} />

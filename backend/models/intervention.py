@@ -20,6 +20,7 @@ class Intervention(Base):
     asignatura = Column(String, nullable=True)
     docente = Column(String, nullable=True)
     observacion = Column(Text, nullable=True)
+    periodo = Column(String, nullable=True, index=True)  # P67, P68, etc.
 
     # Additional web-app fields
     resultado = Column(String, nullable=True)        # Contactado / No contestó / etc

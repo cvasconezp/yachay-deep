@@ -35,6 +35,7 @@ class InterventionCreate(BaseModel):
     derivar_bienestar: Optional[bool] = False
     tipo_evento_critico: Optional[str] = Field(None, max_length=200)
     reporte_bienestar: Optional[str] = Field(None, max_length=5000)
+    periodo: Optional[str] = Field(None, max_length=20)
 
     @field_validator("medio", "motivo", "estado", "asignatura", "docente",
                      "observacion", "resultado", "tipo_evento_critico", "reporte_bienestar",
@@ -56,6 +57,7 @@ class InterventionUpdate(BaseModel):
     derivar_bienestar: Optional[bool] = None
     tipo_evento_critico: Optional[str] = Field(None, max_length=200)
     reporte_bienestar: Optional[str] = Field(None, max_length=5000)
+    periodo: Optional[str] = Field(None, max_length=20)
 
     @field_validator("medio", "motivo", "estado", "asignatura", "docente",
                      "observacion", "resultado", "tipo_evento_critico", "reporte_bienestar",
@@ -80,6 +82,7 @@ class InterventionResponse(BaseModel):
     tipo_evento_critico: Optional[str]
     reporte_bienestar: Optional[str]
     email_enviado: Optional[bool]
+    periodo: Optional[str]
     created_at: Optional[datetime]
 
     class Config:
@@ -100,6 +103,14 @@ def create_intervention(
     if not student:
         raise HTTPException(status_code=404, detail="Estudiante no encontrado")
 
+    # Auto-poblar periodo desde SemesterConfig si no se envía
+    _periodo = payload.periodo
+    if not _periodo:
+        from ..models.course_config import SemesterConfig
+        semconfig = db.query(SemesterConfig).order_by(SemesterConfig.id.desc()).first()
+        if semconfig:
+            _periodo = semconfig.semestre
+
     intervention = Intervention(
         student_id=payload.student_id,
         monitor_id=current_user.id,
@@ -116,6 +127,7 @@ def create_intervention(
         derivar_bienestar=payload.derivar_bienestar,
         tipo_evento_critico=payload.tipo_evento_critico,
         reporte_bienestar=payload.reporte_bienestar,
+        periodo=_periodo,
         # [GAP-F5-01] Snapshot de indicadores al momento de la intervención
         snapshot_compromiso=student.indice_compromiso,
         snapshot_dias_sin_acceso=student.dias_sin_acceso,
@@ -207,6 +219,26 @@ def update_intervention(
             db.refresh(intervention)
 
     return intervention
+
+
+@router.delete("/{intervention_id}")
+def delete_intervention(
+    intervention_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Elimina una intervención creada por error."""
+    intervention = db.query(Intervention).filter(Intervention.id == intervention_id).first()
+    if not intervention:
+        raise HTTPException(status_code=404, detail="Intervención no encontrada")
+
+    # Solo el monitor creador o un admin pueden eliminar
+    if intervention.monitor_id != current_user.id and current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Solo puedes eliminar tus propias intervenciones")
+
+    db.delete(intervention)
+    db.commit()
+    return {"message": "Intervención eliminada", "id": intervention_id}
 
 
 @router.get("/", response_model=list[InterventionResponse])
@@ -329,6 +361,7 @@ def interventions_dashboard(
             "tipo_evento_critico": inv.tipo_evento_critico,
             "email_enviado": inv.email_enviado,
             "monitor_nombre": inv.monitor_nombre,
+            "periodo": inv.periodo,
             "created_at": inv.created_at.isoformat() if inv.created_at else None,
         })
 

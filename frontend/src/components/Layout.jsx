@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import { api } from "../services/api";
 import { YachayLogo, YachayIcon } from "./YachayLogo";
 
 const NAV_ITEMS = [
@@ -8,8 +9,10 @@ const NAV_ITEMS = [
   { path: "/ficha",          label: "Ficha Estudiante",  icon: "🎓" },
   { path: "/asignaturas",    label: "Asignaturas",       icon: "📚" },
   { path: "/docentes",       label: "Docentes",          icon: "👨‍🏫" },
+  { path: "/seguimiento-docente", label: "Seguimiento Docente", icon: "📝" },
   { path: "/tutorias",       label: "Tutorías",          icon: "📋" },
   { path: "/intervenciones", label: "Intervenciones",     icon: "🤝" },
+  { path: "/alertas",        label: "Alertas",           icon: "🔔" },
   { path: "/resumen",        label: "Resumen de Datos",   icon: "📈" },
   { path: "/about",          label: "Sobre Yachay Deep",  icon: "ℹ️" },
 ];
@@ -22,12 +25,33 @@ export function Layout({ children }) {
   const { user, logout, isAdmin } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const [alertCount, setAlertCount] = useState(null);
+  const [alertCriticoCount, setAlertCriticoCount] = useState(0);
+  const [alertAltoCount, setAlertAltoCount] = useState(0);
 
   // Sidebar open/closed con persistencia en localStorage
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     const saved = localStorage.getItem("yd_sidebar");
     return saved !== null ? JSON.parse(saved) : true;
   });
+
+  // Load alert count on mount
+  useEffect(() => {
+    const loadAlertCount = async () => {
+      try {
+        const data = await api.getAlertCount();
+        setAlertCriticoCount(data.critico || 0);
+        setAlertAltoCount(data.alto || 0);
+        setAlertCount((data.critico || 0) + (data.alto || 0));
+      } catch (e) {
+        console.error("Error loading alert count:", e);
+      }
+    };
+    loadAlertCount();
+    // Refresh every 30 seconds
+    const interval = setInterval(loadAlertCount, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const toggleSidebar = () => {
     setSidebarOpen(prev => {
@@ -81,18 +105,27 @@ export function Layout({ children }) {
         {/* Navigation */}
         <nav className={`flex-1 ${sidebarOpen ? "p-4" : "p-2"} space-y-1`}>
           {navItems.map(item => (
-            <Link
-              key={item.path}
-              to={item.path}
-              title={!sidebarOpen ? item.label : undefined}
-              className={`flex items-center ${sidebarOpen ? "gap-3 px-3" : "justify-center px-0"} py-2.5 rounded-lg text-sm font-medium transition-colors
-                ${location.pathname.startsWith(item.path)
-                  ? "bg-brand-gold/90 text-brand-dark"
-                  : "text-blue-200 hover:bg-white/10 hover:text-white"}`}
-            >
-              <span className={sidebarOpen ? "" : "text-lg"}>{item.icon}</span>
-              {sidebarOpen && item.label}
-            </Link>
+            <div key={item.path} className="relative">
+              <Link
+                to={item.path}
+                title={!sidebarOpen ? item.label : undefined}
+                className={`flex items-center ${sidebarOpen ? "gap-3 px-3" : "justify-center px-0"} py-2.5 rounded-lg text-sm font-medium transition-colors
+                  ${location.pathname.startsWith(item.path)
+                    ? "bg-brand-gold/90 text-brand-dark"
+                    : "text-blue-200 hover:bg-white/10 hover:text-white"}`}
+              >
+                <span className={sidebarOpen ? "" : "text-lg"}>{item.icon}</span>
+                {sidebarOpen && item.label}
+              </Link>
+              {/* Alert badge for Alertas item */}
+              {item.path === "/alertas" && alertCount > 0 && (
+                <div className={`absolute ${sidebarOpen ? "top-1 right-2" : "top-0 right-0"} w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold ${
+                  alertCriticoCount > 0 ? "bg-red-600" : "bg-orange-500"
+                }`}>
+                  {alertCount}
+                </div>
+              )}
+            </div>
           ))}
         </nav>
 

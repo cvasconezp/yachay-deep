@@ -10,10 +10,11 @@ from .course_config import CourseConfig, SemesterConfig
 from .recommendation_log import RecommendationLog
 from .ml_model_store import MLModelStore
 from .docente_tracking import DocenteTracking
+from .alert_event import AlertEvent
 
 __all__ = [
     "User", "Student", "Course", "AvacAccess",
     "TaskSubmission", "Grade", "Intervention", "ScrapingRun",
     "CourseConfig", "SemesterConfig", "RecommendationLog", "MLModelStore",
-    "DocenteTracking",
+    "DocenteTracking", "AlertEvent",
 ]

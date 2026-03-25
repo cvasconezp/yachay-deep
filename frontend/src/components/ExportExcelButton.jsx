@@ -1,5 +1,5 @@
 /**
- * Botón de exportación Excel reutilizable con selector de columnas.
+ * Botón de exportación Excel con modal de configuración de columnas.
  *
  * Props:
  *   data: array de objetos a exportar
@@ -26,7 +26,7 @@ export default function ExportExcelButton({ data = [], columns = [], filename = 
   };
 
   const selectAll = () => setSelected(new Set(columns.map(c => c.key)));
-  const selectNone = () => setSelected(new Set());
+  const selectMinimo = () => setSelected(new Set(columns.slice(0, Math.min(3, columns.length)).map(c => c.key)));
 
   const handleExport = () => {
     if (selected.size === 0 || !data.length) return;
@@ -56,50 +56,64 @@ export default function ExportExcelButton({ data = [], columns = [], filename = 
   };
 
   return (
-    <div className="relative">
+    <div>
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors shadow-sm"
+        className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm"
       >
-        <span>📊</span> Exportar Excel
+        <span>📥</span> Exportar Excel
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 p-4"
-          style={{ width: "320px", maxHeight: "400px" }}>
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">Columnas a exportar</span>
-            <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600 text-sm">✕</button>
-          </div>
+        <div
+          className="fixed inset-x-0 top-0 z-50 flex items-start justify-center pt-20"
+          onClick={() => setOpen(false)}
+        >
+          <div
+            className="bg-white rounded-xl border border-green-200 shadow-xl p-5 mx-4"
+            style={{ maxWidth: "800px", width: "100%" }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-gray-800">Configurar exportación ({selected.size} columnas seleccionadas)</h3>
+              <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
+            </div>
 
-          <div className="flex gap-2 mb-2">
-            <button onClick={selectAll} className="text-[10px] text-blue-600 hover:underline">Todas</button>
-            <button onClick={selectNone} className="text-[10px] text-blue-600 hover:underline">Ninguna</button>
-          </div>
+            {/* Acciones rápidas */}
+            <div className="flex gap-2 mb-4">
+              <button onClick={selectAll} className="text-[12px] text-blue-600 hover:underline font-medium">Seleccionar todas</button>
+              <button onClick={selectMinimo} className="text-[12px] text-gray-500 hover:underline">Mínimo</button>
+            </div>
 
-          <div className="max-h-52 overflow-y-auto space-y-0.5 mb-3">
-            {columns.map(col => (
-              <label key={col.key} className="flex items-center gap-2 text-xs cursor-pointer hover:bg-gray-50 rounded px-2 py-1">
-                <input
-                  type="checkbox"
-                  checked={selected.has(col.key)}
-                  onChange={() => toggle(col.key)}
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
-                <span className="text-gray-700">{col.label}</span>
-              </label>
-            ))}
-          </div>
+            {/* Grid de columnas */}
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-1.5 mb-4">
+              {columns.map(col => (
+                <label key={col.key} className="flex items-center gap-1.5 text-xs cursor-pointer hover:bg-gray-50 rounded px-1.5 py-1">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(col.key)}
+                    onChange={() => toggle(col.key)}
+                    className="accent-green-600"
+                  />
+                  <span className="text-gray-700 truncate" title={col.label}>{col.label}</span>
+                </label>
+              ))}
+            </div>
 
-          <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-            <span className="text-[10px] text-gray-400">{data.length} filas · {selected.size} columnas</span>
-            <button
-              onClick={handleExport}
-              disabled={selected.size === 0 || exporting}
-              className="bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white px-4 py-1.5 rounded-lg text-xs font-medium transition-colors"
-            >
-              {exporting ? "Exportando..." : "Descargar CSV"}
-            </button>
+            {/* Información y botones */}
+            <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+              <span className="text-[11px] text-gray-400">{data.length} filas · {selected.size} columnas</span>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleExport}
+                  disabled={selected.size === 0 || exporting}
+                  className="bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                >
+                  {exporting ? "Generando..." : "Descargar Excel"}
+                </button>
+                <button onClick={() => setOpen(false)} className="text-sm text-gray-500 hover:text-gray-700">Cerrar</button>
+              </div>
+            </div>
           </div>
         </div>
       )}

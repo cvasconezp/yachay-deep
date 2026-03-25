@@ -87,6 +87,151 @@ function compactarAcceso(texto) {
     .trim();
 }
 
+/** Trend chart component: shows average grades per period as a simple SVG line chart */
+function TrendChart({ calificacionesHistoricas, calificaciones }) {
+  if (!calificacionesHistoricas?.length) return null;
+
+  // Group by periodo and calculate average
+  const periodos = {};
+  calificacionesHistoricas.forEach(c => {
+    if (!periodos[c.periodo]) periodos[c.periodo] = [];
+    periodos[c.periodo].push(c.nota_final || 0);
+  });
+
+  // Add current semester if available
+  if (calificaciones?.length > 0) {
+    const currentPeriodo = "Actual";
+    periodos[currentPeriodo] = calificaciones.map(c => c.nota_final || 0);
+  }
+
+  const periodoKeys = Object.keys(periodos).sort();
+  if (periodoKeys.length < 2) return null;
+
+  const averages = periodoKeys.map(p => {
+    const values = periodos[p];
+    return values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+  });
+
+  const minVal = Math.max(0, Math.min(...averages) - 5);
+  const maxVal = Math.min(100, Math.max(...averages) + 5);
+  const range = maxVal - minVal;
+
+  // SVG dimensions
+  const width = 380;
+  const height = 140;
+  const padding = { top: 20, right: 20, bottom: 30, left: 40 };
+  const chartWidth = width - padding.left - padding.right;
+  const chartHeight = height - padding.top - padding.bottom;
+
+  // Calculate trend direction
+  const firstAvg = averages[0];
+  const lastAvg = averages[averages.length - 1];
+  const trendUp = lastAvg > firstAvg;
+
+  // Map data points
+  const points = averages.map((avg, i) => {
+    const x = padding.left + (i / (averages.length - 1)) * chartWidth;
+    const y = padding.top + chartHeight - ((avg - minVal) / range) * chartHeight;
+    return { x, y, value: avg };
+  });
+
+  // Build SVG path
+  const pathData = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+
+  return (
+    <div className="border-t border-gray-200">
+      <SectionHeader>
+        Tendencia Académica — Promedio por período
+        <span className="text-gray-400 font-normal ml-2 text-[9px] normal-case tracking-normal">
+          {trendUp ? "↑ Mejorando" : "↓ Descendiendo"}
+        </span>
+      </SectionHeader>
+      <div className="bg-white p-4 overflow-x-auto">
+        <svg width={width} height={height} style={{ minWidth: "400px" }} className="mx-auto">
+          {/* Grid lines */}
+          {[0.2, 0.4, 0.6, 0.8].map((pct, i) => {
+            const y = padding.top + (1 - pct) * chartHeight;
+            return (
+              <g key={i}>
+                <line x1={padding.left} y1={y} x2={width - padding.right} y2={y} stroke="#e5e7eb" strokeWidth="1" strokeDasharray="2" />
+                <text x={padding.left - 8} y={y + 3} fontSize="11" fill="#9ca3af" textAnchor="end">
+                  {Math.round(minVal + pct * range)}
+                </text>
+              </g>
+            );
+          })}
+
+          {/* Axes */}
+          <line x1={padding.left} y1={padding.top} x2={padding.left} y2={height - padding.bottom} stroke="#6b7280" strokeWidth="1.5" />
+          <line x1={padding.left} y1={height - padding.bottom} x2={width - padding.right} y2={height - padding.bottom} stroke="#6b7280" strokeWidth="1.5" />
+
+          {/* Line chart */}
+          <path d={pathData} fill="none" stroke={trendUp ? "#16a34a" : "#dc2626"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+
+          {/* Fill area under line */}
+          <path
+            d={`${pathData} L ${points[points.length - 1].x} ${height - padding.bottom} L ${padding.left} ${height - padding.bottom} Z`}
+            fill={trendUp ? "#dcfce7" : "#fee2e2"}
+            opacity="0.3"
+          />
+
+          {/* Data points */}
+          {points.map((p, i) => {
+            const isBelow70 = p.value < 70;
+            return (
+              <circle
+                key={i}
+                cx={p.x}
+                cy={p.y}
+                r="3.5"
+                fill={trendUp ? "#22c55e" : "#ef4444"}
+                stroke="white"
+                strokeWidth="2"
+              />
+            );
+          })}
+
+          {/* X-axis labels (period names) */}
+          {periodoKeys.map((periodo, i) => {
+            const x = padding.left + (i / (periodoKeys.length - 1)) * chartWidth;
+            return (
+              <text key={`label-${i}`} x={x} y={height - 8} fontSize="11" fill="#6b7280" textAnchor="middle">
+                {periodo.length > 6 ? periodo.slice(0, 5) + "." : periodo}
+              </text>
+            );
+          })}
+
+          {/* Y-axis label */}
+          <text x="12" y="20" fontSize="11" fill="#9ca3af" textAnchor="end">
+            100
+          </text>
+          <text x="12" y={height - padding.bottom + 3} fontSize="11" fill="#9ca3af" textAnchor="end">
+            {Math.round(minVal)}
+          </text>
+        </svg>
+
+        {/* Summary stats below chart */}
+        <div className="flex justify-center gap-6 mt-4 pt-4 border-t border-gray-100 text-xs">
+          <div className="text-center">
+            <div className="text-gray-500">Inicial</div>
+            <div className="font-semibold text-lg text-gray-800">{firstAvg.toFixed(1)}</div>
+          </div>
+          <div className="text-center">
+            <div className="text-gray-500">Actual</div>
+            <div className="font-semibold text-lg text-gray-800">{lastAvg.toFixed(1)}</div>
+          </div>
+          <div className="text-center">
+            <div className="text-gray-500">Cambio</div>
+            <div className={`font-semibold text-lg ${trendUp ? "text-green-600" : "text-red-600"}`}>
+              {(lastAvg - firstAvg).toFixed(1)}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** Title Case: primera letra de cada palabra en mayúscula, excepto números romanos */
 function toTitleCase(str) {
   if (!str) return str;
@@ -1356,6 +1501,9 @@ export default function FichaEstudiante() {
                   </div>
                 );
               })()}
+
+              {/* Tendencia Académica */}
+              <TrendChart calificacionesHistoricas={ficha.calificaciones_historicas} calificaciones={ficha.calificaciones} />
 
               {/* Si no hay cursos AVAC */}
               {Object.keys(cursos).length === 0 && (
