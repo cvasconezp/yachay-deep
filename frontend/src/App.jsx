@@ -8,7 +8,7 @@ import Dashboard from "./pages/Dashboard";
 import FichaEstudiante from "./pages/FichaEstudiante";
 import Asignaturas from "./pages/Asignaturas";
 import Docentes from "./pages/Docentes";
-import SeguimientoDocente from "./pages/SeguimientoDocente";
+// SeguimientoDocente ahora integrado como tab en Docentes
 import Tutorias from "./pages/Tutorias";
 import Intervenciones from "./pages/Intervenciones";
 import Alertas from "./pages/Alertas";
@@ -37,7 +37,7 @@ export default function App() {
           <Route path="/ficha/:studentId" element={<PrivateRoute><FichaEstudiante /></PrivateRoute>} />
           <Route path="/asignaturas" element={<PrivateRoute><Asignaturas /></PrivateRoute>} />
           <Route path="/docentes" element={<PrivateRoute><Docentes /></PrivateRoute>} />
-          <Route path="/seguimiento-docente" element={<PrivateRoute><SeguimientoDocente /></PrivateRoute>} />
+          <Route path="/seguimiento-docente" element={<Navigate to="/docentes?tab=calificaciones" replace />} />
           <Route path="/tutorias" element={<PrivateRoute><Tutorias /></PrivateRoute>} />
           <Route path="/intervenciones" element={<PrivateRoute><Intervenciones /></PrivateRoute>} />
           <Route path="/alertas" element={<PrivateRoute><Alertas /></PrivateRoute>} />

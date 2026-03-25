@@ -79,16 +79,17 @@ def get_alert_count(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Retorna conteo de alertas por severidad."""
-    total = db.query(func.count(AlertEvent.id)).scalar() or 0
+    """Retorna conteo de alertas sin leer por severidad."""
+    unread = AlertEvent.leido == False
+    total = db.query(func.count(AlertEvent.id)).filter(unread).scalar() or 0
     critico = db.query(func.count(AlertEvent.id)).filter(
-        AlertEvent.severidad == "critico"
+        unread, AlertEvent.severidad == "critico"
     ).scalar() or 0
     alto = db.query(func.count(AlertEvent.id)).filter(
-        AlertEvent.severidad == "alto"
+        unread, AlertEvent.severidad == "alto"
     ).scalar() or 0
     medio = db.query(func.count(AlertEvent.id)).filter(
-        AlertEvent.severidad == "medio"
+        unread, AlertEvent.severidad == "medio"
     ).scalar() or 0
 
     return AlertCountResponse(

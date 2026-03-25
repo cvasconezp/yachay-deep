@@ -9,7 +9,6 @@ const NAV_ITEMS = [
   { path: "/ficha",          label: "Ficha Estudiante",  icon: "🎓" },
   { path: "/asignaturas",    label: "Asignaturas",       icon: "📚" },
   { path: "/docentes",       label: "Docentes",          icon: "👨‍🏫" },
-  { path: "/seguimiento-docente", label: "Seguimiento Docente", icon: "📝" },
   { path: "/tutorias",       label: "Tutorías",          icon: "📋" },
   { path: "/intervenciones", label: "Intervenciones",     icon: "🤝" },
   { path: "/alertas",        label: "Alertas",           icon: "🔔" },

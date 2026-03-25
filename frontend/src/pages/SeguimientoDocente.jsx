@@ -5,15 +5,15 @@ import ExportExcelButton from "../components/ExportExcelButton";
 
 const TRACKING_EXPORT_COLS = [
   { key: "docente", label: "Docente" },
-  { key: "actividades_totales", label: "Actividades" },
-  { key: "calificadas", label: "Calificadas" },
-  { key: "pendientes", label: "Pendientes" },
+  { key: "total_actividades", label: "Actividades" },
+  { key: "actividades_calificadas", label: "Calificadas" },
+  { key: "actividades_pendientes", label: "Pendientes" },
   { key: "porcentaje_calificacion", label: "% Calificación" },
-  { key: "promedio_retraso_dias", label: "Promedio Retraso (días)" },
+  { key: "promedio_dias_retraso", label: "Promedio Retraso (días)" },
   { key: "alerta", label: "Estado" },
 ];
 
-export default function SeguimientoDocente() {
+export default function SeguimientoDocente({ embedded = false }) {
   const [data, setData] = useState([]);
   const [resumen, setResumen] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -99,13 +99,20 @@ export default function SeguimientoDocente() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-1">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Seguimiento Docente</h1>
-          <p className="text-gray-500 text-sm">Control de timeliness en calificación de actividades</p>
+      {!embedded && (
+        <div className="flex items-center justify-between mb-1">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Seguimiento Docente</h1>
+            <p className="text-gray-500 text-sm">Control de timeliness en calificación de actividades</p>
+          </div>
+          <ExportExcelButton data={data} columns={TRACKING_EXPORT_COLS} filename="seguimiento_docentes" />
         </div>
-        <ExportExcelButton data={data} columns={TRACKING_EXPORT_COLS} filename="seguimiento_docentes" />
-      </div>
+      )}
+      {embedded && (
+        <div className="flex justify-end mb-2">
+          <ExportExcelButton data={data} columns={TRACKING_EXPORT_COLS} filename="seguimiento_docentes" />
+        </div>
+      )}
 
       {error && (
         <div className="bg-red-50 text-red-700 border border-red-200 rounded-lg px-4 py-3 text-sm mb-4">
@@ -119,12 +126,12 @@ export default function SeguimientoDocente() {
           <SummaryCard label="Total Docentes" value={resumen.total_docentes || 0} color="blue" />
           <SummaryCard
             label="Promedio Calificación %"
-            value={`${(resumen.promedio_calificacion || 0).toFixed(1)}%`}
+            value={`${(resumen.promedio_general_calificacion || 0).toFixed(1)}%`}
             color="green"
           />
           <SummaryCard
             label="Docentes en Alerta"
-            value={resumen.docentes_atencion || 0}
+            value={resumen.docentes_en_atencion || 0}
             color="yellow"
           />
           <SummaryCard
@@ -153,21 +160,21 @@ export default function SeguimientoDocente() {
                 </th>
                 <th
                   className="text-center px-4 py-3 font-semibold text-gray-700 cursor-pointer hover:bg-gray-100"
-                  onClick={() => handleSort("actividades_totales")}
+                  onClick={() => handleSort("total_actividades")}
                 >
-                  Actividades {sortField === "actividades_totales" && (sortOrder === "asc" ? "▲" : "▼")}
+                  Actividades {sortField === "total_actividades" && (sortOrder === "asc" ? "▲" : "▼")}
                 </th>
                 <th
                   className="text-center px-4 py-3 font-semibold text-gray-700 cursor-pointer hover:bg-gray-100"
-                  onClick={() => handleSort("calificadas")}
+                  onClick={() => handleSort("actividades_calificadas")}
                 >
-                  Calificadas {sortField === "calificadas" && (sortOrder === "asc" ? "▲" : "▼")}
+                  Calificadas {sortField === "actividades_calificadas" && (sortOrder === "asc" ? "▲" : "▼")}
                 </th>
                 <th
                   className="text-center px-4 py-3 font-semibold text-gray-700 cursor-pointer hover:bg-gray-100"
-                  onClick={() => handleSort("pendientes")}
+                  onClick={() => handleSort("actividades_pendientes")}
                 >
-                  Pendientes {sortField === "pendientes" && (sortOrder === "asc" ? "▲" : "▼")}
+                  Pendientes {sortField === "actividades_pendientes" && (sortOrder === "asc" ? "▲" : "▼")}
                 </th>
                 <th
                   className="text-center px-4 py-3 font-semibold text-gray-700 cursor-pointer hover:bg-gray-100"
@@ -177,9 +184,9 @@ export default function SeguimientoDocente() {
                 </th>
                 <th
                   className="text-center px-4 py-3 font-semibold text-gray-700 cursor-pointer hover:bg-gray-100"
-                  onClick={() => handleSort("promedio_retraso_dias")}
+                  onClick={() => handleSort("promedio_dias_retraso")}
                 >
-                  Promedio Retraso (días) {sortField === "promedio_retraso_dias" && (sortOrder === "asc" ? "▲" : "▼")}
+                  Promedio Retraso (días) {sortField === "promedio_dias_retraso" && (sortOrder === "asc" ? "▲" : "▼")}
                 </th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-700">Estado</th>
               </tr>
@@ -194,9 +201,9 @@ export default function SeguimientoDocente() {
                   <td className="px-4 py-3">
                     <div className="font-medium text-gray-900">{d.docente}</div>
                   </td>
-                  <td className="px-4 py-3 text-center font-semibold">{d.actividades_totales}</td>
-                  <td className="px-4 py-3 text-center font-semibold text-green-600">{d.calificadas}</td>
-                  <td className="px-4 py-3 text-center font-semibold text-red-600">{d.pendientes}</td>
+                  <td className="px-4 py-3 text-center font-semibold">{d.total_actividades}</td>
+                  <td className="px-4 py-3 text-center font-semibold text-green-600">{d.actividades_calificadas}</td>
+                  <td className="px-4 py-3 text-center font-semibold text-red-600">{d.actividades_pendientes}</td>
                   <td className="px-4 py-3 text-center">
                     <span className={`font-bold ${
                       d.porcentaje_calificacion >= 80 ? "text-green-600" :
@@ -207,7 +214,7 @@ export default function SeguimientoDocente() {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-center font-mono text-gray-600">
-                    {d.promedio_retraso_dias?.toFixed(1) || "—"}
+                    {d.promedio_dias_retraso?.toFixed(1) || "—"}
                   </td>
                   <td className="px-4 py-3 text-center">
                     <span className={`text-xs font-semibold px-2 py-1 rounded-full ${getEstadoBadgeStyle(d.alerta)}`}>
@@ -238,25 +245,29 @@ export default function SeguimientoDocente() {
             <div className="p-6 space-y-4">
               {loadingDetalle ? (
                 <div className="text-center text-gray-400">Cargando detalles...</div>
-              ) : detalleData?.actividades?.length > 0 ? (
+              ) : detalleData?.length > 0 ? (
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-gray-200">
+                      <th className="text-left px-4 py-3 font-semibold text-gray-700">Curso</th>
                       <th className="text-left px-4 py-3 font-semibold text-gray-700">Actividad</th>
+                      <th className="text-center px-4 py-3 font-semibold text-gray-700">Tipo</th>
+                      <th className="text-center px-4 py-3 font-semibold text-gray-700">Calificada</th>
                       <th className="text-center px-4 py-3 font-semibold text-gray-700">Fecha Límite</th>
-                      <th className="text-center px-4 py-3 font-semibold text-gray-700">Calificadas</th>
-                      <th className="text-center px-4 py-3 font-semibold text-gray-700">Pendientes</th>
-                      <th className="text-center px-4 py-3 font-semibold text-gray-700">Retraso Promedio (h)</th>
+                      <th className="text-center px-4 py-3 font-semibold text-gray-700">Fecha Calificación</th>
+                      <th className="text-center px-4 py-3 font-semibold text-gray-700">Días Retraso</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {detalleData.actividades.map((act, idx) => (
+                    {detalleData.map((act, idx) => (
                       <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50">
-                        <td className="px-4 py-3 text-gray-800">{act.nombre || "—"}</td>
+                        <td className="px-4 py-3 text-gray-800">{act.nombre_curso || "—"}</td>
+                        <td className="px-4 py-3 text-gray-800">{act.actividad || "—"}</td>
+                        <td className="px-4 py-3 text-center text-gray-600">{act.tipo_actividad || "—"}</td>
+                        <td className="px-4 py-3 text-center font-semibold text-green-600">{act.calificada ? "Sí" : "No"}</td>
                         <td className="px-4 py-3 text-center text-gray-600">{act.fecha_limite || "—"}</td>
-                        <td className="px-4 py-3 text-center font-semibold text-green-600">{act.calificadas || 0}</td>
-                        <td className="px-4 py-3 text-center font-semibold text-red-600">{act.pendientes || 0}</td>
-                        <td className="px-4 py-3 text-center font-mono text-gray-600">{act.retraso_promedio_horas?.toFixed(1) || "—"}</td>
+                        <td className="px-4 py-3 text-center text-gray-600">{act.fecha_calificacion || "—"}</td>
+                        <td className="px-4 py-3 text-center font-mono text-gray-600">{act.dias_retraso?.toFixed(1) || "—"}</td>
                       </tr>
                     ))}
                   </tbody>

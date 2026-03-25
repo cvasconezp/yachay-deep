@@ -73,6 +73,8 @@ def upgrade_tables():
             ("snapshot_prob_desercion", "FLOAT"),
             ("snapshot_prob_reprobacion", "FLOAT"),
             ("snapshot_nivel_riesgo", "VARCHAR"),
+            # Periodo de la intervención (P67, P68, etc.)
+            ("periodo", "VARCHAR"),
         ],
     }
 

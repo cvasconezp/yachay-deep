@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../services/api";
 import { RiskBadge, CompromisoBar } from "../components/RiskBadge";
 import { SummaryCard } from "../components/StatCard";
 import { PeriodSelector } from "../components/PeriodSelector";
 import ExportExcelButton from "../components/ExportExcelButton";
+import SeguimientoDocente from "./SeguimientoDocente";
 
 const DOC_EXPORT_COLS = [
   { key: "docente", label: "Docente" },
@@ -19,7 +20,14 @@ const DOC_EXPORT_COLS = [
   { key: "total_intervenciones", label: "Intervenciones" },
 ];
 
+const TABS = [
+  { id: "analitica", label: "Analítica Docente", icon: "📊" },
+  { id: "calificaciones", label: "Seguimiento Calificaciones", icon: "📝" },
+];
+
 export default function Docentes() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get("tab") || "analitica";
   const [docentes, setDocentes] = useState([]);
   const [carreras, setCarreras] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -64,15 +72,41 @@ export default function Docentes() {
     }
   };
 
+  const setActiveTab = (tab) => setSearchParams({ tab });
+
   return (
     <div>
       <div className="flex items-center justify-between mb-1">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Analítica Docente</h1>
-          <p className="text-gray-500 text-sm">Ficha docente: asignaturas, estudiantes, concentración de riesgo por curso</p>
+          <h1 className="text-2xl font-bold text-gray-900">Docentes</h1>
+          <p className="text-gray-500 text-sm">Analítica, rendimiento y seguimiento de calificaciones docentes</p>
         </div>
-        <ExportExcelButton data={docentes} columns={DOC_EXPORT_COLS} filename="analitica_docentes" />
+        {activeTab === "analitica" && (
+          <ExportExcelButton data={docentes} columns={DOC_EXPORT_COLS} filename="analitica_docentes" />
+        )}
       </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 border-b border-gray-200 mb-4">
+        {TABS.map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium rounded-t-lg transition-colors
+              ${activeTab === tab.id
+                ? "bg-white border border-b-white border-gray-200 text-blue-700 -mb-px"
+                : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+              }`}
+          >
+            <span>{tab.icon}</span> {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "calificaciones" ? (
+        <SeguimientoDocente embedded />
+      ) : (
+      <>
 
       {error && (
         <div className="bg-red-50 text-red-700 border border-red-200 rounded-lg px-4 py-3 text-sm mb-4">
@@ -194,7 +228,7 @@ export default function Docentes() {
         )}
       </div>
 
-      {/* Modal detalle docente */}
+      {/* Modal detalle docente - analítica */}
       {detalle && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setDetalle(null)}>
           <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[85vh] overflow-auto" onClick={e => e.stopPropagation()}>
@@ -262,6 +296,8 @@ export default function Docentes() {
             </div>
           </div>
         </div>
+      )}
+      </>
       )}
     </div>
   );

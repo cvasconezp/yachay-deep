@@ -128,36 +128,6 @@ def get_docente_tracking(
     return output
 
 
-@router.get("/docente-tracking/{docente_name}", response_model=list[DocenteTrackingDetalle])
-def get_docente_tracking_detalle(
-    docente_name: str,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """Desglose por actividad para un docente específico."""
-    actividades = db.query(DocenteTracking).filter(
-        DocenteTracking.docente == docente_name
-    ).order_by(
-        DocenteTracking.nombre_curso,
-        DocenteTracking.actividad,
-    ).all()
-
-    return [
-        DocenteTrackingDetalle(
-            id=a.id,
-            codigo_curso=a.codigo_curso,
-            nombre_curso=a.nombre_curso,
-            actividad=a.actividad,
-            tipo_actividad=a.tipo_actividad,
-            calificada=a.calificada,
-            fecha_limite=a.fecha_limite.isoformat() if a.fecha_limite else None,
-            fecha_calificacion=a.fecha_calificacion.isoformat() if a.fecha_calificacion else None,
-            dias_retraso=a.dias_retraso,
-        )
-        for a in actividades
-    ]
-
-
 @router.get("/docente-tracking/resumen", response_model=ResumenDocenteTracking)
 def get_docente_tracking_resumen(
     db: Session = Depends(get_db),
@@ -212,3 +182,33 @@ def get_docente_tracking_resumen(
         docentes_en_atencion=docentes_atencion,
         docentes_criticos=docentes_criticos,
     )
+
+
+@router.get("/docente-tracking/{docente_name}", response_model=list[DocenteTrackingDetalle])
+def get_docente_tracking_detalle(
+    docente_name: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Desglose por actividad para un docente específico."""
+    actividades = db.query(DocenteTracking).filter(
+        DocenteTracking.docente == docente_name
+    ).order_by(
+        DocenteTracking.nombre_curso,
+        DocenteTracking.actividad,
+    ).all()
+
+    return [
+        DocenteTrackingDetalle(
+            id=a.id,
+            codigo_curso=a.codigo_curso,
+            nombre_curso=a.nombre_curso,
+            actividad=a.actividad,
+            tipo_actividad=a.tipo_actividad,
+            calificada=a.calificada,
+            fecha_limite=a.fecha_limite.isoformat() if a.fecha_limite else None,
+            fecha_calificacion=a.fecha_calificacion.isoformat() if a.fecha_calificacion else None,
+            dias_retraso=a.dias_retraso,
+        )
+        for a in actividades
+    ]
