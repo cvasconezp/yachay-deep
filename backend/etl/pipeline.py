@@ -20,8 +20,10 @@ from .transformers import (
     transform_personales,
     transform_datos_especificos,
     calcular_indicadores_estudiantes,
+    extract_courses_from_reporte,
+    transform_resumen_general,
 )
-from ..models import Student, AvacAccess, TaskSubmission, Grade, ScrapingRun
+from ..models import Student, AvacAccess, TaskSubmission, Grade, ScrapingRun, DocenteTracking
 from ..models.course_config import CourseConfig, SemesterConfig
 from ..constants import EIB_GRUPO_SEDE
 from ..config import settings
@@ -249,6 +251,28 @@ class ETLPipeline:
             n_merged = self._merge_duplicate_students()
             if n_merged:
                 logs.append(f"  → {n_merged} estudiantes duplicados fusionados")
+
+            # 2b. Auto-poblar CourseConfig desde CODIGO_GRUPO del reporte
+            try:
+                df_courses = extract_courses_from_reporte(settings.DATA_PATH_REPORTE)
+                if not df_courses.empty:
+                    logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Sincronizando cursos desde reporte ({len(df_courses)} encontrados)...")
+                    n_courses = self._sync_course_configs(df_courses, semconfig.semestre if semconfig else None)
+                    logs.append(f"  → {n_courses} cursos sincronizados en course_configs")
+            except Exception as e:
+                logs.append(f"  ⚠ Error sincronizando cursos: {e}")
+                logger.error(f"Error en _sync_course_configs: {e}", exc_info=True)
+
+            # 2c. Procesar Resumen_General (seguimiento de calificación docente)
+            try:
+                df_resumen = transform_resumen_general(settings.DATA_PATH_REPORTE)
+                if not df_resumen.empty:
+                    logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Procesando Resumen_General ({len(df_resumen)} registros)...")
+                    n_resumen = self._upsert_resumen_general(df_resumen)
+                    logs.append(f"  → {n_resumen} registros de seguimiento docente procesados")
+            except Exception as e:
+                logs.append(f"  ⚠ Error procesando Resumen_General: {e}")
+                logger.error(f"Error en _upsert_resumen_general: {e}", exc_info=True)
 
             if semestre_vigente:
                 # 2b. Calcular indicadores
@@ -1063,4 +1087,147 @@ class ETLPipeline:
                 self.db.flush()
 
         self.db.commit()
+        return count
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # CourseConfig auto-population from reporte.xlsx
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _sync_course_configs(self, df_courses: pd.DataFrame, semestre: Optional[str] = None) -> int:
+        """
+        Sincroniza course_configs con los cursos extraídos del reporte.
+        - Crea nuevos registros para códigos AVAC que no existen
+        - Actualiza datos (nombre, docente, nivel, grupo) de los existentes
+        - NO elimina cursos que ya no aparecen (pueden ser de bloques anteriores)
+        """
+        if df_courses.empty:
+            return 0
+
+        count_new = 0
+        count_updated = 0
+        for _, row in df_courses.iterrows():
+            codigo = str(row.get("codigo_avac", "")).strip()
+            if not codigo:
+                continue
+
+            existing = self.db.query(CourseConfig).filter(
+                CourseConfig.codigo_avac == codigo,
+            ).first()
+
+            if existing:
+                # Actualizar datos si hay nueva info
+                if row.get("nombre_asignatura") and pd.notna(row["nombre_asignatura"]):
+                    existing.asignatura = str(row["nombre_asignatura"]).strip()
+                if row.get("carrera") and pd.notna(row["carrera"]):
+                    existing.carrera = str(row["carrera"]).strip()
+                if row.get("docente") and pd.notna(row["docente"]):
+                    existing.docente = str(row["docente"]).strip()
+                if row.get("nivel") and pd.notna(row["nivel"]):
+                    try:
+                        existing.nivel = int(row["nivel"])
+                    except (ValueError, TypeError):
+                        pass
+                if row.get("grupo") and pd.notna(row["grupo"]):
+                    existing.grupo = str(row["grupo"]).strip()
+                if semestre:
+                    existing.semestre = semestre
+                count_updated += 1
+            else:
+                cc = CourseConfig(
+                    codigo_avac=codigo,
+                    asignatura=str(row.get("nombre_asignatura", "")).strip() or None,
+                    carrera=str(row.get("carrera", "")).strip() or None,
+                    docente=str(row.get("docente", "")).strip() or None,
+                    semestre=semestre,
+                    activo=True,
+                )
+                if row.get("nivel") and pd.notna(row["nivel"]):
+                    try:
+                        cc.nivel = int(row["nivel"])
+                    except (ValueError, TypeError):
+                        pass
+                if row.get("grupo") and pd.notna(row["grupo"]):
+                    cc.grupo = str(row["grupo"]).strip()
+                self.db.add(cc)
+                count_new += 1
+
+            if (count_new + count_updated) % 100 == 0:
+                self.db.flush()
+
+        self.db.commit()
+        logger.info(f"_sync_course_configs: {count_new} nuevos, {count_updated} actualizados")
+        return count_new + count_updated
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Resumen_General — seguimiento de calificación docente
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _upsert_resumen_general(self, df_resumen: pd.DataFrame) -> int:
+        """
+        Carga datos de Resumen_General en docente_tracking.
+        Full-refresh: borra registros anteriores del mismo semestre y recarga.
+        """
+        if df_resumen.empty:
+            return 0
+
+        semconfig = self._get_active_semester()
+        semestre = semconfig.semestre if semconfig else None
+
+        # Full-refresh del semestre actual
+        if semestre:
+            self.db.query(DocenteTracking).filter(
+                DocenteTracking.semestre == semestre
+            ).delete()
+            self.db.flush()
+
+        count = 0
+        for _, row in df_resumen.iterrows():
+            codigo = str(row.get("codigo_curso", row.get("codigo", ""))).strip()
+            nombre = str(row.get("nombre_curso", row.get("curso", ""))).strip()
+            actividad = str(row.get("actividad", row.get("nombre_actividad", ""))).strip()
+            tipo = str(row.get("tipo_actividad", row.get("tipo", ""))).strip()
+
+            cal_raw = row.get("calificada", row.get("estado", None))
+            calificada = None
+            if cal_raw is not None and pd.notna(cal_raw):
+                cal_str = str(cal_raw).strip().lower()
+                if cal_str in ("sí", "si", "yes", "true", "1"):
+                    calificada = True
+                elif cal_str in ("no", "false", "0"):
+                    calificada = False
+
+            docente = str(row.get("docente", row.get("profesor", ""))).strip()
+            if docente.lower() in ("nan", "none", ""):
+                docente = None
+
+            fecha_limite = pd.to_datetime(
+                row.get("fecha_limite", row.get("fecha_entrega")), errors="coerce"
+            )
+            fecha_cal = pd.to_datetime(row.get("fecha_calificacion"), errors="coerce")
+
+            dias_retraso = None
+            if pd.notna(fecha_limite) and pd.notna(fecha_cal):
+                dias_retraso = (fecha_cal - fecha_limite).total_seconds() / 86400
+
+            dt = DocenteTracking(
+                codigo_curso=codigo or None,
+                nombre_curso=nombre or None,
+                actividad=actividad or None,
+                tipo_actividad=tipo or None,
+                calificada=calificada,
+                fecha_limite=fecha_limite if pd.notna(fecha_limite) else None,
+                fecha_calificacion=fecha_cal if pd.notna(fecha_cal) else None,
+                docente=docente,
+                dias_retraso=dias_retraso,
+                semestre=semestre,
+                fuente=str(row.get("_fuente", "")).strip() or None,
+            )
+            self.db.add(dt)
+            count += 1
+
+            if count % 500 == 0:
+                self.db.flush()
+
+        self.db.commit()
+        logger.info(f"_upsert_resumen_general: {count} registros de seguimiento docente")
         return count

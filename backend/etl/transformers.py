@@ -756,6 +756,142 @@ def transform_personales(carpeta_o_archivos) -> pd.DataFrame:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# TRANSFORMER 5b: Cursos desde reporte.xlsx (CODIGO_GRUPO → CourseConfig)
+# Extrae la lista única de cursos AVAC para auto-poblar course_configs
+# ─────────────────────────────────────────────────────────────────────────────
+
+def extract_courses_from_reporte(carpeta_o_archivos) -> pd.DataFrame:
+    """
+    Lee los archivos *_reporte.xlsx y extrae la lista única de cursos.
+    Columnas esperadas: CODIGO_GRUPO, NOMBRE_ASIGNATURA, CARRERA, NIVEL,
+                        NOMBRE_GRUPO, DOCENTES (o DOCENTE).
+
+    Retorna DataFrame con columnas:
+        codigo_avac, nombre_asignatura, carrera, nivel, grupo, docente
+    """
+    archivos: list[Path] = []
+    if isinstance(carpeta_o_archivos, (str, Path)):
+        carpeta = Path(carpeta_o_archivos)
+        if carpeta.is_dir():
+            archivos = sorted(carpeta.glob("*_reporte.xlsx"))
+    else:
+        archivos = [Path(f) for f in carpeta_o_archivos]
+
+    if not archivos:
+        return pd.DataFrame()
+
+    dfs = []
+    for archivo in archivos:
+        try:
+            df = pd.read_excel(archivo, engine="openpyxl")
+            df.columns = [c.strip().upper() for c in df.columns]
+            dfs.append(df)
+        except Exception as e:
+            logger.error(f"extract_courses_from_reporte: error leyendo {archivo}: {e}")
+
+    if not dfs:
+        return pd.DataFrame()
+
+    df = pd.concat(dfs, ignore_index=True)
+
+    if "CODIGO_GRUPO" not in df.columns:
+        logger.warning("extract_courses_from_reporte: CODIGO_GRUPO no encontrado en reporte")
+        return pd.DataFrame()
+
+    # Limpiar código AVAC
+    df["codigo_avac"] = df["CODIGO_GRUPO"].astype(str).str.strip()
+    df = df[df["codigo_avac"].str.isdigit()]  # solo códigos numéricos válidos
+
+    # Extraer campos del curso
+    if "NOMBRE_ASIGNATURA" in df.columns:
+        df["nombre_asignatura"] = df["NOMBRE_ASIGNATURA"].astype(str).str.strip()
+    elif "ASIGNATURA" in df.columns:
+        df["nombre_asignatura"] = df["ASIGNATURA"].astype(str).str.strip()
+    else:
+        df["nombre_asignatura"] = None
+
+    if "CARRERA" in df.columns:
+        df["carrera"] = df["CARRERA"].apply(normalizar_carrera)
+    else:
+        df["carrera"] = None
+
+    if "NIVEL" in df.columns:
+        df["nivel"] = pd.to_numeric(df["NIVEL"], errors="coerce").astype("Int64")
+    else:
+        df["nivel"] = None
+
+    if "NOMBRE_GRUPO" in df.columns:
+        df["grupo"] = df["NOMBRE_GRUPO"].apply(extraer_grupo_numero)
+    else:
+        df["grupo"] = None
+
+    # Docente: puede ser DOCENTES o DOCENTE
+    doc_col = next((c for c in df.columns if c in ("DOCENTES", "DOCENTE")), None)
+    if doc_col:
+        df["docente"] = df[doc_col].astype(str).str.strip()
+        df.loc[df["docente"].str.lower().isin(["nan", "none", ""]), "docente"] = None
+    else:
+        df["docente"] = None
+
+    # Deduplicar: un registro por codigo_avac
+    # Tomar first() de los demás campos (son iguales para un mismo código)
+    cols = ["codigo_avac", "nombre_asignatura", "carrera", "nivel", "grupo", "docente"]
+    result = df[cols].drop_duplicates(subset=["codigo_avac"]).reset_index(drop=True)
+
+    logger.info(f"extract_courses_from_reporte: {len(result)} cursos únicos extraídos")
+    return result
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TRANSFORMER 5c: Resumen_General (calificación docente)
+# Fuente: scraping AVAC → Resumen_General*.csv
+# Aporta: curso, actividad, si fue calificada, puntualidad de retroalimentación
+# ─────────────────────────────────────────────────────────────────────────────
+
+def transform_resumen_general(carpeta_o_archivos) -> pd.DataFrame:
+    """
+    Lee archivos Resumen_General*.csv del scraping AVAC.
+    Retorna DataFrame con estado de calificación por actividad y curso.
+
+    Columnas esperadas del CSV (pueden variar por versión del scraping):
+        codigo_curso, nombre_curso, actividad, tipo_actividad,
+        calificada (Sí/No), fecha_limite, fecha_calificacion, docente
+    """
+    archivos: list[Path] = []
+    if isinstance(carpeta_o_archivos, (str, Path)):
+        carpeta = Path(carpeta_o_archivos)
+        if carpeta.is_dir():
+            # Buscar en Reportes/ y en raíz de data/
+            archivos = sorted(carpeta.glob("Resumen_General*.csv"))
+        elif carpeta.is_file() and carpeta.name.lower().startswith("resumen_general"):
+            archivos = [carpeta]
+    else:
+        archivos = [Path(f) for f in carpeta_o_archivos]
+
+    if not archivos:
+        logger.info("transform_resumen_general: no se encontraron archivos Resumen_General*.csv")
+        return pd.DataFrame()
+
+    dfs = []
+    for archivo in archivos:
+        try:
+            df = pd.read_csv(archivo, encoding="utf-8-sig")
+            df.columns = [c.strip().lower().replace(" ", "_") for c in df.columns]
+            df["_fuente"] = archivo.name
+            dfs.append(df)
+            logger.info(f"  Resumen_General leído: {archivo.name} ({len(df)} filas)")
+        except Exception as e:
+            logger.error(f"Error leyendo Resumen_General {archivo.name}: {e}")
+
+    if not dfs:
+        return pd.DataFrame()
+
+    df = pd.concat(dfs, ignore_index=True)
+    logger.info(f"transform_resumen_general: {len(df)} registros de calificación docente")
+    return df
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # TRANSFORMER 6: DatosEspecificos EIB (Microsoft Forms)
 # Fuente: formulario de inicio de semestre → "DatosEspecificos EIB (P67).xlsx"
 # Aporta: nivel académico, sede, residencia granular, whatsapp, etnia

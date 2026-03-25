@@ -187,18 +187,20 @@ async def add_security_headers(request: Request, call_next):
 
 @app.get("/health")
 def health_check():
-    """Health check mejorado: verifica conexión a BD."""
+    """Health check mejorado: verifica conexión a BD y versión del código."""
     from sqlalchemy import text
+    # Version indicator — update on each significant deploy
+    CODE_VERSION = "2026-03-24-nivel-fix"
     try:
         from .database import SessionLocal
         db = SessionLocal()
         db.execute(text("SELECT 1"))
         db.close()
-        return {"status": "ok", "database": "connected"}
+        return {"status": "ok", "database": "connected", "version": CODE_VERSION}
     except Exception as e:
         return JSONResponse(
             status_code=503,
-            content={"status": "degraded", "database": "error", "detail": str(e)},
+            content={"status": "degraded", "database": "error", "detail": str(e), "version": CODE_VERSION},
         )
 
 

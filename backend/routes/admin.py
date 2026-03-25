@@ -116,28 +116,76 @@ async def upload_data_and_run_etl(
         )
     data_root = os.path.abspath("./data")
 
+    # Auto-routing rules: if a file at the ZIP root matches a known pattern,
+    # move it into the correct subdirectory automatically.
+    # This prevents the common mistake of zipping files without subdirectories.
+    def _auto_route(member_name: str) -> str:
+        """Return corrected path if file is at root but belongs in a subdirectory."""
+        basename = os.path.basename(member_name)
+        # Already in a known subdirectory? keep as-is
+        parts = member_name.replace("\\", "/").split("/")
+        if len(parts) > 1 and parts[0] in (
+            "Reportes", "IngresosAVAC", "Tareas",
+            "DatosEspecificos", "TableauHistorico",
+        ):
+            return member_name
+
+        bl = basename.lower()
+        # *_reporte.xlsx → Reportes/
+        if bl.endswith("_reporte.xlsx"):
+            return f"Reportes/{basename}"
+        # ingresosAVAC_*.csv → IngresosAVAC/
+        if bl.startswith("ingresosavac") and bl.endswith(".csv"):
+            return f"IngresosAVAC/{basename}"
+        # estado_*.csv → Tareas/
+        if bl.startswith("estado_") and bl.endswith(".csv"):
+            return f"Tareas/{basename}"
+        # DatosEspecificos*.xlsx → DatosEspecificos/
+        if bl.startswith("datosespecificos") and bl.endswith(".xlsx"):
+            return f"DatosEspecificos/{basename}"
+        # Detalle de Calificaciones*.csv → TableauHistorico/
+        if bl.startswith("detalle de calificaciones") and bl.endswith(".csv"):
+            return f"TableauHistorico/{basename}"
+        # Resumen_General*.csv → Reportes/ (docente grading data)
+        if bl.startswith("resumen_general") and bl.endswith(".csv"):
+            return f"Reportes/{basename}"
+        # calificaciones.csv → root data dir
+        if bl == "calificaciones.csv":
+            return basename
+        # Unknown file: keep original path
+        return member_name
+
+    extracted_files: list[str] = []
+    rerouted: list[str] = []
     try:
         with zipfile.ZipFile(io.BytesIO(content)) as zf:
-            extracted = 0
             for member in zf.namelist():
                 # Ignorar directorios vacíos y archivos ocultos/sistema
                 if member.endswith("/") or os.path.basename(member).startswith("."):
                     continue
-                dest_path = os.path.join(data_root, member)
+                routed = _auto_route(member)
+                dest_path = os.path.join(data_root, routed)
                 # Sanitize: no salir del data_root (path traversal protection)
                 if not os.path.abspath(dest_path).startswith(data_root):
                     continue
                 os.makedirs(os.path.dirname(dest_path), exist_ok=True)
                 with zf.open(member) as src, open(dest_path, "wb") as dst:
                     dst.write(src.read())
-                extracted += 1
+                extracted_files.append(routed)
+                if routed != member:
+                    rerouted.append(f"{member} → {routed}")
     except zipfile.BadZipFile:
         raise HTTPException(status_code=400, detail="El archivo no es un ZIP válido")
 
     background_tasks.add_task(_run_etl_background, triggered_by=current_user.email)
+    msg = f"ZIP extraído ({len(extracted_files)} archivos). ETL iniciado en background."
+    if rerouted:
+        msg += f" {len(rerouted)} archivo(s) reubicados automáticamente."
     return {
-        "message": f"ZIP extraído ({extracted} archivos). ETL iniciado en background.",
-        "archivos_extraidos": extracted,
+        "message": msg,
+        "archivos_extraidos": len(extracted_files),
+        "archivos": extracted_files,
+        "reubicados": rerouted,
         "etl": "iniciado",
     }
 

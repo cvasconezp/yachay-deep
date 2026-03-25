@@ -9,9 +9,11 @@ from .scraping_run import ScrapingRun
 from .course_config import CourseConfig, SemesterConfig
 from .recommendation_log import RecommendationLog
 from .ml_model_store import MLModelStore
+from .docente_tracking import DocenteTracking
 
 __all__ = [
     "User", "Student", "Course", "AvacAccess",
     "TaskSubmission", "Grade", "Intervention", "ScrapingRun",
-    "CourseConfig", "SemesterConfig", "RecommendationLog", "MLModelStore"
+    "CourseConfig", "SemesterConfig", "RecommendationLog", "MLModelStore",
+    "DocenteTracking",
 ]
