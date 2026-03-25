@@ -394,6 +394,8 @@ export default function FichaEstudiante() {
   const [recomendaciones, setRecomendaciones] = useState([]);
   const [contrafactual, setContrafactual] = useState(null);
   const [activeTab, setActiveTab] = useState("indicadores");
+  const [comparativa, setComparativa] = useState(null);
+  const [loadingComparativa, setLoadingComparativa] = useState(false);
   const searchTimeout = useRef(null);
   const searchAbort = useRef(null);
   const searchContainerRef = useRef(null);
@@ -481,6 +483,9 @@ export default function FichaEstudiante() {
       setFicha(data);
       setQuery(data.nombre || "");
       navigate(`/ficha/${id}`, { replace: true });
+      // Cargar análisis comparativo
+      setLoadingComparativa(true);
+      api.getStudentComparativa(id).then(setComparativa).catch(() => setComparativa(null)).finally(() => setLoadingComparativa(false));
     } catch (e) {
       console.error(e);
       setError(e.message || "Error al cargar la ficha del estudiante");
@@ -1512,6 +1517,104 @@ export default function FichaEstudiante() {
                     <div className="text-3xl mb-2">📚</div>
                     <div className="text-sm">Sin actividad AVAC registrada</div>
                   </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ═══ ANÁLISIS COMPARATIVO ═══ */}
+          <div className="border-t border-gray-300">
+            <div className="bg-[#1B3A6B] text-white px-4 py-1 text-[10px] font-bold uppercase tracking-wider">
+              Análisis Comparativo — vs. Compañeros de Carrera
+            </div>
+            <div className="bg-white">
+              {loadingComparativa ? (
+                <div className="py-4 text-center text-[11px] text-gray-400">Cargando análisis comparativo...</div>
+              ) : comparativa?.asignaturas?.length > 0 ? (
+                <div>
+                  {/* Resumen general */}
+                  <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex flex-wrap gap-4 text-[11px]">
+                    <div>
+                      <span className="text-gray-500">Promedio estudiante:</span>{" "}
+                      <strong className={comparativa.promedio_estudiante >= 70 ? "text-green-700" : comparativa.promedio_estudiante >= 60 ? "text-yellow-700" : "text-red-700"}>
+                        {comparativa.promedio_estudiante ?? "—"}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Promedio carrera:</span>{" "}
+                      <strong className="text-gray-700">{comparativa.promedio_carrera ?? "—"}</strong>
+                    </div>
+                    {comparativa.percentil_general != null && (
+                      <div>
+                        <span className="text-gray-500">Percentil general:</span>{" "}
+                        <strong className={comparativa.percentil_general >= 70 ? "text-green-700" : comparativa.percentil_general >= 40 ? "text-yellow-700" : "text-red-700"}>
+                          {comparativa.percentil_general}%
+                        </strong>
+                        <span className="text-gray-400 ml-1">
+                          (supera al {comparativa.percentil_general?.toFixed(0)}% de compañeros)
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  {/* Tabla por asignatura */}
+                  <table className="w-full text-[11px]">
+                    <thead>
+                      <tr className="border-b border-gray-200 bg-gray-50/50">
+                        <th className="text-left px-3 py-1.5 font-semibold text-gray-600">Asignatura</th>
+                        <th className="text-center px-2 py-1.5 font-semibold text-gray-600">Nota</th>
+                        <th className="text-center px-2 py-1.5 font-semibold text-gray-600">Prom. Grupo</th>
+                        <th className="text-center px-2 py-1.5 font-semibold text-gray-600">Mín</th>
+                        <th className="text-center px-2 py-1.5 font-semibold text-gray-600">Máx</th>
+                        <th className="text-center px-2 py-1.5 font-semibold text-gray-600">Posición</th>
+                        <th className="px-2 py-1.5 font-semibold text-gray-600 w-24">Comparación</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {comparativa.asignaturas.map((a, idx) => {
+                        const diff = a.nota_estudiante != null && a.promedio_grupo != null ? a.nota_estudiante - a.promedio_grupo : null;
+                        const barWidth = a.percentil != null ? Math.max(a.percentil, 3) : 0;
+                        return (
+                          <tr key={idx} className="border-b border-gray-50 hover:bg-blue-50/30">
+                            <td className="px-3 py-1.5 text-gray-800">{a.asignatura}</td>
+                            <td className="px-2 py-1.5 text-center">
+                              <span className={`font-bold font-mono ${
+                                a.nota_estudiante >= 70 ? "text-green-700" : a.nota_estudiante >= 60 ? "text-yellow-700" : "text-red-700"
+                              }`}>{a.nota_estudiante ?? "—"}</span>
+                            </td>
+                            <td className="px-2 py-1.5 text-center font-mono text-gray-600">{a.promedio_grupo ?? "—"}</td>
+                            <td className="px-2 py-1.5 text-center font-mono text-gray-400">{a.nota_minima ?? "—"}</td>
+                            <td className="px-2 py-1.5 text-center font-mono text-gray-400">{a.nota_maxima ?? "—"}</td>
+                            <td className="px-2 py-1.5 text-center">
+                              {a.posicion != null && a.total_estudiantes > 0 && (
+                                <span className={`font-semibold ${a.posicion <= 3 ? "text-green-700" : a.posicion <= Math.ceil(a.total_estudiantes / 2) ? "text-gray-700" : "text-red-600"}`}>
+                                  {a.posicion}/{a.total_estudiantes}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-2 py-1.5">
+                              <div className="flex items-center gap-1">
+                                <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                  <div
+                                    className={`h-full rounded-full ${barWidth >= 70 ? "bg-green-500" : barWidth >= 40 ? "bg-yellow-400" : "bg-red-400"}`}
+                                    style={{ width: `${barWidth}%` }}
+                                  />
+                                </div>
+                                {diff != null && (
+                                  <span className={`text-[10px] font-bold whitespace-nowrap ${diff > 0 ? "text-green-600" : diff < 0 ? "text-red-600" : "text-gray-500"}`}>
+                                    {diff > 0 ? "+" : ""}{diff.toFixed(1)}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="py-4 text-center text-[11px] text-gray-400 italic">
+                  Sin datos comparativos disponibles para este semestre
                 </div>
               )}
             </div>

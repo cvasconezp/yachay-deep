@@ -97,6 +97,7 @@ class ApiClient {
     return this.get(`/students/search?${params.toString()}`);
   }
   getFicha(studentId) { return this.get(`/students/${studentId}/ficha`); }
+  getStudentComparativa(studentId) { return this.get(`/students/${studentId}/comparativa`); }
 
   // ── Interventions ──
   createIntervention(data) { return this.post("/interventions/", data); }

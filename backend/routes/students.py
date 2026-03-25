@@ -482,3 +482,144 @@ def get_ficha(
         total_intervenciones=len(intervenciones),
         ultima_intervencion=ultima_intervencion,
     )
+
+
+# ── Análisis Comparativo: estudiante vs compañeros de misma asignatura/carrera ──
+
+class PeerComparisonItem(BaseModel):
+    asignatura: str
+    nota_estudiante: Optional[float] = None
+    promedio_grupo: Optional[float] = None
+    nota_maxima: Optional[float] = None
+    nota_minima: Optional[float] = None
+    percentil: Optional[float] = None
+    total_estudiantes: int = 0
+    posicion: Optional[int] = None
+    docente: Optional[str] = None
+    nivel: Optional[int] = None
+
+class PeerComparisonResponse(BaseModel):
+    student_id: int
+    student_nombre: Optional[str] = None
+    carrera: Optional[str] = None
+    promedio_estudiante: Optional[float] = None
+    promedio_carrera: Optional[float] = None
+    percentil_general: Optional[float] = None
+    asignaturas: list[PeerComparisonItem] = []
+
+
+@router.get("/{student_id}/comparativa", response_model=PeerComparisonResponse)
+def get_student_comparative(
+    student_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Análisis comparativo: rendimiento del estudiante vs compañeros
+    que cursan las mismas asignaturas en la misma carrera.
+    """
+    student = db.query(Student).filter(Student.id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Estudiante no encontrado")
+
+    # Calificaciones actuales del estudiante
+    student_grades = (
+        db.query(Grade)
+        .filter(Grade.student_id == student_id, Grade.periodo.is_(None))
+        .all()
+    )
+
+    if not student_grades:
+        return PeerComparisonResponse(
+            student_id=student_id,
+            student_nombre=student.nombre,
+            carrera=student.carrera,
+            asignaturas=[],
+        )
+
+    asignaturas_result = []
+    all_student_notas = []
+
+    for sg in student_grades:
+        if sg.nota_final is None:
+            continue
+
+        # Obtener notas de todos los estudiantes en la misma asignatura
+        # filtrados por misma carrera si aplica
+        peer_query = db.query(Grade.nota_final).filter(
+            Grade.asignatura == sg.asignatura,
+            Grade.periodo.is_(None),
+            Grade.nota_final.isnot(None),
+        )
+        if student.carrera:
+            peer_sids = [s_id for (s_id,) in db.query(Student.id).filter(
+                func.lower(Student.carrera) == func.lower(student.carrera)
+            ).all()]
+            if peer_sids:
+                peer_query = peer_query.filter(Grade.student_id.in_(peer_sids))
+
+        peer_notas = sorted([n for (n,) in peer_query.all() if n is not None])
+        total = len(peer_notas)
+
+        if total == 0:
+            continue
+
+        promedio_grupo = round(sum(peer_notas) / total, 1)
+        nota_max = max(peer_notas)
+        nota_min = min(peer_notas)
+
+        # Calcular percentil del estudiante
+        below = sum(1 for n in peer_notas if n < sg.nota_final)
+        percentil = round(below / total * 100, 1) if total > 0 else None
+
+        # Posición (1 = mejor)
+        sorted_desc = sorted(peer_notas, reverse=True)
+        posicion = sorted_desc.index(sg.nota_final) + 1 if sg.nota_final in sorted_desc else None
+
+        all_student_notas.append(sg.nota_final)
+
+        asignaturas_result.append(PeerComparisonItem(
+            asignatura=sg.asignatura,
+            nota_estudiante=sg.nota_final,
+            promedio_grupo=promedio_grupo,
+            nota_maxima=nota_max,
+            nota_minima=nota_min,
+            percentil=percentil,
+            total_estudiantes=total,
+            posicion=posicion,
+            docente=sg.docente,
+            nivel=sg.nivel,
+        ))
+
+    # Promedio general del estudiante
+    promedio_est = round(sum(all_student_notas) / len(all_student_notas), 1) if all_student_notas else None
+
+    # Promedio general de la carrera
+    promedio_carrera = None
+    percentil_general = None
+    if student.carrera:
+        career_sids = [s_id for (s_id,) in db.query(Student.id).filter(
+            func.lower(Student.carrera) == func.lower(student.carrera)
+        ).all()]
+        if career_sids:
+            career_grades = db.query(Grade.student_id, func.avg(Grade.nota_final)).filter(
+                Grade.student_id.in_(career_sids),
+                Grade.periodo.is_(None),
+                Grade.nota_final.isnot(None),
+            ).group_by(Grade.student_id).all()
+            if career_grades:
+                promedios = [float(avg) for _, avg in career_grades]
+                promedio_carrera = round(sum(promedios) / len(promedios), 1)
+                if promedio_est is not None:
+                    below = sum(1 for p in promedios if p < promedio_est)
+                    percentil_general = round(below / len(promedios) * 100, 1)
+
+    return PeerComparisonResponse(
+        student_id=student_id,
+        student_nombre=student.nombre,
+        carrera=student.carrera,
+        promedio_estudiante=promedio_est,
+        promedio_carrera=promedio_carrera,
+        percentil_general=percentil_general,
+        asignaturas=sorted(asignaturas_result, key=lambda x: x.asignatura),
+    )
