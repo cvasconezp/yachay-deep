@@ -111,7 +111,7 @@ function abbreviateGrupo(grupo) {
  * Prioriza nivel_academico (entero), luego el nivel más frecuente de calificaciones.
  * NO parsea nivel_detectado ("Semestre 67") porque es código de período, no nivel real.
  */
-function formatNivel(nivelAcademico, calificaciones) {
+function formatNivel(nivelAcademico, calificaciones, calificacionesHistoricas) {
   if (nivelAcademico != null && nivelAcademico > 0 && nivelAcademico <= 12)
     return `${nivelAcademico}° Nivel`;
   // Fallback: nivel más frecuente de calificaciones del semestre actual
@@ -122,6 +122,17 @@ function formatNivel(nivelAcademico, calificaciones) {
       niveles.forEach(n => { counts[n] = (counts[n] || 0) + 1; });
       const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
       return `${top}° Nivel`;
+    }
+  }
+  // Fallback 2: nivel más alto del último período histórico
+  if (calificacionesHistoricas?.length > 0) {
+    const periodos = [...new Set(calificacionesHistoricas.map(c => c.periodo))].sort();
+    const ultimoPeriodo = periodos[periodos.length - 1];
+    const delUltimo = calificacionesHistoricas.filter(c => c.periodo === ultimoPeriodo);
+    const niveles = delUltimo.map(c => c.nivel).filter(n => n != null && n > 0 && n <= 12);
+    if (niveles.length > 0) {
+      const maxNivel = Math.max(...niveles) + 1; // Next level after the last completed
+      return maxNivel <= 12 ? `${maxNivel}° Nivel` : `${Math.max(...niveles)}° Nivel`;
     }
   }
   return null;
@@ -237,6 +248,7 @@ export default function FichaEstudiante() {
   const [prediccion, setPrediccion] = useState(null);
   const [recomendaciones, setRecomendaciones] = useState([]);
   const [contrafactual, setContrafactual] = useState(null);
+  const [activeTab, setActiveTab] = useState("indicadores");
   const searchTimeout = useRef(null);
   const searchAbort = useRef(null);
   const searchContainerRef = useRef(null);
@@ -318,6 +330,7 @@ export default function FichaEstudiante() {
     setLoading(true);
     setError(null);
     setSearchResults([]);
+    setActiveTab("indicadores");
     try {
       const data = await api.getFicha(id);
       setFicha(data);
@@ -485,11 +498,11 @@ export default function FichaEstudiante() {
                 <span>Tel: <strong className="text-white/90 font-semibold">{ficha.telefono || "—"}</strong></span>
                 <span className="hidden sm:inline w-px h-3 bg-white/20" />
                 <span>Actualizado: <strong className="text-white/90 font-semibold">{updatedText}</strong></span>
-                {formatNivel(ficha.nivel_academico, ficha.calificaciones) && (
+                {formatNivel(ficha.nivel_academico, ficha.calificaciones, ficha.calificaciones_historicas) && (
                   <>
                     <span className="hidden sm:inline w-px h-3 bg-white/20" />
                     <span className="bg-white/15 text-white px-2.5 py-0.5 rounded-full text-xs font-semibold">
-                      {formatNivel(ficha.nivel_academico, ficha.calificaciones)}
+                      {formatNivel(ficha.nivel_academico, ficha.calificaciones, ficha.calificaciones_historicas)}
                     </span>
                   </>
                 )}
@@ -569,275 +582,283 @@ export default function FichaEstudiante() {
             </div>
           </div>
 
-          {/* ===== Explicación del Riesgo (XAI) ===== */}
-          {prediccion?.xai && (
-          <div className="mt-4 space-y-3">
-            <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wide flex items-center gap-2">
-              <span>🔍</span> Explicación del Riesgo
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {prediccion.xai.desercion?.length > 0 && (
-              <div className="bg-white rounded-xl border border-red-100 shadow-sm p-4">
-                <p className="text-xs font-bold text-red-700 mb-3 uppercase">Factores · Deserción</p>
-                <div className="space-y-3">
-                  {prediccion.xai.desercion.slice(0,3).map((f,i) => {
-                    const nm = {promedio_notas:'Promedio Calificaciones',num_reprobadas:'Materias Reprobadas',pct_reprobadas:'% Reprobadas',nota_min:'Nota Mínima',std_notas:'Dispersión Notas',num_zeros:'Materias con Cero'};
-                    const sube = f.direccion==='aumenta';
-                    const pct = Math.min(100, Math.round(Math.abs(f.impacto||0)*100));
-                    return (
-                    <div key={i}>
-                      <div className="flex justify-between text-xs mb-0.5">
-                        <span className="font-medium text-gray-700">{nm[f.feature]||f.feature}</span>
-                        <span className={sube?'text-red-500':'text-emerald-500'}>{sube?'↑ riesgo':'↓ riesgo'}</span>
-                      </div>
-                      <p className="text-xs text-gray-400 mb-1">Valor: {typeof f.valor==='number'?f.valor.toFixed(2):f.valor} · Media: {typeof f.media_carrera==='number'?f.media_carrera.toFixed(2):f.media_carrera}</p>
-                      <div className="h-1.5 bg-gray-100 rounded-full">
-                        <div className={'h-1.5 rounded-full ' + (sube?'bg-red-400':'bg-emerald-400')} style={{width: pct + '%'}}/>
-                      </div>
-                    </div>
-                    );
-                  })}
-                </div>
-              </div>
-              )}
-              {prediccion.xai.reprobacion?.length > 0 && (
-              <div className="bg-white rounded-xl border border-orange-100 shadow-sm p-4">
-                <p className="text-xs font-bold text-orange-700 mb-3 uppercase">Factores · Reprobación</p>
-                <div className="space-y-3">
-                  {prediccion.xai.reprobacion.slice(0,3).map((f,i) => {
-                    const nm = {promedio_notas:'Promedio Calificaciones',num_reprobadas:'Materias Reprobadas',pct_reprobadas:'% Reprobadas',nota_min:'Nota Mínima',std_notas:'Dispersión Notas',num_zeros:'Materias con Cero'};
-                    const sube = f.direccion==='aumenta';
-                    const pct = Math.min(100, Math.round(Math.abs(f.impacto||0)*100));
-                    return (
-                    <div key={i}>
-                      <div className="flex justify-between text-xs mb-0.5">
-                        <span className="font-medium text-gray-700">{nm[f.feature]||f.feature}</span>
-                        <span className={sube?'text-orange-500':'text-emerald-500'}>{sube?'↑ riesgo':'↓ riesgo'}</span>
-                      </div>
-                      <p className="text-xs text-gray-400 mb-1">Valor: {typeof f.valor==='number'?f.valor.toFixed(2):f.valor} · Media: {typeof f.media_carrera==='number'?f.media_carrera.toFixed(2):f.media_carrera}</p>
-                      <div className="h-1.5 bg-gray-100 rounded-full">
-                        <div className={'h-1.5 rounded-full ' + (sube?'bg-orange-400':'bg-emerald-400')} style={{width: pct + '%'}}/>
-                      </div>
-                    </div>
-                    );
-                  })}
-                </div>
-              </div>
-              )}
-            </div>
-          </div>
-          )}
+          {/* ===== PANEL IA: Tabbed Navigation ===== */}
+{(prediccion?.xai || prediccion?.contexto_conductual?.length > 0 || contrafactual?.contrafactual_desercion?.cambios?.length > 0 || contrafactual?.contrafactual_conductual?.escenarios?.length > 0 || recomendaciones.length > 0) && (
+<div className="border-t border-gray-200 bg-[#FAFBFF]">
+  {/* Tab headers */}
+  <div className="flex border-b border-gray-200 bg-white">
+    <button
+      onClick={() => setActiveTab("indicadores")}
+      className={`flex-1 px-4 py-2.5 text-[11px] font-bold uppercase tracking-wide transition-colors ${
+        activeTab === "indicadores"
+          ? "text-[#1B3A6B] border-b-2 border-[#1B3A6B] bg-blue-50/50"
+          : "text-gray-400 hover:text-gray-600 hover:bg-gray-50"
+      }`}
+    >
+      📊 Indicadores · Predicción IA
+    </button>
+    {prediccion?.contexto_conductual?.length > 0 && (
+      <button
+        onClick={() => setActiveTab("alertas")}
+        className={`flex-1 px-4 py-2.5 text-[11px] font-bold uppercase tracking-wide transition-colors ${
+          activeTab === "alertas"
+            ? "text-[#1B3A6B] border-b-2 border-[#1B3A6B] bg-blue-50/50"
+            : "text-gray-400 hover:text-gray-600 hover:bg-gray-50"
+        }`}
+      >
+        ⚡ Alertas conductuales
+        <span className="bg-red-100 text-red-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full ml-1.5">
+          {prediccion.contexto_conductual.length}
+        </span>
+      </button>
+    )}
+    {(contrafactual?.contrafactual_conductual?.escenarios?.length > 0 || recomendaciones.length > 0) && (
+      <button
+        onClick={() => setActiveTab("acciones")}
+        className={`flex-1 px-4 py-2.5 text-[11px] font-bold uppercase tracking-wide transition-colors ${
+          activeTab === "acciones"
+            ? "text-[#1B3A6B] border-b-2 border-[#1B3A6B] bg-blue-50/50"
+            : "text-gray-400 hover:text-gray-600 hover:bg-gray-50"
+        }`}
+      >
+        🎯 ¿Qué puede hacer el estudiante?
+      </button>
+    )}
+  </div>
 
-          {/* ===== PANEL IA: Acordeones desplegables ===== */}
-          {(prediccion?.contexto_conductual?.length > 0 || contrafactual?.contrafactual_desercion?.cambios?.length > 0 || recomendaciones.length > 0) && (
-          <div className="border-t border-gray-200 bg-[#FAFBFF]">
-            <div className="divide-y divide-gray-200">
-
-              {/* ── Alertas Conductuales (acordeón) ── */}
-              {prediccion?.contexto_conductual?.length > 0 && (
-              <details open className="group">
-                <summary className="flex items-center justify-between px-4 py-2 cursor-pointer hover:bg-blue-50/50 transition select-none">
-                  <span className="text-[11px] font-bold text-gray-600 uppercase tracking-wide flex items-center gap-1.5">
-                    <span>⚡</span> Alertas Conductuales
-                    <span className="bg-red-100 text-red-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full ml-1">
-                      {prediccion.contexto_conductual.length}
-                    </span>
-                  </span>
-                  <span className="text-gray-400 text-xs group-open:rotate-180 transition-transform">▼</span>
-                </summary>
-                <div className="px-4 pb-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                  {prediccion.contexto_conductual.map((ctx, i) => {
-                    const sev = ctx.severidad === "critica"
-                      ? "border-red-300 bg-red-50 text-red-800"
-                      : "border-amber-300 bg-amber-50 text-amber-800";
-                    const icon = ctx.severidad === "critica" ? "🔴" : "🟡";
-                    return (
-                    <div key={i} className={`rounded-lg border p-2.5 ${sev}`}>
-                      <div className="flex items-center gap-1.5 mb-0.5">
-                        <span className="text-sm">{icon}</span>
-                        <span className="text-[10px] font-bold uppercase">{ctx.factor}</span>
-                      </div>
-                      <p className="text-xs">{ctx.descripcion}</p>
+  {/* Tab content */}
+  <div className="p-4">
+    {/* ── Tab: Indicadores · Predicción IA ── */}
+    {activeTab === "indicadores" && (
+      <div className="space-y-3">
+        {prediccion?.xai && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {prediccion.xai.desercion?.length > 0 && (
+            <div className="bg-white rounded-xl border border-red-100 shadow-sm p-4">
+              <p className="text-xs font-bold text-red-700 mb-3 uppercase">Factores · Deserción</p>
+              <div className="space-y-3">
+                {prediccion.xai.desercion.slice(0,3).map((f,i) => {
+                  const nm = {promedio_notas:'Promedio Calificaciones',num_reprobadas:'Materias Reprobadas',pct_reprobadas:'% Reprobadas',nota_min:'Nota Mínima',std_notas:'Dispersión Notas',num_zeros:'Materias con Cero'};
+                  const sube = f.direccion==='aumenta';
+                  const pct = Math.min(100, Math.round(Math.abs(f.impacto||0)*100));
+                  return (
+                  <div key={i}>
+                    <div className="flex justify-between text-xs mb-0.5">
+                      <span className="font-medium text-gray-700">{nm[f.feature]||f.feature}</span>
+                      <span className={sube?'text-red-500':'text-emerald-500'}>{sube?'↑ riesgo':'↓ riesgo'}</span>
                     </div>
-                    );
-                  })}
-                </div>
-              </details>
-              )}
-
-              {/* ── Escenarios Contrafactuales v2 (reactivado con factibilidad) ── */}
-              {contrafactual?.contrafactual_desercion?.cambios?.length > 0 && (
-              <details className="group">
-                <summary className="flex items-center justify-between px-4 py-2 cursor-pointer hover:bg-blue-50/50 transition select-none">
-                  <span className="text-[11px] font-bold text-gray-600 uppercase tracking-wide flex items-center gap-1.5">
-                    <span>🔄</span> Escenarios Contrafactuales
-                    <span className="text-[10px] font-normal text-gray-400 normal-case ml-1">¿Qué cambiar para reducir el riesgo?</span>
-                  </span>
-                  <span className="text-gray-400 text-xs group-open:rotate-180 transition-transform">▼</span>
-                </summary>
-                <div className="px-4 pb-3 space-y-2">
-                  {[
-                    { data: contrafactual.contrafactual_desercion, label: "Deserción", border: "border-red-200", title: "text-red-700" },
-                    { data: contrafactual.contrafactual_reprobacion, label: "Reprobación", border: "border-orange-200", title: "text-orange-700" },
-                  ].filter(s => s.data?.cambios?.length > 0).map((sc, si) => (
-                  <div key={si} className={`bg-white rounded-lg border ${sc.border} p-3`}>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className={`text-[10px] font-bold ${sc.title} uppercase`}>Escenario · {sc.label}</span>
-                      <div className="flex items-center gap-1.5 text-xs">
-                        <span className="text-gray-500">{Math.round((sc.data.prob_original||0)*100)}%</span>
-                        <span className="text-gray-300">→</span>
-                        <span className={`font-bold ${sc.data.factible ? 'text-green-600' : 'text-amber-600'}`}>
-                          {Math.round((sc.data.prob_contrafactual||0)*100)}%
-                        </span>
-                        {sc.data.factible && <span className="text-green-500 text-[10px]">✓</span>}
-                      </div>
+                    <p className="text-xs text-gray-400 mb-1">Valor: {typeof f.valor==='number'?f.valor.toFixed(2):f.valor} · Media: {typeof f.media_carrera==='number'?f.media_carrera.toFixed(2):f.media_carrera}</p>
+                    <div className="h-1.5 bg-gray-100 rounded-full">
+                      <div className={'h-1.5 rounded-full ' + (sube?'bg-red-400':'bg-emerald-400')} style={{width: pct + '%'}}/>
                     </div>
-                    {sc.data.cambios.map((c, ci) => {
-                      const factColors = {alta:'bg-green-100 text-green-700',media:'bg-amber-100 text-amber-700',baja:'bg-gray-100 text-gray-500'};
-                      return (
-                      <div key={ci} className="flex items-start gap-1.5 text-xs mb-1.5">
-                        <span className="text-blue-500 mt-0.5">▸</span>
-                        <div className="flex-1">
-                          <span className="font-medium text-gray-800">{c.accion}</span>
-                          <div className="flex items-center gap-1.5 mt-0.5">
-                            <span className="text-gray-400">-{Math.round((c.impacto_individual||0)*100)}% riesgo</span>
-                            {c.factibilidad && (
-                              <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${factColors[c.factibilidad]||'bg-gray-100 text-gray-500'}`}>
-                                {c.factibilidad}
-                              </span>
-                            )}
-                            {c.plazo && <span className="text-[9px] text-gray-400">{c.plazo}</span>}
-                          </div>
-                        </div>
-                      </div>
-                      );
-                    })}
-                    {sc.data.factible && (
-                    <p className="text-[10px] text-green-600 mt-1.5 font-medium">
-                      ✓ Riesgo: {Math.round((sc.data.prob_original||0)*100)}% → {Math.round((sc.data.prob_contrafactual||0)*100)}%
-                      (−{Math.round((sc.data.reduccion_total||0)*100)} puntos)
-                    </p>
-                    )}
                   </div>
-                  ))}
-                </div>
-              </details>
-              )}
-
-              {/* ── Contrafactuales Conductuales (siempre visible si hay datos) ── */}
-              {contrafactual?.contrafactual_conductual?.escenarios?.length > 0 && (
-              <details open className="group">
-                <summary className="flex items-center justify-between px-4 py-2 cursor-pointer hover:bg-blue-50/50 transition select-none">
-                  <span className="text-[11px] font-bold text-gray-600 uppercase tracking-wide flex items-center gap-1.5">
-                    <span>🎯</span> ¿Qué puede hacer el estudiante?
-                    <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full ml-1">
-                      {contrafactual.contrafactual_conductual.escenarios.length}
-                    </span>
-                  </span>
-                  <span className="text-gray-400 text-xs group-open:rotate-180 transition-transform">▼</span>
-                </summary>
-                <div className="px-4 pb-3 space-y-2">
-                  {contrafactual.contrafactual_conductual.escenarios.map((esc, i) => {
-                    const factColors = {alta:'border-green-200 bg-green-50',media:'border-amber-200 bg-amber-50',baja:'border-gray-200 bg-gray-50'};
-                    const badgeColors = {alta:'bg-green-100 text-green-700',media:'bg-amber-100 text-amber-700',baja:'bg-gray-100 text-gray-500'};
-                    return (
-                    <div key={i} className={`rounded-lg border p-3 ${factColors[esc.factibilidad] || 'border-gray-200 bg-gray-50'}`}>
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1">
-                          <p className="text-xs font-medium text-gray-800">{esc.accion}</p>
-                          <div className="flex items-center gap-2 mt-1.5">
-                            <span className="text-[10px] text-gray-500">Compromiso:</span>
-                            <span className="text-[11px] font-bold text-gray-600">{esc.compromiso_actual}%</span>
-                            <span className="text-gray-300">→</span>
-                            <span className="text-[11px] font-bold text-green-600">{esc.compromiso_nuevo}%</span>
-                            <span className="text-[10px] text-green-600 font-medium">(+{esc.ganancia}pp)</span>
-                          </div>
-                          <div className="flex items-center gap-1.5 mt-1">
-                            <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${badgeColors[esc.factibilidad] || ''}`}>
-                              {esc.factibilidad}
-                            </span>
-                            <span className="text-[9px] text-gray-400">{esc.plazo}</span>
-                            <span className="text-[9px] text-gray-400">→ Riesgo: {esc.nivel_riesgo_nuevo}</span>
-                          </div>
-                        </div>
-                        {/* Botón Notificar Tutoría (solo para escenarios tipo tutoría) */}
-                        {esc.tipo === "tutoria" && (
-                          <button
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              const btn = e.currentTarget;
-                              btn.disabled = true;
-                              btn.textContent = "Enviando...";
-                              try {
-                                const res = await api.notifyTutoria({
-                                  student_id: esc.student_id,
-                                  asignatura: esc.asignatura,
-                                  docente: esc.docente,
-                                  motivo: esc.motivo_tutoria || esc.valor_actual,
-                                });
-                                btn.textContent = res.email_enviado ? "✓ Notificado" : "✓ Registrado";
-                                btn.className = btn.className.replace("bg-blue-600", "bg-green-600").replace("hover:bg-blue-700", "");
-                              } catch (err) {
-                                btn.textContent = "Error";
-                                btn.disabled = false;
-                                console.error(err);
-                              }
-                            }}
-                            className="flex-shrink-0 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-medium px-3 py-1.5 rounded-lg transition-colors shadow-sm whitespace-nowrap"
-                            title="Enviar notificación de tutoría al estudiante y registrar intervención"
-                          >
-                            📧 Notificar tutoría
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                    );
-                  })}
-                </div>
-              </details>
-              )}
-
-              {/* ── Recomendaciones Automáticas (acordeón) ── */}
-              {recomendaciones.length > 0 && (
-              <details className="group">
-                <summary className="flex items-center justify-between px-4 py-2 cursor-pointer hover:bg-blue-50/50 transition select-none">
-                  <span className="text-[11px] font-bold text-gray-600 uppercase tracking-wide flex items-center gap-1.5">
-                    <span>💡</span> Recomendaciones
-                    <span className="bg-amber-100 text-amber-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full ml-1">
-                      {recomendaciones.length}
-                    </span>
-                    {recomendaciones.some(r => (r.prioridad||r.priority) === 'urgente') && (
-                      <span className="bg-red-100 text-red-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-                        {recomendaciones.filter(r => (r.prioridad||r.priority) === 'urgente').length} urgentes
-                      </span>
-                    )}
-                  </span>
-                  <span className="text-gray-400 text-xs group-open:rotate-180 transition-transform">▼</span>
-                </summary>
-                <div className="px-4 pb-3 space-y-1.5">
-                  {recomendaciones.map((rec, i) => {
-                    const clrs = {urgente:'border-red-200 bg-red-50',importante:'border-amber-200 bg-amber-50',sugerida:'border-blue-200 bg-blue-50'};
-                    const bdgs = {urgente:'bg-red-100 text-red-700',importante:'bg-amber-100 text-amber-700',sugerida:'bg-blue-100 text-blue-700'};
-                    const prio = rec.priority||rec.prioridad||'sugerida';
-                    return (
-                    <div key={i} className={'rounded-lg border p-2.5 ' + (clrs[prio]||'border-gray-200 bg-gray-50')}>
-                      <div className="flex flex-wrap items-center gap-1 mb-0.5">
-                        <span className={'text-[10px] font-semibold px-1.5 py-0.5 rounded-full ' + (bdgs[prio]||'bg-gray-100 text-gray-600')}>{prio}</span>
-                        <span className="text-[10px] text-gray-500">{rec.medio}</span>
-                        {rec.destinatario && <span className="text-[10px] text-gray-400">→ {rec.destinatario}</span>}
-                      </div>
-                      <p className="text-xs font-medium text-gray-800">{rec.accion}</p>
-                      {rec.motivo && <p className="text-[10px] text-gray-500 mt-0.5">{rec.motivo}</p>}
-                    </div>
-                    );
-                  })}
-                </div>
-              </details>
-              )}
-
+                  );
+                })}
+              </div>
             </div>
+            )}
+            {prediccion.xai.reprobacion?.length > 0 && (
+            <div className="bg-white rounded-xl border border-orange-100 shadow-sm p-4">
+              <p className="text-xs font-bold text-orange-700 mb-3 uppercase">Factores · Reprobación</p>
+              <div className="space-y-3">
+                {prediccion.xai.reprobacion.slice(0,3).map((f,i) => {
+                  const nm = {promedio_notas:'Promedio Calificaciones',num_reprobadas:'Materias Reprobadas',pct_reprobadas:'% Reprobadas',nota_min:'Nota Mínima',std_notas:'Dispersión Notas',num_zeros:'Materias con Cero'};
+                  const sube = f.direccion==='aumenta';
+                  const pct = Math.min(100, Math.round(Math.abs(f.impacto||0)*100));
+                  return (
+                  <div key={i}>
+                    <div className="flex justify-between text-xs mb-0.5">
+                      <span className="font-medium text-gray-700">{nm[f.feature]||f.feature}</span>
+                      <span className={sube?'text-orange-500':'text-emerald-500'}>{sube?'↑ riesgo':'↓ riesgo'}</span>
+                    </div>
+                    <p className="text-xs text-gray-400 mb-1">Valor: {typeof f.valor==='number'?f.valor.toFixed(2):f.valor} · Media: {typeof f.media_carrera==='number'?f.media_carrera.toFixed(2):f.media_carrera}</p>
+                    <div className="h-1.5 bg-gray-100 rounded-full">
+                      <div className={'h-1.5 rounded-full ' + (sube?'bg-orange-400':'bg-emerald-400')} style={{width: pct + '%'}}/>
+                    </div>
+                  </div>
+                  );
+                })}
+              </div>
+            </div>
+            )}
           </div>
-          )}
+        )}
+        {/* Contrafactuales ML (escenarios de cambio cuantitativo) */}
+        {contrafactual?.contrafactual_desercion?.cambios?.length > 0 && (
+          <div className="space-y-2 mt-3">
+            <h4 className="text-[11px] font-bold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+              🔄 Escenarios Contrafactuales
+              <span className="text-[10px] font-normal text-gray-400 normal-case ml-1">¿Qué cambiar para reducir el riesgo?</span>
+            </h4>
+            {[
+              { data: contrafactual.contrafactual_desercion, label: "Deserción", border: "border-red-200", title: "text-red-700" },
+              { data: contrafactual.contrafactual_reprobacion, label: "Reprobación", border: "border-orange-200", title: "text-orange-700" },
+            ].filter(s => s.data?.cambios?.length > 0).map((sc, si) => (
+            <div key={si} className={`bg-white rounded-lg border ${sc.border} p-3`}>
+              <div className="flex items-center justify-between mb-2">
+                <span className={`text-[10px] font-bold ${sc.title} uppercase`}>Escenario · {sc.label}</span>
+                <div className="flex items-center gap-1.5 text-xs">
+                  <span className="text-gray-500">{Math.round((sc.data.prob_original||0)*100)}%</span>
+                  <span className="text-gray-300">→</span>
+                  <span className={`font-bold ${sc.data.factible ? 'text-green-600' : 'text-amber-600'}`}>
+                    {Math.round((sc.data.prob_contrafactual||0)*100)}%
+                  </span>
+                  {sc.data.factible && <span className="text-green-500 text-[10px]">✓</span>}
+                </div>
+              </div>
+              {sc.data.cambios.map((c, ci) => {
+                const factColors = {alta:'bg-green-100 text-green-700',media:'bg-amber-100 text-amber-700',baja:'bg-gray-100 text-gray-500'};
+                return (
+                <div key={ci} className="flex items-start gap-1.5 text-xs mb-1.5">
+                  <span className="text-blue-500 mt-0.5">▸</span>
+                  <div className="flex-1">
+                    <span className="font-medium text-gray-800">{c.accion}</span>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="text-gray-400">-{Math.round((c.impacto_individual||0)*100)}% riesgo</span>
+                      {c.factibilidad && (
+                        <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${factColors[c.factibilidad]||'bg-gray-100 text-gray-500'}`}>
+                          {c.factibilidad}
+                        </span>
+                      )}
+                      {c.plazo && <span className="text-[9px] text-gray-400">{c.plazo}</span>}
+                    </div>
+                  </div>
+                </div>
+                );
+              })}
+              {sc.data.factible && (
+              <p className="text-[10px] text-green-600 mt-1.5 font-medium">
+                ✓ Riesgo: {Math.round((sc.data.prob_original||0)*100)}% → {Math.round((sc.data.prob_contrafactual||0)*100)}%
+                (−{Math.round((sc.data.reduccion_total||0)*100)} puntos)
+              </p>
+              )}
+            </div>
+            ))}
+          </div>
+        )}
+      </div>
+    )}
+
+    {/* ── Tab: Alertas Conductuales ── */}
+    {activeTab === "alertas" && prediccion?.contexto_conductual?.length > 0 && (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+        {prediccion.contexto_conductual.map((ctx, i) => {
+          const sev = ctx.severidad === "critica"
+            ? "border-red-300 bg-red-50 text-red-800"
+            : "border-amber-300 bg-amber-50 text-amber-800";
+          const icon = ctx.severidad === "critica" ? "🔴" : "🟡";
+          return (
+          <div key={i} className={`rounded-lg border p-2.5 ${sev}`}>
+            <div className="flex items-center gap-1.5 mb-0.5">
+              <span className="text-sm">{icon}</span>
+              <span className="text-[10px] font-bold uppercase">{ctx.factor}</span>
+            </div>
+            <p className="text-xs">{ctx.descripcion}</p>
+          </div>
+          );
+        })}
+      </div>
+    )}
+
+    {/* ── Tab: ¿Qué puede hacer el estudiante? ── */}
+    {activeTab === "acciones" && (
+      <div className="space-y-3">
+        {/* Contrafactuales Conductuales */}
+        {contrafactual?.contrafactual_conductual?.escenarios?.length > 0 && (
+          <div className="space-y-2">
+            {contrafactual.contrafactual_conductual.escenarios.map((esc, i) => {
+              const factColors = {alta:'border-green-200 bg-green-50',media:'border-amber-200 bg-amber-50',baja:'border-gray-200 bg-gray-50'};
+              const badgeColors = {alta:'bg-green-100 text-green-700',media:'bg-amber-100 text-amber-700',baja:'bg-gray-100 text-gray-500'};
+              return (
+              <div key={i} className={`rounded-lg border p-3 ${factColors[esc.factibilidad] || 'border-gray-200 bg-gray-50'}`}>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1">
+                    <p className="text-xs font-medium text-gray-800">{esc.accion}</p>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <span className="text-[10px] text-gray-500">Compromiso:</span>
+                      <span className="text-[11px] font-bold text-gray-600">{esc.compromiso_actual}%</span>
+                      <span className="text-gray-300">→</span>
+                      <span className="text-[11px] font-bold text-green-600">{esc.compromiso_nuevo}%</span>
+                      <span className="text-[10px] text-green-600 font-medium">(+{esc.ganancia}pp)</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${badgeColors[esc.factibilidad] || ''}`}>
+                        {esc.factibilidad}
+                      </span>
+                      <span className="text-[9px] text-gray-400">{esc.plazo}</span>
+                      <span className="text-[9px] text-gray-400">→ Riesgo: {esc.nivel_riesgo_nuevo}</span>
+                    </div>
+                  </div>
+                  {/* Botón Notificar Tutoría */}
+                  {esc.tipo === "tutoria" && (
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        const btn = e.currentTarget;
+                        btn.disabled = true;
+                        btn.textContent = "Enviando...";
+                        try {
+                          const res = await api.notifyTutoria({
+                            student_id: esc.student_id,
+                            asignatura: esc.asignatura,
+                            docente: esc.docente,
+                            motivo: esc.motivo_tutoria || esc.valor_actual,
+                          });
+                          btn.textContent = res.email_enviado ? "✓ Notificado" : "✓ Registrado";
+                          btn.className = btn.className.replace("bg-blue-600", "bg-green-600").replace("hover:bg-blue-700", "");
+                        } catch (err) {
+                          btn.textContent = "Error";
+                          btn.disabled = false;
+                          console.error(err);
+                        }
+                      }}
+                      className="flex-shrink-0 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-medium px-3 py-1.5 rounded-lg transition-colors shadow-sm whitespace-nowrap"
+                      title="Enviar notificación de tutoría al estudiante y registrar intervención"
+                    >
+                      📧 Notificar tutoría
+                    </button>
+                  )}
+                </div>
+              </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Recomendaciones Automáticas */}
+        {recomendaciones.length > 0 && (
+          <div className="space-y-1.5">
+            <h4 className="text-[11px] font-bold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+              💡 Recomendaciones
+              {recomendaciones.some(r => (r.prioridad||r.priority) === 'urgente') && (
+                <span className="bg-red-100 text-red-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                  {recomendaciones.filter(r => (r.prioridad||r.priority) === 'urgente').length} urgentes
+                </span>
+              )}
+            </h4>
+            {recomendaciones.map((rec, i) => {
+              const clrs = {urgente:'border-red-200 bg-red-50',importante:'border-amber-200 bg-amber-50',sugerida:'border-blue-200 bg-blue-50'};
+              const bdgs = {urgente:'bg-red-100 text-red-700',importante:'bg-amber-100 text-amber-700',sugerida:'bg-blue-100 text-blue-700'};
+              const prio = rec.priority||rec.prioridad||'sugerida';
+              return (
+              <div key={i} className={'rounded-lg border p-2.5 ' + (clrs[prio]||'border-gray-200 bg-gray-50')}>
+                <div className="flex flex-wrap items-center gap-1 mb-0.5">
+                  <span className={'text-[10px] font-semibold px-1.5 py-0.5 rounded-full ' + (bdgs[prio]||'bg-gray-100 text-gray-600')}>{prio}</span>
+                  <span className="text-[10px] text-gray-500">{rec.medio}</span>
+                  {rec.destinatario && <span className="text-[10px] text-gray-400">→ {rec.destinatario}</span>}
+                </div>
+                <p className="text-xs font-medium text-gray-800">{rec.accion}</p>
+                {rec.motivo && <p className="text-[10px] text-gray-500 mt-0.5">{rec.motivo}</p>}
+              </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    )}
+  </div>
+</div>
+)}
 
           {/* ═══ CUERPO PRINCIPAL: 2 columnas ═══ */}
           <div className="flex divide-x divide-gray-200 bg-white">
@@ -956,7 +977,7 @@ export default function FichaEstudiante() {
                 <div className="px-3 py-1.5 text-center flex-1">
                   <div className="text-[9px] opacity-50 uppercase tracking-wider">Nivel</div>
                   <div className="text-xs font-semibold mt-0.5">
-                    {formatNivel(ficha.nivel_academico, ficha.calificaciones) || "—"}
+                    {formatNivel(ficha.nivel_academico, ficha.calificaciones, ficha.calificaciones_historicas) || "—"}
                   </div>
                 </div>
               </div>
@@ -1004,8 +1025,11 @@ export default function FichaEstudiante() {
                               {(() => {
                                 const nivNum = parseNivelNum(matchedCal?.nivel);
                                 const grp = abbreviateGrupo(matchedCal?.grupo || acceso?.grupo || ts[0]?.grupo);
-                                if (nivNum && grp) return <>{nivNum}° nivel | {grp}</>;
-                                if (nivNum) return <>{nivNum}° nivel</>;
+                                // Fallback: use ficha.nivel_academico if individual nivel is missing
+                                const nivFallback = !nivNum && ficha.nivel_academico > 0 && ficha.nivel_academico <= 12 ? ficha.nivel_academico : null;
+                                const niv = nivNum || nivFallback;
+                                if (niv && grp) return <>{niv}° Nivel | {grp}</>;
+                                if (niv) return <>{niv}° Nivel</>;
                                 if (grp) return grp;
                                 return <span className="text-gray-300">—</span>;
                               })()}
@@ -1088,8 +1112,11 @@ export default function FichaEstudiante() {
                               {(() => {
                                 const nivNum = parseNivelNum(cal.nivel);
                                 const grp = abbreviateGrupo(cal.grupo);
-                                if (nivNum && grp) return <>{nivNum}° nivel | {grp}</>;
-                                if (nivNum) return <>{nivNum}° nivel</>;
+                                // Fallback: use ficha.nivel_academico if individual nivel is missing
+                                const nivFallback = !nivNum && ficha.nivel_academico > 0 && ficha.nivel_academico <= 12 ? ficha.nivel_academico : null;
+                                const niv = nivNum || nivFallback;
+                                if (niv && grp) return <>{niv}° Nivel | {grp}</>;
+                                if (niv) return <>{niv}° Nivel</>;
                                 if (grp) return grp;
                                 return <span className="text-gray-300">—</span>;
                               })()}
@@ -1152,8 +1179,11 @@ export default function FichaEstudiante() {
                               {(() => {
                                 const nivNum = parseNivelNum(cal.nivel);
                                 const grp = abbreviateGrupo(cal.grupo);
-                                if (nivNum && grp) return <>{nivNum}° nivel | {grp}</>;
-                                if (nivNum) return <>{nivNum}° nivel</>;
+                                // Fallback: use ficha.nivel_academico if individual nivel is missing
+                                const nivFallback = !nivNum && ficha.nivel_academico > 0 && ficha.nivel_academico <= 12 ? ficha.nivel_academico : null;
+                                const niv = nivNum || nivFallback;
+                                if (niv && grp) return <>{niv}° Nivel | {grp}</>;
+                                if (niv) return <>{niv}° Nivel</>;
                                 if (grp) return grp;
                                 return "—";
                               })()}
@@ -1213,7 +1243,7 @@ export default function FichaEstudiante() {
                 return (
                   <div className="border-t border-gray-200">
                     <SectionHeader>
-                      Malla curricular — {periodos.length} semestres · {ficha.calificaciones_historicas.length} asignaturas
+                      Malla curricular — {periodos.length} niveles · {ficha.calificaciones_historicas.length} asignaturas
                       <span className="text-gray-400 font-normal ml-2 text-[9px] normal-case tracking-normal">
                         escala 0–100 · ≥70 aprobado
                       </span>
@@ -1228,7 +1258,10 @@ export default function FichaEstudiante() {
                             <div key={periodo} className="flex-shrink-0 flex flex-col" style={{ minWidth: "80px" }}>
                               {/* Encabezado de período */}
                               <div className="bg-[#1B3A6B] text-white text-center rounded-t px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider">
-                                {periodo}
+                                {(() => {
+                                  const nivelNum = asigs[0]?.nivel;
+                                  return (nivelNum && nivelNum >= 1 && nivelNum <= 12) ? `${nivelNum}° Nivel` : periodo;
+                                })()}
                               </div>
                               {/* Chips de asignaturas */}
                               <div className="border border-t-0 border-gray-200 rounded-b bg-white px-1 pt-1 pb-0.5 flex flex-col gap-0.5">
@@ -1255,7 +1288,7 @@ export default function FichaEstudiante() {
                           return (
                             <div className="flex-shrink-0 flex flex-col" style={{ minWidth: "80px" }}>
                               <div className="bg-[#F0B000] text-white text-center rounded-t px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider">
-                                {formatNivel(ficha.nivel_academico, ficha.calificaciones) || "Sem. actual"}
+                                {formatNivel(ficha.nivel_academico, ficha.calificaciones, ficha.calificaciones_historicas) || "Sem. actual"}
                               </div>
                               <div className="border border-t-0 border-[#F0B000] rounded-b bg-[#FFFDF5] px-1 pt-1 pb-0.5 flex flex-col gap-0.5">
                                 {ficha.calificaciones.map((c, i) => (
@@ -1298,7 +1331,7 @@ export default function FichaEstudiante() {
                 return (
                   <div className="border-t border-gray-200">
                     <SectionHeader>
-                      Malla curricular — semestre actual · {ficha.calificaciones.length} asignaturas
+                      Malla curricular — {formatNivel(ficha.nivel_academico, ficha.calificaciones, ficha.calificaciones_historicas) || "Nivel actual"} · {ficha.calificaciones.length} asignaturas
                       <span className="text-gray-400 font-normal ml-2 text-[9px] normal-case tracking-normal">
                         escala 0–100 · ≥70 aprobado
                       </span>
@@ -1307,7 +1340,7 @@ export default function FichaEstudiante() {
                       <div className="flex gap-2" style={{ minWidth: "max-content" }}>
                         <div className="flex-shrink-0 flex flex-col" style={{ minWidth: "80px" }}>
                           <div className="bg-[#F0B000] text-white text-center rounded-t px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider">
-                            {formatNivel(ficha.nivel_academico, ficha.calificaciones) || "Sem. actual"}
+                            {formatNivel(ficha.nivel_academico, ficha.calificaciones, ficha.calificaciones_historicas) || "Sem. actual"}
                           </div>
                           <div className="border border-t-0 border-[#F0B000] rounded-b bg-[#FFFDF5] px-1 pt-1 pb-0.5 flex flex-col gap-0.5">
                             {ficha.calificaciones.map((c, i) => (
