@@ -207,3 +207,23 @@ def system_status(
         "ultima_actualizacion": last_run.finished_at.isoformat() if last_run else None,
         "estado_pipeline": last_run.status if last_run else "nunca_ejecutado",
     }
+
+
+@router.post("/students/deduplicate")
+def deduplicate_students(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """
+    Ejecuta la deduplicación de estudiantes AHORA.
+    Detecta y fusiona registros duplicados por:
+    - Mismo nombre pero con/sin correo institucional
+    - Mismo nombre pero con variación de tildes (ACHIÑA vs ACHINA)
+    Mueve calificaciones, accesos, tareas, intervenciones y alertas al registro principal.
+    """
+    pipeline = ETLPipeline(db)
+    merged = pipeline._merge_duplicate_students()
+    return {
+        "message": f"Deduplicación completada. {merged} estudiantes fusionados.",
+        "fusionados": merged,
+    }
