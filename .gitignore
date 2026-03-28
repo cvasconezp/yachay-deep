@@ -25,6 +25,9 @@ env/
 data/
 !data/.gitkeep
 !frontend/src/data/
+!backend/data/
+backend/data/*
+!backend/data/mallas/
 
 # Node
 node_modules/
