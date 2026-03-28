@@ -55,13 +55,34 @@ def build_features(db: Session) -> pd.DataFrame:
         .to_dict()
     )
 
-    # [BUG-06] FIX: Mapeo de nivel_academico para no etiquetar graduados como desertores
-    # Obtener el nivel académico de cada estudiante desde la tabla students
-    nivel_query = text("""
-        SELECT id, nivel_academico FROM students
+    # [BUG-06] FIX: Mapeo para no etiquetar egresados/graduados como desertores
+    # Obtener nivel_academico y estado_matricula de cada estudiante
+    student_info_query = text("""
+        SELECT id, nivel_academico, estado_matricula, carrera FROM students
     """)
-    nivel_rows = db.execute(nivel_query).fetchall()
-    nivel_por_estudiante = {row[0]: row[1] for row in nivel_rows}
+    student_info_rows = db.execute(student_info_query).fetchall()
+    nivel_por_estudiante = {row[0]: row[1] for row in student_info_rows}
+    estado_por_estudiante = {row[0]: (row[2] or "").upper() for row in student_info_rows}
+    carrera_por_sid = {row[0]: row[3] for row in student_info_rows}
+
+    # Calcular nivel máximo por carrera (para saber cuándo alguien terminó)
+    max_nivel_carrera_query = text("""
+        SELECT s.carrera, MAX(g.nivel) as max_niv
+        FROM grades g
+        JOIN students s ON g.student_id = s.id
+        WHERE g.nivel IS NOT NULL AND g.nivel >= 1
+        GROUP BY s.carrera
+    """)
+    max_nivel_rows = db.execute(max_nivel_carrera_query).fetchall()
+    max_nivel_por_carrera = {row[0]: row[1] for row in max_nivel_rows if row[0]}
+
+    # También contar periodos únicos por estudiante para detectar quienes
+    # cursaron muchos semestres (probable egresado aunque nivel no sea max)
+    periodos_por_estudiante = (
+        df.groupby("student_id")["periodo"]
+        .nunique()
+        .to_dict()
+    )
 
 
     # Agrupar por estudiante-periodo
@@ -99,22 +120,43 @@ def build_features(db: Session) -> pd.DataFrame:
         return None
 
     # Label desercion: 1 si no aparece en periodo siguiente
-    # [BUG-06] FIX: No etiquetar como deserto si el estudiante ha alcanzado nivel_academico >= 8 (graduado)
+    # Excluir egresados/graduados para no contaminar el modelo con falsos positivos
     def label_desercion(row):
         nxt = periodo_siguiente(row["periodo"])
         if nxt is None:
             return None  # ultimo periodo, no se puede evaluar
 
+        sid = row["student_id"]
+
         # Verificar si el estudiante está en el siguiente periodo
-        if row["student_id"] in estudiantes_por_periodo.get(nxt, set()):
+        if sid in estudiantes_por_periodo.get(nxt, set()):
             return 0  # Sigue matriculado en siguiente periodo
 
-        # Si no está en siguiente periodo, verificar si es graduado
-        nivel_ac = nivel_por_estudiante.get(row["student_id"])
-        if nivel_ac is not None and nivel_ac >= 8:
-            return 0  # Graduado, no es deserción (es egreso)
+        # ── No aparece en siguiente periodo: ¿desertó o egresó? ──
 
-        # No está en siguiente periodo y no es graduado → deserción
+        # 1. Estado de matrícula contiene EGRESADO o GRADUADO
+        estado = estado_por_estudiante.get(sid, "")
+        if any(kw in estado for kw in ("EGRESADO", "GRADUADO", "TITULADO")):
+            return 0  # Egresado/graduado, no es deserción
+
+        # 2. Nivel académico >= nivel máximo de su carrera (completó la malla)
+        nivel_ac = nivel_por_estudiante.get(sid)
+        carrera = carrera_por_sid.get(sid)
+        max_niv = max_nivel_por_carrera.get(carrera, 10)
+        if nivel_ac is not None and nivel_ac >= max_niv:
+            return 0  # Alcanzó el último nivel → egreso
+
+        # 3. Nivel académico alto (>= 8) como fallback genérico
+        if nivel_ac is not None and nivel_ac >= 8:
+            return 0  # Probable egresado
+
+        # 4. Estudiante cursó muchos periodos (>= 7) y tiene nivel alto (>= 6)
+        #    → probablemente terminó o está en proceso de titulación
+        n_periodos = periodos_por_estudiante.get(sid, 0)
+        if n_periodos >= 7 and nivel_ac is not None and nivel_ac >= 6:
+            return 0  # Probable egresado en proceso de titulación
+
+        # No cumple ningún criterio de egreso → deserción
         return 1
 
     features["deserto"] = features.apply(label_desercion, axis=1)
