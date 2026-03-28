@@ -4,8 +4,11 @@ Búsqueda por nombre/correo/cédula y vista de ficha completa.
 """
 from typing import Optional
 from collections import Counter
+from pathlib import Path
+import json
 import time
 import logging
+import unicodedata
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
@@ -27,6 +30,56 @@ router = APIRouter(prefix="/students", tags=["students"])
 # Estructura: { "CARRERA_UPPER": (timestamp, canonical_dict) }
 _canonical_cache: dict[str, tuple[float, dict[str, int]]] = {}
 _CANONICAL_CACHE_TTL = 600  # 10 minutos
+
+# ── Directorio de mallas de referencia (JSONs oficiales) ──
+_MALLAS_DIR = Path(__file__).resolve().parent.parent / "data" / "mallas"
+
+
+def _strip_accents(text: str) -> str:
+    """Elimina acentos/diacríticos de un string Unicode."""
+    nfkd = unicodedata.normalize("NFKD", text)
+    return "".join(c for c in nfkd if not unicodedata.combining(c))
+
+
+def _career_to_filename(carrera_upper: str) -> str:
+    """
+    Convierte nombre de carrera a nombre de archivo JSON.
+    Ej: 'EDUCACIÓN INTERCULTURAL BILINGÜE' -> 'EDUCACION_INTERCULTURAL_BILINGUE.json'
+    """
+    clean = _strip_accents(carrera_upper)
+    clean = clean.replace(" ", "_")
+    # Quitar caracteres que no sean alfanuméricos o guión bajo
+    clean = "".join(c for c in clean if c.isalnum() or c == "_")
+    return f"{clean}.json"
+
+
+def _load_reference_malla(carrera_upper: str) -> dict[str, int] | None:
+    """
+    Intenta cargar la malla canónica desde un archivo JSON de referencia.
+    Retorna dict {ASIGNATURA_UPPER: nivel_int} o None si no existe.
+    """
+    filename = _career_to_filename(carrera_upper)
+    filepath = _MALLAS_DIR / filename
+    if not filepath.exists():
+        logger.debug("No hay malla de referencia para %s (buscado: %s)", carrera_upper, filepath)
+        return None
+
+    try:
+        data = json.loads(filepath.read_text(encoding="utf-8"))
+        niveles = data.get("niveles", {})
+        canonical: dict[str, int] = {}
+        for nivel_str, asignaturas in niveles.items():
+            nivel_int = int(nivel_str)
+            for asig in asignaturas:
+                canonical[asig.strip().upper()] = nivel_int
+        logger.info(
+            "Malla de referencia cargada para %s: %d asignaturas desde %s",
+            carrera_upper, len(canonical), filename,
+        )
+        return canonical
+    except Exception as e:
+        logger.error("Error cargando malla de referencia %s: %s", filepath, e)
+        return None
 
 def detectar_sede(course_configs: list, student_grupo: str = None) -> Optional[str]:
     """
@@ -386,7 +439,14 @@ def _get_canonical_for_career(db: Session, carrera: str) -> dict[str, int]:
             logger.debug("Malla canónica para %s: caché hit", carrera_key)
             return cached
 
-    logger.info("Calculando malla canónica para %s...", carrera_key)
+    # ── Prioridad 1: Malla de referencia (JSON oficial) ──
+    ref = _load_reference_malla(carrera_key)
+    if ref is not None:
+        _canonical_cache[carrera_key] = (now, ref)
+        return ref
+
+    # ── Prioridad 2: Inferencia desde datos (fallback) ──
+    logger.info("Calculando malla canónica por inferencia para %s...", carrera_key)
     t0 = time.time()
 
     # Usar subquery en lugar de IN con lista enorme de IDs
