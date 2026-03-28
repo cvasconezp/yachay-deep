@@ -379,7 +379,7 @@ function getMallaEstado(estado) {
   }
 }
 
-// ── Celda de la malla fija con soporte de repeticiones ──────────────────────
+// ── Celda compacta de la malla con soporte de repeticiones ──────────────────
 function MallaCeldaFija({ asignatura }) {
   const [showTooltip, setShowTooltip] = useState(false);
   const s = getMallaEstado(asignatura.estado);
@@ -387,45 +387,46 @@ function MallaCeldaFija({ asignatura }) {
 
   const esRepeticion = asignatura.es_repeticion;
   const numIntentos = asignatura.num_intentos;
+  const nota = asignatura.nota_vigente;
 
   return (
     <div
-      className={`relative border ${s.border} ${s.bg} rounded text-center cursor-default transition-shadow hover:shadow-md flex flex-col`}
+      className={`relative border ${s.border} ${s.bg} rounded cursor-default transition-shadow hover:shadow-sm`}
       style={{
-        minHeight: "80px",
-        ...(esRepeticion ? { borderLeftWidth: "4px", borderLeftColor: "#f97316", borderLeftStyle: "solid" } : {}),
+        padding: "4px 6px",
+        ...(esRepeticion ? { borderLeftWidth: "3px", borderLeftColor: "#f97316", borderLeftStyle: "solid" } : {}),
       }}
-      onMouseEnter={() => esRepeticion && setShowTooltip(true)}
+      onMouseEnter={() => setShowTooltip(true)}
       onMouseLeave={() => setShowTooltip(false)}
     >
       {/* Badge de repetición */}
       {esRepeticion && (
-        <div className="absolute -top-1.5 -right-1.5 bg-orange-500 text-white text-[8px] font-bold rounded-full w-4 h-4 flex items-center justify-center shadow-sm z-10"
+        <div className="absolute -top-1 -right-1 bg-orange-500 text-white font-bold rounded-full flex items-center justify-center shadow-sm z-10"
+             style={{ width: "14px", height: "14px", fontSize: "7px" }}
              title={`${numIntentos} intentos`}>
           {numIntentos}
         </div>
       )}
 
-      {/* Nombre de asignatura — completo */}
-      <div className="px-2 pt-2 pb-1 flex-1 flex flex-col justify-between">
-        <div className="text-[10px] text-gray-700 leading-snug"
+      {/* Nombre + nota en layout compacto */}
+      <div className="flex items-start gap-1">
+        <div className="flex-1 leading-tight" style={{ fontSize: "9px", color: "#374151" }}
              title={titleName}>
           {titleName}
         </div>
-        {/* Nota */}
-        <div className={`text-base font-bold mt-1 ${s.text}`}>
-          {asignatura.nota_vigente != null ? asignatura.nota_vigente : "—"}
+        <div className={`font-bold flex-shrink-0 ${s.text}`} style={{ fontSize: "11px", minWidth: "20px", textAlign: "right" }}>
+          {nota != null ? nota : "—"}
         </div>
       </div>
 
       {/* Tooltip con historial de intentos */}
       {showTooltip && esRepeticion && asignatura.intentos.length > 0 && (
-        <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 bg-gray-900 text-white rounded-lg shadow-xl px-3 py-2 text-[10px] whitespace-nowrap"
-             style={{ minWidth: "160px" }}>
-          <div className="font-bold mb-1 text-orange-300">{titleName}</div>
-          <div className="font-semibold text-gray-300 mb-1">{numIntentos} intentos:</div>
+        <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-1 bg-gray-900 text-white rounded-lg shadow-xl px-2.5 py-1.5 whitespace-nowrap"
+             style={{ minWidth: "150px", fontSize: "9px" }}>
+          <div className="font-bold mb-0.5 text-orange-300" style={{ fontSize: "10px" }}>{titleName}</div>
+          <div className="font-semibold text-gray-300 mb-0.5">{numIntentos} intentos:</div>
           {asignatura.intentos.map((intento, i) => (
-            <div key={i} className="flex justify-between gap-3 py-0.5 border-t border-gray-700">
+            <div key={i} className="flex justify-between gap-3 py-px border-t border-gray-700">
               <span className="text-gray-300">{intento.periodo || "Actual"}</span>
               <span className={
                 intento.estado === "aprobada" ? "text-green-400 font-bold" :
@@ -1469,35 +1470,59 @@ export default function FichaEstudiante() {
                         {malla.total_aprobadas} aprobadas · {malla.total_cursando} cursando · {malla.total_reprobadas} reprobadas · {malla.total_no_cursado} pendientes
                       </span>
                     </SectionHeader>
-                    <div className="overflow-x-auto bg-[#FAFAFA] px-2 py-3">
-                      <div className="flex gap-1.5" style={{ minWidth: "max-content" }}>
+                    {/* Leyenda compacta arriba del grid */}
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 px-3 py-1 bg-[#FAFAFA]" style={{ fontSize: "8px", color: "#6b7280" }}>
+                      <span className="flex items-center gap-1">
+                        <span className="inline-block w-2 h-2 rounded-sm bg-green-100 border border-green-300"></span>Aprobada
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="inline-block w-2 h-2 rounded-sm bg-amber-100 border border-amber-400"></span>Cursando
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="inline-block w-2 h-2 rounded-sm bg-yellow-100 border border-yellow-300"></span>En proceso
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="inline-block w-2 h-2 rounded-sm bg-red-100 border border-red-300"></span>Reprobada
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="inline-block w-2 h-2 rounded-sm bg-gray-100 border border-gray-200"></span>No cursada
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="inline-block w-2 h-2 rounded-sm bg-white border border-gray-200" style={{ borderLeftWidth: "2px", borderLeftColor: "#f97316" }}></span>Repetición
+                      </span>
+                    </div>
+                    {/* Grid de niveles */}
+                    <div className="bg-[#FAFAFA] px-1.5 pb-2">
+                      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${malla.total_semestres}, minmax(0, 1fr))` }}>
                         {malla.semestres.map((sem, si) => {
                           const yearLabel = YEAR_LABELS[sem.numero];
                           const promedioStyle = getNoteStyleHistorico(sem.promedio != null ? Math.round(sem.promedio) : null);
                           return (
-                            <div key={sem.numero} className="flex-shrink-0 flex flex-col" style={{ width: "170px" }}>
+                            <div key={sem.numero} className="flex flex-col min-w-0">
                               {/* Etiqueta de año (solo en semestres impares) */}
                               {yearLabel && (
-                                <div className="bg-[#0F2A4A] text-white text-center text-[8px] font-bold uppercase tracking-wider px-1 py-0.5 rounded-t"
-                                     style={{ marginBottom: "-1px" }}>
+                                <div className="bg-[#0F2A4A] text-white text-center font-bold uppercase tracking-wider rounded-t"
+                                     style={{ fontSize: "7px", padding: "2px 2px", marginBottom: "-1px" }}>
                                   {yearLabel}
                                 </div>
                               )}
-                              {/* Encabezado de semestre/nivel */}
-                              <div className={`bg-[#1B3A6B] text-white text-center px-1 py-1.5 text-[11px] font-bold uppercase tracking-wider ${!yearLabel ? "rounded-t" : ""}`}>
-                                {sem.numero}° Nivel
+                              {/* Encabezado de nivel */}
+                              <div className={`bg-[#1B3A6B] text-white text-center font-bold uppercase tracking-wider ${!yearLabel ? "rounded-t" : ""}`}
+                                   style={{ fontSize: "9px", padding: "3px 2px" }}>
+                                {sem.numero}°
                               </div>
                               {/* Celdas de asignaturas */}
-                              <div className="border border-t-0 border-gray-200 rounded-b bg-white px-1 pt-1.5 pb-1 flex flex-col gap-1">
+                              <div className="border border-t-0 border-gray-200 rounded-b bg-white flex flex-col gap-0.5" style={{ padding: "3px" }}>
                                 {sem.asignaturas.length > 0 ? (
                                   sem.asignaturas.map((asig, ai) => (
                                     <MallaCeldaFija key={ai} asignatura={asig} />
                                   ))
                                 ) : (
-                                  <div className="text-[9px] text-gray-300 text-center py-3 italic">Sin datos</div>
+                                  <div className="text-gray-300 text-center py-2 italic" style={{ fontSize: "8px" }}>Sin datos</div>
                                 )}
                                 {/* Promedio del nivel */}
-                                <div className={`mt-1 text-center text-[10px] font-bold border-t border-gray-100 pt-1 ${promedioStyle.text}`}>
+                                <div className={`text-center font-bold border-t border-gray-100 ${promedioStyle.text}`}
+                                     style={{ fontSize: "9px", paddingTop: "2px", marginTop: "2px" }}>
                                   x&#772; {sem.promedio != null ? sem.promedio.toFixed(1) : "—"}
                                 </div>
                               </div>
@@ -1505,27 +1530,6 @@ export default function FichaEstudiante() {
                           );
                         })}
                       </div>
-                    </div>
-                    {/* Leyenda */}
-                    <div className="flex flex-wrap gap-3 px-2 pb-1.5 bg-[#FAFAFA] border-t border-gray-100">
-                      <span className="flex items-center gap-1 text-[9px] text-gray-500">
-                        <span className="inline-block w-2.5 h-2.5 rounded-sm bg-green-100 border border-green-300"></span>Aprobada
-                      </span>
-                      <span className="flex items-center gap-1 text-[9px] text-gray-500">
-                        <span className="inline-block w-2.5 h-2.5 rounded-sm bg-amber-100 border border-amber-400"></span>Cursando
-                      </span>
-                      <span className="flex items-center gap-1 text-[9px] text-gray-500">
-                        <span className="inline-block w-2.5 h-2.5 rounded-sm bg-yellow-100 border border-yellow-300"></span>En proceso
-                      </span>
-                      <span className="flex items-center gap-1 text-[9px] text-gray-500">
-                        <span className="inline-block w-2.5 h-2.5 rounded-sm bg-red-100 border border-red-300"></span>Reprobada
-                      </span>
-                      <span className="flex items-center gap-1 text-[9px] text-gray-500">
-                        <span className="inline-block w-2.5 h-2.5 rounded-sm bg-gray-100 border border-gray-200"></span>No cursada
-                      </span>
-                      <span className="flex items-center gap-1 text-[9px] text-gray-500">
-                        <span className="inline-block w-2.5 h-2.5 rounded-sm bg-white border border-gray-200" style={{ borderLeftWidth: "3px", borderLeftColor: "#f97316" }}></span>Repetici&oacute;n
-                      </span>
                     </div>
                   </div>
                 );
