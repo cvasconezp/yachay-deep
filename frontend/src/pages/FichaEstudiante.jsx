@@ -1487,10 +1487,6 @@ export default function FichaEstudiante() {
               {/* ══ MALLA CURRICULAR FIJA (grid por niveles canónicos) ══ */}
               {ficha.malla_curricular?.semestres?.length > 0 && (() => {
                 const malla = ficha.malla_curricular;
-                const YEAR_LABELS = {
-                  1: "Primer Año", 3: "Segundo Año", 5: "Tercer Año",
-                  7: "Cuarto Año", 9: "Quinto Año", 11: "Sexto Año",
-                };
                 return (
                   <div className="border-t border-gray-200">
                     <SectionHeader>
@@ -1520,40 +1516,56 @@ export default function FichaEstudiante() {
                         <span className="inline-block w-2 h-2 rounded-sm bg-white border border-gray-200" style={{ borderLeftWidth: "2px", borderLeftColor: "#f97316" }}></span>Repetición
                       </span>
                     </div>
-                    {/* Grid de niveles */}
+                    {/* Grid de niveles con años que abarcan 2 columnas */}
                     <div className="bg-[#FAFAFA] px-1.5 pb-2">
+                      {/* Fila de años — cada año abarca 2 niveles */}
                       <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${malla.total_semestres}, minmax(0, 1fr))` }}>
-                        {malla.semestres.map((sem, si) => {
-                          const yearLabel = YEAR_LABELS[sem.numero];
+                        {(() => {
+                          const yearCells = [];
+                          const totalSem = malla.total_semestres;
+                          for (let i = 0; i < totalSem; i += 2) {
+                            const yearNum = Math.floor(i / 2) + 1;
+                            const YEAR_NAMES = { 1: "Primer Año", 2: "Segundo Año", 3: "Tercer Año", 4: "Cuarto Año", 5: "Quinto Año" };
+                            const label = YEAR_NAMES[yearNum] || `${yearNum}° Año`;
+                            const span = (i + 1 < totalSem) ? 2 : 1;
+                            yearCells.push(
+                              <div key={`year-${i}`}
+                                   className="bg-[#0F2A4A] text-white text-center font-bold uppercase tracking-wider rounded-t"
+                                   style={{ fontSize: "8px", padding: "3px 2px", gridColumn: `span ${span}` }}>
+                                {label}
+                              </div>
+                            );
+                          }
+                          return yearCells;
+                        })()}
+                      </div>
+                      {/* Fila de encabezados de nivel — todos alineados */}
+                      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${malla.total_semestres}, minmax(0, 1fr))`, marginTop: "-1px" }}>
+                        {malla.semestres.map((sem) => (
+                          <div key={`hdr-${sem.numero}`}
+                               className="bg-[#1B3A6B] text-white text-center font-bold uppercase tracking-wider"
+                               style={{ fontSize: "11px", padding: "4px 2px" }}>
+                            {sem.numero}°
+                          </div>
+                        ))}
+                      </div>
+                      {/* Filas de contenido — asignaturas */}
+                      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${malla.total_semestres}, minmax(0, 1fr))`, marginTop: "-1px" }}>
+                        {malla.semestres.map((sem) => {
                           const promedioStyle = getNoteStyleHistorico(sem.promedio != null ? Math.round(sem.promedio) : null);
                           return (
-                            <div key={sem.numero} className="flex flex-col min-w-0">
-                              {/* Etiqueta de año (solo en semestres impares) */}
-                              {yearLabel && (
-                                <div className="bg-[#0F2A4A] text-white text-center font-bold uppercase tracking-wider rounded-t"
-                                     style={{ fontSize: "8px", padding: "2px 2px", marginBottom: "-1px" }}>
-                                  {yearLabel}
-                                </div>
+                            <div key={`col-${sem.numero}`} className="border border-t-0 border-gray-200 rounded-b bg-white flex flex-col gap-0.5 min-w-0" style={{ padding: "4px" }}>
+                              {sem.asignaturas.length > 0 ? (
+                                sem.asignaturas.map((asig, ai) => (
+                                  <MallaCeldaFija key={ai} asignatura={asig} />
+                                ))
+                              ) : (
+                                <div className="text-gray-300 text-center py-2 italic" style={{ fontSize: "9px" }}>Sin datos</div>
                               )}
-                              {/* Encabezado de nivel */}
-                              <div className={`bg-[#1B3A6B] text-white text-center font-bold uppercase tracking-wider ${!yearLabel ? "rounded-t" : ""}`}
-                                   style={{ fontSize: "11px", padding: "4px 2px" }}>
-                                {sem.numero}°
-                              </div>
-                              {/* Celdas de asignaturas */}
-                              <div className="border border-t-0 border-gray-200 rounded-b bg-white flex flex-col gap-0.5" style={{ padding: "4px" }}>
-                                {sem.asignaturas.length > 0 ? (
-                                  sem.asignaturas.map((asig, ai) => (
-                                    <MallaCeldaFija key={ai} asignatura={asig} />
-                                  ))
-                                ) : (
-                                  <div className="text-gray-300 text-center py-2 italic" style={{ fontSize: "9px" }}>Sin datos</div>
-                                )}
-                                {/* Promedio del nivel */}
-                                <div className={`text-center font-bold border-t border-gray-100 ${promedioStyle.text}`}
-                                     style={{ fontSize: "10px", paddingTop: "3px", marginTop: "3px" }}>
-                                  x&#772; {sem.promedio != null ? sem.promedio.toFixed(1) : "—"}
-                                </div>
+                              {/* Promedio del nivel */}
+                              <div className={`text-center font-bold border-t border-gray-100 ${promedioStyle.text}`}
+                                   style={{ fontSize: "10px", paddingTop: "3px", marginTop: "3px" }}>
+                                x&#772; {sem.promedio != null ? sem.promedio.toFixed(1) : "—"}
                               </div>
                             </div>
                           );
