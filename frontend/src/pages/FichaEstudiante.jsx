@@ -384,22 +384,15 @@ function MallaCeldaFija({ asignatura }) {
   const [showTooltip, setShowTooltip] = useState(false);
   const s = getMallaEstado(asignatura.estado);
   const titleName = toTitleCase(asignatura.nombre) || "";
-  const abrev = titleName
-    .replace(/\b(de|la|las|los|el|y|en|del|para|con|por)\b/gi, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 22);
 
   const esRepeticion = asignatura.es_repeticion;
   const numIntentos = asignatura.num_intentos;
 
   return (
     <div
-      className={`relative border ${s.border} ${s.bg} rounded text-center cursor-default transition-shadow hover:shadow-md`}
+      className={`relative border ${s.border} ${s.bg} rounded text-center cursor-default transition-shadow hover:shadow-md flex flex-col`}
       style={{
-        minWidth: "110px",
-        maxWidth: "140px",
-        minHeight: "54px",
+        minHeight: "80px",
         ...(esRepeticion ? { borderLeftWidth: "4px", borderLeftColor: "#f97316", borderLeftStyle: "solid" } : {}),
       }}
       onMouseEnter={() => esRepeticion && setShowTooltip(true)}
@@ -407,21 +400,20 @@ function MallaCeldaFija({ asignatura }) {
     >
       {/* Badge de repetición */}
       {esRepeticion && (
-        <div className="absolute -top-1.5 -right-1.5 bg-orange-500 text-white text-[8px] font-bold rounded-full w-4 h-4 flex items-center justify-center shadow-sm"
+        <div className="absolute -top-1.5 -right-1.5 bg-orange-500 text-white text-[8px] font-bold rounded-full w-4 h-4 flex items-center justify-center shadow-sm z-10"
              title={`${numIntentos} intentos`}>
           {numIntentos}
         </div>
       )}
 
-      {/* Nombre de asignatura */}
-      <div className="px-1.5 pt-1.5 pb-0.5">
-        <div className="text-[9px] text-gray-600 leading-tight overflow-hidden"
-             style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", minHeight: "20px" }}
+      {/* Nombre de asignatura — completo */}
+      <div className="px-2 pt-2 pb-1 flex-1 flex flex-col justify-between">
+        <div className="text-[10px] text-gray-700 leading-snug"
              title={titleName}>
-          {abrev}
+          {titleName}
         </div>
         {/* Nota */}
-        <div className={`text-sm font-bold mt-0.5 ${s.text}`}>
+        <div className={`text-base font-bold mt-1 ${s.text}`}>
           {asignatura.nota_vigente != null ? asignatura.nota_vigente : "—"}
         </div>
       </div>
@@ -1483,7 +1475,7 @@ export default function FichaEstudiante() {
                           const yearLabel = YEAR_LABELS[sem.numero];
                           const promedioStyle = getNoteStyleHistorico(sem.promedio != null ? Math.round(sem.promedio) : null);
                           return (
-                            <div key={sem.numero} className="flex-shrink-0 flex flex-col" style={{ minWidth: "120px", maxWidth: "140px" }}>
+                            <div key={sem.numero} className="flex-shrink-0 flex flex-col" style={{ width: "170px" }}>
                               {/* Etiqueta de año (solo en semestres impares) */}
                               {yearLabel && (
                                 <div className="bg-[#0F2A4A] text-white text-center text-[8px] font-bold uppercase tracking-wider px-1 py-0.5 rounded-t"
@@ -1492,8 +1484,7 @@ export default function FichaEstudiante() {
                                 </div>
                               )}
                               {/* Encabezado de semestre/nivel */}
-                              <div className={`bg-[#1B3A6B] text-white text-center px-1 py-1 text-[10px] font-bold uppercase tracking-wider ${!yearLabel ? "rounded-t" : ""}`}>
-                                <span className="text-white/60 mr-1">{sem.numero}</span>
+                              <div className={`bg-[#1B3A6B] text-white text-center px-1 py-1.5 text-[11px] font-bold uppercase tracking-wider ${!yearLabel ? "rounded-t" : ""}`}>
                                 {sem.numero}° Nivel
                               </div>
                               {/* Celdas de asignaturas */}

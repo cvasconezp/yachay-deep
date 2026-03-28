@@ -192,7 +192,7 @@ def health_check():
     """Health check mejorado: verifica conexión a BD y versión del código."""
     from sqlalchemy import text
     # Version indicator — update on each significant deploy
-    CODE_VERSION = "2026-03-27-malla-fija-v3"
+    CODE_VERSION = "2026-03-27-malla-diseño-v4"
     try:
         from .database import SessionLocal
         db = SessionLocal()
