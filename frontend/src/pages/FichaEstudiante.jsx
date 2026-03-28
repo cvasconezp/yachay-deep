@@ -400,8 +400,7 @@ function MallaCeldaFija({ asignatura }) {
         minWidth: "110px",
         maxWidth: "140px",
         minHeight: "54px",
-        borderLeftWidth: esRepeticion ? "4px" : "1px",
-        borderLeftColor: esRepeticion ? "#f97316" : undefined,
+        ...(esRepeticion ? { borderLeftWidth: "4px", borderLeftColor: "#f97316", borderLeftStyle: "solid" } : {}),
       }}
       onMouseEnter={() => esRepeticion && setShowTooltip(true)}
       onMouseLeave={() => setShowTooltip(false)}
@@ -1534,7 +1533,7 @@ export default function FichaEstudiante() {
                         <span className="inline-block w-2.5 h-2.5 rounded-sm bg-gray-100 border border-gray-200"></span>No cursada
                       </span>
                       <span className="flex items-center gap-1 text-[9px] text-gray-500">
-                        <span className="inline-block w-2.5 h-2.5 rounded-sm bg-white border-l-[3px] border-orange-500 border-t border-r border-b border-gray-200"></span>Repetici&oacute;n
+                        <span className="inline-block w-2.5 h-2.5 rounded-sm bg-white border border-gray-200" style={{ borderLeftWidth: "3px", borderLeftColor: "#f97316" }}></span>Repetici&oacute;n
                       </span>
                     </div>
                   </div>

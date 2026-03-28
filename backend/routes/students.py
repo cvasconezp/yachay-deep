@@ -419,8 +419,10 @@ def _build_malla_canonica(
     for asig_upper, counter in asig_nivel_counts.items():
         canonical[asig_upper] = counter.most_common(1)[0][0]
 
-    # ── Estrategia B: inferir nivel desde secuencia de períodos ──
-    # Solo si la estrategia A no cubrió suficientes asignaturas
+    # ── Estrategia B: inferir nivel usando "estudiantes modelo" ──
+    # Un estudiante modelo: no tiene retakes (cada asignatura aparece en 1 solo
+    # periodo) y tiene al menos 4 periodos distintos (malla suficientemente completa).
+    # Usar SOLO estos estudiantes da una malla limpia sin ruido.
     all_career_grades_hist = (
         db.query(Grade.student_id, Grade.asignatura, Grade.periodo)
         .filter(
@@ -436,30 +438,73 @@ def _build_malla_canonica(
         for sid, asig, periodo in all_career_grades_hist:
             student_grades_grouped.setdefault(sid, []).append((asig, periodo))
 
-        # Para cada estudiante, construir mapeo período → nivel inferido
-        inferred_counts: dict[str, Counter] = {}
+        # Identificar estudiantes modelo:
+        # - Sin retakes (ninguna asignatura en más de 1 periodo)
+        # - Al menos 4 periodos distintos
+        model_student_ids = []
         for sid, grades_list in student_grades_grouped.items():
-            # Obtener periodos únicos del estudiante, ordenados
+            periodos_unicos = set(p for _, p in grades_list)
+            if len(periodos_unicos) < 4:
+                continue
+            # Verificar que no haya asignatura repetida en distintos periodos
+            asig_periodos: dict[str, set] = {}
+            for asig, periodo in grades_list:
+                asig_upper = asig.strip().upper()
+                asig_periodos.setdefault(asig_upper, set()).add(periodo)
+            has_retake = any(len(ps) > 1 for ps in asig_periodos.values())
+            if not has_retake:
+                model_student_ids.append((sid, len(periodos_unicos)))
+
+        # Ordenar por cantidad de periodos (más completos primero)
+        model_student_ids.sort(key=lambda x: -x[1])
+
+        # Usar los top modelo (hasta 30 estudiantes más completos)
+        top_models = [sid for sid, _ in model_student_ids[:30]]
+
+        # Si no hay suficientes modelos, relajar: permitir hasta 1 retake
+        if len(top_models) < 5:
+            for sid, grades_list in student_grades_grouped.items():
+                if sid in [s for s, _ in model_student_ids]:
+                    continue
+                periodos_unicos = set(p for _, p in grades_list)
+                if len(periodos_unicos) < 3:
+                    continue
+                asig_periodos: dict[str, set] = {}
+                for asig, periodo in grades_list:
+                    asig_upper = asig.strip().upper()
+                    asig_periodos.setdefault(asig_upper, set()).add(periodo)
+                retake_count = sum(1 for ps in asig_periodos.values() if len(ps) > 1)
+                if retake_count <= 1:
+                    top_models.append(sid)
+                if len(top_models) >= 15:
+                    break
+
+        # Construir canonical desde estudiantes modelo
+        inferred_counts: dict[str, Counter] = {}
+        for sid in top_models:
+            grades_list = student_grades_grouped[sid]
             periodos_unicos = sorted(set(p for _, p in grades_list))
             periodo_to_nivel = {p: (i + 1) for i, p in enumerate(periodos_unicos)}
 
-            # Para cada asignatura, tomar el PRIMER período en que la cursó
+            # Para cada asignatura, tomar el PRIMER período
             asig_primer_periodo: dict[str, str] = {}
             for asig, periodo in sorted(grades_list, key=lambda x: x[1]):
                 asig_upper = asig.strip().upper()
                 if asig_upper not in asig_primer_periodo:
                     asig_primer_periodo[asig_upper] = periodo
 
-            # Asignar nivel inferido
             for asig_upper, primer_periodo in asig_primer_periodo.items():
                 nivel_inferido = periodo_to_nivel[primer_periodo]
                 if asig_upper not in inferred_counts:
                     inferred_counts[asig_upper] = Counter()
                 inferred_counts[asig_upper][nivel_inferido] += 1
 
-        # Llenar canonical con datos inferidos donde no exista nivel explícito
+        # Solo incluir asignaturas que aparecen en al menos 2 estudiantes modelo
+        # (o al menos 1 si hay pocos modelos)
+        min_apariciones = 2 if len(top_models) >= 5 else 1
         for asig_upper, counter in inferred_counts.items():
-            if asig_upper not in canonical:
+            total_apariciones = sum(counter.values())
+            if total_apariciones >= min_apariciones and asig_upper not in canonical:
                 canonical[asig_upper] = counter.most_common(1)[0][0]
 
     if not canonical:
