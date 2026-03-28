@@ -213,15 +213,39 @@ function TabSistema() {
           <button
             onClick={async () => {
               setMlLoading(true);
-              setMlMsg("");
+              setMlMsg("Iniciando entrenamiento...");
               try {
                 const r = await api.trainModel();
-                setMlMsg(r.status === "ok"
-                  ? `Modelo entrenado (${r.estudiantes} estudiantes, ${r.periodos?.length} periodos)`
-                  : `Aviso: ${r.message || "sin resultado"}`);
-                loadMlStatus();
-              } catch (e) { setMlMsg("Error: " + e.message); }
-              finally { setMlLoading(false); }
+                if (r.status === "started" || r.status === "already_running") {
+                  setMlMsg("Entrenando en background...");
+                  // Polling cada 3s hasta que termine
+                  const poll = setInterval(async () => {
+                    try {
+                      const st = await api.getTaskStatus();
+                      if (!st.running) {
+                        clearInterval(poll);
+                        setMlLoading(false);
+                        if (st.error) {
+                          setMlMsg("Error: " + st.error);
+                        } else if (st.result?.status === "ok") {
+                          setMlMsg(`Modelo entrenado (${st.result.estudiantes} estudiantes, ${st.result.periodos?.length} periodos) en ${st.elapsed_seconds}s`);
+                          loadMlStatus();
+                        } else {
+                          setMlMsg(`Aviso: ${st.result?.message || "sin resultado"}`);
+                        }
+                      } else {
+                        setMlMsg(`Entrenando... (${Math.round(st.elapsed_seconds)}s)`);
+                      }
+                    } catch { /* ignore polling errors */ }
+                  }, 3000);
+                } else {
+                  setMlMsg(r.status === "ok"
+                    ? `Modelo entrenado (${r.estudiantes} estudiantes)`
+                    : `Aviso: ${r.message || "sin resultado"}`);
+                  setMlLoading(false);
+                  loadMlStatus();
+                }
+              } catch (e) { setMlMsg("Error: " + e.message); setMlLoading(false); }
             }}
             disabled={mlLoading}
             className="bg-brand text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-brand-light transition-colors disabled:opacity-60"
@@ -231,16 +255,38 @@ function TabSistema() {
           <button
             onClick={async () => {
               setMlLoading(true);
-              setMlMsg("");
+              setMlMsg("Iniciando predicciones...");
               try {
                 const r = await api.runPredictions();
-                setMlMsg(r.status === "ok"
-                  ? `Predicciones actualizadas para ${r.updated} estudiantes`
-                  : `Aviso: ${r.message || "sin resultado"}`);
-              } catch (e) { setMlMsg("Error: " + e.message); }
-              finally { setMlLoading(false); }
+                if (r.status === "started" || r.status === "already_running") {
+                  setMlMsg("Ejecutando predicciones...");
+                  const poll = setInterval(async () => {
+                    try {
+                      const st = await api.getTaskStatus();
+                      if (!st.running) {
+                        clearInterval(poll);
+                        setMlLoading(false);
+                        if (st.error) {
+                          setMlMsg("Error: " + st.error);
+                        } else if (st.result?.status === "ok") {
+                          setMlMsg(`Predicciones actualizadas para ${st.result.updated} estudiantes en ${st.elapsed_seconds}s`);
+                        } else {
+                          setMlMsg(`Aviso: ${st.result?.message || "sin resultado"}`);
+                        }
+                      } else {
+                        setMlMsg(`Ejecutando predicciones... (${Math.round(st.elapsed_seconds)}s)`);
+                      }
+                    } catch { /* ignore polling errors */ }
+                  }, 3000);
+                } else {
+                  setMlMsg(r.status === "ok"
+                    ? `Predicciones actualizadas para ${r.updated} estudiantes`
+                    : `Aviso: ${r.message || "sin resultado"}`);
+                  setMlLoading(false);
+                }
+              } catch (e) { setMlMsg("Error: " + e.message); setMlLoading(false); }
             }}
-            disabled={mlLoading || !mlStatus?.loaded}
+            disabled={mlLoading}
             className="bg-brand-gold text-brand-dark px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-brand-gold-light transition-colors disabled:opacity-60"
           >
             {mlLoading ? "Ejecutando..." : "Ejecutar Predicciones"}

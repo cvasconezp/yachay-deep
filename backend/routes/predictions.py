@@ -4,10 +4,12 @@ Permite entrenar modelos, ejecutar predicciones, consultar estado
 y generar recomendaciones automáticas de intervención.
 """
 import logging
+import threading
+import time as _time
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from ..database import get_db
+from ..database import get_db, SessionLocal
 from ..auth.jwt import get_current_user
 from ..models.user import User, UserRole
 
@@ -15,54 +17,104 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/predictions", tags=["predictions"])
 
+# ── Estado de tareas en background (train/predict) ──
+_bg_task: dict = {"running": False, "type": None, "started": None, "result": None, "error": None}
+
 
 def _require_admin(user: User):
     if user.role != UserRole.admin:
         raise HTTPException(status_code=403, detail="Solo administradores")
 
 
+def _run_train_in_background():
+    """Ejecuta entrenamiento en un hilo separado para evitar timeout HTTP."""
+    db = SessionLocal()
+    try:
+        from ..ml.train import train_models
+        result = train_models(db)
+        _bg_task["result"] = result
+        _bg_task["error"] = None
+        logger.info("Entrenamiento en background completado: %s", result.get("status"))
+    except Exception as e:
+        _bg_task["result"] = None
+        _bg_task["error"] = str(e)
+        logger.error("Error en entrenamiento background: %s", e)
+    finally:
+        db.close()
+        _bg_task["running"] = False
+
+
+def _run_predict_in_background():
+    """Ejecuta predicciones en un hilo separado para evitar timeout HTTP."""
+    db = SessionLocal()
+    try:
+        from ..ml.predict import Predictor
+        predictor = Predictor.get_instance()
+
+        # Auto-reentrenar si no hay modelos cargados
+        if not predictor.is_loaded and not predictor.load_models():
+            from ..ml.train import train_models
+            train_result = train_models(db)
+            if train_result.get("status") != "ok":
+                _bg_task["result"] = {"status": "error", "message": "No se pudo entrenar", "detail": train_result}
+                return
+            predictor.reset()
+            predictor.load_models()
+
+        result = predictor.predict_batch(db)
+        _bg_task["result"] = result
+        _bg_task["error"] = None
+        logger.info("Predicciones en background completadas: %s", result.get("status"))
+    except Exception as e:
+        _bg_task["result"] = None
+        _bg_task["error"] = str(e)
+        logger.error("Error en predicciones background: %s", e)
+    finally:
+        db.close()
+        _bg_task["running"] = False
+
+
 @router.post("/train")
 def train_model(
-    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Reentrena los modelos predictivos con datos historicos."""
+    """Reentrena los modelos predictivos en background."""
     _require_admin(current_user)
 
-    from ..ml.train import train_models
-    result = train_models(db)
-    return result
+    if _bg_task["running"]:
+        return {"status": "already_running", "type": _bg_task["type"], "started": _bg_task["started"]}
+
+    _bg_task.update({"running": True, "type": "train", "started": _time.time(), "result": None, "error": None})
+    threading.Thread(target=_run_train_in_background, daemon=True).start()
+    return {"status": "started", "message": "Entrenamiento iniciado en background. Consulta /predictions/task-status para ver progreso."}
 
 
 @router.post("/run")
 def run_predictions(
-    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Ejecuta predicciones para todos los estudiantes del semestre actual.
-    Si no hay modelos entrenados (ej. después de un redeploy en Railway),
-    reentrena automáticamente antes de predecir.
-    """
+    """Ejecuta predicciones en background para todos los estudiantes."""
     _require_admin(current_user)
 
-    from ..ml.predict import Predictor
-    predictor = Predictor.get_instance()
+    if _bg_task["running"]:
+        return {"status": "already_running", "type": _bg_task["type"], "started": _bg_task["started"]}
 
-    # Auto-reentrenar si no hay modelos cargados
-    if not predictor.is_loaded and not predictor.load_models():
-        from ..ml.train import train_models
-        train_result = train_models(db)
-        if train_result.get("status") != "ok":
-            return {"status": "error", "message": "No se pudo entrenar el modelo", "train_detail": train_result}
-        # Recargar modelos recién entrenados
-        predictor.reset()
-        predictor.load_models()
+    _bg_task.update({"running": True, "type": "predict", "started": _time.time(), "result": None, "error": None})
+    threading.Thread(target=_run_predict_in_background, daemon=True).start()
+    return {"status": "started", "message": "Predicciones iniciadas en background. Consulta /predictions/task-status para ver progreso."}
 
-    result = predictor.predict_batch(db)
-    if result.get("status") == "error" and "No hay modelos" in result.get("message", ""):
-        result["hint"] = "No hay datos históricos suficientes para entrenar. Ejecute primero el ETL con datos del TableauHistorico."
-    return result
+
+@router.get("/task-status")
+def task_status(current_user: User = Depends(get_current_user)):
+    """Estado de la tarea en background (train o predict)."""
+    elapsed = round(_time.time() - _bg_task["started"], 1) if _bg_task["started"] else None
+    return {
+        "running": _bg_task["running"],
+        "type": _bg_task["type"],
+        "elapsed_seconds": elapsed,
+        "result": _bg_task["result"],
+        "error": _bg_task["error"],
+    }
 
 
 @router.get("/status")

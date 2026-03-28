@@ -217,6 +217,7 @@ class ApiClient {
   // ── Predictions / ML ──
   trainModel() { return this.post("/predictions/train", {}); }
   runPredictions() { return this.post("/predictions/run", {}); }
+  getTaskStatus() { return this.get("/predictions/task-status"); }
   getPredictionStatus() { return this.get("/predictions/status"); }
   getPredictionStudent(studentId) { return this.get(`/predictions/student/${studentId}`); }
   getPrediction(studentId) { return this.getPredictionStudent(studentId); } // alias
