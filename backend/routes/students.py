@@ -382,8 +382,12 @@ def _build_malla_canonica(
     if not carrera:
         return MallaCurricular()
 
-    # ── 1. Descubrir malla canónica: (asignatura → nivel) vía moda de TODA la carrera ──
-    # Consultar nivel más frecuente por asignatura entre todos los estudiantes de la carrera
+    # ── 1. Descubrir malla canónica: (asignatura → nivel) ──
+    # Estrategia dual:
+    #   A) Si el campo 'nivel' está poblado en grades, usar moda directa.
+    #   B) Si no (caso TableauHistorico), inferir nivel a partir de la
+    #      secuencia de períodos de cada estudiante: 1er periodo = nivel 1, etc.
+
     career_student_ids = [
         sid for (sid,) in db.query(Student.id).filter(
             func.upper(Student.carrera) == carrera.upper()
@@ -392,7 +396,8 @@ def _build_malla_canonica(
     if not career_student_ids:
         return MallaCurricular(carrera=carrera)
 
-    all_career_grades = (
+    # ── Estrategia A: nivel explícito ──
+    all_career_grades_with_nivel = (
         db.query(Grade.asignatura, Grade.nivel)
         .filter(
             Grade.student_id.in_(career_student_ids),
@@ -403,18 +408,59 @@ def _build_malla_canonica(
         .all()
     )
 
-    # Calcular moda de nivel por asignatura
     asig_nivel_counts: dict[str, Counter] = {}
-    for asig, nivel in all_career_grades:
+    for asig, nivel in all_career_grades_with_nivel:
         asig_upper = asig.strip().upper()
         if asig_upper not in asig_nivel_counts:
             asig_nivel_counts[asig_upper] = Counter()
         asig_nivel_counts[asig_upper][nivel] += 1
 
-    # Mapeo canónico: asignatura_upper → nivel_canonico
     canonical: dict[str, int] = {}
     for asig_upper, counter in asig_nivel_counts.items():
         canonical[asig_upper] = counter.most_common(1)[0][0]
+
+    # ── Estrategia B: inferir nivel desde secuencia de períodos ──
+    # Solo si la estrategia A no cubrió suficientes asignaturas
+    all_career_grades_hist = (
+        db.query(Grade.student_id, Grade.asignatura, Grade.periodo)
+        .filter(
+            Grade.student_id.in_(career_student_ids),
+            Grade.periodo.isnot(None),
+        )
+        .all()
+    )
+
+    if all_career_grades_hist:
+        # Agrupar grades por estudiante
+        student_grades_grouped: dict[int, list] = {}
+        for sid, asig, periodo in all_career_grades_hist:
+            student_grades_grouped.setdefault(sid, []).append((asig, periodo))
+
+        # Para cada estudiante, construir mapeo período → nivel inferido
+        inferred_counts: dict[str, Counter] = {}
+        for sid, grades_list in student_grades_grouped.items():
+            # Obtener periodos únicos del estudiante, ordenados
+            periodos_unicos = sorted(set(p for _, p in grades_list))
+            periodo_to_nivel = {p: (i + 1) for i, p in enumerate(periodos_unicos)}
+
+            # Para cada asignatura, tomar el PRIMER período en que la cursó
+            asig_primer_periodo: dict[str, str] = {}
+            for asig, periodo in sorted(grades_list, key=lambda x: x[1]):
+                asig_upper = asig.strip().upper()
+                if asig_upper not in asig_primer_periodo:
+                    asig_primer_periodo[asig_upper] = periodo
+
+            # Asignar nivel inferido
+            for asig_upper, primer_periodo in asig_primer_periodo.items():
+                nivel_inferido = periodo_to_nivel[primer_periodo]
+                if asig_upper not in inferred_counts:
+                    inferred_counts[asig_upper] = Counter()
+                inferred_counts[asig_upper][nivel_inferido] += 1
+
+        # Llenar canonical con datos inferidos donde no exista nivel explícito
+        for asig_upper, counter in inferred_counts.items():
+            if asig_upper not in canonical:
+                canonical[asig_upper] = counter.most_common(1)[0][0]
 
     if not canonical:
         return MallaCurricular(carrera=carrera)
