@@ -4,11 +4,15 @@ Búsqueda por nombre/correo/cédula y vista de ficha completa.
 """
 from typing import Optional
 from collections import Counter
+import time
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
 from pydantic import BaseModel
 from datetime import datetime, date
+
+logger = logging.getLogger(__name__)
 
 from ..database import get_db
 from ..models import Student, AvacAccess, TaskSubmission, Grade, Intervention
@@ -18,6 +22,11 @@ from ..models.user import User
 from ..constants import EIB_GRUPO_SEDE_STR as SEDE_MAPPING
 
 router = APIRouter(prefix="/students", tags=["students"])
+
+# ── Caché en memoria para malla canónica por carrera (evita recalcular por cada estudiante) ──
+# Estructura: { "CARRERA_UPPER": (timestamp, canonical_dict) }
+_canonical_cache: dict[str, tuple[float, dict[str, int]]] = {}
+_CANONICAL_CACHE_TTL = 600  # 10 minutos
 
 def detectar_sede(course_configs: list, student_grupo: str = None) -> Optional[str]:
     """
@@ -361,46 +370,37 @@ def search_students(
 
 # ── Construcción de Malla Curricular Canónica ─────────────────────────────────
 
-def _build_malla_canonica(
-    db: Session,
-    student: "Student",
-    calificaciones_hist: list["Grade"],
-    calificaciones_actual: list["Grade"],
-) -> MallaCurricular:
+def _get_canonical_for_career(db: Session, carrera: str) -> dict[str, int]:
     """
-    Construye la malla curricular fija del estudiante.
-
-    Estrategia (Opción A — automática):
-    1. Determina la malla canónica de la carrera usando el campo `nivel` de TODAS
-       las calificaciones históricas de TODOS los estudiantes de esa carrera.
-       Para cada asignatura, el nivel canónico es el más frecuente (moda).
-    2. Construye una grilla fija: 1 columna por nivel, con todas las asignaturas
-       que pertenecen a ese nivel según la malla canónica.
-    3. Para el estudiante dado, rellena cada celda con sus intentos (hist + actual).
+    Obtiene el diccionario canónico {ASIGNATURA_UPPER: nivel} para una carrera.
+    Usa caché en memoria con TTL de 10 minutos para evitar recalcular
+    en cada request (la malla canónica no cambia frecuentemente).
     """
-    carrera = student.carrera
-    if not carrera:
-        return MallaCurricular()
+    carrera_key = carrera.upper()
+    now = time.time()
 
-    # ── 1. Descubrir malla canónica: (asignatura → nivel) ──
-    # Estrategia dual:
-    #   A) Si el campo 'nivel' está poblado en grades, usar moda directa.
-    #   B) Si no (caso TableauHistorico), inferir nivel a partir de la
-    #      secuencia de períodos de cada estudiante: 1er periodo = nivel 1, etc.
+    # Verificar caché
+    if carrera_key in _canonical_cache:
+        ts, cached = _canonical_cache[carrera_key]
+        if now - ts < _CANONICAL_CACHE_TTL:
+            logger.debug("Malla canónica para %s: caché hit", carrera_key)
+            return cached
 
-    career_student_ids = [
-        sid for (sid,) in db.query(Student.id).filter(
-            func.upper(Student.carrera) == carrera.upper()
-        ).all()
-    ]
-    if not career_student_ids:
-        return MallaCurricular(carrera=carrera)
+    logger.info("Calculando malla canónica para %s...", carrera_key)
+    t0 = time.time()
+
+    # Usar subquery en lugar de IN con lista enorme de IDs
+    career_subq = (
+        db.query(Student.id)
+        .filter(func.upper(Student.carrera) == carrera_key)
+        .subquery()
+    )
 
     # ── Estrategia A: nivel explícito ──
     all_career_grades_with_nivel = (
         db.query(Grade.asignatura, Grade.nivel)
         .filter(
-            Grade.student_id.in_(career_student_ids),
+            Grade.student_id.in_(db.query(career_subq.c.id)),
             Grade.nivel.isnot(None),
             Grade.nivel >= 1,
             Grade.nivel <= 12,
@@ -420,33 +420,25 @@ def _build_malla_canonica(
         canonical[asig_upper] = counter.most_common(1)[0][0]
 
     # ── Estrategia B: inferir nivel usando "estudiantes modelo" ──
-    # Un estudiante modelo: no tiene retakes (cada asignatura aparece en 1 solo
-    # periodo) y tiene al menos 4 periodos distintos (malla suficientemente completa).
-    # Usar SOLO estos estudiantes da una malla limpia sin ruido.
     all_career_grades_hist = (
         db.query(Grade.student_id, Grade.asignatura, Grade.periodo)
         .filter(
-            Grade.student_id.in_(career_student_ids),
+            Grade.student_id.in_(db.query(career_subq.c.id)),
             Grade.periodo.isnot(None),
         )
         .all()
     )
 
     if all_career_grades_hist:
-        # Agrupar grades por estudiante
         student_grades_grouped: dict[int, list] = {}
         for sid, asig, periodo in all_career_grades_hist:
             student_grades_grouped.setdefault(sid, []).append((asig, periodo))
 
-        # Identificar estudiantes modelo:
-        # - Sin retakes (ninguna asignatura en más de 1 periodo)
-        # - Al menos 4 periodos distintos
         model_student_ids = []
         for sid, grades_list in student_grades_grouped.items():
             periodos_unicos = set(p for _, p in grades_list)
             if len(periodos_unicos) < 4:
                 continue
-            # Verificar que no haya asignatura repetida en distintos periodos
             asig_periodos: dict[str, set] = {}
             for asig, periodo in grades_list:
                 asig_upper = asig.strip().upper()
@@ -455,38 +447,33 @@ def _build_malla_canonica(
             if not has_retake:
                 model_student_ids.append((sid, len(periodos_unicos)))
 
-        # Ordenar por cantidad de periodos (más completos primero)
         model_student_ids.sort(key=lambda x: -x[1])
-
-        # Usar los top modelo (hasta 30 estudiantes más completos)
         top_models = [sid for sid, _ in model_student_ids[:30]]
 
-        # Si no hay suficientes modelos, relajar: permitir hasta 1 retake
         if len(top_models) < 5:
+            model_set = {s for s, _ in model_student_ids}
             for sid, grades_list in student_grades_grouped.items():
-                if sid in [s for s, _ in model_student_ids]:
+                if sid in model_set:
                     continue
                 periodos_unicos = set(p for _, p in grades_list)
                 if len(periodos_unicos) < 3:
                     continue
-                asig_periodos: dict[str, set] = {}
+                asig_periodos_r: dict[str, set] = {}
                 for asig, periodo in grades_list:
                     asig_upper = asig.strip().upper()
-                    asig_periodos.setdefault(asig_upper, set()).add(periodo)
-                retake_count = sum(1 for ps in asig_periodos.values() if len(ps) > 1)
+                    asig_periodos_r.setdefault(asig_upper, set()).add(periodo)
+                retake_count = sum(1 for ps in asig_periodos_r.values() if len(ps) > 1)
                 if retake_count <= 1:
                     top_models.append(sid)
                 if len(top_models) >= 15:
                     break
 
-        # Construir canonical desde estudiantes modelo
         inferred_counts: dict[str, Counter] = {}
         for sid in top_models:
             grades_list = student_grades_grouped[sid]
             periodos_unicos = sorted(set(p for _, p in grades_list))
             periodo_to_nivel = {p: (i + 1) for i, p in enumerate(periodos_unicos)}
 
-            # Para cada asignatura, tomar el PRIMER período
             asig_primer_periodo: dict[str, str] = {}
             for asig, periodo in sorted(grades_list, key=lambda x: x[1]):
                 asig_upper = asig.strip().upper()
@@ -499,16 +486,42 @@ def _build_malla_canonica(
                     inferred_counts[asig_upper] = Counter()
                 inferred_counts[asig_upper][nivel_inferido] += 1
 
-        # Solo incluir asignaturas que aparecen en al menos 2 estudiantes modelo
-        # (o al menos 1 si hay pocos modelos)
         min_apariciones = 2 if len(top_models) >= 5 else 1
         for asig_upper, counter in inferred_counts.items():
             total_apariciones = sum(counter.values())
             if total_apariciones >= min_apariciones and asig_upper not in canonical:
                 canonical[asig_upper] = counter.most_common(1)[0][0]
 
+    elapsed = time.time() - t0
+    logger.info("Malla canónica para %s: %d asignaturas en %.2fs", carrera_key, len(canonical), elapsed)
+
+    # Guardar en caché
+    _canonical_cache[carrera_key] = (now, canonical)
+    return canonical
+
+
+def _build_malla_canonica(
+    db: Session,
+    student: "Student",
+    calificaciones_hist: list["Grade"],
+    calificaciones_actual: list["Grade"],
+) -> tuple["MallaCurricular", dict[str, int]]:
+    """
+    Construye la malla curricular fija del estudiante.
+
+    Retorna (MallaCurricular, canonical_dict) donde canonical_dict es
+    {ASIGNATURA_UPPER: nivel_canonico} para reutilizar al normalizar
+    el nivel de las calificaciones del semestre actual.
+    """
+    carrera = student.carrera
+    if not carrera:
+        return MallaCurricular(), {}
+
+    # ── 1. Obtener malla canónica (con caché) ──
+    canonical = _get_canonical_for_career(db, carrera)
+
     if not canonical:
-        return MallaCurricular(carrera=carrera)
+        return MallaCurricular(carrera=carrera), {}
 
     # ── 2. Construir estructura de semestres ──
     # Agrupar asignaturas canónicas por nivel
@@ -595,11 +608,10 @@ def _build_malla_canonica(
                 if g.asignatura.strip():
                     nombre_display = g.asignatura.strip()
                     break
-            # Si no tiene grades propias, buscar el nombre de cualquier grade de la carrera
+            # Si no tiene grades propias, buscar el nombre de cualquier grade
             if not grades:
                 sample = db.query(Grade.asignatura).filter(
                     func.upper(Grade.asignatura) == asig_upper,
-                    Grade.student_id.in_(career_student_ids),
                 ).first()
                 if sample:
                     nombre_display = sample[0].strip()
@@ -636,7 +648,7 @@ def _build_malla_canonica(
         total_cursando=total_cursando,
         total_no_cursado=total_no_cursado,
         total_asignaturas_malla=total_asig,
-    )
+    ), canonical
 
 
 @router.get("/{student_id}/ficha", response_model=FichaEstudiante)
@@ -759,10 +771,32 @@ def get_ficha(
 
     ultima_intervencion = intervenciones[0].created_at if intervenciones else None
 
-    # ── Construir malla curricular fija ──
-    malla = _build_malla_canonica(
-        db, student, calificaciones_historicas, calificaciones,
-    )
+    # ── Construir malla curricular fija (con protección contra errores) ──
+    try:
+        malla, canonical_niveles = _build_malla_canonica(
+            db, student, calificaciones_historicas, calificaciones,
+        )
+    except Exception as e:
+        logger.error("Error construyendo malla para estudiante %s (carrera: %s): %s",
+                      student.id, student.carrera, e, exc_info=True)
+        malla = MallaCurricular(carrera=student.carrera)
+        canonical_niveles = {}
+
+    # ── Normalizar nivel de calificaciones actuales con la malla canónica ──
+    # Esto garantiza que el módulo "semestre actual" muestre el mismo nivel
+    # que la malla curricular (evita desajustes por datos inconsistentes).
+    calificaciones_out = []
+    for g in calificaciones:
+        nivel_canon = canonical_niveles.get(g.asignatura.strip().upper())
+        calificaciones_out.append(GradeOut(
+            asignatura=g.asignatura,
+            nota_final=g.nota_final,
+            docente=g.docente,
+            grupo=g.grupo,
+            periodo=g.periodo,
+            numero_repitencias=g.numero_repitencias,
+            nivel=nivel_canon if nivel_canon is not None else g.nivel,
+        ))
 
     return FichaEstudiante(
         id=student.id,
@@ -798,7 +832,7 @@ def get_ficha(
         prediccion_updated_at=student.prediccion_updated_at,
         accesos_avac=accesos_out,
         tareas=tareas_out,
-        calificaciones=calificaciones,
+        calificaciones=calificaciones_out,
         calificaciones_historicas=calificaciones_historicas,
         malla_curricular=malla,
         intervenciones=intervenciones,

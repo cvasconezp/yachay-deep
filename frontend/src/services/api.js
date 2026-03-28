@@ -26,11 +26,27 @@ class ApiClient {
     };
 
     // [SEC-02] credentials: "include" envía la HttpOnly cookie automáticamente
-    const response = await fetch(`${this.baseUrl}${path}`, {
-      ...options,
-      headers,
-      credentials: "include",
-    });
+    // [PERF-03] Timeout de 30s para evitar requests colgados
+    const controller = options.signal ? null : new AbortController();
+    const timeoutId = controller ? setTimeout(() => controller.abort(), 30000) : null;
+
+    let response;
+    try {
+      response = await fetch(`${this.baseUrl}${path}`, {
+        ...options,
+        headers,
+        credentials: "include",
+        signal: options.signal || controller?.signal,
+      });
+    } catch (e) {
+      if (timeoutId) clearTimeout(timeoutId);
+      if (e.name === "AbortError" && !options.signal) {
+        throw new Error("La solicitud tardó demasiado. Intenta de nuevo.");
+      }
+      throw e;
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+    }
 
     if (response.status === 401) {
       window.dispatchEvent(new CustomEvent("yd:unauthorized"));
