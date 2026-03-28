@@ -87,146 +87,236 @@ function compactarAcceso(texto) {
     .trim();
 }
 
-/** Trend chart component: shows average grades per period as a simple SVG line chart */
+/** Trend chart component: BI-style sparkline + KPIs — full-width, compact height */
 function TrendChart({ calificacionesHistoricas, calificaciones }) {
+  const chartRef = useRef(null);
+  const [chartW, setChartW] = useState(600);
+  const [hoveredIdx, setHoveredIdx] = useState(null);
+
   if (!calificacionesHistoricas?.length) return null;
 
-  // Group by periodo and calculate average
+  // Group by periodo and calculate average + count
   const periodos = {};
   calificacionesHistoricas.forEach(c => {
     if (!periodos[c.periodo]) periodos[c.periodo] = [];
-    periodos[c.periodo].push(c.nota_final || 0);
+    if (c.nota_final != null) periodos[c.periodo].push(c.nota_final);
   });
-
-  // Add current semester if available
   if (calificaciones?.length > 0) {
-    const currentPeriodo = "Actual";
-    periodos[currentPeriodo] = calificaciones.map(c => c.nota_final || 0);
+    const notas = calificaciones.filter(c => c.nota_final != null).map(c => c.nota_final);
+    if (notas.length > 0) periodos["Actual"] = notas;
   }
 
   const periodoKeys = Object.keys(periodos).sort();
   if (periodoKeys.length < 2) return null;
 
   const averages = periodoKeys.map(p => {
-    const values = periodos[p];
-    return values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+    const v = periodos[p];
+    return v.length > 0 ? v.reduce((a, b) => a + b, 0) / v.length : 0;
   });
+  const counts = periodoKeys.map(p => periodos[p].length);
 
-  const minVal = Math.max(0, Math.min(...averages) - 5);
-  const maxVal = Math.min(100, Math.max(...averages) + 5);
-  const range = maxVal - minVal;
-
-  // SVG dimensions
-  const width = 380;
-  const height = 140;
-  const padding = { top: 20, right: 20, bottom: 30, left: 40 };
-  const chartWidth = width - padding.left - padding.right;
-  const chartHeight = height - padding.top - padding.bottom;
-
-  // Calculate trend direction
   const firstAvg = averages[0];
   const lastAvg = averages[averages.length - 1];
-  const trendUp = lastAvg > firstAvg;
+  const cambio = lastAvg - firstAvg;
+  const trendUp = cambio > 0;
+  const trendFlat = Math.abs(cambio) < 0.5;
+  const maxAvg = Math.max(...averages);
+  const minAvg = Math.min(...averages);
+  const bestIdx = averages.indexOf(maxAvg);
+  const worstIdx = averages.indexOf(minAvg);
 
-  // Map data points
-  const points = averages.map((avg, i) => {
-    const x = padding.left + (i / (averages.length - 1)) * chartWidth;
-    const y = padding.top + chartHeight - ((avg - minVal) / range) * chartHeight;
-    return { x, y, value: avg };
-  });
+  // Responsive width
+  useEffect(() => {
+    if (!chartRef.current) return;
+    const ro = new ResizeObserver(entries => {
+      for (const e of entries) setChartW(e.contentRect.width);
+    });
+    ro.observe(chartRef.current);
+    return () => ro.disconnect();
+  }, []);
 
-  // Build SVG path
-  const pathData = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+  // SVG dimensions — compact
+  const svgH = 80;
+  const pad = { top: 8, right: 12, bottom: 18, left: 32 };
+  const cw = chartW - pad.left - pad.right;
+  const ch = svgH - pad.top - pad.bottom;
+
+  // Scale
+  const yMin = Math.max(0, minAvg - 8);
+  const yMax = Math.min(100, maxAvg + 8);
+  const yRange = yMax - yMin || 1;
+  const scaleX = (i) => pad.left + (i / (averages.length - 1)) * cw;
+  const scaleY = (v) => pad.top + ch - ((v - yMin) / yRange) * ch;
+
+  const points = averages.map((avg, i) => ({ x: scaleX(i), y: scaleY(avg), value: avg }));
+
+  // Smooth curve (monotone cubic)
+  const buildPath = (pts) => {
+    if (pts.length < 2) return "";
+    if (pts.length === 2) return `M${pts[0].x},${pts[0].y}L${pts[1].x},${pts[1].y}`;
+    let d = `M${pts[0].x},${pts[0].y}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[Math.max(0, i - 1)];
+      const p1 = pts[i];
+      const p2 = pts[i + 1];
+      const p3 = pts[Math.min(pts.length - 1, i + 2)];
+      const cp1x = p1.x + (p2.x - p0.x) / 6;
+      const cp1y = p1.y + (p2.y - p0.y) / 6;
+      const cp2x = p2.x - (p3.x - p1.x) / 6;
+      const cp2y = p2.y - (p3.y - p1.y) / 6;
+      d += `C${cp1x},${cp1y},${cp2x},${cp2y},${p2.x},${p2.y}`;
+    }
+    return d;
+  };
+  const linePath = buildPath(points);
+  const areaPath = `${linePath}L${points[points.length - 1].x},${pad.top + ch}L${points[0].x},${pad.top + ch}Z`;
+
+  // 70-pt reference line
+  const y70 = (70 >= yMin && 70 <= yMax) ? scaleY(70) : null;
+
+  // Colors
+  const lineColor = trendFlat ? "#6366f1" : trendUp ? "#059669" : "#dc2626";
+  const areaColor = trendFlat ? "#eef2ff" : trendUp ? "#ecfdf5" : "#fef2f2";
+  const dotColor = trendFlat ? "#818cf8" : trendUp ? "#34d399" : "#f87171";
+  const kpiColor = trendFlat ? "text-indigo-600" : trendUp ? "text-emerald-600" : "text-red-600";
+  const kpiBg = trendFlat ? "bg-indigo-50" : trendUp ? "bg-emerald-50" : "bg-red-50";
+  const trendIcon = trendFlat ? "→" : trendUp ? "↑" : "↓";
+  const trendLabel = trendFlat ? "Estable" : trendUp ? "Mejorando" : "Descendiendo";
+
+  // Y ticks (3 ticks)
+  const yTicks = [yMin, (yMin + yMax) / 2, yMax].map(v => Math.round(v));
 
   return (
     <div className="border-t border-gray-200">
-      <SectionHeader>
-        Tendencia Académica — Promedio por período
-        <span className="text-gray-400 font-normal ml-2 text-[9px] normal-case tracking-normal">
-          {trendUp ? "↑ Mejorando" : "↓ Descendiendo"}
-        </span>
-      </SectionHeader>
-      <div className="bg-white p-4 overflow-x-auto">
-        <svg width={width} height={height} style={{ minWidth: "400px" }} className="mx-auto">
-          {/* Grid lines */}
-          {[0.2, 0.4, 0.6, 0.8].map((pct, i) => {
-            const y = padding.top + (1 - pct) * chartHeight;
-            return (
-              <g key={i}>
-                <line x1={padding.left} y1={y} x2={width - padding.right} y2={y} stroke="#e5e7eb" strokeWidth="1" strokeDasharray="2" />
-                <text x={padding.left - 8} y={y + 3} fontSize="11" fill="#9ca3af" textAnchor="end">
-                  {Math.round(minVal + pct * range)}
-                </text>
-              </g>
-            );
-          })}
-
-          {/* Axes */}
-          <line x1={padding.left} y1={padding.top} x2={padding.left} y2={height - padding.bottom} stroke="#6b7280" strokeWidth="1.5" />
-          <line x1={padding.left} y1={height - padding.bottom} x2={width - padding.right} y2={height - padding.bottom} stroke="#6b7280" strokeWidth="1.5" />
-
-          {/* Line chart */}
-          <path d={pathData} fill="none" stroke={trendUp ? "#16a34a" : "#dc2626"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-
-          {/* Fill area under line */}
-          <path
-            d={`${pathData} L ${points[points.length - 1].x} ${height - padding.bottom} L ${padding.left} ${height - padding.bottom} Z`}
-            fill={trendUp ? "#dcfce7" : "#fee2e2"}
-            opacity="0.3"
-          />
-
-          {/* Data points */}
-          {points.map((p, i) => {
-            const isBelow70 = p.value < 70;
-            return (
-              <circle
-                key={i}
-                cx={p.x}
-                cy={p.y}
-                r="3.5"
-                fill={trendUp ? "#22c55e" : "#ef4444"}
-                stroke="white"
-                strokeWidth="2"
-              />
-            );
-          })}
-
-          {/* X-axis labels (period names) */}
-          {periodoKeys.map((periodo, i) => {
-            const x = padding.left + (i / (periodoKeys.length - 1)) * chartWidth;
-            return (
-              <text key={`label-${i}`} x={x} y={height - 8} fontSize="11" fill="#6b7280" textAnchor="middle">
-                {periodo.length > 6 ? periodo.slice(0, 5) + "." : periodo}
-              </text>
-            );
-          })}
-
-          {/* Y-axis label */}
-          <text x="12" y="20" fontSize="11" fill="#9ca3af" textAnchor="end">
-            100
-          </text>
-          <text x="12" y={height - padding.bottom + 3} fontSize="11" fill="#9ca3af" textAnchor="end">
-            {Math.round(minVal)}
-          </text>
-        </svg>
-
-        {/* Summary stats below chart */}
-        <div className="flex justify-center gap-6 mt-4 pt-4 border-t border-gray-100 text-xs">
-          <div className="text-center">
-            <div className="text-gray-500">Inicial</div>
-            <div className="font-semibold text-lg text-gray-800">{firstAvg.toFixed(1)}</div>
-          </div>
-          <div className="text-center">
-            <div className="text-gray-500">Actual</div>
-            <div className="font-semibold text-lg text-gray-800">{lastAvg.toFixed(1)}</div>
-          </div>
-          <div className="text-center">
-            <div className="text-gray-500">Cambio</div>
-            <div className={`font-semibold text-lg ${trendUp ? "text-green-600" : "text-red-600"}`}>
-              {(lastAvg - firstAvg).toFixed(1)}
-            </div>
+      <SectionHeader>Tendencia Académica</SectionHeader>
+      <div className="bg-white" style={{ padding: "8px 12px 10px" }}>
+        {/* KPI row — flush horizontal */}
+        <div className="flex items-center gap-2 mb-1" style={{ fontSize: "11px" }}>
+          {/* Trend badge */}
+          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-semibold ${kpiBg} ${kpiColor}`}
+                style={{ fontSize: "10px" }}>
+            {trendIcon} {trendLabel}
+          </span>
+          {/* KPIs inline */}
+          <div className="flex items-center gap-3 ml-auto text-gray-500" style={{ fontSize: "10px" }}>
+            <span>Inicio <strong className="text-gray-800 ml-0.5">{firstAvg.toFixed(1)}</strong></span>
+            <span className="text-gray-300">|</span>
+            <span>Actual <strong className="text-gray-800 ml-0.5">{lastAvg.toFixed(1)}</strong></span>
+            <span className="text-gray-300">|</span>
+            <span>
+              Cambio{" "}
+              <strong className={`ml-0.5 ${kpiColor}`}>
+                {cambio > 0 ? "+" : ""}{cambio.toFixed(1)}
+              </strong>
+            </span>
+            <span className="text-gray-300">|</span>
+            <span>
+              Máx <strong className="text-gray-800 ml-0.5">{maxAvg.toFixed(1)}</strong>
+              <span className="text-gray-400 ml-0.5">({periodoKeys[bestIdx]})</span>
+            </span>
           </div>
         </div>
+
+        {/* Chart — full-width responsive SVG */}
+        <div ref={chartRef} className="w-full" style={{ minWidth: 0 }}>
+          <svg width={chartW} height={svgH} style={{ display: "block" }}
+               onMouseLeave={() => setHoveredIdx(null)}>
+            <defs>
+              <linearGradient id="trend-area-grad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={areaColor} stopOpacity="0.7" />
+                <stop offset="100%" stopColor={areaColor} stopOpacity="0.05" />
+              </linearGradient>
+            </defs>
+
+            {/* Y ticks */}
+            {yTicks.map((v, i) => {
+              const y = scaleY(v);
+              return (
+                <g key={`yt-${i}`}>
+                  <line x1={pad.left} y1={y} x2={chartW - pad.right} y2={y}
+                        stroke="#f3f4f6" strokeWidth="1" />
+                  <text x={pad.left - 5} y={y + 3} fontSize="9" fill="#b0b0b0" textAnchor="end">{v}</text>
+                </g>
+              );
+            })}
+
+            {/* 70-pt reference line */}
+            {y70 != null && (
+              <g>
+                <line x1={pad.left} y1={y70} x2={chartW - pad.right} y2={y70}
+                      stroke="#f59e0b" strokeWidth="1" strokeDasharray="3,3" opacity="0.5" />
+                <text x={chartW - pad.right + 2} y={y70 + 3} fontSize="8" fill="#f59e0b">70</text>
+              </g>
+            )}
+
+            {/* Area fill */}
+            <path d={areaPath} fill="url(#trend-area-grad)" />
+
+            {/* Line */}
+            <path d={linePath} fill="none" stroke={lineColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+
+            {/* Data points + value labels */}
+            {points.map((p, i) => {
+              const isHovered = hoveredIdx === i;
+              const isBest = i === bestIdx;
+              const isWorst = i === worstIdx;
+              const isEnd = i === 0 || i === points.length - 1;
+              const showLabel = isHovered || isBest || isWorst || isEnd || points.length <= 5;
+              const below70 = p.value < 70;
+              const dotFill = below70 ? "#f59e0b" : dotColor;
+              return (
+                <g key={i}>
+                  {/* Hover hit area */}
+                  <rect x={p.x - cw / (averages.length * 2)} y={pad.top} width={cw / averages.length} height={ch}
+                        fill="transparent" onMouseEnter={() => setHoveredIdx(i)} />
+                  {/* Vertical indicator on hover */}
+                  {isHovered && (
+                    <line x1={p.x} y1={pad.top} x2={p.x} y2={pad.top + ch} stroke={lineColor} strokeWidth="1" opacity="0.2" />
+                  )}
+                  <circle cx={p.x} cy={p.y} r={isHovered ? 5 : 3.5} fill={dotFill} stroke="white" strokeWidth="2"
+                          style={{ transition: "r 0.15s" }} />
+                  {showLabel && (
+                    <text x={p.x} y={p.y - 7} fontSize="9" fontWeight={isHovered || isBest ? "700" : "600"}
+                          fill={below70 ? "#d97706" : "#374151"} textAnchor="middle">
+                      {p.value.toFixed(1)}
+                    </text>
+                  )}
+                </g>
+              );
+            })}
+
+            {/* X-axis labels */}
+            {periodoKeys.map((periodo, i) => {
+              const x = scaleX(i);
+              const isLast = periodo === "Actual";
+              return (
+                <text key={`xl-${i}`} x={x} y={svgH - 3} fontSize="9"
+                      fill={isLast ? lineColor : "#9ca3af"} fontWeight={isLast ? "700" : "400"}
+                      textAnchor="middle">
+                  {isLast ? "Actual" : periodo}
+                </text>
+              );
+            })}
+          </svg>
+        </div>
+
+        {/* Hover tooltip row */}
+        {hoveredIdx != null && (
+          <div className="flex items-center gap-3 text-gray-500 mt-0.5" style={{ fontSize: "9px", minHeight: "14px" }}>
+            <span className="font-semibold text-gray-700">{periodoKeys[hoveredIdx]}</span>
+            <span>Promedio: <strong className="text-gray-800">{averages[hoveredIdx].toFixed(1)}</strong></span>
+            <span>Materias: <strong className="text-gray-800">{counts[hoveredIdx]}</strong></span>
+            {hoveredIdx > 0 && (
+              <span>
+                vs anterior:{" "}
+                <strong className={averages[hoveredIdx] >= averages[hoveredIdx - 1] ? "text-emerald-600" : "text-red-600"}>
+                  {(averages[hoveredIdx] - averages[hoveredIdx - 1]) > 0 ? "+" : ""}
+                  {(averages[hoveredIdx] - averages[hoveredIdx - 1]).toFixed(1)}
+                </strong>
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
