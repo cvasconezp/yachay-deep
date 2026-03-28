@@ -106,7 +106,11 @@ function TrendChart({ calificacionesHistoricas, calificaciones }) {
     if (notas.length > 0) periodos["Actual"] = notas;
   }
 
-  const periodoKeys = Object.keys(periodos).sort();
+  // Ordenar períodos cronológicamente, "Actual" siempre al final
+  const periodoKeys = Object.keys(periodos)
+    .filter(k => k !== "Actual")
+    .sort()
+    .concat(periodos["Actual"] ? ["Actual"] : []);
   if (periodoKeys.length < 2) return null;
 
   const averages = periodoKeys.map(p => {
