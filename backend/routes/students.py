@@ -183,6 +183,42 @@ class GradeOut(BaseModel):
         from_attributes = True
 
 
+# ── Schemas para Malla Curricular fija ────────────────────────────────────────
+
+class MallaIntento(BaseModel):
+    """Un intento de cursar una asignatura (un registro en un período)."""
+    periodo: Optional[str] = None
+    nota: Optional[float] = None
+    estado: str  # aprobada | reprobada | en_proceso | cursando
+
+class MallaAsignatura(BaseModel):
+    """Una asignatura dentro de la malla canónica."""
+    nombre: str
+    nivel_canonico: int
+    intentos: list[MallaIntento] = []
+    nota_vigente: Optional[float] = None
+    estado: str  # aprobada | reprobada | en_proceso | cursando | no_cursado
+    es_repeticion: bool = False
+    num_intentos: int = 0
+
+class MallaSemestre(BaseModel):
+    """Un semestre/nivel de la malla canónica."""
+    numero: int
+    asignaturas: list[MallaAsignatura] = []
+    promedio: Optional[float] = None
+
+class MallaCurricular(BaseModel):
+    """Malla curricular completa del estudiante."""
+    carrera: Optional[str] = None
+    total_semestres: int = 0
+    semestres: list[MallaSemestre] = []
+    total_aprobadas: int = 0
+    total_reprobadas: int = 0
+    total_cursando: int = 0
+    total_no_cursado: int = 0
+    total_asignaturas_malla: int = 0
+
+
 class InterventionOut(BaseModel):
     id: int
     monitor_nombre: Optional[str] = None
@@ -246,6 +282,7 @@ class FichaEstudiante(BaseModel):
     calificaciones: list[GradeOut] = []          # semestre actual (periodo IS NULL)
     calificaciones_historicas: list[GradeOut] = []  # histórico (periodo IS NOT NULL), ordenado por periodo
     intervenciones: list[InterventionOut] = []
+    malla_curricular: Optional[MallaCurricular] = None  # malla fija por niveles
 
     # Resumen
     total_intervenciones: int = 0
@@ -319,6 +356,195 @@ def search_students(
 
     return PaginatedStudents(
         items=results, total=total, page=page, pages=pages, limit=limit,
+    )
+
+
+# ── Construcción de Malla Curricular Canónica ─────────────────────────────────
+
+def _build_malla_canonica(
+    db: Session,
+    student: "Student",
+    calificaciones_hist: list["Grade"],
+    calificaciones_actual: list["Grade"],
+) -> MallaCurricular:
+    """
+    Construye la malla curricular fija del estudiante.
+
+    Estrategia (Opción A — automática):
+    1. Determina la malla canónica de la carrera usando el campo `nivel` de TODAS
+       las calificaciones históricas de TODOS los estudiantes de esa carrera.
+       Para cada asignatura, el nivel canónico es el más frecuente (moda).
+    2. Construye una grilla fija: 1 columna por nivel, con todas las asignaturas
+       que pertenecen a ese nivel según la malla canónica.
+    3. Para el estudiante dado, rellena cada celda con sus intentos (hist + actual).
+    """
+    carrera = student.carrera
+    if not carrera:
+        return MallaCurricular()
+
+    # ── 1. Descubrir malla canónica: (asignatura → nivel) vía moda de TODA la carrera ──
+    # Consultar nivel más frecuente por asignatura entre todos los estudiantes de la carrera
+    career_student_ids = [
+        sid for (sid,) in db.query(Student.id).filter(
+            func.upper(Student.carrera) == carrera.upper()
+        ).all()
+    ]
+    if not career_student_ids:
+        return MallaCurricular(carrera=carrera)
+
+    all_career_grades = (
+        db.query(Grade.asignatura, Grade.nivel)
+        .filter(
+            Grade.student_id.in_(career_student_ids),
+            Grade.nivel.isnot(None),
+            Grade.nivel >= 1,
+            Grade.nivel <= 12,
+        )
+        .all()
+    )
+
+    # Calcular moda de nivel por asignatura
+    asig_nivel_counts: dict[str, Counter] = {}
+    for asig, nivel in all_career_grades:
+        asig_upper = asig.strip().upper()
+        if asig_upper not in asig_nivel_counts:
+            asig_nivel_counts[asig_upper] = Counter()
+        asig_nivel_counts[asig_upper][nivel] += 1
+
+    # Mapeo canónico: asignatura_upper → nivel_canonico
+    canonical: dict[str, int] = {}
+    for asig_upper, counter in asig_nivel_counts.items():
+        canonical[asig_upper] = counter.most_common(1)[0][0]
+
+    if not canonical:
+        return MallaCurricular(carrera=carrera)
+
+    # ── 2. Construir estructura de semestres ──
+    # Agrupar asignaturas canónicas por nivel
+    niveles_asigs: dict[int, list[str]] = {}
+    for asig_upper, niv in canonical.items():
+        if niv not in niveles_asigs:
+            niveles_asigs[niv] = []
+        niveles_asigs[niv].append(asig_upper)
+
+    # Ordenar asignaturas dentro de cada nivel alfabéticamente
+    for niv in niveles_asigs:
+        niveles_asigs[niv].sort()
+
+    max_nivel = max(niveles_asigs.keys()) if niveles_asigs else 0
+
+    # ── 3. Recopilar calificaciones del estudiante indexadas por asignatura ──
+    # Todas las calificaciones (hist + actuales) agrupadas por asignatura
+    student_grades_map: dict[str, list] = {}  # asig_upper → [Grade]
+    for g in calificaciones_hist:
+        key = g.asignatura.strip().upper()
+        student_grades_map.setdefault(key, []).append(g)
+    for g in calificaciones_actual:
+        key = g.asignatura.strip().upper()
+        student_grades_map.setdefault(key, []).append(g)
+
+    # ── 4. Construir la respuesta ──
+    semestres = []
+    total_aprobadas = 0
+    total_reprobadas = 0
+    total_cursando = 0
+    total_no_cursado = 0
+
+    for niv in range(1, max_nivel + 1):
+        asigs_en_nivel = niveles_asigs.get(niv, [])
+        malla_asigs = []
+        notas_nivel = []
+
+        for asig_upper in asigs_en_nivel:
+            grades = student_grades_map.get(asig_upper, [])
+
+            # Construir intentos ordenados por período
+            intentos = []
+            for g in sorted(grades, key=lambda x: x.periodo or "Z999"):
+                nota = g.nota_final
+                if g.periodo is None:
+                    # Semestre actual → cursando
+                    est = "cursando"
+                elif nota is not None and nota >= 70:
+                    est = "aprobada"
+                elif nota is not None and nota >= 60:
+                    est = "en_proceso"
+                elif nota is not None:
+                    est = "reprobada"
+                else:
+                    est = "cursando"
+                intentos.append(MallaIntento(
+                    periodo=g.periodo,
+                    nota=nota,
+                    estado=est,
+                ))
+
+            # Determinar estado final y nota vigente
+            if not intentos:
+                estado_final = "no_cursado"
+                nota_vigente = None
+                total_no_cursado += 1
+            else:
+                ultimo = intentos[-1]
+                nota_vigente = ultimo.nota
+                estado_final = ultimo.estado
+                if estado_final == "aprobada":
+                    total_aprobadas += 1
+                elif estado_final == "cursando":
+                    total_cursando += 1
+                elif estado_final in ("reprobada", "en_proceso"):
+                    total_reprobadas += 1
+
+            num_intentos = len(intentos)
+            es_repeticion = num_intentos > 1
+
+            # Nombre original (título) — buscar en las grades del estudiante
+            nombre_display = asig_upper
+            for g in grades:
+                if g.asignatura.strip():
+                    nombre_display = g.asignatura.strip()
+                    break
+            # Si no tiene grades propias, buscar el nombre de cualquier grade de la carrera
+            if not grades:
+                sample = db.query(Grade.asignatura).filter(
+                    func.upper(Grade.asignatura) == asig_upper,
+                    Grade.student_id.in_(career_student_ids),
+                ).first()
+                if sample:
+                    nombre_display = sample[0].strip()
+
+            malla_asigs.append(MallaAsignatura(
+                nombre=nombre_display,
+                nivel_canonico=niv,
+                intentos=intentos,
+                nota_vigente=nota_vigente,
+                estado=estado_final,
+                es_repeticion=es_repeticion,
+                num_intentos=num_intentos,
+            ))
+
+            if nota_vigente is not None:
+                notas_nivel.append(nota_vigente)
+
+        promedio = round(sum(notas_nivel) / len(notas_nivel), 1) if notas_nivel else None
+
+        semestres.append(MallaSemestre(
+            numero=niv,
+            asignaturas=malla_asigs,
+            promedio=promedio,
+        ))
+
+    total_asig = sum(len(s.asignaturas) for s in semestres)
+
+    return MallaCurricular(
+        carrera=carrera,
+        total_semestres=len(semestres),
+        semestres=semestres,
+        total_aprobadas=total_aprobadas,
+        total_reprobadas=total_reprobadas,
+        total_cursando=total_cursando,
+        total_no_cursado=total_no_cursado,
+        total_asignaturas_malla=total_asig,
     )
 
 
@@ -442,6 +668,11 @@ def get_ficha(
 
     ultima_intervencion = intervenciones[0].created_at if intervenciones else None
 
+    # ── Construir malla curricular fija ──
+    malla = _build_malla_canonica(
+        db, student, calificaciones_historicas, calificaciones,
+    )
+
     return FichaEstudiante(
         id=student.id,
         cedula=student.cedula,
@@ -478,6 +709,7 @@ def get_ficha(
         tareas=tareas_out,
         calificaciones=calificaciones,
         calificaciones_historicas=calificaciones_historicas,
+        malla_curricular=malla,
         intervenciones=intervenciones,
         total_intervenciones=len(intervenciones),
         ultima_intervencion=ultima_intervencion,

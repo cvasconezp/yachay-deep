@@ -346,11 +346,10 @@ function GradeChip({ asignatura, nota_final, docente }) {
   );
 }
 
-// ── Chip de calificación en malla histórica ────────────────────────────────────
+// ── Chip de calificación en malla histórica (legacy — used in old grid) ──────
 function MallaChip({ asignatura, nota_final, docente }) {
   const s = getNoteStyleHistorico(nota_final);
   const titleName = toTitleCase(asignatura) || "";
-  // Abreviar nombre: máx 18 chars, eliminar palabras comunes
   const abrev = titleName
     .replace(/\b(de|la|las|los|el|y|en|del|para|con|por)\b/gi, "")
     .replace(/\s+/g, " ")
@@ -365,6 +364,91 @@ function MallaChip({ asignatura, nota_final, docente }) {
         {abrev}
       </div>
       <div className={`text-[11px] font-bold ${s.text}`}>{nota_final ?? "—"}</div>
+    </div>
+  );
+}
+
+// ── Estilos para la malla fija ──────────────────────────────────────────────
+function getMallaEstado(estado) {
+  switch (estado) {
+    case "aprobada":   return { bg: "bg-green-50",  border: "border-green-300", text: "text-green-800",  label: "Aprobada" };
+    case "reprobada":  return { bg: "bg-red-50",    border: "border-red-300",   text: "text-red-700",    label: "Reprobada" };
+    case "en_proceso": return { bg: "bg-yellow-50", border: "border-yellow-300",text: "text-yellow-800", label: "En proceso" };
+    case "cursando":   return { bg: "bg-amber-50",  border: "border-amber-400", text: "text-amber-800",  label: "Cursando" };
+    default:           return { bg: "bg-gray-50",   border: "border-gray-200",  text: "text-gray-400",   label: "No cursado" };
+  }
+}
+
+// ── Celda de la malla fija con soporte de repeticiones ──────────────────────
+function MallaCeldaFija({ asignatura }) {
+  const [showTooltip, setShowTooltip] = useState(false);
+  const s = getMallaEstado(asignatura.estado);
+  const titleName = toTitleCase(asignatura.nombre) || "";
+  const abrev = titleName
+    .replace(/\b(de|la|las|los|el|y|en|del|para|con|por)\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 22);
+
+  const esRepeticion = asignatura.es_repeticion;
+  const numIntentos = asignatura.num_intentos;
+
+  return (
+    <div
+      className={`relative border ${s.border} ${s.bg} rounded text-center cursor-default transition-shadow hover:shadow-md`}
+      style={{
+        minWidth: "110px",
+        maxWidth: "140px",
+        minHeight: "54px",
+        borderLeftWidth: esRepeticion ? "4px" : "1px",
+        borderLeftColor: esRepeticion ? "#f97316" : undefined,
+      }}
+      onMouseEnter={() => esRepeticion && setShowTooltip(true)}
+      onMouseLeave={() => setShowTooltip(false)}
+    >
+      {/* Badge de repetición */}
+      {esRepeticion && (
+        <div className="absolute -top-1.5 -right-1.5 bg-orange-500 text-white text-[8px] font-bold rounded-full w-4 h-4 flex items-center justify-center shadow-sm"
+             title={`${numIntentos} intentos`}>
+          {numIntentos}
+        </div>
+      )}
+
+      {/* Nombre de asignatura */}
+      <div className="px-1.5 pt-1.5 pb-0.5">
+        <div className="text-[9px] text-gray-600 leading-tight overflow-hidden"
+             style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", minHeight: "20px" }}
+             title={titleName}>
+          {abrev}
+        </div>
+        {/* Nota */}
+        <div className={`text-sm font-bold mt-0.5 ${s.text}`}>
+          {asignatura.nota_vigente != null ? asignatura.nota_vigente : "—"}
+        </div>
+      </div>
+
+      {/* Tooltip con historial de intentos */}
+      {showTooltip && esRepeticion && asignatura.intentos.length > 0 && (
+        <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 bg-gray-900 text-white rounded-lg shadow-xl px-3 py-2 text-[10px] whitespace-nowrap"
+             style={{ minWidth: "160px" }}>
+          <div className="font-bold mb-1 text-orange-300">{titleName}</div>
+          <div className="font-semibold text-gray-300 mb-1">{numIntentos} intentos:</div>
+          {asignatura.intentos.map((intento, i) => (
+            <div key={i} className="flex justify-between gap-3 py-0.5 border-t border-gray-700">
+              <span className="text-gray-300">{intento.periodo || "Actual"}</span>
+              <span className={
+                intento.estado === "aprobada" ? "text-green-400 font-bold" :
+                intento.estado === "reprobada" ? "text-red-400 font-bold" :
+                intento.estado === "cursando" ? "text-amber-400" :
+                "text-yellow-400"
+              }>
+                {intento.nota != null ? intento.nota : "—"}
+              </span>
+            </div>
+          ))}
+          <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1379,128 +1463,120 @@ export default function FichaEstudiante() {
                 </div>
               </div>
 
-              {/* ══ MALLA CURRICULAR HISTÓRICA (TableauHistorico P60–P67+) ══ */}
-              {ficha.calificaciones_historicas?.length > 0 && (() => {
-                // Agrupar por período
-                const porPeriodo = {};
-                ficha.calificaciones_historicas.forEach(c => {
-                  const p = c.periodo || "Sin período";
-                  if (!porPeriodo[p]) porPeriodo[p] = [];
-                  porPeriodo[p].push(c);
-                });
-                const periodos = Object.keys(porPeriodo).sort();
-
+              {/* ══ MALLA CURRICULAR FIJA (grid por niveles canónicos) ══ */}
+              {ficha.malla_curricular?.semestres?.length > 0 && (() => {
+                const malla = ficha.malla_curricular;
+                const YEAR_LABELS = {
+                  1: "Primer Año", 3: "Segundo Año", 5: "Tercer Año",
+                  7: "Cuarto Año", 9: "Quinto Año", 11: "Sexto Año",
+                };
                 return (
                   <div className="border-t border-gray-200">
                     <SectionHeader>
-                      Malla curricular — {periodos.length} niveles · {ficha.calificaciones_historicas.length} asignaturas
+                      Malla curricular — {malla.total_semestres} niveles · {malla.total_asignaturas_malla} asignaturas
                       <span className="text-gray-400 font-normal ml-2 text-[9px] normal-case tracking-normal">
-                        escala 0–100 · ≥70 aprobado
+                        {malla.total_aprobadas} aprobadas · {malla.total_cursando} cursando · {malla.total_reprobadas} reprobadas · {malla.total_no_cursado} pendientes
                       </span>
                     </SectionHeader>
-                    <div className="overflow-x-auto bg-[#FAFAFA] px-2 py-2">
-                      <div className="flex gap-2" style={{ minWidth: "max-content" }}>
-                        {periodos.map(periodo => {
-                          const asigs = porPeriodo[periodo];
-                          const promedio = asigs.reduce((s, c) => s + (c.nota_final ?? 0), 0) / asigs.length;
-                          const promedioStyle = getNoteStyleHistorico(Math.round(promedio));
+                    <div className="overflow-x-auto bg-[#FAFAFA] px-2 py-3">
+                      <div className="flex gap-1.5" style={{ minWidth: "max-content" }}>
+                        {malla.semestres.map((sem, si) => {
+                          const yearLabel = YEAR_LABELS[sem.numero];
+                          const promedioStyle = getNoteStyleHistorico(sem.promedio != null ? Math.round(sem.promedio) : null);
                           return (
-                            <div key={periodo} className="flex-shrink-0 flex flex-col" style={{ minWidth: "80px" }}>
-                              {/* Encabezado de período */}
-                              <div className="bg-[#1B3A6B] text-white text-center rounded-t px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider">
-                                {(() => {
-                                  const nivelNum = asigs[0]?.nivel;
-                                  return (nivelNum && nivelNum >= 1 && nivelNum <= 12) ? `${nivelNum}° Nivel` : periodo;
-                                })()}
+                            <div key={sem.numero} className="flex-shrink-0 flex flex-col" style={{ minWidth: "120px", maxWidth: "140px" }}>
+                              {/* Etiqueta de año (solo en semestres impares) */}
+                              {yearLabel && (
+                                <div className="bg-[#0F2A4A] text-white text-center text-[8px] font-bold uppercase tracking-wider px-1 py-0.5 rounded-t"
+                                     style={{ marginBottom: "-1px" }}>
+                                  {yearLabel}
+                                </div>
+                              )}
+                              {/* Encabezado de semestre/nivel */}
+                              <div className={`bg-[#1B3A6B] text-white text-center px-1 py-1 text-[10px] font-bold uppercase tracking-wider ${!yearLabel ? "rounded-t" : ""}`}>
+                                <span className="text-white/60 mr-1">{sem.numero}</span>
+                                {sem.numero}° Nivel
                               </div>
-                              {/* Chips de asignaturas */}
-                              <div className="border border-t-0 border-gray-200 rounded-b bg-white px-1 pt-1 pb-0.5 flex flex-col gap-0.5">
-                                {asigs.map((c, i) => (
-                                  <MallaChip
-                                    key={i}
-                                    asignatura={c.asignatura}
-                                    nota_final={c.nota_final}
-                                    docente={c.docente}
-                                  />
-                                ))}
-                                {/* Promedio del período */}
-                                <div className={`mt-0.5 text-center text-[9px] font-bold border-t border-gray-100 pt-0.5 ${promedioStyle.text}`}>
-                                  x̄ {isNaN(promedio) ? "—" : promedio.toFixed(1)}
+                              {/* Celdas de asignaturas */}
+                              <div className="border border-t-0 border-gray-200 rounded-b bg-white px-1 pt-1.5 pb-1 flex flex-col gap-1">
+                                {sem.asignaturas.length > 0 ? (
+                                  sem.asignaturas.map((asig, ai) => (
+                                    <MallaCeldaFija key={ai} asignatura={asig} />
+                                  ))
+                                ) : (
+                                  <div className="text-[9px] text-gray-300 text-center py-3 italic">Sin datos</div>
+                                )}
+                                {/* Promedio del nivel */}
+                                <div className={`mt-1 text-center text-[10px] font-bold border-t border-gray-100 pt-1 ${promedioStyle.text}`}>
+                                  x&#772; {sem.promedio != null ? sem.promedio.toFixed(1) : "—"}
                                 </div>
                               </div>
                             </div>
                           );
                         })}
-                        {/* ── Columna del semestre actual ── */}
-                        {ficha.calificaciones?.length > 0 && (() => {
-                          const promActual = ficha.calificaciones.reduce((s, c) => s + (c.nota_final ?? 0), 0) / ficha.calificaciones.length;
-                          const promActualStyle = getNoteStyleHistorico(Math.round(promActual));
-                          return (
-                            <div className="flex-shrink-0 flex flex-col" style={{ minWidth: "80px" }}>
-                              <div className="bg-[#F0B000] text-white text-center rounded-t px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider">
-                                {formatNivel(ficha.nivel_academico, ficha.calificaciones, ficha.calificaciones_historicas) || "Sem. actual"}
-                              </div>
-                              <div className="border border-t-0 border-[#F0B000] rounded-b bg-[#FFFDF5] px-1 pt-1 pb-0.5 flex flex-col gap-0.5">
-                                {ficha.calificaciones.map((c, i) => (
-                                  <MallaChip
-                                    key={i}
-                                    asignatura={c.asignatura}
-                                    nota_final={c.nota_final}
-                                    docente={c.docente}
-                                  />
-                                ))}
-                                <div className={`mt-0.5 text-center text-[9px] font-bold border-t border-gray-100 pt-0.5 ${promActualStyle.text}`}>
-                                  x̄ {isNaN(promActual) ? "—" : promActual.toFixed(1)}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })()}
                       </div>
                     </div>
                     {/* Leyenda */}
-                    <div className="flex gap-3 px-2 pb-1 bg-[#FAFAFA] border-t border-gray-100">
-                      <span className="flex items-center gap-1 text-[9px] text-gray-400">
-                        <span className="inline-block w-2 h-2 rounded-sm bg-green-200 border border-green-300"></span>≥70 Aprobado
+                    <div className="flex flex-wrap gap-3 px-2 pb-1.5 bg-[#FAFAFA] border-t border-gray-100">
+                      <span className="flex items-center gap-1 text-[9px] text-gray-500">
+                        <span className="inline-block w-2.5 h-2.5 rounded-sm bg-green-100 border border-green-300"></span>Aprobada
                       </span>
-                      <span className="flex items-center gap-1 text-[9px] text-gray-400">
-                        <span className="inline-block w-2 h-2 rounded-sm bg-yellow-200 border border-yellow-300"></span>60–69 En proceso
+                      <span className="flex items-center gap-1 text-[9px] text-gray-500">
+                        <span className="inline-block w-2.5 h-2.5 rounded-sm bg-amber-100 border border-amber-400"></span>Cursando
                       </span>
-                      <span className="flex items-center gap-1 text-[9px] text-gray-400">
-                        <span className="inline-block w-2 h-2 rounded-sm bg-red-200 border border-red-300"></span>&lt;60 Reprobado
+                      <span className="flex items-center gap-1 text-[9px] text-gray-500">
+                        <span className="inline-block w-2.5 h-2.5 rounded-sm bg-yellow-100 border border-yellow-300"></span>En proceso
+                      </span>
+                      <span className="flex items-center gap-1 text-[9px] text-gray-500">
+                        <span className="inline-block w-2.5 h-2.5 rounded-sm bg-red-100 border border-red-300"></span>Reprobada
+                      </span>
+                      <span className="flex items-center gap-1 text-[9px] text-gray-500">
+                        <span className="inline-block w-2.5 h-2.5 rounded-sm bg-gray-100 border border-gray-200"></span>No cursada
+                      </span>
+                      <span className="flex items-center gap-1 text-[9px] text-gray-500">
+                        <span className="inline-block w-2.5 h-2.5 rounded-sm bg-white border-l-[3px] border-orange-500 border-t border-r border-b border-gray-200"></span>Repetici&oacute;n
                       </span>
                     </div>
                   </div>
                 );
               })()}
 
-              {/* Calificaciones semestre actual: si no hay malla histórica pero sí calificaciones, mostrar como columna única */}
-              {(!ficha.calificaciones_historicas || ficha.calificaciones_historicas.length === 0) && ficha.calificaciones?.length > 0 && (() => {
-                const promActual = ficha.calificaciones.reduce((s, c) => s + (c.nota_final ?? 0), 0) / ficha.calificaciones.length;
-                const promActualStyle = getNoteStyleHistorico(Math.round(promActual));
+              {/* Fallback: si no hay malla canónica pero hay calificaciones, mostrar vista legacy */}
+              {(!ficha.malla_curricular?.semestres?.length) && (ficha.calificaciones_historicas?.length > 0 || ficha.calificaciones?.length > 0) && (() => {
+                const allGrades = [...(ficha.calificaciones_historicas || []), ...(ficha.calificaciones || [])];
+                const porPeriodo = {};
+                allGrades.forEach(c => {
+                  const p = c.periodo || "Actual";
+                  if (!porPeriodo[p]) porPeriodo[p] = [];
+                  porPeriodo[p].push(c);
+                });
+                const periodos = Object.keys(porPeriodo).sort();
                 return (
                   <div className="border-t border-gray-200">
-                    <SectionHeader>
-                      Malla curricular — {formatNivel(ficha.nivel_academico, ficha.calificaciones, ficha.calificaciones_historicas) || "Nivel actual"} · {ficha.calificaciones.length} asignaturas
-                      <span className="text-gray-400 font-normal ml-2 text-[9px] normal-case tracking-normal">
-                        escala 0–100 · ≥70 aprobado
-                      </span>
-                    </SectionHeader>
+                    <SectionHeader>Malla curricular (vista simplificada)</SectionHeader>
                     <div className="overflow-x-auto bg-[#FAFAFA] px-2 py-2">
                       <div className="flex gap-2" style={{ minWidth: "max-content" }}>
-                        <div className="flex-shrink-0 flex flex-col" style={{ minWidth: "80px" }}>
-                          <div className="bg-[#F0B000] text-white text-center rounded-t px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider">
-                            {formatNivel(ficha.nivel_academico, ficha.calificaciones, ficha.calificaciones_historicas) || "Sem. actual"}
-                          </div>
-                          <div className="border border-t-0 border-[#F0B000] rounded-b bg-[#FFFDF5] px-1 pt-1 pb-0.5 flex flex-col gap-0.5">
-                            {ficha.calificaciones.map((c, i) => (
-                              <MallaChip key={i} asignatura={c.asignatura} nota_final={c.nota_final} docente={c.docente} />
-                            ))}
-                            <div className={`mt-0.5 text-center text-[9px] font-bold border-t border-gray-100 pt-0.5 ${promActualStyle.text}`}>
-                              x̄ {isNaN(promActual) ? "—" : promActual.toFixed(1)}
+                        {periodos.map(periodo => {
+                          const asigs = porPeriodo[periodo];
+                          const promedio = asigs.reduce((s, c) => s + (c.nota_final ?? 0), 0) / asigs.length;
+                          const promedioStyle = getNoteStyleHistorico(Math.round(promedio));
+                          const isActual = periodo === "Actual";
+                          return (
+                            <div key={periodo} className="flex-shrink-0 flex flex-col" style={{ minWidth: "80px" }}>
+                              <div className={`${isActual ? "bg-[#F0B000]" : "bg-[#1B3A6B]"} text-white text-center rounded-t px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider`}>
+                                {periodo}
+                              </div>
+                              <div className="border border-t-0 border-gray-200 rounded-b bg-white px-1 pt-1 pb-0.5 flex flex-col gap-0.5">
+                                {asigs.map((c, i) => (
+                                  <MallaChip key={i} asignatura={c.asignatura} nota_final={c.nota_final} docente={c.docente} />
+                                ))}
+                                <div className={`mt-0.5 text-center text-[9px] font-bold border-t border-gray-100 pt-0.5 ${promedioStyle.text}`}>
+                                  x&#772; {isNaN(promedio) ? "—" : promedio.toFixed(1)}
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                        </div>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
