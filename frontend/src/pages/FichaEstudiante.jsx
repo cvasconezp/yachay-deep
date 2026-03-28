@@ -506,9 +506,11 @@ function getMallaEstado(estado) {
 
 // ── Abreviar nombres largos de asignaturas ──────────────────────────────────
 function abreviarAsignatura(nombre, maxLen = 32) {
-  // Siempre quitar conectores primero para compactar
+  // Quitar conectores para compactar.
+  // Usamos lookaround con espacios en vez de \b para evitar que
+  // \bA\b matchee la "a" al final de palabras acentuadas (ej. Antropología → Antropologí)
   let short = nombre
-    .replace(/\b(De La|De Los|De Las|Del|De|La|Las|Los|El|Y|En|Para|Con|Por|A)\b/gi, "")
+    .replace(/(?<=^|\s)(De La|De Los|De Las|Del|De|La|Las|Los|El|Y|En|Para|Con|Por|A)(?=\s|$)/gi, "")
     .replace(/\s{2,}/g, " ")
     .trim();
   if (short.length <= maxLen) return short;
