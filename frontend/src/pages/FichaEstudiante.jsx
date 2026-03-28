@@ -1364,6 +1364,165 @@ export default function FichaEstudiante() {
                 </div>
               </div>
 
+              {/* Tabla de cursos AVAC activos — semestre actual (primera mano) */}
+              {Object.keys(cursos).length > 0 && (
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-[#BDD7EE]">
+                        <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 whitespace-nowrap text-[10px]">Nivel y grupo</th>
+                        <th className="text-left px-2 py-1 border border-gray-300 font-semibold text-gray-700 text-[10px]" style={{ minWidth: "180px" }}>Asignaturas matriculadas</th>
+                        <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 w-14 text-[10px]">Nota</th>
+                        <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 w-10 text-[10px]">Mat</th>
+                        <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 w-16 text-[10px]">AVAC</th>
+                        <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 w-28 text-[10px]">Actividades</th>
+                        <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 w-14 text-[10px]">Link</th>
+                        <th className="text-left px-2 py-1 border border-gray-300 font-semibold text-gray-700 text-[10px]">Docente</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(cursos).map(([codigo, { acceso, tareas: ts }], idx) => {
+                        const courseName = acceso?.nombre_curso || ts[0]?.nombre_curso || codigo;
+                        const matchedCal = matchNota(courseName, ficha.calificaciones)
+                          || matchNota(courseName, ficha.calificaciones_historicas);
+                        const notaTableau = matchedCal?.nota_final ?? null;
+                        const totalCurso = ts.find(t => t.total_curso != null)?.total_curso ?? null;
+                        const nota = notaTableau ?? totalCurso;
+                        const noteStyle = getNoteStyleHistorico(nota);
+                        const sortedTasks = [...ts].sort((a, b) =>
+                          String(a.unidad).localeCompare(String(b.unidad), undefined, { numeric: true })
+                        );
+                        const diasInt = acceso?.dias_sin_acceso != null ? Math.round(acceso.dias_sin_acceso) : null;
+                        const diasColor = diasInt == null ? "text-gray-300"
+                          : diasInt > 14 ? "text-red-600 font-bold"
+                          : diasInt > 7 ? "text-orange-500"
+                          : "text-green-600";
+
+                        return (
+                          <tr key={codigo} className={idx % 2 === 0 ? "bg-white" : "bg-[#F9F9F9]"}>
+                            <td className="px-2 py-1 border border-gray-200 text-center text-[11px] text-gray-500 whitespace-nowrap">
+                              {(() => {
+                                const nivNum = parseNivelNum(matchedCal?.nivel);
+                                const grp = abbreviateGrupo(matchedCal?.grupo || acceso?.grupo || ts[0]?.grupo);
+                                const nivFallback = !nivNum && ficha.nivel_academico > 0 && ficha.nivel_academico <= 12 ? ficha.nivel_academico : null;
+                                const niv = nivNum || nivFallback;
+                                if (niv && grp) return <>{niv}° Nivel | {grp}</>;
+                                if (niv) return <>{niv}° Nivel</>;
+                                if (grp) return grp;
+                                return <span className="text-gray-300">—</span>;
+                              })()}
+                            </td>
+                            <td className="px-2 py-1 border border-gray-200 font-medium text-gray-800">
+                              {toTitleCase(courseName)}
+                            </td>
+                            <td className={`px-2 py-1 border border-gray-200 text-center font-bold ${noteStyle.bg} ${noteStyle.text}`}>
+                              {nota != null ? nota : <span className="text-gray-300">—</span>}
+                            </td>
+                            <td className="px-2 py-1 border border-gray-200 text-center text-[11px] text-gray-500">
+                              {matchedCal?.numero_repitencias != null
+                                ? <span className={`px-1 rounded text-[10px] font-semibold ${matchedCal.numero_repitencias > 1 ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-gray-700"}`}>
+                                    {matchedCal.numero_repitencias}
+                                  </span>
+                                : "—"}
+                            </td>
+                            <td className="px-2 py-1 border border-gray-200 text-center">
+                              <span className={`font-mono text-[11px] ${diasColor}`}>
+                                {diasInt != null ? `${diasInt}d` : "—"}
+                              </span>
+                              {acceso?.ultimo_acceso_texto && (
+                                <div className="text-[10px] text-gray-400 leading-tight whitespace-nowrap">
+                                  {compactarAcceso(acceso.ultimo_acceso_texto)}
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-2 py-1 border border-gray-200">
+                              <div className="flex gap-0.5 justify-center flex-wrap">
+                                {sortedTasks.slice(0, 8).map((t, i) => (
+                                  <TaskCell
+                                    key={i}
+                                    entregada={t.entregada}
+                                    retrasada={t.retrasada}
+                                    title={`Unidad ${t.unidad}: ${t.entregada ? "Entregada" : t.retrasada ? "Retrasada" : "Pendiente"}`}
+                                  />
+                                ))}
+                                {sortedTasks.length > 8 && (
+                                  <span className="text-[10px] text-gray-400 self-center">+{sortedTasks.length - 8}</span>
+                                )}
+                                {sortedTasks.length === 0 && (
+                                  <span className="text-[10px] text-gray-300 italic">Sin tareas</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-2 py-1 border border-gray-200 text-center">
+                              <a href={`https://avac.ups.edu.ec/grado67/course/search.php?search=${codigo}`}
+                                 target="_blank" rel="noreferrer"
+                                 className="text-blue-500 hover:text-blue-700 font-mono text-[11px]">
+                                {codigo}
+                              </a>
+                            </td>
+                            <td className="px-2 py-1 border border-gray-200 text-gray-600 text-[11px]">
+                              {toTitleCase(acceso?.docente || ts[0]?.docente || matchedCal?.docente)
+                                || <span className="text-gray-300 italic">—</span>}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {/* Materias con calificación pero sin actividad AVAC */}
+                      {ficha.calificaciones?.filter(cal => {
+                        return !Object.entries(cursos).some(([, { acceso, tareas: ts }]) => {
+                          const cn = acceso?.nombre_curso || ts[0]?.nombre_curso || "";
+                          return matchNota(cn, [cal]);
+                        });
+                      }).map((cal, idx) => {
+                        const noteStyle = getNoteStyleHistorico(cal.nota_final);
+                        const rowIdx = Object.keys(cursos).length + idx;
+                        return (
+                          <tr key={`cal-${idx}`} className={rowIdx % 2 === 0 ? "bg-white" : "bg-[#F9F9F9]"}>
+                            <td className="px-2 py-1 border border-gray-200 text-center text-[11px] text-gray-500 whitespace-nowrap">
+                              {(() => {
+                                const nivNum = parseNivelNum(cal.nivel);
+                                const grp = abbreviateGrupo(cal.grupo);
+                                const nivFallback = !nivNum && ficha.nivel_academico > 0 && ficha.nivel_academico <= 12 ? ficha.nivel_academico : null;
+                                const niv = nivNum || nivFallback;
+                                if (niv && grp) return <>{niv}° Nivel | {grp}</>;
+                                if (niv) return <>{niv}° Nivel</>;
+                                if (grp) return grp;
+                                return <span className="text-gray-300">—</span>;
+                              })()}
+                            </td>
+                            <td className="px-2 py-1 border border-gray-200 font-medium text-gray-800">
+                              {toTitleCase(cal.asignatura)}
+                            </td>
+                            <td className={`px-2 py-1 border border-gray-200 text-center font-bold ${noteStyle.bg} ${noteStyle.text}`}>
+                              {cal.nota_final != null ? cal.nota_final : <span className="text-gray-300">—</span>}
+                            </td>
+                            <td className="px-2 py-1 border border-gray-200 text-center text-[11px] text-gray-500">
+                              {cal.numero_repitencias != null
+                                ? <span className={`px-1 rounded text-[10px] font-semibold ${cal.numero_repitencias > 1 ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-gray-700"}`}>
+                                    {cal.numero_repitencias}
+                                  </span>
+                                : "—"}
+                            </td>
+                            <td className="px-2 py-1 border border-gray-200 text-center">
+                              <span className="text-[10px] text-gray-300 italic">Sin AVAC</span>
+                            </td>
+                            <td className="px-2 py-1 border border-gray-200">
+                              <span className="text-[10px] text-gray-300 italic">—</span>
+                            </td>
+                            <td className="px-2 py-1 border border-gray-200 text-center">
+                              <span className="text-gray-300">—</span>
+                            </td>
+                            <td className="px-2 py-1 border border-gray-200 text-gray-600 text-[11px]">
+                              {toTitleCase(cal.docente) || <span className="text-gray-300 italic">—</span>}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
               {/* ═══ KPIs AVAC ═══ */}
               <div className="grid grid-cols-2 divide-x divide-gray-200 border-t border-gray-200 bg-gradient-to-r from-gray-50 to-white">
                 <div className="py-3 px-4 text-center">
@@ -1524,178 +1683,6 @@ export default function FichaEstudiante() {
 
               {/* Tendencia Académica */}
               <TrendChart calificacionesHistoricas={ficha.calificaciones_historicas} calificaciones={ficha.calificaciones} />
-
-              {/* Tabla de cursos AVAC activos */}
-              {Object.keys(cursos).length > 0 && (
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse text-xs">
-                    <thead>
-                      <tr className="bg-[#BDD7EE]">
-                        <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 whitespace-nowrap text-[10px]">Nivel y grupo</th>
-                        <th className="text-left px-2 py-1 border border-gray-300 font-semibold text-gray-700 text-[10px]" style={{ minWidth: "180px" }}>Asignaturas matriculadas</th>
-                        <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 w-14 text-[10px]">Nota</th>
-                        <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 w-10 text-[10px]">Mat</th>
-                        <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 w-16 text-[10px]">AVAC</th>
-                        <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 w-28 text-[10px]">Actividades</th>
-                        <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 w-14 text-[10px]">Link</th>
-                        <th className="text-left px-2 py-1 border border-gray-300 font-semibold text-gray-700 text-[10px]">Docente</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {Object.entries(cursos).map(([codigo, { acceso, tareas: ts }], idx) => {
-                        const courseName = acceso?.nombre_curso || ts[0]?.nombre_curso || codigo;
-                        const matchedCal = matchNota(courseName, ficha.calificaciones)
-                          || matchNota(courseName, ficha.calificaciones_historicas);
-                        const notaTableau = matchedCal?.nota_final ?? null;
-                        // Fallback: nota total del curso desde TaskSubmission (total_curso, escala 0-100)
-                        const totalCurso = ts.find(t => t.total_curso != null)?.total_curso ?? null;
-                        const nota = notaTableau ?? totalCurso;
-                        // Escala: calificaciones Tableau (institucionales) = 0-100
-                        const noteStyle = getNoteStyleHistorico(nota);
-                        const sortedTasks = [...ts].sort((a, b) =>
-                          String(a.unidad).localeCompare(String(b.unidad), undefined, { numeric: true })
-                        );
-                        const diasInt = acceso?.dias_sin_acceso != null ? Math.round(acceso.dias_sin_acceso) : null;
-                        const diasColor = diasInt == null ? "text-gray-300"
-                          : diasInt > 14 ? "text-red-600 font-bold"
-                          : diasInt > 7 ? "text-orange-500"
-                          : "text-green-600";
-
-                        return (
-                          <tr key={codigo} className={idx % 2 === 0 ? "bg-white" : "bg-[#F9F9F9]"}>
-                            {/* Nivel y grupo */}
-                            <td className="px-2 py-1 border border-gray-200 text-center text-[11px] text-gray-500 whitespace-nowrap">
-                              {(() => {
-                                const nivNum = parseNivelNum(matchedCal?.nivel);
-                                const grp = abbreviateGrupo(matchedCal?.grupo || acceso?.grupo || ts[0]?.grupo);
-                                // Fallback: use ficha.nivel_academico if individual nivel is missing
-                                const nivFallback = !nivNum && ficha.nivel_academico > 0 && ficha.nivel_academico <= 12 ? ficha.nivel_academico : null;
-                                const niv = nivNum || nivFallback;
-                                if (niv && grp) return <>{niv}° Nivel | {grp}</>;
-                                if (niv) return <>{niv}° Nivel</>;
-                                if (grp) return grp;
-                                return <span className="text-gray-300">—</span>;
-                              })()}
-                            </td>
-                            {/* Asignatura */}
-                            <td className="px-2 py-1 border border-gray-200 font-medium text-gray-800">
-                              {toTitleCase(courseName)}
-                            </td>
-                            {/* Nota */}
-                            <td className={`px-2 py-1 border border-gray-200 text-center font-bold ${noteStyle.bg} ${noteStyle.text}`}>
-                              {nota != null ? nota : <span className="text-gray-300">—</span>}
-                            </td>
-                            {/* Mat (número de repitencias) */}
-                            <td className="px-2 py-1 border border-gray-200 text-center text-[11px] text-gray-500">
-                              {matchedCal?.numero_repitencias != null
-                                ? <span className={`px-1 rounded text-[10px] font-semibold ${matchedCal.numero_repitencias > 1 ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-gray-700"}`}>
-                                    {matchedCal.numero_repitencias}
-                                  </span>
-                                : "—"}
-                            </td>
-                            {/* AVAC: días + texto compactado */}
-                            <td className="px-2 py-1 border border-gray-200 text-center">
-                              <span className={`font-mono text-[11px] ${diasColor}`}>
-                                {diasInt != null ? `${diasInt}d` : "—"}
-                              </span>
-                              {acceso?.ultimo_acceso_texto && (
-                                <div className="text-[10px] text-gray-400 leading-tight whitespace-nowrap">
-                                  {compactarAcceso(acceso.ultimo_acceso_texto)}
-                                </div>
-                              )}
-                            </td>
-                            {/* Actividades: celdas de tareas */}
-                            <td className="px-2 py-1 border border-gray-200">
-                              <div className="flex gap-0.5 justify-center flex-wrap">
-                                {sortedTasks.slice(0, 8).map((t, i) => (
-                                  <TaskCell
-                                    key={i}
-                                    entregada={t.entregada}
-                                    retrasada={t.retrasada}
-                                    title={`Unidad ${t.unidad}: ${t.entregada ? "Entregada" : t.retrasada ? "Retrasada" : "Pendiente"}`}
-                                  />
-                                ))}
-                                {sortedTasks.length > 8 && (
-                                  <span className="text-[10px] text-gray-400 self-center">+{sortedTasks.length - 8}</span>
-                                )}
-                                {sortedTasks.length === 0 && (
-                                  <span className="text-[10px] text-gray-300 italic">Sin tareas</span>
-                                )}
-                              </div>
-                            </td>
-                            {/* Link AVAC */}
-                            <td className="px-2 py-1 border border-gray-200 text-center">
-                              <a href={`https://avac.ups.edu.ec/grado67/course/search.php?search=${codigo}`}
-                                 target="_blank" rel="noreferrer"
-                                 className="text-blue-500 hover:text-blue-700 font-mono text-[11px]">
-                                {codigo}
-                              </a>
-                            </td>
-                            {/* Docente */}
-                            <td className="px-2 py-1 border border-gray-200 text-gray-600 text-[11px]">
-                              {toTitleCase(acceso?.docente || ts[0]?.docente || matchedCal?.docente)
-                                || <span className="text-gray-300 italic">—</span>}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                      {/* Materias con calificación pero sin actividad AVAC */}
-                      {ficha.calificaciones?.filter(cal => {
-                        // Excluir las que ya tienen match con algún curso AVAC
-                        return !Object.entries(cursos).some(([, { acceso, tareas: ts }]) => {
-                          const cn = acceso?.nombre_curso || ts[0]?.nombre_curso || "";
-                          return matchNota(cn, [cal]);
-                        });
-                      }).map((cal, idx) => {
-                        const noteStyle = getNoteStyleHistorico(cal.nota_final);
-                        const rowIdx = Object.keys(cursos).length + idx;
-                        return (
-                          <tr key={`cal-${idx}`} className={rowIdx % 2 === 0 ? "bg-white" : "bg-[#F9F9F9]"}>
-                            <td className="px-2 py-1 border border-gray-200 text-center text-[11px] text-gray-500 whitespace-nowrap">
-                              {(() => {
-                                const nivNum = parseNivelNum(cal.nivel);
-                                const grp = abbreviateGrupo(cal.grupo);
-                                // Fallback: use ficha.nivel_academico if individual nivel is missing
-                                const nivFallback = !nivNum && ficha.nivel_academico > 0 && ficha.nivel_academico <= 12 ? ficha.nivel_academico : null;
-                                const niv = nivNum || nivFallback;
-                                if (niv && grp) return <>{niv}° Nivel | {grp}</>;
-                                if (niv) return <>{niv}° Nivel</>;
-                                if (grp) return grp;
-                                return <span className="text-gray-300">—</span>;
-                              })()}
-                            </td>
-                            <td className="px-2 py-1 border border-gray-200 font-medium text-gray-800">
-                              {toTitleCase(cal.asignatura)}
-                            </td>
-                            <td className={`px-2 py-1 border border-gray-200 text-center font-bold ${noteStyle.bg} ${noteStyle.text}`}>
-                              {cal.nota_final != null ? cal.nota_final : <span className="text-gray-300">—</span>}
-                            </td>
-                            <td className="px-2 py-1 border border-gray-200 text-center text-[11px] text-gray-500">
-                              {cal.numero_repitencias != null
-                                ? <span className={`px-1 rounded text-[10px] font-semibold ${cal.numero_repitencias > 1 ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-gray-700"}`}>
-                                    {cal.numero_repitencias}
-                                  </span>
-                                : "—"}
-                            </td>
-                            <td className="px-2 py-1 border border-gray-200 text-center">
-                              <span className="text-[10px] text-gray-300 italic">Sin AVAC</span>
-                            </td>
-                            <td className="px-2 py-1 border border-gray-200">
-                              <span className="text-[10px] text-gray-300 italic">—</span>
-                            </td>
-                            <td className="px-2 py-1 border border-gray-200 text-center">
-                              <span className="text-gray-300">—</span>
-                            </td>
-                            <td className="px-2 py-1 border border-gray-200 text-gray-600 text-[11px]">
-                              {toTitleCase(cal.docente) || <span className="text-gray-300 italic">—</span>}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
 
               {/* Tabla de materias — fallback cuando no hay cursos AVAC pero sí calificaciones */}
               {Object.keys(cursos).length === 0 && ficha.calificaciones?.length > 0 && (() => {
