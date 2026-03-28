@@ -1,9 +1,13 @@
 """
 Ingenieria de features para prediccion de desercion y reprobacion.
-Consulta la tabla grades (datos historicos P60-P67) y construye
+Consulta la tabla grades (datos historicos P57-P67) y construye
 features por estudiante-periodo, agrupados por carrera.
 """
+import json
 import logging
+import re
+import unicodedata
+from pathlib import Path
 from typing import Optional
 
 import pandas as pd
@@ -14,6 +18,55 @@ logger = logging.getLogger(__name__)
 
 # Periodos ordenados cronologicamente (P57+ para incluir datos históricos completos)
 PERIODOS_ORDENADOS = ["P57", "P58", "P59", "P60", "P61", "P62", "P63", "P64", "P65", "P66", "P67"]
+
+# ── Utilidades para mallas curriculares ──────────────────────────────────────
+_MALLAS_DIR = Path(__file__).resolve().parent.parent / "data" / "mallas"
+
+
+def _normalize_asig(name: str) -> str:
+    """Normaliza nombre de asignatura: upper, colapsa whitespace/newlines."""
+    return re.sub(r"\s+", " ", name.strip().upper())
+
+
+def _strip_accents(text: str) -> str:
+    """Elimina acentos para generar nombres de archivo."""
+    nfkd = unicodedata.normalize("NFKD", text)
+    return "".join(c for c in nfkd if not unicodedata.combining(c))
+
+
+def _career_to_filename(carrera_upper: str) -> str:
+    """Convierte nombre de carrera a nombre de archivo JSON."""
+    base = _strip_accents(carrera_upper)
+    base = re.sub(r"[^A-Z0-9]+", "_", base).strip("_")
+    return f"{base}.json"
+
+
+def _load_reference_malla(carrera_upper: str) -> set[str] | None:
+    """Carga set de asignaturas desde JSON de referencia oficial.
+    Retorna None si no existe archivo para esa carrera."""
+    filename = _career_to_filename(carrera_upper)
+    filepath = _MALLAS_DIR / filename
+    if not filepath.exists():
+        return None
+    data = json.loads(filepath.read_text(encoding="utf-8"))
+    niveles = data.get("niveles", {})
+    asignaturas = set()
+    for asigs in niveles.values():
+        for asig in asigs:
+            asignaturas.add(_normalize_asig(asig))
+    return asignaturas
+
+
+def _build_malla_from_grades(df_grades: pd.DataFrame) -> dict[str, set[str]]:
+    """Infiere el set de asignaturas por carrera a partir de grades históricos.
+    Para carreras sin JSON de referencia."""
+    malla = {}
+    for carrera, group in df_grades.groupby("carrera"):
+        if carrera:
+            malla[carrera.strip().upper()] = set(
+                _normalize_asig(a) for a in group["asignatura"].dropna().unique()
+            )
+    return malla
 
 
 def build_features(db: Session) -> pd.DataFrame:
@@ -34,7 +87,7 @@ def build_features(db: Session) -> pd.DataFrame:
       - reprobo: 1 si alguna nota < 70, 0 si todas >= 70
     """
     query = text("""
-        SELECT g.student_id, g.periodo, g.nota_final, g.carrera
+        SELECT g.student_id, g.periodo, g.nota_final, g.carrera, g.asignatura
         FROM grades g
         WHERE g.periodo IS NOT NULL
         ORDER BY g.student_id, g.periodo
@@ -45,7 +98,7 @@ def build_features(db: Session) -> pd.DataFrame:
         logger.warning("No hay calificaciones historicas para construir features")
         return pd.DataFrame()
 
-    df = pd.DataFrame(rows, columns=["student_id", "periodo", "nota_final", "carrera"])
+    df = pd.DataFrame(rows, columns=["student_id", "periodo", "nota_final", "carrera", "asignatura"])
     df["nota_final"] = pd.to_numeric(df["nota_final"], errors="coerce").fillna(0)
 
     # Determinar carrera principal por estudiante (la más frecuente)
@@ -57,14 +110,31 @@ def build_features(db: Session) -> pd.DataFrame:
 
     # [BUG-06] FIX: Mapeo para no etiquetar egresados/graduados como desertores
     # Obtener nivel_academico de cada estudiante
-    # NOTA: estado_matricula en la DB solo tiene "Matriculado"/"Sin matrícula"
-    # (viene de PAGADO+ESTADO_MATRICULADOS), no tiene EGRESADO/GRADUADO.
-    # Por eso usamos nivel_academico >= 8 como criterio de graduación.
     student_info_query = text("""
         SELECT id, nivel_academico FROM students
     """)
     student_info_rows = db.execute(student_info_query).fetchall()
     nivel_por_estudiante = {row[0]: row[1] for row in student_info_rows}
+
+    # ── Cargar mallas de referencia oficiales (JSON) por carrera ──
+    # Solo usamos JSONs oficiales para verificar egreso completo.
+    # Para carreras sin JSON, nivel 8 es suficiente indicador de egreso.
+    malla_por_carrera: dict[str, set[str]] = {}
+    for carrera_key in set(c.strip().upper() for c in df["carrera"].dropna().unique()):
+        ref = _load_reference_malla(carrera_key)
+        if ref is not None:
+            malla_por_carrera[carrera_key] = ref
+            logger.info(f"Malla referencia cargada: {carrera_key} ({len(ref)} materias)")
+
+    # ── Materias aprobadas (nota >= 70) por estudiante acumuladas ──
+    # Un estudiante puede aprobar la misma materia en diferentes periodos;
+    # contamos el set único de asignaturas aprobadas.
+    aprobadas_mask = df["nota_final"] >= 70
+    materias_aprobadas_por_sid: dict[int, set[str]] = {}
+    for sid, group in df[aprobadas_mask].groupby("student_id"):
+        materias_aprobadas_por_sid[sid] = set(
+            _normalize_asig(a) for a in group["asignatura"].dropna().unique()
+        )
 
 
     # Agrupar por estudiante-periodo
@@ -102,10 +172,9 @@ def build_features(db: Session) -> pd.DataFrame:
         return None
 
     # Label desercion: 1 si no aparece en periodo siguiente
-    # Excluir graduados para no contaminar el modelo con falsos positivos
-    # Lógica: todas las carreras tienen 8 niveles como máximo.
-    # Si nivel_academico >= 8 y ya no aparece → graduado, no desertor.
-    # Carreras con nivel < 8 en datos son NUEVAS (aún no llegan a 8vo).
+    # Excluir egresados para no contaminar el modelo con falsos positivos
+    # Lógica de egreso: está en 8vo nivel Y aprobó todas las materias de la malla.
+    # Si no cumple ambas condiciones y desapareció → deserción.
     def label_desercion(row):
         nxt = periodo_siguiente(row["periodo"])
         if nxt is None:
@@ -117,14 +186,26 @@ def build_features(db: Session) -> pd.DataFrame:
         if sid in estudiantes_por_periodo.get(nxt, set()):
             return 0  # Sigue matriculado en siguiente periodo
 
-        # ── No aparece en siguiente periodo: ¿desertó o se graduó? ──
+        # ── No aparece en siguiente periodo: ¿desertó o egresó? ──
 
-        # Si aprobó el último nivel (8vo) → graduado
+        # Egresado = nivel 8 + aprobó todas las materias de la malla
         nivel_ac = nivel_por_estudiante.get(sid)
         if nivel_ac is not None and nivel_ac >= 8:
-            return 0  # Completó la carrera
+            carrera = carrera_por_estudiante.get(sid, "")
+            carrera_key = (carrera or "").strip().upper()
+            malla = malla_por_carrera.get(carrera_key)
+            aprobadas = materias_aprobadas_por_sid.get(sid, set())
 
-        # No completó nivel 8 y desapareció → deserción
+            if malla is not None:
+                # Verificar si aprobó todas las materias de la malla
+                faltantes = malla - aprobadas
+                if len(faltantes) == 0:
+                    return 0  # Egresado: nivel 8 + malla completa
+            else:
+                # Sin malla de referencia: nivel 8 es suficiente indicador
+                return 0
+
+        # No está en nivel 8 o no completó la malla → deserción
         return 1
 
     features["deserto"] = features.apply(label_desercion, axis=1)
