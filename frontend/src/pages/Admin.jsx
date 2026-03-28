@@ -270,6 +270,7 @@ function TabSistema() {
                           setMlMsg("Error: " + st.error);
                         } else if (st.result?.status === "ok") {
                           setMlMsg(`Predicciones actualizadas para ${st.result.updated} estudiantes en ${st.elapsed_seconds}s`);
+                          loadMlStatus();
                         } else {
                           setMlMsg(`Aviso: ${st.result?.message || "sin resultado"}`);
                         }

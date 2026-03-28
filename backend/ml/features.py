@@ -12,8 +12,8 @@ from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
-# Periodos ordenados cronologicamente
-PERIODOS_ORDENADOS = ["P60", "P61", "P62", "P63", "P64", "P65", "P66", "P67"]
+# Periodos ordenados cronologicamente (P57+ para incluir datos históricos completos)
+PERIODOS_ORDENADOS = ["P57", "P58", "P59", "P60", "P61", "P62", "P63", "P64", "P65", "P66", "P67"]
 
 
 def build_features(db: Session) -> pd.DataFrame:

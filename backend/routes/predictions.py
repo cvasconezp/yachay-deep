@@ -34,6 +34,18 @@ def _run_train_in_background():
         result = train_models(db)
         _bg_task["result"] = result
         _bg_task["error"] = None
+
+        # Recargar el singleton del Predictor para que get_status() refleje los nuevos modelos
+        if result.get("status") == "ok":
+            try:
+                from ..ml.predict import Predictor
+                predictor = Predictor.get_instance()
+                predictor.reset()
+                predictor.load_models()
+                logger.info("Predictor recargado con modelos recién entrenados")
+            except Exception as e:
+                logger.warning("No se pudo recargar Predictor: %s", e)
+
         logger.info("Entrenamiento en background completado: %s", result.get("status"))
     except Exception as e:
         _bg_task["result"] = None
