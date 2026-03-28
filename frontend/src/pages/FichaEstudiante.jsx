@@ -154,26 +154,51 @@ function TrendChart({ calificacionesHistoricas, calificaciones }) {
 
   const points = averages.map((avg, i) => ({ x: scaleX(i), y: scaleY(avg), value: avg }));
 
-  // Smooth curve (monotone cubic)
+  // Curva suavizada — Catmull-Rom (tensión 0.5 para curvas más visibles)
   const buildPath = (pts) => {
     if (pts.length < 2) return "";
-    if (pts.length === 2) return `M${pts[0].x},${pts[0].y}L${pts[1].x},${pts[1].y}`;
+    if (pts.length === 2) {
+      // Con 2 puntos: curva ligera usando un punto de control central elevado
+      const mx = (pts[0].x + pts[1].x) / 2;
+      const my = (pts[0].y + pts[1].y) / 2 - Math.abs(pts[1].y - pts[0].y) * 0.15;
+      return `M${pts[0].x},${pts[0].y}Q${mx},${my},${pts[1].x},${pts[1].y}`;
+    }
+    const tension = 0.35;
     let d = `M${pts[0].x},${pts[0].y}`;
     for (let i = 0; i < pts.length - 1; i++) {
       const p0 = pts[Math.max(0, i - 1)];
       const p1 = pts[i];
       const p2 = pts[i + 1];
       const p3 = pts[Math.min(pts.length - 1, i + 2)];
-      const cp1x = p1.x + (p2.x - p0.x) / 6;
-      const cp1y = p1.y + (p2.y - p0.y) / 6;
-      const cp2x = p2.x - (p3.x - p1.x) / 6;
-      const cp2y = p2.y - (p3.y - p1.y) / 6;
+      const cp1x = p1.x + (p2.x - p0.x) * tension;
+      const cp1y = p1.y + (p2.y - p0.y) * tension;
+      const cp2x = p2.x - (p3.x - p1.x) * tension;
+      const cp2y = p2.y - (p3.y - p1.y) * tension;
       d += `C${cp1x},${cp1y},${cp2x},${cp2y},${p2.x},${p2.y}`;
     }
     return d;
   };
   const linePath = buildPath(points);
   const areaPath = `${linePath}L${points[points.length - 1].x},${pad.top + ch}L${points[0].x},${pad.top + ch}Z`;
+
+  // Línea de tendencia (regresión lineal) — solo con ≥4 períodos
+  const showTrendLine = averages.length >= 4;
+  let trendLinePath = "";
+  if (showTrendLine) {
+    const n = averages.length;
+    const meanX = (n - 1) / 2;
+    const meanY = averages.reduce((a, b) => a + b, 0) / n;
+    let num = 0, den = 0;
+    for (let i = 0; i < n; i++) {
+      num += (i - meanX) * (averages[i] - meanY);
+      den += (i - meanX) * (i - meanX);
+    }
+    const slope = den !== 0 ? num / den : 0;
+    const intercept = meanY - slope * meanX;
+    const y0 = intercept;
+    const yN = slope * (n - 1) + intercept;
+    trendLinePath = `M${scaleX(0)},${scaleY(y0)}L${scaleX(n - 1)},${scaleY(yN)}`;
+  }
 
   // 70-pt reference line
   const y70 = (70 >= yMin && 70 <= yMax) ? scaleY(70) : null;
@@ -256,7 +281,13 @@ function TrendChart({ calificacionesHistoricas, calificaciones }) {
             {/* Area fill */}
             <path d={areaPath} fill="url(#trend-area-grad)" />
 
-            {/* Line */}
+            {/* Trend line — regresión lineal (solo ≥4 períodos) */}
+            {showTrendLine && (
+              <path d={trendLinePath} fill="none" stroke={lineColor} strokeWidth="1.5"
+                    strokeDasharray="6,4" opacity="0.35" />
+            )}
+
+            {/* Line — curva suavizada */}
             <path d={linePath} fill="none" stroke={lineColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
 
             {/* Data points + value labels */}
