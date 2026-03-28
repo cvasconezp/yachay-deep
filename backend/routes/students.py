@@ -8,6 +8,7 @@ from pathlib import Path
 import json
 import time
 import logging
+import re
 import unicodedata
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -41,6 +42,11 @@ def _strip_accents(text: str) -> str:
     return "".join(c for c in nfkd if not unicodedata.combining(c))
 
 
+def _normalize_asig(name: str) -> str:
+    """Normaliza nombre de asignatura: upper, colapsa whitespace/newlines."""
+    return re.sub(r"\s+", " ", name.strip().upper())
+
+
 def _career_to_filename(carrera_upper: str) -> str:
     """
     Convierte nombre de carrera a nombre de archivo JSON.
@@ -71,7 +77,7 @@ def _load_reference_malla(carrera_upper: str) -> dict[str, int] | None:
         for nivel_str, asignaturas in niveles.items():
             nivel_int = int(nivel_str)
             for asig in asignaturas:
-                canonical[asig.strip().upper()] = nivel_int
+                canonical[_normalize_asig(asig)] = nivel_int
         logger.info(
             "Malla de referencia cargada para %s: %d asignaturas desde %s",
             carrera_upper, len(canonical), filename,
@@ -477,7 +483,7 @@ def _get_canonical_for_career(db: Session, carrera: str) -> dict[str, int]:
 
     asig_nivel_counts: dict[str, Counter] = {}
     for asig, nivel in all_career_grades_with_nivel:
-        asig_upper = asig.strip().upper()
+        asig_upper = _normalize_asig(asig)
         if asig_upper not in asig_nivel_counts:
             asig_nivel_counts[asig_upper] = Counter()
         asig_nivel_counts[asig_upper][nivel] += 1
@@ -509,7 +515,7 @@ def _get_canonical_for_career(db: Session, carrera: str) -> dict[str, int]:
                 continue
             asig_periodos: dict[str, set] = {}
             for asig, periodo in grades_list:
-                asig_upper = asig.strip().upper()
+                asig_upper = _normalize_asig(asig)
                 asig_periodos.setdefault(asig_upper, set()).add(periodo)
             has_retake = any(len(ps) > 1 for ps in asig_periodos.values())
             if not has_retake:
@@ -528,7 +534,7 @@ def _get_canonical_for_career(db: Session, carrera: str) -> dict[str, int]:
                     continue
                 asig_periodos_r: dict[str, set] = {}
                 for asig, periodo in grades_list:
-                    asig_upper = asig.strip().upper()
+                    asig_upper = _normalize_asig(asig)
                     asig_periodos_r.setdefault(asig_upper, set()).add(periodo)
                 retake_count = sum(1 for ps in asig_periodos_r.values() if len(ps) > 1)
                 if retake_count <= 1:
@@ -544,7 +550,7 @@ def _get_canonical_for_career(db: Session, carrera: str) -> dict[str, int]:
 
             asig_primer_periodo: dict[str, str] = {}
             for asig, periodo in sorted(grades_list, key=lambda x: x[1]):
-                asig_upper = asig.strip().upper()
+                asig_upper = _normalize_asig(asig)
                 if asig_upper not in asig_primer_periodo:
                     asig_primer_periodo[asig_upper] = periodo
 
@@ -607,12 +613,12 @@ def _build_malla_canonica(
 
     # ── 3. Recopilar calificaciones del estudiante indexadas por asignatura ──
     # Todas las calificaciones (hist + actuales) agrupadas por asignatura
-    student_grades_map: dict[str, list] = {}  # asig_upper → [Grade]
+    student_grades_map: dict[str, list] = {}  # asig_normalized → [Grade]
     for g in calificaciones_hist:
-        key = g.asignatura.strip().upper()
+        key = _normalize_asig(g.asignatura)
         student_grades_map.setdefault(key, []).append(g)
     for g in calificaciones_actual:
-        key = g.asignatura.strip().upper()
+        key = _normalize_asig(g.asignatura)
         student_grades_map.setdefault(key, []).append(g)
 
     # ── 4. Construir la respuesta ──
