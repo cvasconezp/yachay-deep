@@ -628,6 +628,7 @@ export default function FichaEstudiante() {
   const [recomendaciones, setRecomendaciones] = useState([]);
   const [contrafactual, setContrafactual] = useState(null);
   const [activeTab, setActiveTab] = useState("indicadores");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [comparativa, setComparativa] = useState(null);
   const [loadingComparativa, setLoadingComparativa] = useState(false);
   const searchTimeout = useRef(null);
@@ -1247,8 +1248,25 @@ export default function FichaEstudiante() {
           {/* ═══ CUERPO PRINCIPAL: 2 columnas ═══ */}
           <div className="flex divide-x divide-gray-200 bg-white">
 
-            {/* ─── COLUMNA IZQUIERDA ─── */}
-            <div className="flex-shrink-0 bg-white" style={{ width: "300px" }}>
+            {/* ─── COLUMNA IZQUIERDA (colapsable) ─── */}
+            <div
+              className="flex-shrink-0 bg-white transition-all duration-300 overflow-hidden"
+              style={{ width: sidebarCollapsed ? "36px" : "300px" }}
+            >
+              {/* Botón colapsar/expandir */}
+              <button
+                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                className="w-full flex items-center justify-center py-1.5 bg-gray-100 hover:bg-gray-200 transition-colors border-b border-gray-200"
+                title={sidebarCollapsed ? "Expandir datos personales" : "Minimizar datos personales"}
+                style={{ fontSize: "10px" }}
+              >
+                {sidebarCollapsed
+                  ? <span className="text-gray-500 font-bold">▶</span>
+                  : <span className="text-gray-400">◀ Minimizar</span>
+                }
+              </button>
+
+              {!sidebarCollapsed && (<>
 
               {/* Datos personales */}
               <SectionHeader>Datos personales</SectionHeader>
@@ -1345,6 +1363,8 @@ export default function FichaEstudiante() {
                   </tr>
                 </tbody>
               </table>
+
+              </>)}
             </div>
 
             {/* ─── SECCIÓN DERECHA ─── */}
