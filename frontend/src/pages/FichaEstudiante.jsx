@@ -379,11 +379,31 @@ function getMallaEstado(estado) {
   }
 }
 
+// ── Abreviar nombres largos de asignaturas ──────────────────────────────────
+function abreviarAsignatura(nombre, maxLen = 45) {
+  if (nombre.length <= maxLen) return nombre;
+  // Quitar palabras conectoras para acortar
+  let short = nombre
+    .replace(/\b(De La|De Los|De Las|Del|De|La|Las|Los|El|Y|En|Para|Con|Por|A)\b/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  if (short.length <= maxLen) return short;
+  // Si sigue largo, tomar primeras palabras con elipsis
+  const words = short.split(" ");
+  let result = "";
+  for (const w of words) {
+    if ((result + " " + w).trim().length > maxLen - 1) break;
+    result = (result + " " + w).trim();
+  }
+  return result + "…";
+}
+
 // ── Celda compacta de la malla con soporte de repeticiones ──────────────────
 function MallaCeldaFija({ asignatura }) {
   const [showTooltip, setShowTooltip] = useState(false);
   const s = getMallaEstado(asignatura.estado);
   const titleName = toTitleCase(asignatura.nombre) || "";
+  const shortName = abreviarAsignatura(titleName);
 
   const esRepeticion = asignatura.es_repeticion;
   const numIntentos = asignatura.num_intentos;
@@ -408,36 +428,41 @@ function MallaCeldaFija({ asignatura }) {
         </div>
       )}
 
-      {/* Nombre + nota en layout compacto */}
+      {/* Nombre abreviado + nota en layout compacto */}
       <div className="flex items-start gap-1">
-        <div className="flex-1 leading-tight" style={{ fontSize: "9px", color: "#374151" }}
-             title={titleName}>
-          {titleName}
+        <div className="flex-1 leading-tight" style={{ fontSize: "9px", color: "#374151" }}>
+          {shortName}
         </div>
         <div className={`font-bold flex-shrink-0 ${s.text}`} style={{ fontSize: "11px", minWidth: "20px", textAlign: "right" }}>
           {nota != null ? nota : "—"}
         </div>
       </div>
 
-      {/* Tooltip con historial de intentos */}
-      {showTooltip && esRepeticion && asignatura.intentos.length > 0 && (
-        <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-1 bg-gray-900 text-white rounded-lg shadow-xl px-2.5 py-1.5 whitespace-nowrap"
-             style={{ minWidth: "150px", fontSize: "9px" }}>
-          <div className="font-bold mb-0.5 text-orange-300" style={{ fontSize: "10px" }}>{titleName}</div>
-          <div className="font-semibold text-gray-300 mb-0.5">{numIntentos} intentos:</div>
-          {asignatura.intentos.map((intento, i) => (
-            <div key={i} className="flex justify-between gap-3 py-px border-t border-gray-700">
-              <span className="text-gray-300">{intento.periodo || "Actual"}</span>
-              <span className={
-                intento.estado === "aprobada" ? "text-green-400 font-bold" :
-                intento.estado === "reprobada" ? "text-red-400 font-bold" :
-                intento.estado === "cursando" ? "text-amber-400" :
-                "text-yellow-400"
-              }>
-                {intento.nota != null ? intento.nota : "—"}
-              </span>
-            </div>
-          ))}
+      {/* Tooltip: nombre completo (siempre) + historial de intentos (si repetición) */}
+      {showTooltip && (
+        <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-1 bg-gray-900 text-white rounded-lg shadow-xl px-2.5 py-1.5"
+             style={{ minWidth: "180px", maxWidth: "280px", fontSize: "9px" }}>
+          <div className="font-bold mb-0.5" style={{ fontSize: "10px", color: esRepeticion ? "#fdba74" : "#e5e7eb", whiteSpace: "normal" }}>
+            {titleName}
+          </div>
+          {esRepeticion && asignatura.intentos.length > 0 && (
+            <>
+              <div className="font-semibold text-gray-300 mb-0.5">{numIntentos} intentos:</div>
+              {asignatura.intentos.map((intento, i) => (
+                <div key={i} className="flex justify-between gap-3 py-px border-t border-gray-700 whitespace-nowrap">
+                  <span className="text-gray-300">{intento.periodo || "Actual"}</span>
+                  <span className={
+                    intento.estado === "aprobada" ? "text-green-400 font-bold" :
+                    intento.estado === "reprobada" ? "text-red-400 font-bold" :
+                    intento.estado === "cursando" ? "text-amber-400" :
+                    "text-yellow-400"
+                  }>
+                    {intento.nota != null ? intento.nota : "—"}
+                  </span>
+                </div>
+              ))}
+            </>
+          )}
           <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
         </div>
       )}
