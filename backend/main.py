@@ -291,13 +291,52 @@ def debug_malla_diagnostico():
             .scalar()
         )
 
+        # 6. Listar TODAS las asignaturas únicas del canonical actual
+        from .routes.students import _get_canonical_for_career
+        canonical = _get_canonical_for_career(db, student_carrera)
+        # Agrupar por nivel para ver distribución
+        by_nivel = {}
+        for asig, niv in canonical.items():
+            by_nivel.setdefault(niv, []).append(asig)
+        for niv in by_nivel:
+            by_nivel[niv].sort()
+
+        # 7. Contar materias únicas por Strategy B (periodo inference, con filtro)
+        from sqlalchemy import distinct
+        strategy_b_subjects = (
+            db.query(func.distinct(func.upper(func.trim(Grade.asignatura))))
+            .filter(
+                Grade.student_id.in_(db.query(career_students.c.id)),
+                func.upper(Grade.carrera) == carrera_key,
+                Grade.periodo.isnot(None),
+            )
+            .all()
+        )
+
+        # 8. Buscar estudiantes EIB que tienen grades de otra carrera original
+        #    (carrera del CSV != carrera del student)
+        cross_career = db.execute(text("""
+            SELECT DISTINCT g.carrera as grade_carrera, s.carrera as student_carrera, count(*) as cnt
+            FROM grades g
+            JOIN students s ON g.student_id = s.id
+            WHERE upper(s.carrera) = :ck
+              AND g.carrera IS NOT NULL
+              AND g.carrera != ''
+              AND upper(g.carrera) != :ck
+            GROUP BY g.carrera, s.carrera
+        """), {"ck": carrera_key}).fetchall()
+
         return {
             "estudiante": student.nombre,
             "student_carrera": student_carrera,
             "carrera_key": carrera_key,
             "grade_carrera_distribution": {str(k): v for k, v in grade_carrera_dist},
-            "asignaturas_con_filtro_estricto": strict_count,
-            "asignaturas_sin_filtro_carrera": no_filter_count,
+            "asignaturas_con_filtro_estricto_A": strict_count,
+            "asignaturas_sin_filtro_carrera_A": no_filter_count,
+            "strategy_b_subjects_count": len(strategy_b_subjects),
+            "canonical_total": len(canonical),
+            "canonical_by_nivel": {str(k): {"count": len(v), "asignaturas": v} for k, v in sorted(by_nivel.items())},
+            "cross_career_grades": [{"grade_carrera": r[0], "student_carrera": r[1], "count": r[2]} for r in cross_career],
             "etl_last_run": etl_info,
             "etl_log_relevante": etl_log_backfill,
         }
