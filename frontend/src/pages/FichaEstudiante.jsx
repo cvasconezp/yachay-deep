@@ -432,13 +432,15 @@ function MallaCeldaFija({ asignatura }) {
         </div>
       )}
 
-      {/* Nombre abreviado + nota */}
-      <div className="flex items-start gap-1.5">
-        <div className="flex-1 leading-snug" style={{ fontSize: "10.5px", color: "#1f2937" }}>
-          {shortName}
-        </div>
-        <div className={`font-bold flex-shrink-0 ${s.text}`} style={{ fontSize: "12px", minWidth: "22px", textAlign: "right" }}>
-          {nota != null ? nota : "—"}
+      {/* Nombre abreviado + nota — overflow controlado */}
+      <div className="overflow-hidden" style={{ minWidth: 0 }}>
+        <div className="flex items-start gap-1" style={{ minWidth: 0 }}>
+          <div className="leading-snug" style={{ fontSize: "10.5px", color: "#1f2937", flex: "1 1 0%", minWidth: 0, wordBreak: "break-word" }}>
+            {shortName}
+          </div>
+          <div className={`font-bold ${s.text}`} style={{ fontSize: "12px", flexShrink: 0, textAlign: "right" }}>
+            {nota != null ? nota : "—"}
+          </div>
         </div>
       </div>
 
