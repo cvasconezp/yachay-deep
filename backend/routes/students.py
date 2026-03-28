@@ -396,14 +396,11 @@ def _get_canonical_for_career(db: Session, carrera: str) -> dict[str, int]:
         .subquery()
     )
 
-    # Filtro doble: estudiante pertenece a la carrera Y la calificación
-    # también es de esa carrera (evita contaminación cruzada cuando un
-    # estudiante cambió de carrera o tiene grades de otra fuente).
-    _career_grade_filter = or_(
-        func.upper(Grade.carrera) == carrera_key,
-        Grade.carrera.is_(None),
-        Grade.carrera == "",
-    )
+    # Filtro estricto: SOLO grades cuya carrera coincida explícitamente.
+    # NO permitimos Grade.carrera=NULL porque grades huérfanas de otras
+    # carreras (ej. estudiantes que cambiaron de carrera) contaminarían
+    # la malla canónica con asignaturas que no corresponden.
+    _career_grade_filter = func.upper(Grade.carrera) == carrera_key
 
     # ── Estrategia A: nivel explícito ──
     all_career_grades_with_nivel = (

@@ -357,6 +357,33 @@ class ETLPipeline:
             if n_merged2:
                 logs.append(f"  → {n_merged2} estudiantes duplicados fusionados (post-grades)")
 
+            # 7c. Backfill Grade.carrera desde Student.carrera donde sea NULL
+            #     Esto asegura que el filtro estricto de malla canónica funcione
+            #     correctamente (solo incluye grades con carrera explícita).
+            logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Backfill Grade.carrera desde Student.carrera...")
+            n_backfill = self.db.execute(
+                sa_text("""
+                    UPDATE grades
+                    SET carrera = s.carrera
+                    FROM students s
+                    WHERE grades.student_id = s.id
+                      AND (grades.carrera IS NULL OR grades.carrera = '')
+                      AND s.carrera IS NOT NULL
+                      AND s.carrera != ''
+                """)
+            ).rowcount
+            self.db.commit()
+            if n_backfill:
+                logs.append(f"  → {n_backfill} calificaciones con carrera backfilled desde estudiante")
+
+            # 7d. Invalidar caché de malla canónica (datos frescos)
+            try:
+                from ..routes.students import _canonical_cache
+                _canonical_cache.clear()
+                logs.append("  → Caché de malla canónica invalidado")
+            except Exception:
+                pass
+
             # 8. Reentrenar modelos ML con datos históricos actualizados
             try:
                 from ..ml.train import train_models

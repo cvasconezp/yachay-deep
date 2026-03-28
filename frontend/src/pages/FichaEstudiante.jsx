@@ -1364,6 +1364,167 @@ export default function FichaEstudiante() {
                 </div>
               </div>
 
+              {/* ═══ KPIs AVAC ═══ */}
+              <div className="grid grid-cols-2 divide-x divide-gray-200 border-t border-gray-200 bg-gradient-to-r from-gray-50 to-white">
+                <div className="py-3 px-4 text-center">
+                  <div className="text-[9px] text-gray-400 uppercase tracking-widest font-semibold">Días sin AVAC</div>
+                  <div className={`font-bold text-lg mt-0.5 ${
+                    ficha.dias_sin_acceso == null ? "text-gray-300"
+                    : ficha.dias_sin_acceso > 14 ? "text-red-600"
+                    : ficha.dias_sin_acceso > 7 ? "text-orange-500"
+                    : "text-green-600"}`}>
+                    {ficha.dias_sin_acceso != null ? `${Math.round(ficha.dias_sin_acceso)}d` : "—"}
+                  </div>
+                </div>
+                <div className="py-3 px-4 text-center">
+                  <div className="text-[9px] text-gray-400 uppercase tracking-widest font-semibold">Tareas entregadas</div>
+                  <div className={`font-bold text-lg mt-0.5 ${
+                    ficha.porcentaje_tareas == null ? "text-gray-300"
+                    : ficha.porcentaje_tareas < 50 ? "text-red-600"
+                    : ficha.porcentaje_tareas < 75 ? "text-orange-500"
+                    : "text-green-600"}`}>
+                    {ficha.porcentaje_tareas != null ? `${Math.round(ficha.porcentaje_tareas)}%` : "—"}
+                  </div>
+                </div>
+              </div>
+
+              {/* ══ MALLA CURRICULAR FIJA (grid por niveles canónicos) ══ */}
+              {ficha.malla_curricular?.semestres?.length > 0 && (() => {
+                const malla = ficha.malla_curricular;
+                return (
+                  <div className="border-t border-gray-200">
+                    <SectionHeader>
+                      Malla curricular — {malla.total_semestres} niveles · {malla.total_asignaturas_malla} asignaturas
+                      <span className="text-gray-400 font-normal ml-2 text-[9px] normal-case tracking-normal">
+                        {malla.total_aprobadas} aprobadas · {malla.total_cursando} cursando · {malla.total_reprobadas} reprobadas · {malla.total_no_cursado} pendientes
+                      </span>
+                    </SectionHeader>
+                    {/* Leyenda compacta arriba del grid */}
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 px-3 py-1.5 bg-[#FAFAFA]" style={{ fontSize: "9px", color: "#6b7280" }}>
+                      <span className="flex items-center gap-1">
+                        <span className="inline-block w-2 h-2 rounded-sm bg-green-100 border border-green-300"></span>Aprobada
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="inline-block w-2 h-2 rounded-sm bg-amber-100 border border-amber-400"></span>Cursando
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="inline-block w-2 h-2 rounded-sm bg-yellow-100 border border-yellow-300"></span>En proceso
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="inline-block w-2 h-2 rounded-sm bg-red-100 border border-red-300"></span>Reprobada
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="inline-block w-2 h-2 rounded-sm bg-gray-100 border border-gray-200"></span>No cursada
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="inline-block w-2 h-2 rounded-sm bg-white border border-gray-200" style={{ borderLeftWidth: "2px", borderLeftColor: "#f97316" }}></span>Repetición
+                      </span>
+                    </div>
+                    {/* Grid de niveles con años que abarcan 2 columnas */}
+                    <div className="bg-[#FAFAFA] px-1.5 pb-2">
+                      {/* Fila de años — cada año abarca 2 niveles */}
+                      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${malla.total_semestres}, minmax(0, 1fr))` }}>
+                        {(() => {
+                          const yearCells = [];
+                          const totalSem = malla.total_semestres;
+                          for (let i = 0; i < totalSem; i += 2) {
+                            const yearNum = Math.floor(i / 2) + 1;
+                            const YEAR_NAMES = { 1: "Primer Año", 2: "Segundo Año", 3: "Tercer Año", 4: "Cuarto Año", 5: "Quinto Año" };
+                            const label = YEAR_NAMES[yearNum] || `${yearNum}° Año`;
+                            const span = (i + 1 < totalSem) ? 2 : 1;
+                            yearCells.push(
+                              <div key={`year-${i}`}
+                                   className="bg-[#0F2A4A] text-white text-center font-bold uppercase tracking-wider rounded-t"
+                                   style={{ fontSize: "8px", padding: "3px 2px", gridColumn: `span ${span}` }}>
+                                {label}
+                              </div>
+                            );
+                          }
+                          return yearCells;
+                        })()}
+                      </div>
+                      {/* Fila de encabezados de nivel — todos alineados */}
+                      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${malla.total_semestres}, minmax(0, 1fr))`, marginTop: "-1px" }}>
+                        {malla.semestres.map((sem) => (
+                          <div key={`hdr-${sem.numero}`}
+                               className="bg-[#1B3A6B] text-white text-center font-bold uppercase tracking-wider"
+                               style={{ fontSize: "11px", padding: "4px 2px" }}>
+                            {sem.numero}°
+                          </div>
+                        ))}
+                      </div>
+                      {/* Filas de contenido — asignaturas */}
+                      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${malla.total_semestres}, minmax(0, 1fr))`, marginTop: "-1px" }}>
+                        {malla.semestres.map((sem) => {
+                          const promedioStyle = getNoteStyleHistorico(sem.promedio != null ? Math.round(sem.promedio) : null);
+                          return (
+                            <div key={`col-${sem.numero}`} className="border border-t-0 border-gray-200 rounded-b bg-white flex flex-col gap-0.5 min-w-0" style={{ padding: "4px" }}>
+                              {sem.asignaturas.length > 0 ? (
+                                sem.asignaturas.map((asig, ai) => (
+                                  <MallaCeldaFija key={ai} asignatura={asig} />
+                                ))
+                              ) : (
+                                <div className="text-gray-300 text-center py-2 italic" style={{ fontSize: "9px" }}>Sin datos</div>
+                              )}
+                              {/* Promedio del nivel */}
+                              <div className={`text-center font-bold border-t border-gray-100 ${promedioStyle.text}`}
+                                   style={{ fontSize: "10px", paddingTop: "3px", marginTop: "3px" }}>
+                                x&#772; {sem.promedio != null ? sem.promedio.toFixed(1) : "—"}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Fallback: si no hay malla canónica pero hay calificaciones, mostrar vista legacy */}
+              {(!ficha.malla_curricular?.semestres?.length) && (ficha.calificaciones_historicas?.length > 0 || ficha.calificaciones?.length > 0) && (() => {
+                const allGrades = [...(ficha.calificaciones_historicas || []), ...(ficha.calificaciones || [])];
+                const porPeriodo = {};
+                allGrades.forEach(c => {
+                  const p = c.periodo || "Actual";
+                  if (!porPeriodo[p]) porPeriodo[p] = [];
+                  porPeriodo[p].push(c);
+                });
+                const periodos = Object.keys(porPeriodo).sort();
+                return (
+                  <div className="border-t border-gray-200">
+                    <SectionHeader>Malla curricular (vista simplificada)</SectionHeader>
+                    <div className="overflow-x-auto bg-[#FAFAFA] px-2 py-2">
+                      <div className="flex gap-2" style={{ minWidth: "max-content" }}>
+                        {periodos.map(periodo => {
+                          const asigs = porPeriodo[periodo];
+                          const promedio = asigs.reduce((s, c) => s + (c.nota_final ?? 0), 0) / asigs.length;
+                          const promedioStyle = getNoteStyleHistorico(Math.round(promedio));
+                          const isActual = periodo === "Actual";
+                          return (
+                            <div key={periodo} className="flex-shrink-0 flex flex-col" style={{ minWidth: "80px" }}>
+                              <div className={`${isActual ? "bg-[#F0B000]" : "bg-[#1B3A6B]"} text-white text-center rounded-t px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider`}>
+                                {periodo}
+                              </div>
+                              <div className="border border-t-0 border-gray-200 rounded-b bg-white px-1 pt-1 pb-0.5 flex flex-col gap-0.5">
+                                {asigs.map((c, i) => (
+                                  <MallaChip key={i} asignatura={c.asignatura} nota_final={c.nota_final} docente={c.docente} />
+                                ))}
+                                <div className={`mt-0.5 text-center text-[9px] font-bold border-t border-gray-100 pt-0.5 ${promedioStyle.text}`}>
+                                  x&#772; {isNaN(promedio) ? "—" : promedio.toFixed(1)}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Tendencia Académica */}
+              <TrendChart calificacionesHistoricas={ficha.calificaciones_historicas} calificaciones={ficha.calificaciones} />
+
               {/* Tabla de cursos AVAC activos */}
               {Object.keys(cursos).length > 0 && (
                 <div className="overflow-x-auto">
@@ -1627,173 +1788,15 @@ export default function FichaEstudiante() {
                 );
               })()}
 
-              {/* Fila resumen de KPIs */}
-              <div className="grid grid-cols-2 divide-x divide-gray-200 border-t border-gray-200 bg-gradient-to-r from-gray-50 to-white">
-                <div className="py-3 px-4 text-center">
-                  <div className="text-[9px] text-gray-400 uppercase tracking-widest font-semibold">Días sin AVAC</div>
-                  <div className={`font-bold text-lg mt-0.5 ${
-                    ficha.dias_sin_acceso == null ? "text-gray-300"
-                    : ficha.dias_sin_acceso > 14 ? "text-red-600"
-                    : ficha.dias_sin_acceso > 7 ? "text-orange-500"
-                    : "text-green-600"}`}>
-                    {ficha.dias_sin_acceso != null ? `${Math.round(ficha.dias_sin_acceso)}d` : "—"}
-                  </div>
-                </div>
-                <div className="py-3 px-4 text-center">
-                  <div className="text-[9px] text-gray-400 uppercase tracking-widest font-semibold">Tareas entregadas</div>
-                  <div className={`font-bold text-lg mt-0.5 ${
-                    ficha.porcentaje_tareas == null ? "text-gray-300"
-                    : ficha.porcentaje_tareas < 50 ? "text-red-600"
-                    : ficha.porcentaje_tareas < 75 ? "text-orange-500"
-                    : "text-green-600"}`}>
-                    {ficha.porcentaje_tareas != null ? `${Math.round(ficha.porcentaje_tareas)}%` : "—"}
-                  </div>
-                </div>
-              </div>
-
-              {/* ══ MALLA CURRICULAR FIJA (grid por niveles canónicos) ══ */}
-              {ficha.malla_curricular?.semestres?.length > 0 && (() => {
-                const malla = ficha.malla_curricular;
-                return (
-                  <div className="border-t border-gray-200">
-                    <SectionHeader>
-                      Malla curricular — {malla.total_semestres} niveles · {malla.total_asignaturas_malla} asignaturas
-                      <span className="text-gray-400 font-normal ml-2 text-[9px] normal-case tracking-normal">
-                        {malla.total_aprobadas} aprobadas · {malla.total_cursando} cursando · {malla.total_reprobadas} reprobadas · {malla.total_no_cursado} pendientes
-                      </span>
-                    </SectionHeader>
-                    {/* Leyenda compacta arriba del grid */}
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 px-3 py-1.5 bg-[#FAFAFA]" style={{ fontSize: "9px", color: "#6b7280" }}>
-                      <span className="flex items-center gap-1">
-                        <span className="inline-block w-2 h-2 rounded-sm bg-green-100 border border-green-300"></span>Aprobada
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <span className="inline-block w-2 h-2 rounded-sm bg-amber-100 border border-amber-400"></span>Cursando
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <span className="inline-block w-2 h-2 rounded-sm bg-yellow-100 border border-yellow-300"></span>En proceso
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <span className="inline-block w-2 h-2 rounded-sm bg-red-100 border border-red-300"></span>Reprobada
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <span className="inline-block w-2 h-2 rounded-sm bg-gray-100 border border-gray-200"></span>No cursada
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <span className="inline-block w-2 h-2 rounded-sm bg-white border border-gray-200" style={{ borderLeftWidth: "2px", borderLeftColor: "#f97316" }}></span>Repetición
-                      </span>
-                    </div>
-                    {/* Grid de niveles con años que abarcan 2 columnas */}
-                    <div className="bg-[#FAFAFA] px-1.5 pb-2">
-                      {/* Fila de años — cada año abarca 2 niveles */}
-                      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${malla.total_semestres}, minmax(0, 1fr))` }}>
-                        {(() => {
-                          const yearCells = [];
-                          const totalSem = malla.total_semestres;
-                          for (let i = 0; i < totalSem; i += 2) {
-                            const yearNum = Math.floor(i / 2) + 1;
-                            const YEAR_NAMES = { 1: "Primer Año", 2: "Segundo Año", 3: "Tercer Año", 4: "Cuarto Año", 5: "Quinto Año" };
-                            const label = YEAR_NAMES[yearNum] || `${yearNum}° Año`;
-                            const span = (i + 1 < totalSem) ? 2 : 1;
-                            yearCells.push(
-                              <div key={`year-${i}`}
-                                   className="bg-[#0F2A4A] text-white text-center font-bold uppercase tracking-wider rounded-t"
-                                   style={{ fontSize: "8px", padding: "3px 2px", gridColumn: `span ${span}` }}>
-                                {label}
-                              </div>
-                            );
-                          }
-                          return yearCells;
-                        })()}
-                      </div>
-                      {/* Fila de encabezados de nivel — todos alineados */}
-                      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${malla.total_semestres}, minmax(0, 1fr))`, marginTop: "-1px" }}>
-                        {malla.semestres.map((sem) => (
-                          <div key={`hdr-${sem.numero}`}
-                               className="bg-[#1B3A6B] text-white text-center font-bold uppercase tracking-wider"
-                               style={{ fontSize: "11px", padding: "4px 2px" }}>
-                            {sem.numero}°
-                          </div>
-                        ))}
-                      </div>
-                      {/* Filas de contenido — asignaturas */}
-                      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${malla.total_semestres}, minmax(0, 1fr))`, marginTop: "-1px" }}>
-                        {malla.semestres.map((sem) => {
-                          const promedioStyle = getNoteStyleHistorico(sem.promedio != null ? Math.round(sem.promedio) : null);
-                          return (
-                            <div key={`col-${sem.numero}`} className="border border-t-0 border-gray-200 rounded-b bg-white flex flex-col gap-0.5 min-w-0" style={{ padding: "4px" }}>
-                              {sem.asignaturas.length > 0 ? (
-                                sem.asignaturas.map((asig, ai) => (
-                                  <MallaCeldaFija key={ai} asignatura={asig} />
-                                ))
-                              ) : (
-                                <div className="text-gray-300 text-center py-2 italic" style={{ fontSize: "9px" }}>Sin datos</div>
-                              )}
-                              {/* Promedio del nivel */}
-                              <div className={`text-center font-bold border-t border-gray-100 ${promedioStyle.text}`}
-                                   style={{ fontSize: "10px", paddingTop: "3px", marginTop: "3px" }}>
-                                x&#772; {sem.promedio != null ? sem.promedio.toFixed(1) : "—"}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Fallback: si no hay malla canónica pero hay calificaciones, mostrar vista legacy */}
-              {(!ficha.malla_curricular?.semestres?.length) && (ficha.calificaciones_historicas?.length > 0 || ficha.calificaciones?.length > 0) && (() => {
-                const allGrades = [...(ficha.calificaciones_historicas || []), ...(ficha.calificaciones || [])];
-                const porPeriodo = {};
-                allGrades.forEach(c => {
-                  const p = c.periodo || "Actual";
-                  if (!porPeriodo[p]) porPeriodo[p] = [];
-                  porPeriodo[p].push(c);
-                });
-                const periodos = Object.keys(porPeriodo).sort();
-                return (
-                  <div className="border-t border-gray-200">
-                    <SectionHeader>Malla curricular (vista simplificada)</SectionHeader>
-                    <div className="overflow-x-auto bg-[#FAFAFA] px-2 py-2">
-                      <div className="flex gap-2" style={{ minWidth: "max-content" }}>
-                        {periodos.map(periodo => {
-                          const asigs = porPeriodo[periodo];
-                          const promedio = asigs.reduce((s, c) => s + (c.nota_final ?? 0), 0) / asigs.length;
-                          const promedioStyle = getNoteStyleHistorico(Math.round(promedio));
-                          const isActual = periodo === "Actual";
-                          return (
-                            <div key={periodo} className="flex-shrink-0 flex flex-col" style={{ minWidth: "80px" }}>
-                              <div className={`${isActual ? "bg-[#F0B000]" : "bg-[#1B3A6B]"} text-white text-center rounded-t px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider`}>
-                                {periodo}
-                              </div>
-                              <div className="border border-t-0 border-gray-200 rounded-b bg-white px-1 pt-1 pb-0.5 flex flex-col gap-0.5">
-                                {asigs.map((c, i) => (
-                                  <MallaChip key={i} asignatura={c.asignatura} nota_final={c.nota_final} docente={c.docente} />
-                                ))}
-                                <div className={`mt-0.5 text-center text-[9px] font-bold border-t border-gray-100 pt-0.5 ${promedioStyle.text}`}>
-                                  x&#772; {isNaN(promedio) ? "—" : promedio.toFixed(1)}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Tendencia Académica */}
-              <TrendChart calificacionesHistoricas={ficha.calificaciones_historicas} calificaciones={ficha.calificaciones} />
-
-              {/* Si no hay cursos AVAC */}
-              {Object.keys(cursos).length === 0 && !ficha.calificaciones?.length && (
-                <div className="flex-1 flex items-center justify-center py-12 text-center text-gray-300">
+              {/* Estado vacío: solo si no hay absolutamente nada (ni cursos, ni calificaciones, ni historial, ni malla) */}
+              {Object.keys(cursos).length === 0
+                && !ficha.calificaciones?.length
+                && !ficha.calificaciones_historicas?.length
+                && !ficha.malla_curricular?.semestres?.length && (
+                <div className="flex-1 flex items-center justify-center py-8 text-center text-gray-300">
                   <div>
-                    <div className="text-3xl mb-2">📚</div>
-                    <div className="text-sm">Sin actividad académica registrada</div>
+                    <div className="text-2xl mb-1">📚</div>
+                    <div className="text-[11px]">Sin actividad académica registrada</div>
                   </div>
                 </div>
               )}
