@@ -206,3 +206,102 @@ def health_check():
         )
 
 
+@app.get("/debug/malla-diagnostico")
+def debug_malla_diagnostico():
+    """
+    Endpoint temporal de diagnóstico — muestra distribución de Grade.carrera
+    para entender la contaminación cruzada en la malla canónica.
+    ELIMINAR después de resolver el problema.
+    """
+    from sqlalchemy import text, func
+    from .database import SessionLocal
+    from .models import Student, Grade
+
+    db = SessionLocal()
+    try:
+        # 1. Buscar a FERNANDEZ FERNANDEZ
+        student = db.query(Student).filter(
+            Student.nombre.ilike("%FERNANDEZ FERNANDEZ LIZBETH%")
+        ).first()
+
+        if not student:
+            return {"error": "Estudiante no encontrada"}
+
+        student_carrera = student.carrera
+
+        # 2. Distribución de Grade.carrera para TODOS los grades de estudiantes EIB
+        carrera_key = student_carrera.upper() if student_carrera else "?"
+
+        # Contar grades por carrera para estudiantes de esta carrera
+        career_students = db.query(Student.id).filter(
+            func.upper(Student.carrera) == carrera_key
+        ).subquery()
+
+        grade_carrera_dist = (
+            db.query(
+                func.coalesce(Grade.carrera, "NULL"),
+                func.count()
+            )
+            .filter(Grade.student_id.in_(db.query(career_students.c.id)))
+            .group_by(func.coalesce(Grade.carrera, "NULL"))
+            .all()
+        )
+
+        # 3. Último ETL run
+        last_run = db.execute(text(
+            "SELECT id, status, started_at, finished_at, log_output "
+            "FROM scraping_runs ORDER BY started_at DESC LIMIT 1"
+        )).fetchone()
+
+        etl_info = None
+        etl_log_backfill = None
+        if last_run:
+            etl_info = {
+                "id": last_run[0],
+                "status": last_run[1],
+                "started_at": str(last_run[2]),
+                "finished_at": str(last_run[3]),
+            }
+            log = last_run[4] or ""
+            # Extraer líneas relevantes del log
+            etl_log_backfill = [l for l in log.split("\n") if "backfill" in l.lower() or "canónic" in l.lower() or "carrera" in l.lower() or "merged" in l.lower() or "ERROR" in l]
+
+        # 4. Total asignaturas únicas que pasarían el filtro estricto
+        strict_count = (
+            db.query(func.count(func.distinct(func.upper(func.trim(Grade.asignatura)))))
+            .filter(
+                Grade.student_id.in_(db.query(career_students.c.id)),
+                func.upper(Grade.carrera) == carrera_key,
+                Grade.nivel.isnot(None),
+                Grade.nivel >= 1,
+                Grade.nivel <= 12,
+            )
+            .scalar()
+        )
+
+        # 5. Total sin filtro de carrera (para comparar)
+        no_filter_count = (
+            db.query(func.count(func.distinct(func.upper(func.trim(Grade.asignatura)))))
+            .filter(
+                Grade.student_id.in_(db.query(career_students.c.id)),
+                Grade.nivel.isnot(None),
+                Grade.nivel >= 1,
+                Grade.nivel <= 12,
+            )
+            .scalar()
+        )
+
+        return {
+            "estudiante": student.nombre,
+            "student_carrera": student_carrera,
+            "carrera_key": carrera_key,
+            "grade_carrera_distribution": {str(k): v for k, v in grade_carrera_dist},
+            "asignaturas_con_filtro_estricto": strict_count,
+            "asignaturas_sin_filtro_carrera": no_filter_count,
+            "etl_last_run": etl_info,
+            "etl_log_relevante": etl_log_backfill,
+        }
+    finally:
+        db.close()
+
+
