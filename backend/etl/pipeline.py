@@ -352,6 +352,11 @@ class ETLPipeline:
                 total_registros += n
                 logs.append(f"  → {n} registros históricos cargados")
 
+            # 7b. Segunda pasada de deduplicación (grades pueden crear orphans nuevos)
+            n_merged2 = self._merge_duplicate_students()
+            if n_merged2:
+                logs.append(f"  → {n_merged2} estudiantes duplicados fusionados (post-grades)")
+
             # 8. Reentrenar modelos ML con datos históricos actualizados
             try:
                 from ..ml.train import train_models

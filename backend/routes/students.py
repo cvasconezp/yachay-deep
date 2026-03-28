@@ -396,11 +396,21 @@ def _get_canonical_for_career(db: Session, carrera: str) -> dict[str, int]:
         .subquery()
     )
 
+    # Filtro doble: estudiante pertenece a la carrera Y la calificación
+    # también es de esa carrera (evita contaminación cruzada cuando un
+    # estudiante cambió de carrera o tiene grades de otra fuente).
+    _career_grade_filter = or_(
+        func.upper(Grade.carrera) == carrera_key,
+        Grade.carrera.is_(None),
+        Grade.carrera == "",
+    )
+
     # ── Estrategia A: nivel explícito ──
     all_career_grades_with_nivel = (
         db.query(Grade.asignatura, Grade.nivel)
         .filter(
             Grade.student_id.in_(db.query(career_subq.c.id)),
+            _career_grade_filter,
             Grade.nivel.isnot(None),
             Grade.nivel >= 1,
             Grade.nivel <= 12,
@@ -424,6 +434,7 @@ def _get_canonical_for_career(db: Session, carrera: str) -> dict[str, int]:
         db.query(Grade.student_id, Grade.asignatura, Grade.periodo)
         .filter(
             Grade.student_id.in_(db.query(career_subq.c.id)),
+            _career_grade_filter,
             Grade.periodo.isnot(None),
         )
         .all()
