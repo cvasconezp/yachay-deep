@@ -56,13 +56,15 @@ def build_features(db: Session) -> pd.DataFrame:
     )
 
     # [BUG-06] FIX: Mapeo para no etiquetar egresados/graduados como desertores
-    # Obtener nivel_academico y estado_matricula de cada estudiante
+    # Obtener nivel_academico de cada estudiante
+    # NOTA: estado_matricula en la DB solo tiene "Matriculado"/"Sin matrícula"
+    # (viene de PAGADO+ESTADO_MATRICULADOS), no tiene EGRESADO/GRADUADO.
+    # Por eso usamos nivel_academico >= 8 como criterio de graduación.
     student_info_query = text("""
-        SELECT id, nivel_academico, estado_matricula FROM students
+        SELECT id, nivel_academico FROM students
     """)
     student_info_rows = db.execute(student_info_query).fetchall()
     nivel_por_estudiante = {row[0]: row[1] for row in student_info_rows}
-    estado_por_estudiante = {row[0]: (row[2] or "").upper() for row in student_info_rows}
 
 
     # Agrupar por estudiante-periodo
@@ -100,10 +102,10 @@ def build_features(db: Session) -> pd.DataFrame:
         return None
 
     # Label desercion: 1 si no aparece en periodo siguiente
-    # Excluir egresados/graduados para no contaminar el modelo con falsos positivos
-    # Lógica: las carreras normalmente tienen 8 o 9 niveles como último nivel.
-    # Si el estudiante aprobó nivel >= 8 y ya no aparece → es graduado, no desertor.
-    # Carreras con nivel máximo 6 en datos son carreras NUEVAS, no carreras cortas.
+    # Excluir graduados para no contaminar el modelo con falsos positivos
+    # Lógica: todas las carreras tienen 8 niveles como máximo.
+    # Si nivel_academico >= 8 y ya no aparece → graduado, no desertor.
+    # Carreras con nivel < 8 en datos son NUEVAS (aún no llegan a 8vo).
     def label_desercion(row):
         nxt = periodo_siguiente(row["periodo"])
         if nxt is None:
@@ -115,20 +117,14 @@ def build_features(db: Session) -> pd.DataFrame:
         if sid in estudiantes_por_periodo.get(nxt, set()):
             return 0  # Sigue matriculado en siguiente periodo
 
-        # ── No aparece en siguiente periodo: ¿desertó o egresó? ──
+        # ── No aparece en siguiente periodo: ¿desertó o se graduó? ──
 
-        # 1. Estado de matrícula contiene EGRESADO, GRADUADO o TITULADO
-        estado = estado_por_estudiante.get(sid, "")
-        if any(kw in estado for kw in ("EGRESADO", "GRADUADO", "TITULADO")):
-            return 0  # Egresado/graduado, no es deserción
-
-        # 2. Aprobó el último nivel (8vo o 9no) → graduado
-        #    Las carreras estándar tienen 8 o 9 niveles como final.
+        # Si aprobó el último nivel (8vo) → graduado
         nivel_ac = nivel_por_estudiante.get(sid)
         if nivel_ac is not None and nivel_ac >= 8:
             return 0  # Completó la carrera
 
-        # No cumple ningún criterio de egreso → deserción
+        # No completó nivel 8 y desapareció → deserción
         return 1
 
     features["deserto"] = features.apply(label_desercion, axis=1)
