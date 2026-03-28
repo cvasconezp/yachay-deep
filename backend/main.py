@@ -207,7 +207,7 @@ def health_check():
 
 
 @app.get("/debug/malla-diagnostico")
-def debug_malla_diagnostico():
+def debug_malla_diagnostico():  # TODO: eliminar endpoint temporal después de resolver malla
     """
     Endpoint temporal de diagnóstico — muestra distribución de Grade.carrera
     para entender la contaminación cruzada en la malla canónica.

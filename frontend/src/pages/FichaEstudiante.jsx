@@ -1523,6 +1523,94 @@ export default function FichaEstudiante() {
                 </div>
               )}
 
+              {/* Tabla de materias — fallback cuando no hay cursos AVAC pero sí calificaciones */}
+              {Object.keys(cursos).length === 0 && ficha.calificaciones?.length > 0 && (() => {
+                const calsByNivel = {};
+                ficha.calificaciones.forEach(cal => {
+                  const niv = parseNivelNum(cal.nivel) || parseNivelNum(ficha.nivel_academico) || 0;
+                  if (!calsByNivel[niv]) calsByNivel[niv] = [];
+                  calsByNivel[niv].push(cal);
+                });
+                const niveles = Object.keys(calsByNivel).sort((a, b) => a - b);
+                const totalMaterias = ficha.calificaciones.length;
+                const conNota = ficha.calificaciones.filter(c => c.nota_final != null);
+                const promedio = conNota.length > 0 ? conNota.reduce((s, c) => s + c.nota_final, 0) / conNota.length : null;
+
+                return (
+                  <div>
+                    <div className="flex items-center gap-4 px-3 py-1.5 bg-gray-50 border-b border-gray-200" style={{ fontSize: "10px" }}>
+                      <span className="text-gray-500">{totalMaterias} materias matriculadas</span>
+                      {promedio != null && (
+                        <>
+                          <span className="text-gray-300">|</span>
+                          <span className="text-gray-500">
+                            Promedio{" "}
+                            <strong className={promedio >= 70 ? "text-emerald-700" : promedio >= 60 ? "text-amber-600" : "text-red-600"}>
+                              {promedio.toFixed(1)}
+                            </strong>
+                          </span>
+                        </>
+                      )}
+                      <span className="ml-auto px-2 py-0.5 rounded bg-amber-50 text-amber-600 font-medium" style={{ fontSize: "9px" }}>
+                        Sin datos AVAC
+                      </span>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse" style={{ fontSize: "11px" }}>
+                        <thead>
+                          <tr style={{ background: "linear-gradient(to right, #1e3a5f, #2d5a8e)", color: "white" }}>
+                            <th className="text-center px-2 py-1.5 font-semibold whitespace-nowrap" style={{ fontSize: "10px", width: "90px" }}>Nivel</th>
+                            <th className="text-left px-2 py-1.5 font-semibold" style={{ fontSize: "10px" }}>Asignatura</th>
+                            <th className="text-center px-2 py-1.5 font-semibold" style={{ fontSize: "10px", width: "55px" }}>Nota</th>
+                            <th className="text-center px-2 py-1.5 font-semibold" style={{ fontSize: "10px", width: "40px" }}>Mat</th>
+                            <th className="text-left px-2 py-1.5 font-semibold" style={{ fontSize: "10px" }}>Docente</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {niveles.map(niv => {
+                            const cals = calsByNivel[niv];
+                            return cals.map((cal, idx) => {
+                              const noteStyle = getNoteStyleHistorico(cal.nota_final);
+                              const grp = abbreviateGrupo(cal.grupo);
+                              const nivNum = parseNivelNum(cal.nivel) || parseNivelNum(ficha.nivel_academico);
+                              return (
+                                <tr key={`${niv}-${idx}`}
+                                    className={idx % 2 === 0 ? "bg-white" : "bg-[#f8fafc]"}
+                                    style={{ borderBottom: "1px solid #e5e7eb" }}>
+                                  {idx === 0 ? (
+                                    <td rowSpan={cals.length}
+                                        className="px-2 py-1 text-center align-top font-semibold"
+                                        style={{ fontSize: "10px", color: "#1e3a5f", borderRight: "2px solid #e5e7eb", background: "#f1f5f9" }}>
+                                      {nivNum ? `${nivNum}° Nivel` : "—"}
+                                      {grp && <div className="font-normal text-gray-400" style={{ fontSize: "9px" }}>{grp}</div>}
+                                    </td>
+                                  ) : null}
+                                  <td className="px-2 py-1 font-medium text-gray-800">{toTitleCase(cal.asignatura)}</td>
+                                  <td className={`px-2 py-1 text-center font-bold ${noteStyle.bg} ${noteStyle.text}`}
+                                      style={{ borderRadius: "3px" }}>
+                                    {cal.nota_final ?? <span className="text-gray-300 font-normal">—</span>}
+                                  </td>
+                                  <td className="px-2 py-1 text-center text-gray-500" style={{ fontSize: "10px" }}>
+                                    {cal.numero_repitencias != null ? (
+                                      <span className={`px-1 rounded ${cal.numero_repitencias > 1 ? "bg-orange-100 text-orange-700 font-semibold" : ""}`}>
+                                        {cal.numero_repitencias}
+                                      </span>
+                                    ) : "—"}
+                                  </td>
+                                  <td className="px-2 py-1 text-gray-600" style={{ fontSize: "10px" }}>
+                                    {toTitleCase(cal.docente) || <span className="text-gray-300">—</span>}
+                                  </td>
+                                </tr>
+                              );
+                            });
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* ═══ KPIs AVAC ═══ */}
               <div className="grid grid-cols-2 divide-x divide-gray-200 border-t border-gray-200 bg-gradient-to-r from-gray-50 to-white">
                 <div className="py-3 px-4 text-center">
@@ -1683,97 +1771,6 @@ export default function FichaEstudiante() {
 
               {/* Tendencia Académica */}
               <TrendChart calificacionesHistoricas={ficha.calificaciones_historicas} calificaciones={ficha.calificaciones} />
-
-              {/* Tabla de materias — fallback cuando no hay cursos AVAC pero sí calificaciones */}
-              {Object.keys(cursos).length === 0 && ficha.calificaciones?.length > 0 && (() => {
-                // Agrupar calificaciones por nivel para subtotales
-                const calsByNivel = {};
-                ficha.calificaciones.forEach(cal => {
-                  const niv = parseNivelNum(cal.nivel) || parseNivelNum(ficha.nivel_academico) || 0;
-                  if (!calsByNivel[niv]) calsByNivel[niv] = [];
-                  calsByNivel[niv].push(cal);
-                });
-                const niveles = Object.keys(calsByNivel).sort((a, b) => a - b);
-                const totalMaterias = ficha.calificaciones.length;
-                const conNota = ficha.calificaciones.filter(c => c.nota_final != null);
-                const promedio = conNota.length > 0 ? conNota.reduce((s, c) => s + c.nota_final, 0) / conNota.length : null;
-
-                return (
-                  <div>
-                    {/* KPI row compacto */}
-                    <div className="flex items-center gap-4 px-3 py-1.5 bg-gray-50 border-b border-gray-200" style={{ fontSize: "10px" }}>
-                      <span className="text-gray-500">{totalMaterias} materias matriculadas</span>
-                      {promedio != null && (
-                        <>
-                          <span className="text-gray-300">|</span>
-                          <span className="text-gray-500">
-                            Promedio{" "}
-                            <strong className={promedio >= 70 ? "text-emerald-700" : promedio >= 60 ? "text-amber-600" : "text-red-600"}>
-                              {promedio.toFixed(1)}
-                            </strong>
-                          </span>
-                        </>
-                      )}
-                      <span className="ml-auto px-2 py-0.5 rounded bg-amber-50 text-amber-600 font-medium" style={{ fontSize: "9px" }}>
-                        Sin datos AVAC
-                      </span>
-                    </div>
-
-                    <div className="overflow-x-auto">
-                      <table className="w-full border-collapse" style={{ fontSize: "11px" }}>
-                        <thead>
-                          <tr style={{ background: "linear-gradient(to right, #1e3a5f, #2d5a8e)", color: "white" }}>
-                            <th className="text-center px-2 py-1.5 font-semibold whitespace-nowrap" style={{ fontSize: "10px", width: "90px" }}>Nivel</th>
-                            <th className="text-left px-2 py-1.5 font-semibold" style={{ fontSize: "10px" }}>Asignatura</th>
-                            <th className="text-center px-2 py-1.5 font-semibold" style={{ fontSize: "10px", width: "55px" }}>Nota</th>
-                            <th className="text-center px-2 py-1.5 font-semibold" style={{ fontSize: "10px", width: "40px" }}>Mat</th>
-                            <th className="text-left px-2 py-1.5 font-semibold" style={{ fontSize: "10px" }}>Docente</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {niveles.map(niv => {
-                            const cals = calsByNivel[niv];
-                            return cals.map((cal, idx) => {
-                              const noteStyle = getNoteStyleHistorico(cal.nota_final);
-                              const grp = abbreviateGrupo(cal.grupo);
-                              const nivNum = parseNivelNum(cal.nivel) || parseNivelNum(ficha.nivel_academico);
-                              return (
-                                <tr key={`${niv}-${idx}`}
-                                    className={idx % 2 === 0 ? "bg-white" : "bg-[#f8fafc]"}
-                                    style={{ borderBottom: "1px solid #e5e7eb" }}>
-                                  {idx === 0 ? (
-                                    <td rowSpan={cals.length}
-                                        className="px-2 py-1 text-center align-top font-semibold"
-                                        style={{ fontSize: "10px", color: "#1e3a5f", borderRight: "2px solid #e5e7eb", background: "#f1f5f9" }}>
-                                      {nivNum ? `${nivNum}° Nivel` : "—"}
-                                      {grp && <div className="font-normal text-gray-400" style={{ fontSize: "9px" }}>{grp}</div>}
-                                    </td>
-                                  ) : null}
-                                  <td className="px-2 py-1 font-medium text-gray-800">{toTitleCase(cal.asignatura)}</td>
-                                  <td className={`px-2 py-1 text-center font-bold ${noteStyle.bg} ${noteStyle.text}`}
-                                      style={{ borderRadius: "3px" }}>
-                                    {cal.nota_final ?? <span className="text-gray-300 font-normal">—</span>}
-                                  </td>
-                                  <td className="px-2 py-1 text-center text-gray-500" style={{ fontSize: "10px" }}>
-                                    {cal.numero_repitencias != null ? (
-                                      <span className={`px-1 rounded ${cal.numero_repitencias > 1 ? "bg-orange-100 text-orange-700 font-semibold" : ""}`}>
-                                        {cal.numero_repitencias}
-                                      </span>
-                                    ) : "—"}
-                                  </td>
-                                  <td className="px-2 py-1 text-gray-600" style={{ fontSize: "10px" }}>
-                                    {toTitleCase(cal.docente) || <span className="text-gray-300">—</span>}
-                                  </td>
-                                </tr>
-                              );
-                            });
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                );
-              })()}
 
               {/* Estado vacío: solo si no hay absolutamente nada (ni cursos, ni calificaciones, ni historial, ni malla) */}
               {Object.keys(cursos).length === 0
