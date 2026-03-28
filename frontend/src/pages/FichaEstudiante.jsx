@@ -380,15 +380,19 @@ function getMallaEstado(estado) {
 }
 
 // ── Abreviar nombres largos de asignaturas ──────────────────────────────────
-function abreviarAsignatura(nombre, maxLen = 45) {
-  if (nombre.length <= maxLen) return nombre;
-  // Quitar palabras conectoras para acortar
+function abreviarAsignatura(nombre, maxLen = 32) {
+  // Siempre quitar conectores primero para compactar
   let short = nombre
     .replace(/\b(De La|De Los|De Las|Del|De|La|Las|Los|El|Y|En|Para|Con|Por|A)\b/gi, "")
     .replace(/\s{2,}/g, " ")
     .trim();
   if (short.length <= maxLen) return short;
-  // Si sigue largo, tomar primeras palabras con elipsis
+  // Quitar subtítulos después de ":" para acortar más
+  const colonIdx = short.indexOf(":");
+  if (colonIdx > 0 && colonIdx <= maxLen - 1) {
+    return short.slice(0, colonIdx).trim() + "…";
+  }
+  // Truncar con elipsis
   const words = short.split(" ");
   let result = "";
   for (const w of words) {
@@ -413,7 +417,7 @@ function MallaCeldaFija({ asignatura }) {
     <div
       className={`relative border ${s.border} ${s.bg} rounded cursor-default transition-shadow hover:shadow-sm`}
       style={{
-        padding: "4px 6px",
+        padding: "5px 7px",
         ...(esRepeticion ? { borderLeftWidth: "3px", borderLeftColor: "#f97316", borderLeftStyle: "solid" } : {}),
       }}
       onMouseEnter={() => setShowTooltip(true)}
@@ -421,28 +425,28 @@ function MallaCeldaFija({ asignatura }) {
     >
       {/* Badge de repetición */}
       {esRepeticion && (
-        <div className="absolute -top-1 -right-1 bg-orange-500 text-white font-bold rounded-full flex items-center justify-center shadow-sm z-10"
-             style={{ width: "14px", height: "14px", fontSize: "7px" }}
+        <div className="absolute -top-1.5 -right-1.5 bg-orange-500 text-white font-bold rounded-full flex items-center justify-center shadow-sm z-10"
+             style={{ width: "16px", height: "16px", fontSize: "8px" }}
              title={`${numIntentos} intentos`}>
           {numIntentos}
         </div>
       )}
 
-      {/* Nombre abreviado + nota en layout compacto */}
-      <div className="flex items-start gap-1">
-        <div className="flex-1 leading-tight" style={{ fontSize: "9px", color: "#374151" }}>
+      {/* Nombre abreviado + nota */}
+      <div className="flex items-start gap-1.5">
+        <div className="flex-1 leading-snug" style={{ fontSize: "10.5px", color: "#1f2937" }}>
           {shortName}
         </div>
-        <div className={`font-bold flex-shrink-0 ${s.text}`} style={{ fontSize: "11px", minWidth: "20px", textAlign: "right" }}>
+        <div className={`font-bold flex-shrink-0 ${s.text}`} style={{ fontSize: "12px", minWidth: "22px", textAlign: "right" }}>
           {nota != null ? nota : "—"}
         </div>
       </div>
 
       {/* Tooltip: nombre completo (siempre) + historial de intentos (si repetición) */}
       {showTooltip && (
-        <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-1 bg-gray-900 text-white rounded-lg shadow-xl px-2.5 py-1.5"
-             style={{ minWidth: "180px", maxWidth: "280px", fontSize: "9px" }}>
-          <div className="font-bold mb-0.5" style={{ fontSize: "10px", color: esRepeticion ? "#fdba74" : "#e5e7eb", whiteSpace: "normal" }}>
+        <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-1 bg-gray-900 text-white rounded-lg shadow-xl px-3 py-2"
+             style={{ minWidth: "200px", maxWidth: "300px", fontSize: "10px" }}>
+          <div className="font-bold mb-0.5" style={{ fontSize: "11px", color: esRepeticion ? "#fdba74" : "#e5e7eb", whiteSpace: "normal" }}>
             {titleName}
           </div>
           {esRepeticion && asignatura.intentos.length > 0 && (
@@ -1496,7 +1500,7 @@ export default function FichaEstudiante() {
                       </span>
                     </SectionHeader>
                     {/* Leyenda compacta arriba del grid */}
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 px-3 py-1 bg-[#FAFAFA]" style={{ fontSize: "8px", color: "#6b7280" }}>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 px-3 py-1.5 bg-[#FAFAFA]" style={{ fontSize: "9px", color: "#6b7280" }}>
                       <span className="flex items-center gap-1">
                         <span className="inline-block w-2 h-2 rounded-sm bg-green-100 border border-green-300"></span>Aprobada
                       </span>
@@ -1527,27 +1531,27 @@ export default function FichaEstudiante() {
                               {/* Etiqueta de año (solo en semestres impares) */}
                               {yearLabel && (
                                 <div className="bg-[#0F2A4A] text-white text-center font-bold uppercase tracking-wider rounded-t"
-                                     style={{ fontSize: "7px", padding: "2px 2px", marginBottom: "-1px" }}>
+                                     style={{ fontSize: "8px", padding: "2px 2px", marginBottom: "-1px" }}>
                                   {yearLabel}
                                 </div>
                               )}
                               {/* Encabezado de nivel */}
                               <div className={`bg-[#1B3A6B] text-white text-center font-bold uppercase tracking-wider ${!yearLabel ? "rounded-t" : ""}`}
-                                   style={{ fontSize: "9px", padding: "3px 2px" }}>
+                                   style={{ fontSize: "11px", padding: "4px 2px" }}>
                                 {sem.numero}°
                               </div>
                               {/* Celdas de asignaturas */}
-                              <div className="border border-t-0 border-gray-200 rounded-b bg-white flex flex-col gap-0.5" style={{ padding: "3px" }}>
+                              <div className="border border-t-0 border-gray-200 rounded-b bg-white flex flex-col gap-0.5" style={{ padding: "4px" }}>
                                 {sem.asignaturas.length > 0 ? (
                                   sem.asignaturas.map((asig, ai) => (
                                     <MallaCeldaFija key={ai} asignatura={asig} />
                                   ))
                                 ) : (
-                                  <div className="text-gray-300 text-center py-2 italic" style={{ fontSize: "8px" }}>Sin datos</div>
+                                  <div className="text-gray-300 text-center py-2 italic" style={{ fontSize: "9px" }}>Sin datos</div>
                                 )}
                                 {/* Promedio del nivel */}
                                 <div className={`text-center font-bold border-t border-gray-100 ${promedioStyle.text}`}
-                                     style={{ fontSize: "9px", paddingTop: "2px", marginTop: "2px" }}>
+                                     style={{ fontSize: "10px", paddingTop: "3px", marginTop: "3px" }}>
                                   x&#772; {sem.promedio != null ? sem.promedio.toFixed(1) : "—"}
                                 </div>
                               </div>
