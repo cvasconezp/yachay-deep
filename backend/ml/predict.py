@@ -150,6 +150,16 @@ class Predictor:
                             key = name[:-len("_reprobacion")]
                             self.stats.setdefault(key, {})["reprobacion"] = stats
 
+                # Restaurar metadata.json y carrera_mapping.json desde BD
+                for special_name, attr in [("__metadata__", "metadata"), ("__carrera_mapping__", "carrera_mapping")]:
+                    row = db.query(MLModelStore).filter(MLModelStore.name == special_name).first()
+                    if row and row.metadata_json:
+                        data = json.loads(row.metadata_json)
+                        setattr(self, attr, data)
+                        # Also write to disk for future fast loads
+                        fname = "metadata.json" if attr == "metadata" else "carrera_mapping.json"
+                        (MODELS_DIR / fname).write_text(row.metadata_json)
+
                 if loaded:
                     logger.info(f"[DB] Modelos restaurados desde PostgreSQL: {len(rows)} archivos")
                 return loaded

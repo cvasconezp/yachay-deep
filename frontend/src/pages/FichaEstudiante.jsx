@@ -637,8 +637,11 @@ function PracticasSection({ practicas }) {
           Prácticas Preprofesionales
           {hasPracticas && <span className="ml-2 opacity-60">({practicas.length})</span>}
         </span>
-        <span className="text-[9px] opacity-60">
-          {expanded ? "▲ Minimizar" : "▼ Expandir"}
+        <span className="flex items-center gap-1">
+          <svg xmlns="http://www.w3.org/2000/svg" className={`w-3 h-3 transition-transform ${expanded ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+          <span className="text-[9px] opacity-70">{expanded ? "Minimizar" : "Expandir"}</span>
         </span>
       </button>
 
@@ -1073,7 +1076,7 @@ export default function FichaEstudiante() {
             <div className="flex items-center justify-between px-4 py-1 bg-gray-50/80 border-b border-gray-100">
               <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Indicadores · Predicción IA</span>
               <span className="text-[9px] text-gray-400">
-                Modelo ML · {mlPeriodos || "..."}
+                Modelo ML{mlPeriodos ? ` · ${mlPeriodos}` : ""}
                 {ficha.prediccion_updated_at && (
                   <> · {new Date(ficha.prediccion_updated_at).toLocaleDateString("es-EC")}</>
                 )}
@@ -1141,10 +1144,12 @@ export default function FichaEstudiante() {
   <div className="flex border-b border-gray-200 bg-white">
     <button
       onClick={() => setIaPanelExpanded(!iaPanelExpanded)}
-      className="px-2 py-2 text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors border-r border-gray-100 flex items-center"
+      className="px-2.5 py-2 text-[#1B3A6B] bg-blue-50 hover:bg-blue-100 transition-colors border-r border-gray-200 flex items-center gap-1"
       title={iaPanelExpanded ? "Minimizar panel IA" : "Expandir panel IA"}
     >
-      <span className="text-[10px]">{iaPanelExpanded ? "◀" : "▶"}</span>
+      <svg xmlns="http://www.w3.org/2000/svg" className={`w-3.5 h-3.5 transition-transform ${iaPanelExpanded ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+      </svg>
     </button>
     <button
       onClick={() => { setActiveTab("indicadores"); setIaPanelExpanded(true); }}
@@ -1430,14 +1435,13 @@ export default function FichaEstudiante() {
               {/* Botón colapsar/expandir */}
               <button
                 onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                className="w-full flex items-center justify-center py-1.5 bg-gray-100 hover:bg-gray-200 transition-colors border-b border-gray-200"
+                className="w-full flex items-center justify-center gap-1 py-1.5 bg-blue-50 hover:bg-blue-100 text-[#1B3A6B] transition-colors border-b border-gray-200"
                 title={sidebarCollapsed ? "Expandir datos personales" : "Minimizar datos personales"}
-                style={{ fontSize: "10px" }}
               >
-                {sidebarCollapsed
-                  ? <span className="text-gray-500 font-bold">▶</span>
-                  : <span className="text-gray-400">◀ Minimizar</span>
-                }
+                <svg xmlns="http://www.w3.org/2000/svg" className={`w-3.5 h-3.5 transition-transform ${sidebarCollapsed ? "" : "rotate-180"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+                {!sidebarCollapsed && <span className="text-[10px] font-medium">Minimizar</span>}
               </button>
 
               {!sidebarCollapsed && (<>
@@ -1807,27 +1811,27 @@ export default function FichaEstudiante() {
                 );
               })()}
 
-              {/* ═══ KPIs AVAC ═══ */}
+              {/* ═══ KPIs AVAC — compact single-line ═══ */}
               <div className="grid grid-cols-2 divide-x divide-gray-200 border-t border-gray-200 bg-gradient-to-r from-gray-50 to-white">
-                <div className="py-3 px-4 text-center">
-                  <div className="text-[9px] text-gray-400 uppercase tracking-widest font-semibold">Días sin AVAC</div>
-                  <div className={`font-bold text-lg mt-0.5 ${
+                <div className="px-4 py-1.5 flex items-center gap-2">
+                  <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider whitespace-nowrap">Días sin AVAC</span>
+                  <span className={`text-lg font-bold leading-none ${
                     ficha.dias_sin_acceso == null ? "text-gray-300"
                     : ficha.dias_sin_acceso > 14 ? "text-red-600"
                     : ficha.dias_sin_acceso > 7 ? "text-orange-500"
                     : "text-green-600"}`}>
                     {ficha.dias_sin_acceso != null ? `${Math.round(ficha.dias_sin_acceso)}d` : "—"}
-                  </div>
+                  </span>
                 </div>
-                <div className="py-3 px-4 text-center">
-                  <div className="text-[9px] text-gray-400 uppercase tracking-widest font-semibold">Tareas entregadas</div>
-                  <div className={`font-bold text-lg mt-0.5 ${
+                <div className="px-4 py-1.5 flex items-center gap-2">
+                  <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider whitespace-nowrap">Tareas entregadas</span>
+                  <span className={`text-lg font-bold leading-none ${
                     ficha.porcentaje_tareas == null ? "text-gray-300"
                     : ficha.porcentaje_tareas < 50 ? "text-red-600"
                     : ficha.porcentaje_tareas < 75 ? "text-orange-500"
                     : "text-green-600"}`}>
                     {ficha.porcentaje_tareas != null ? `${Math.round(ficha.porcentaje_tareas)}%` : "—"}
-                  </div>
+                  </span>
                 </div>
               </div>
 

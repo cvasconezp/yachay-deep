@@ -92,6 +92,9 @@ def train_models(db) -> dict:
         json.dumps(carrera_mapping, indent=2, ensure_ascii=False)
     )
 
+    # Persistir metadata y carrera_mapping en PostgreSQL para sobrevivir redeploys
+    _persist_global_metadata_to_db(metadata, carrera_mapping)
+
     logger.info(f"Entrenamiento completado: {len(results['carreras'])} carreras procesadas")
     return {"status": "ok", **metadata}
 
@@ -218,6 +221,32 @@ def _train_single_target(df, target_col: str, model_name: str) -> dict:
         "positive_rate_train": round(float(y_train.mean()), 4),
         "all_models": model_metrics,
     }
+
+
+def _persist_global_metadata_to_db(metadata: dict, carrera_mapping: dict):
+    """Persiste metadata.json y carrera_mapping.json en PostgreSQL (sobrevive redeploys)."""
+    try:
+        from ..database import SessionLocal
+        from ..models.ml_model_store import MLModelStore
+
+        db = SessionLocal()
+        try:
+            meta_json = json.dumps(metadata, default=str, ensure_ascii=False)
+            mapping_json = json.dumps(carrera_mapping, ensure_ascii=False)
+
+            for name, data in [("__metadata__", meta_json), ("__carrera_mapping__", mapping_json)]:
+                existing = db.query(MLModelStore).filter(MLModelStore.name == name).first()
+                if existing:
+                    existing.metadata_json = data
+                    existing.model_data = b""  # no binary payload
+                else:
+                    db.add(MLModelStore(name=name, model_data=b"", metadata_json=data))
+            db.commit()
+            logger.info("  [DB] metadata.json + carrera_mapping.json persistidos en PostgreSQL")
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning(f"  [DB] No se pudo persistir metadata en BD: {e}")
 
 
 def _persist_model_to_db(model_name: str, model_path: Path, xai_stats: dict):
