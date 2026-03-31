@@ -402,8 +402,9 @@ def export_ficha_pdf(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Genera PDF de la ficha del estudiante.
-    Equivalente a ExportarFichaAPDF() del VBA pero server-side.
+    Genera PDF completo de la ficha del estudiante.
+    Incluye: datos personales, residencia, estado socioeconómico,
+    indicadores, calificaciones, actividades AVAC, intervenciones y prácticas.
     """
     try:
         from reportlab.lib.pagesizes import A4, landscape
@@ -412,11 +413,13 @@ def export_ficha_pdf(
         from reportlab.lib import colors
         from reportlab.platypus import (
             SimpleDocTemplate, Paragraph, Table, TableStyle,
-            Spacer, HRFlowable
+            Spacer, HRFlowable, KeepTogether
         )
-        from reportlab.lib.enums import TA_CENTER, TA_LEFT
+        from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
     except ImportError:
-        raise HTTPException(status_code=500, detail="reportlab no instalado. Ejecuta: pip install reportlab")
+        raise HTTPException(status_code=500, detail="reportlab no instalado")
+
+    from ..models.practica_preprofesional import PracticaPreprofesional, EscuelaPractica
 
     student = db.query(Student).filter(Student.id == student_id).first()
     if not student:
@@ -424,98 +427,269 @@ def export_ficha_pdf(
 
     tareas = db.query(TaskSubmission).filter(TaskSubmission.student_id == student_id).all()
     accesos = db.query(AvacAccess).filter(AvacAccess.student_id == student_id).all()
-    calificaciones = db.query(Grade).filter(Grade.student_id == student_id).all()
-    intervenciones = db.query(Intervention).filter(Intervention.student_id == student_id).order_by(Intervention.created_at.desc()).limit(10).all()
+    calificaciones = db.query(Grade).filter(Grade.student_id == student_id).order_by(Grade.periodo.desc()).all()
+    intervenciones = db.query(Intervention).filter(Intervention.student_id == student_id).order_by(Intervention.created_at.desc()).all()
+    practicas = (
+        db.query(PracticaPreprofesional)
+        .filter(PracticaPreprofesional.student_id == student_id)
+        .all()
+    )
 
-    # Colores por nivel de riesgo
-    RISK_COLORS = {"Alto": colors.HexColor("#FF4C4C"), "Medio": colors.HexColor("#FFC000"), "Bajo": colors.HexColor("#00B050")}
-    risk_color = RISK_COLORS.get(student.nivel_riesgo or "Medio", colors.grey)
+    # ── Colores y estilos ──
+    BRAND = colors.HexColor("#1B3A6B")
+    BRAND_LIGHT = colors.HexColor("#D6E4F0")
+    GOLD = colors.HexColor("#F0B000")
+    GRAY_BG = colors.HexColor("#F5F7FA")
+    GRAY_BORDER = colors.HexColor("#D0D5DD")
 
     buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), rightMargin=1.5*cm, leftMargin=1.5*cm, topMargin=1.5*cm, bottomMargin=1.5*cm)
+    doc = SimpleDocTemplate(
+        buffer, pagesize=landscape(A4),
+        rightMargin=1.2 * cm, leftMargin=1.2 * cm,
+        topMargin=1.2 * cm, bottomMargin=1.2 * cm,
+    )
     styles = getSampleStyleSheet()
     story = []
 
-    # Header
-    title_style = ParagraphStyle("title", fontSize=16, fontName="Helvetica-Bold", alignment=TA_CENTER, textColor=colors.HexColor("#1B3A6B"))
-    story.append(Paragraph("YACHAY DEEP — Ficha de Seguimiento Académico", title_style))
-    story.append(Spacer(1, 0.3*cm))
-    story.append(HRFlowable(width="100%", thickness=2, color=colors.HexColor("#1B3A6B")))
-    story.append(Spacer(1, 0.3*cm))
-
-    # Datos del estudiante
-    data_estudiante = [
-        ["Estudiante:", student.nombre or "-", "Carrera:", student.carrera or "-"],
-        ["Correo:", student.correo_institucional or "-", "Cédula:", student.cedula or "-"],
-        ["Nivel de Riesgo:", student.nivel_riesgo or "-", "Índice Compromiso:", f"{(student.indice_compromiso or 0)*100:.0f}%"],
-        ["Días sin acceso AVAC:", str(student.dias_sin_acceso or "-"), "% Tareas entregadas:", f"{student.porcentaje_tareas or 0:.0f}%"],
-    ]
-    t_datos = Table(data_estudiante, colWidths=[4*cm, 8*cm, 4*cm, 8*cm])
-    t_datos.setStyle(TableStyle([
-        ("FONTNAME", (0, 0), (-1, -1), "Helvetica"),
+    # ── Helpers ──
+    section_style = ParagraphStyle(
+        "section", fontSize=10, fontName="Helvetica-Bold",
+        textColor=BRAND, spaceBefore=6, spaceAfter=3,
+    )
+    cell_p = lambda txt, bold=False, size=8, color=colors.black: Paragraph(
+        f"<font size={size}><b>{txt}</b></font>" if bold
+        else f"<font size={size} color='{color}'>{txt}</font>",
+        styles["Normal"],
+    )
+    label_style = TableStyle([
         ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
-        ("FONTNAME", (2, 0), (2, -1), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, -1), 9),
-        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F5F7FA")),
-        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#D0D5DD")),
-        ("ROWBACKGROUNDS", (0, 0), (-1, -1), [colors.HexColor("#F5F7FA"), colors.white]),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("BACKGROUND", (0, 0), (0, -1), BRAND_LIGHT),
+        ("GRID", (0, 0), (-1, -1), 0.5, GRAY_BORDER),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+    ])
+    header_table_style = TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), BRAND),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("GRID", (0, 0), (-1, -1), 0.5, GRAY_BORDER),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, GRAY_BG]),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+    ])
+
+    v = lambda x: str(x) if x not in (None, "", "nan") else "—"
+    pct = lambda x: f"{round(x * 100)}%" if x is not None else "—"
+
+    # ════════════════════ HEADER ════════════════════
+    title_style = ParagraphStyle(
+        "title", fontSize=14, fontName="Helvetica-Bold",
+        alignment=TA_CENTER, textColor=BRAND,
+    )
+    story.append(Paragraph("YACHAY DEEP — Ficha del Estudiante", title_style))
+    story.append(Spacer(1, 0.2 * cm))
+    story.append(HRFlowable(width="100%", thickness=2, color=BRAND))
+    story.append(Spacer(1, 0.3 * cm))
+
+    # ════════════════════ DATOS PERSONALES + RESIDENCIA (side by side) ════════════════════
+    # Left: personal info
+    edad = ""
+    if student.fecha_nacimiento:
+        from datetime import date
+        born = student.fecha_nacimiento
+        today = date.today()
+        age = today.year - born.year - ((today.month, today.day) < (born.month, born.day))
+        fecha_str = born.strftime("%d/%m/%Y")
+        edad = f"{fecha_str} ({age} años)"
+
+    personal_data = [
+        ["Nombre", v(student.nombre)],
+        ["Cédula", v(student.cedula)],
+        ["Correo", v(student.correo)],
+        ["Correo Institucional", v(student.correo_institucional)],
+        ["Teléfono / WhatsApp", v(student.whatsapp or student.telefono)],
+        ["Fecha nac. y edad", edad or "—"],
+        ["Autoidentificación", v(student.autoidentificacion_etnica)],
+        ["Género", v(student.genero)],
+    ]
+    t_personal = Table(personal_data, colWidths=[3.5 * cm, 7 * cm])
+    t_personal.setStyle(label_style)
+
+    # Right: residence + socioeconomic
+    residence_data = [
+        ["Provincia", v(student.provincia)],
+        ["Cantón", v(student.ciudad)],
+        ["Parroquia", v(student.parroquia)],
+        ["Barrio", v(student.barrio)],
+    ]
+    matricula_text = "Ya pagó la matrícula" if student.estado_matricula == "Matriculado" else (
+        "Aún no paga" if student.estado_matricula else "—"
+    )
+    socio_data = [
+        ["Pago matrícula", matricula_text],
+    ]
+    right_data = residence_data + socio_data
+    t_right = Table(right_data, colWidths=[3 * cm, 7.5 * cm])
+    t_right.setStyle(label_style)
+
+    # Wrap in a 2-column layout
+    story.append(Paragraph("Datos personales / Residencia / Estado socioeconómico", section_style))
+    layout = Table([[t_personal, t_right]], colWidths=[10.5 * cm, 10.5 * cm])
+    layout.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (0, -1), 8),
     ]))
-    story.append(t_datos)
-    story.append(Spacer(1, 0.4*cm))
+    story.append(layout)
+    story.append(Spacer(1, 0.3 * cm))
 
-    # Tabla de tareas por curso
+    # ════════════════════ DATOS ACADÉMICOS ════════════════════
+    story.append(Paragraph("Datos académicos", section_style))
+    acad_data = [
+        ["Carrera", v(student.carrera)],
+        ["Centro de apoyo", v(student.sede)],
+        ["Nivel", v(student.nivel_academico)],
+        ["Grupo", v(student.grupo)],
+    ]
+    t_acad = Table(acad_data, colWidths=[3.5 * cm, 17.5 * cm])
+    t_acad.setStyle(label_style)
+    story.append(t_acad)
+    story.append(Spacer(1, 0.3 * cm))
+
+    # ════════════════════ INDICADORES ════════════════════
+    story.append(Paragraph("Indicadores · Predicción IA", section_style))
+    ind_data = [
+        ["Indicador", "Valor", "Nivel"],
+        [
+            "Compromiso",
+            pct(student.indice_compromiso),
+            "Alto" if (student.indice_compromiso or 0) >= 0.6 else "Medio" if (student.indice_compromiso or 0) >= 0.3 else "Bajo",
+        ],
+        [
+            "Predicción Deserción",
+            pct(student.prob_desercion),
+            "Alto" if (student.prob_desercion or 0) >= 0.7 else "Moderado" if (student.prob_desercion or 0) >= 0.4 else "Bajo",
+        ],
+        [
+            "Predicción Reprobación",
+            pct(student.prob_reprobacion),
+            "Alto" if (student.prob_reprobacion or 0) >= 0.7 else "Moderado" if (student.prob_reprobacion or 0) >= 0.4 else "Bajo",
+        ],
+        [
+            "Días sin AVAC",
+            f"{round(student.dias_sin_acceso)}d" if student.dias_sin_acceso is not None else "—",
+            "",
+        ],
+        [
+            "Tareas entregadas",
+            f"{round(student.porcentaje_tareas)}%" if student.porcentaje_tareas is not None else "—",
+            "",
+        ],
+    ]
+    t_ind = Table(ind_data, colWidths=[5 * cm, 4 * cm, 4 * cm])
+    t_ind.setStyle(header_table_style)
+    story.append(t_ind)
+    story.append(Spacer(1, 0.3 * cm))
+
+    # ════════════════════ CALIFICACIONES ════════════════════
+    if calificaciones:
+        story.append(Paragraph("Calificaciones", section_style))
+        cal_headers = ["Período", "Asignatura", "Nota 1", "Nota 2", "Examen", "Final", "Estado"]
+        cal_rows = [cal_headers]
+        for g in calificaciones[:50]:
+            estado = "Aprobado" if (g.nota_final or 0) >= 70 else "Reprobado" if g.nota_final is not None else "—"
+            cal_rows.append([
+                v(g.periodo), v(g.asignatura),
+                str(round(g.nota_parcial_1, 1)) if g.nota_parcial_1 is not None else "—",
+                str(round(g.nota_parcial_2, 1)) if g.nota_parcial_2 is not None else "—",
+                str(round(g.nota_examen, 1)) if g.nota_examen is not None else "—",
+                str(round(g.nota_final, 1)) if g.nota_final is not None else "—",
+                estado,
+            ])
+        t_cal = Table(cal_rows, colWidths=[2.5 * cm, 7.5 * cm, 2.2 * cm, 2.2 * cm, 2.2 * cm, 2.2 * cm, 2.5 * cm])
+        t_cal.setStyle(header_table_style)
+        # Color cells for reprobado
+        for i, g in enumerate(calificaciones[:50], 1):
+            if g.nota_final is not None and g.nota_final < 70:
+                t_cal.setStyle(TableStyle([
+                    ("TEXTCOLOR", (5, i), (6, i), colors.HexColor("#DC2626")),
+                ]))
+        story.append(t_cal)
+        story.append(Spacer(1, 0.3 * cm))
+
+    # ════════════════════ ACTIVIDADES AVAC ════════════════════
     if tareas:
-        story.append(Paragraph("Actividades por Curso", styles["Heading3"]))
-        headers_tareas = ["Curso", "Unidad", "Estado", "Calificación", "Entregada", "Retrasada"]
-        rows_tareas = [headers_tareas]
-        for t in tareas[:30]:  # máximo 30 filas
-            estado_corto = (t.estado or "-")[:40]
-            rows_tareas.append([
-                t.codigo_curso, t.unidad, estado_corto,
-                f"{t.calificacion or '-'}", "✓" if t.entregada else "✗", "⚠" if t.retrasada else "-"
+        story.append(Paragraph("Actividades AVAC", section_style))
+        act_headers = ["Curso", "Unidad", "Estado", "Calificación", "Entregada"]
+        act_rows = [act_headers]
+        for t in tareas[:40]:
+            act_rows.append([
+                v(t.codigo_curso), v(t.unidad),
+                (t.estado or "—")[:45],
+                str(t.calificacion) if t.calificacion is not None else "—",
+                "Sí" if t.entregada else "No",
             ])
-        t_tareas = Table(rows_tareas, colWidths=[3*cm, 2*cm, 9*cm, 3*cm, 2.5*cm, 2.5*cm])
-        t_tareas.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1B3A6B")),
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-            ("FONTSIZE", (0, 0), (-1, -1), 8),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#D0D5DD")),
-            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F5F7FA")]),
-        ]))
-        story.append(t_tareas)
-        story.append(Spacer(1, 0.4*cm))
+        t_act = Table(act_rows, colWidths=[4 * cm, 2.5 * cm, 9 * cm, 3 * cm, 2.5 * cm])
+        t_act.setStyle(header_table_style)
+        story.append(t_act)
+        story.append(Spacer(1, 0.3 * cm))
 
-    # Historial de intervenciones
+    # ════════════════════ PRÁCTICAS PREPROFESIONALES ════════════════════
+    if practicas:
+        story.append(Paragraph("Prácticas Preprofesionales", section_style))
+        for p in practicas:
+            escuela = db.query(EscuelaPractica).filter(EscuelaPractica.id == p.escuela_id).first() if p.escuela_id else None
+            prac_data = [
+                ["Práctica", v(p.nombre_practica)],
+                ["IE Práctica", v(p.nombre_escuela)],
+                ["Ubicación", v(p.ubicacion_escuela)],
+                ["AMIE", v(p.amie_escuela)],
+                ["Período", v(p.periodo)],
+            ]
+            if escuela:
+                jurisdiccion = escuela.jurisdiccion or "—"
+                prac_data.append(["Jurisdicción", jurisdiccion])
+            t_prac = Table(prac_data, colWidths=[3.5 * cm, 17.5 * cm])
+            t_prac.setStyle(label_style)
+            story.append(t_prac)
+            story.append(Spacer(1, 0.15 * cm))
+        story.append(Spacer(1, 0.2 * cm))
+
+    # ════════════════════ INTERVENCIONES ════════════════════
     if intervenciones:
-        story.append(Paragraph("Historial de Intervenciones", styles["Heading3"]))
-        headers_interv = ["Fecha", "Monitor", "Medio", "Motivo", "Estado", "Observación"]
-        rows_interv = [headers_interv]
-        for i in intervenciones:
-            rows_interv.append([
-                i.created_at.strftime("%d/%m/%Y %H:%M") if i.created_at else "-",
-                (i.monitor_nombre or "-")[:20],
-                i.medio or "-",
-                i.motivo or "-",
-                i.estado or "-",
-                (i.observacion or "-")[:40],
+        story.append(Paragraph(f"Historial de Intervenciones ({len(intervenciones)})", section_style))
+        int_headers = ["Fecha", "Monitor", "Medio", "Motivo", "Estado", "Resultado", "Observación"]
+        int_rows = [int_headers]
+        for i in intervenciones[:30]:
+            int_rows.append([
+                i.created_at.strftime("%d/%m/%Y") if i.created_at else "—",
+                (i.monitor_nombre or "—")[:18],
+                v(i.medio),
+                v(i.motivo),
+                v(i.estado),
+                v(i.resultado),
+                (i.observacion or "—")[:50],
             ])
-        t_interv = Table(rows_interv, colWidths=[3.5*cm, 4*cm, 3*cm, 4.5*cm, 3*cm, 6*cm])
-        t_interv.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1B3A6B")),
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-            ("FONTSIZE", (0, 0), (-1, -1), 8),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#D0D5DD")),
-            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F5F7FA")]),
-        ]))
-        story.append(t_interv)
+        t_int = Table(int_rows, colWidths=[2.2 * cm, 3 * cm, 2.2 * cm, 3 * cm, 2.2 * cm, 3 * cm, 5.5 * cm])
+        t_int.setStyle(header_table_style)
+        story.append(t_int)
 
-    # Footer
-    story.append(Spacer(1, 0.5*cm))
-    story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#D0D5DD")))
+    # ════════════════════ FOOTER ════════════════════
+    story.append(Spacer(1, 0.5 * cm))
+    story.append(HRFlowable(width="100%", thickness=1, color=GRAY_BORDER))
     footer_style = ParagraphStyle("footer", fontSize=7, textColor=colors.grey, alignment=TA_CENTER)
-    story.append(Paragraph(f"Generado por Yachay Deep — {datetime.now().strftime('%d/%m/%Y %H:%M')} — Monitor: {current_user.nombre}", footer_style))
+    story.append(Paragraph(
+        f"Generado por Yachay Deep — {datetime.now().strftime('%d/%m/%Y %H:%M')} — {current_user.nombre}",
+        footer_style,
+    ))
 
     doc.build(story)
     buffer.seek(0)
@@ -526,5 +700,5 @@ def export_ficha_pdf(
     return StreamingResponse(
         buffer,
         media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
