@@ -105,7 +105,8 @@ class ETLPipeline:
 
     def run_full(self, triggered_by: str = "manual") -> ScrapingRun:
         """Ejecuta el pipeline completo: ingresos + tareas + calificaciones."""
-        run = ScrapingRun(tipo="full", status="running", triggered_by=triggered_by)
+        run = ScrapingRun(tipo="full", status="running", triggered_by=triggered_by,
+                         descripcion="Pipeline ETL completo: ingresos, tareas, calificaciones, reportes")
         self.db.add(run)
         self.db.commit()
 

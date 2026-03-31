@@ -13,6 +13,7 @@ class ScrapingRun(Base):
     cursos_error = Column(Integer, default=0)
     registros_insertados = Column(Integer, default=0)
     errores = Column(JSON, nullable=True)           # list of {curso, error}
+    descripcion = Column(String, nullable=True)      # human-readable description of what was run
     triggered_by = Column(String, nullable=True)    # "github_actions" / "admin_manual" / user email
     started_at = Column(DateTime(timezone=True), server_default=func.now())
     finished_at = Column(DateTime(timezone=True), nullable=True)

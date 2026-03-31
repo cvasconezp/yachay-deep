@@ -8,7 +8,8 @@ const TABS = ["Sistema", "Cursos", "Semestre", "Usuarios"];
 // ─────────────────────────────────────────────────────────────────────────────
 function TabSistema() {
   const [status, setStatus] = useState(null);
-  const [runs, setRuns] = useState([]);
+  const [runsData, setRunsData] = useState({ items: [], total: 0, page: 1, pages: 1 });
+  const [runsPage, setRunsPage] = useState(1);
   const [etlLoading, setEtlLoading] = useState(false);
   const [uploadLoading, setUploadLoading] = useState(false);
   const [msg, setMsg] = useState("");
@@ -20,9 +21,13 @@ function TabSistema() {
 
   const loadMlStatus = () => api.getPredictionStatus().then(setMlStatus).catch(() => {});
 
+  const loadRuns = (page = 1) => {
+    api.getETLRuns(page).then(data => { setRunsData(data); setRunsPage(data.page); }).catch(() => setMsg("Error: No se pudo cargar el historial ETL"));
+  };
+
   useEffect(() => {
     api.getSystemStatus().then(setStatus).catch(() => setMsg("Error: No se pudo cargar el estado del sistema"));
-    api.getETLRuns().then(setRuns).catch(() => setMsg("Error: No se pudo cargar el historial ETL"));
+    loadRuns(1);
     loadMlStatus();
   }, []);
 
@@ -32,7 +37,7 @@ function TabSistema() {
     try {
       const result = await api.triggerETL();
       setEtlMsg(result.message || "ETL ejecutado correctamente");
-      setTimeout(() => api.getETLRuns().then(setRuns), 2000);
+      setTimeout(() => loadRuns(1), 2000);
     } catch (e) {
       setEtlMsg("Error: " + e.message);
     } finally {
@@ -140,41 +145,71 @@ function TabSistema() {
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <h2 className="px-5 py-4 font-semibold text-gray-800 border-b border-gray-100">
           Historial de Ejecuciones ETL
+          {runsData.total > 0 && <span className="text-xs font-normal text-gray-400 ml-2">({runsData.total})</span>}
         </h2>
-        {runs.length === 0 ? (
+        {runsData.items.length === 0 ? (
           <p className="text-center py-8 text-gray-400 text-sm">Sin ejecuciones registradas</p>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="text-left px-5 py-2.5 text-gray-600 font-medium">Inicio</th>
-                <th className="text-left px-5 py-2.5 text-gray-600 font-medium">Tipo</th>
-                <th className="text-center px-5 py-2.5 text-gray-600 font-medium">Estado</th>
-                <th className="text-center px-5 py-2.5 text-gray-600 font-medium">Registros</th>
-                <th className="text-left px-5 py-2.5 text-gray-600 font-medium">Disparado por</th>
-              </tr>
-            </thead>
-            <tbody>
-              {runs.map(run => (
-                <tr key={run.id} className="border-t border-gray-100">
-                  <td className="px-5 py-3 text-gray-600">
-                    {run.started_at ? new Date(run.started_at).toLocaleString("es-EC") : "—"}
-                  </td>
-                  <td className="px-5 py-3 capitalize text-gray-700">{run.tipo}</td>
-                  <td className="px-5 py-3 text-center">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium
-                      ${run.status === "success" ? "bg-green-100 text-green-700"
-                        : run.status === "error" ? "bg-red-100 text-red-700"
-                        : "bg-yellow-100 text-yellow-700"}`}>
-                      {run.status}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3 text-center font-mono">{run.registros_insertados ?? "—"}</td>
-                  <td className="px-5 py-3 text-gray-500 text-xs">{run.triggered_by}</td>
+          <>
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="text-left px-4 py-2.5 text-gray-600 font-medium">Inicio</th>
+                  <th className="text-left px-4 py-2.5 text-gray-600 font-medium">Tipo</th>
+                  <th className="text-left px-4 py-2.5 text-gray-600 font-medium">Descripción</th>
+                  <th className="text-center px-4 py-2.5 text-gray-600 font-medium">Estado</th>
+                  <th className="text-center px-4 py-2.5 text-gray-600 font-medium">Registros</th>
+                  <th className="text-left px-4 py-2.5 text-gray-600 font-medium">Disparado por</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {runsData.items.map(run => (
+                  <tr key={run.id} className="border-t border-gray-100">
+                    <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
+                      {run.started_at ? new Date(run.started_at).toLocaleString("es-EC") : "—"}
+                    </td>
+                    <td className="px-4 py-3 capitalize text-gray-700">{run.tipo}</td>
+                    <td className="px-4 py-3 text-gray-500 text-xs max-w-[260px] truncate" title={run.descripcion || ""}>
+                      {run.descripcion || "—"}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium
+                        ${run.status === "success" ? "bg-green-100 text-green-700"
+                          : run.status === "error" ? "bg-red-100 text-red-700"
+                          : run.status === "partial" ? "bg-orange-100 text-orange-700"
+                          : "bg-yellow-100 text-yellow-700"}`}>
+                        {run.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-center font-mono">{run.registros_insertados ?? "—"}</td>
+                    <td className="px-4 py-3 text-gray-500 text-xs">{run.triggered_by}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {/* Paginación */}
+            {runsData.pages > 1 && (
+              <div className="flex items-center justify-center gap-1 py-3 border-t border-gray-100">
+                <button
+                  onClick={() => loadRuns(runsPage - 1)}
+                  disabled={runsPage <= 1}
+                  className="px-2 py-1 text-xs rounded text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+                >‹</button>
+                {Array.from({ length: runsData.pages }, (_, i) => i + 1).map(p => (
+                  <button
+                    key={p}
+                    onClick={() => loadRuns(p)}
+                    className={`px-2.5 py-1 text-xs rounded font-medium ${p === runsPage ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-100"}`}
+                  >{p}</button>
+                ))}
+                <button
+                  onClick={() => loadRuns(runsPage + 1)}
+                  disabled={runsPage >= runsData.pages}
+                  className="px-2 py-1 text-xs rounded text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+                >›</button>
+              </div>
+            )}
+          </>
         )}
       </div>
 
