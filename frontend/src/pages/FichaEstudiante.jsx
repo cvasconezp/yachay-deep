@@ -498,7 +498,6 @@ function getMallaEstado(estado) {
   switch (estado) {
     case "aprobada":   return { bg: "bg-green-50",  border: "border-green-300", text: "text-green-800",  label: "Aprobada" };
     case "reprobada":  return { bg: "bg-red-50",    border: "border-red-300",   text: "text-red-700",    label: "Reprobada" };
-    case "en_proceso": return { bg: "bg-yellow-50", border: "border-yellow-300",text: "text-yellow-800", label: "En proceso" };
     case "cursando":   return { bg: "bg-amber-50",  border: "border-amber-400", text: "text-amber-800",  label: "Cursando" };
     default:           return { bg: "bg-gray-50",   border: "border-gray-200",  text: "text-gray-400",   label: "No cursado" };
   }
@@ -1886,9 +1885,6 @@ export default function FichaEstudiante() {
                       </span>
                       <span className="flex items-center gap-1">
                         <span className="inline-block w-2 h-2 rounded-sm bg-amber-100 border border-amber-400"></span>Cursando
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <span className="inline-block w-2 h-2 rounded-sm bg-yellow-100 border border-yellow-300"></span>En proceso
                       </span>
                       <span className="flex items-center gap-1">
                         <span className="inline-block w-2 h-2 rounded-sm bg-red-100 border border-red-300"></span>Reprobada
