@@ -25,6 +25,7 @@ class ScrapingRunOut(BaseModel):
     id: int
     tipo: str
     status: str
+    descripcion: Optional[str] = None
     cursos_procesados: Optional[int]
     registros_insertados: Optional[int]
     cursos_error: Optional[int]
@@ -61,19 +62,34 @@ def trigger_etl(
     return {"message": "ETL iniciado en background. Consulta /admin/etl/runs para ver el progreso."}
 
 
-@router.get("/etl/runs", response_model=list[ScrapingRunOut])
+class PaginatedRuns(BaseModel):
+    items: list[ScrapingRunOut]
+    total: int
+    page: int
+    page_size: int
+    pages: int
+
+
+@router.get("/etl/runs", response_model=PaginatedRuns)
 def get_etl_runs(
-    limit: int = 20,
+    page: int = 1,
+    page_size: int = 10,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    """Historial de ejecuciones del ETL."""
-    return (
+    """Historial de ejecuciones del ETL con paginación."""
+    from sqlalchemy import func as sqlfunc
+    total = db.query(sqlfunc.count(ScrapingRun.id)).scalar()
+    pages = max(1, (total + page_size - 1) // page_size)
+    page = max(1, min(page, pages))
+    items = (
         db.query(ScrapingRun)
         .order_by(ScrapingRun.started_at.desc())
-        .limit(limit)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
         .all()
     )
+    return PaginatedRuns(items=items, total=total, page=page, page_size=page_size, pages=pages)
 
 
 @router.get("/etl/runs/{run_id}/log")
@@ -243,14 +259,44 @@ async def upload_practicas_files(
             dst.write(content)
         saved_files.append(f.filename)
 
-    # Ejecutar ETL de prácticas en background
+    # Ejecutar ETL de prácticas en background con registro en historial
+    files_desc = ", ".join(saved_files)
+
     def _run_practicas_etl():
         from ..database import SessionLocal
         from ..etl.practicas import run_practicas_etl
+        from datetime import timezone
         db_session = SessionLocal()
         try:
-            run_practicas_etl(db_session, practicas_dir)
+            run = ScrapingRun(
+                tipo="practicas",
+                status="running",
+                descripcion=f"Prácticas Preprofesionales: {files_desc}",
+                triggered_by=current_user.email,
+            )
+            db_session.add(run)
+            db_session.commit()
+
+            stats = run_practicas_etl(db_session, practicas_dir)
+            run.status = "success"
+            run.registros_insertados = stats.get("practicas_cargadas", 0)
+            log_lines = [
+                f"Escuelas cargadas: {stats.get('escuelas_cargadas', 0)}",
+                f"Prácticas cargadas: {stats.get('practicas_cargadas', 0)}",
+                f"Sin estudiante: {stats.get('sin_estudiante', 0)}",
+            ]
+            if stats.get("errores"):
+                run.status = "partial"
+                run.errores = stats["errores"]
+                log_lines.append(f"Errores: {len(stats['errores'])}")
+            run.log_output = "\n".join(log_lines)
+        except Exception as e:
+            run.status = "error"
+            run.errores = [{"error": str(e)}]
+            run.log_output = f"ERROR: {e}"
         finally:
+            run.finished_at = datetime.now(timezone.utc)
+            db_session.commit()
             db_session.close()
 
     background_tasks.add_task(_run_practicas_etl)

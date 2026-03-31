@@ -80,6 +80,9 @@ def upgrade_tables():
             # Periodo de la intervención (P67, P68, etc.)
             ("periodo", "VARCHAR"),
         ],
+        "scraping_runs": [
+            ("descripcion", "VARCHAR"),
+        ],
     }
 
     inspector = inspect(engine)

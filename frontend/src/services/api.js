@@ -175,7 +175,7 @@ class ApiClient {
 
   // ── Admin ──
   triggerETL() { return this.post("/admin/etl/run", {}); }
-  getETLRuns() { return this.get("/admin/etl/runs"); }
+  getETLRuns(page = 1, pageSize = 10) { return this.get(`/admin/etl/runs?page=${page}&page_size=${pageSize}`); }
   getSystemStatus() { return this.get("/admin/system/status"); }
   uploadAndRunETL(file) {
     const form = new FormData();
