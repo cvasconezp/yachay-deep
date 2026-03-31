@@ -795,6 +795,8 @@ export default function FichaEstudiante() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [comparativa, setComparativa] = useState(null);
   const [loadingComparativa, setLoadingComparativa] = useState(false);
+  const [mlPeriodos, setMlPeriodos] = useState(null);  // periodos dinámicos del modelo ML
+  const [iaPanelExpanded, setIaPanelExpanded] = useState(true);  // expand/collapse del panel IA
   const searchTimeout = useRef(null);
   const searchAbort = useRef(null);
   const searchContainerRef = useRef(null);
@@ -841,6 +843,13 @@ export default function FichaEstudiante() {
     loadRecomendaciones();
     // Cargar contrafactuales
     api.getCounterfactual(studentId).then(setContrafactual).catch(() => {});
+    // Cargar periodos del modelo ML (para label dinámico)
+    api.getPredictionStatus().then(s => {
+      if (s?.metadata?.periodos?.length) {
+        const p = s.metadata.periodos;
+        setMlPeriodos(`${p[0]}-${p[p.length - 1]}`);
+      }
+    }).catch(() => {});
   }, [studentId]);
 
   // Re-buscar cuando cambia la carrera seleccionada
@@ -1059,69 +1068,63 @@ export default function FichaEstudiante() {
             </div>
           </div>
 
-          {/* ═══ INDICADORES — GRID EJECUTIVO ═══ */}
+          {/* ═══ INDICADORES — COMPACTO SINGLE-LINE ═══ */}
           <div className="bg-white border-b border-gray-200">
-            <div className="flex items-center justify-between px-6 py-1.5 bg-gray-50/80 border-b border-gray-100">
+            <div className="flex items-center justify-between px-4 py-1 bg-gray-50/80 border-b border-gray-100">
               <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Indicadores · Predicción IA</span>
               <span className="text-[9px] text-gray-400">
-                Modelo ML · P60-P67
+                Modelo ML · {mlPeriodos || "..."}
                 {ficha.prediccion_updated_at && (
                   <> · {new Date(ficha.prediccion_updated_at).toLocaleDateString("es-EC")}</>
                 )}
               </span>
             </div>
             <div className="grid grid-cols-3 divide-x divide-gray-100">
-              {/* Compromiso */}
-              <div className="px-5 py-2 cursor-help" title="Indice de compromiso: acceso AVAC (30%), tareas (30%), rendimiento (25%), matrícula (15%)">
-                <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mb-1">Compromiso</div>
-                <div className="flex items-end gap-2">
-                  <span className={`text-2xl font-bold leading-none ${compromisoColor}`}>{compromisoStr || "—"}</span>
-                  <span className={`text-xs font-semibold ${compromisoColor} mb-0.5`}>{compromisoLabel}</span>
-                </div>
+              {/* Compromiso — single line */}
+              <div className="px-4 py-1.5 cursor-help flex items-center gap-2" title="Índice de compromiso: acceso AVAC (30%), tareas (30%), rendimiento (25%), matrícula (15%)">
+                <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider whitespace-nowrap">Compromiso</span>
+                <span className={`text-lg font-bold leading-none ${compromisoColor}`}>{compromisoStr || "—"}</span>
+                <span className={`text-[10px] font-semibold ${compromisoColor}`}>{compromisoLabel}</span>
                 {ficha.indice_compromiso != null && (
-                  <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden min-w-[40px]">
                     <div className={`h-full rounded-full transition-all duration-500 ${
                       ficha.indice_compromiso >= 0.7 ? "bg-green-500" : ficha.indice_compromiso >= 0.4 ? "bg-yellow-400" : "bg-red-500"
                     }`} style={{ width: `${Math.round(ficha.indice_compromiso * 100)}%` }} />
                   </div>
                 )}
               </div>
-              {/* Predicción Deserción */}
+              {/* Predicción Deserción — single line */}
               {(() => {
                 const pctDes = ficha.prob_desercion != null ? Math.round(ficha.prob_desercion * 100) : null;
                 const colorDes = pctDes == null ? "text-gray-300" : pctDes >= 70 ? "text-red-600" : pctDes >= 40 ? "text-orange-600" : "text-green-600";
                 const barDes = pctDes >= 70 ? "bg-red-500" : pctDes >= 40 ? "bg-orange-400" : "bg-green-500";
                 const labelDes = pctDes == null ? "—" : pctDes >= 70 ? "Alto" : pctDes >= 40 ? "Moderado" : "Bajo";
                 return (
-                  <div className="px-5 py-2 cursor-help" title="Probabilidad de deserción predicha por modelo ML">
-                    <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mb-1">Predicción Deserción</div>
-                    <div className="flex items-end gap-2">
-                      <span className={`text-2xl font-bold leading-none ${colorDes}`}>{pctDes != null ? `${pctDes}%` : "—"}</span>
-                      <span className={`text-xs font-semibold ${colorDes} mb-0.5`}>{labelDes}</span>
-                    </div>
+                  <div className="px-4 py-1.5 cursor-help flex items-center gap-2" title="Probabilidad de deserción predicha por modelo ML">
+                    <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider whitespace-nowrap">Deserción</span>
+                    <span className={`text-lg font-bold leading-none ${colorDes}`}>{pctDes != null ? `${pctDes}%` : "—"}</span>
+                    <span className={`text-[10px] font-semibold ${colorDes}`}>{labelDes}</span>
                     {pctDes != null && (
-                      <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden min-w-[40px]">
                         <div className={`h-full rounded-full transition-all duration-500 ${barDes}`} style={{ width: `${pctDes}%` }} />
                       </div>
                     )}
                   </div>
                 );
               })()}
-              {/* Predicción Reprobación */}
+              {/* Predicción Reprobación — single line */}
               {(() => {
                 const pctRep = ficha.prob_reprobacion != null ? Math.round(ficha.prob_reprobacion * 100) : null;
                 const colorRep = pctRep == null ? "text-gray-300" : pctRep >= 70 ? "text-red-600" : pctRep >= 40 ? "text-orange-600" : "text-green-600";
                 const barRep = pctRep >= 70 ? "bg-red-500" : pctRep >= 40 ? "bg-orange-400" : "bg-green-500";
                 const labelRep = pctRep == null ? "—" : pctRep >= 70 ? "Alto" : pctRep >= 40 ? "Moderado" : "Bajo";
                 return (
-                  <div className="px-5 py-2 cursor-help" title="Probabilidad de reprobar al menos una materia">
-                    <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mb-1">Predicción Reprobación</div>
-                    <div className="flex items-end gap-2">
-                      <span className={`text-2xl font-bold leading-none ${colorRep}`}>{pctRep != null ? `${pctRep}%` : "—"}</span>
-                      <span className={`text-xs font-semibold ${colorRep} mb-0.5`}>{labelRep}</span>
-                    </div>
+                  <div className="px-4 py-1.5 cursor-help flex items-center gap-2" title="Probabilidad de reprobar al menos una materia">
+                    <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider whitespace-nowrap">Reprobación</span>
+                    <span className={`text-lg font-bold leading-none ${colorRep}`}>{pctRep != null ? `${pctRep}%` : "—"}</span>
+                    <span className={`text-[10px] font-semibold ${colorRep}`}>{labelRep}</span>
                     {pctRep != null && (
-                      <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden min-w-[40px]">
                         <div className={`h-full rounded-full transition-all duration-500 ${barRep}`} style={{ width: `${pctRep}%` }} />
                       </div>
                     )}
@@ -1131,15 +1134,22 @@ export default function FichaEstudiante() {
             </div>
           </div>
 
-          {/* ===== PANEL IA: Tabbed Navigation ===== */}
+          {/* ===== PANEL IA: Collapsible Tabbed Navigation ===== */}
 {(prediccion?.xai || prediccion?.contexto_conductual?.length > 0 || contrafactual?.contrafactual_desercion?.cambios?.length > 0 || contrafactual?.contrafactual_conductual?.escenarios?.length > 0 || recomendaciones.length > 0) && (
 <div className="border-t border-gray-200 bg-[#FAFBFF]">
-  {/* Tab headers */}
+  {/* Tab headers — with collapse toggle */}
   <div className="flex border-b border-gray-200 bg-white">
     <button
-      onClick={() => setActiveTab("indicadores")}
-      className={`flex-1 px-4 py-2.5 text-[11px] font-bold uppercase tracking-wide transition-colors ${
-        activeTab === "indicadores"
+      onClick={() => setIaPanelExpanded(!iaPanelExpanded)}
+      className="px-2 py-2 text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors border-r border-gray-100 flex items-center"
+      title={iaPanelExpanded ? "Minimizar panel IA" : "Expandir panel IA"}
+    >
+      <span className="text-[10px]">{iaPanelExpanded ? "◀" : "▶"}</span>
+    </button>
+    <button
+      onClick={() => { setActiveTab("indicadores"); setIaPanelExpanded(true); }}
+      className={`flex-1 px-4 py-2 text-[11px] font-bold uppercase tracking-wide transition-colors ${
+        activeTab === "indicadores" && iaPanelExpanded
           ? "text-[#1B3A6B] border-b-2 border-[#1B3A6B] bg-blue-50/50"
           : "text-gray-400 hover:text-gray-600 hover:bg-gray-50"
       }`}
@@ -1148,9 +1158,9 @@ export default function FichaEstudiante() {
     </button>
     {prediccion?.contexto_conductual?.length > 0 && (
       <button
-        onClick={() => setActiveTab("alertas")}
-        className={`flex-1 px-4 py-2.5 text-[11px] font-bold uppercase tracking-wide transition-colors ${
-          activeTab === "alertas"
+        onClick={() => { setActiveTab("alertas"); setIaPanelExpanded(true); }}
+        className={`flex-1 px-4 py-2 text-[11px] font-bold uppercase tracking-wide transition-colors ${
+          activeTab === "alertas" && iaPanelExpanded
             ? "text-[#1B3A6B] border-b-2 border-[#1B3A6B] bg-blue-50/50"
             : "text-gray-400 hover:text-gray-600 hover:bg-gray-50"
         }`}
@@ -1163,9 +1173,9 @@ export default function FichaEstudiante() {
     )}
     {(contrafactual?.contrafactual_conductual?.escenarios?.length > 0 || recomendaciones.length > 0) && (
       <button
-        onClick={() => setActiveTab("acciones")}
-        className={`flex-1 px-4 py-2.5 text-[11px] font-bold uppercase tracking-wide transition-colors ${
-          activeTab === "acciones"
+        onClick={() => { setActiveTab("acciones"); setIaPanelExpanded(true); }}
+        className={`flex-1 px-4 py-2 text-[11px] font-bold uppercase tracking-wide transition-colors ${
+          activeTab === "acciones" && iaPanelExpanded
             ? "text-[#1B3A6B] border-b-2 border-[#1B3A6B] bg-blue-50/50"
             : "text-gray-400 hover:text-gray-600 hover:bg-gray-50"
         }`}
@@ -1175,8 +1185,8 @@ export default function FichaEstudiante() {
     )}
   </div>
 
-  {/* Tab content */}
-  <div className="p-4">
+  {/* Tab content — collapsible */}
+  {iaPanelExpanded && <div className="p-4">
     {/* ── Tab: Indicadores · Predicción IA ── */}
     {activeTab === "indicadores" && (
       <div className="space-y-3">
@@ -1405,7 +1415,7 @@ export default function FichaEstudiante() {
         )}
       </div>
     )}
-  </div>
+  </div>}
 </div>
 )}
 

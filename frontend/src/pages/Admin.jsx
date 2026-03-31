@@ -332,7 +332,7 @@ function TabSistema() {
           </button>
         </div>
         <p className="text-xs text-gray-400 mt-2">
-          Entrena modelos de desercion y reprobacion con datos historicos (P60-P67). Las predicciones se ejecutan automaticamente al final del ETL si hay un modelo entrenado.
+          Entrena modelos de deserción y reprobación con datos históricos (P57-P67). Las predicciones se ejecutan automáticamente al final del ETL si hay un modelo entrenado.
         </p>
         {mlMsg && (
           <div className={`text-sm mt-3 px-4 py-2 rounded-lg ${mlMsg.startsWith("Error") ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>

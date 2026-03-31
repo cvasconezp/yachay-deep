@@ -44,7 +44,7 @@ const FRAMEWORK_PHASES = [
     items: [
       "Modelos de predicción de abandono y reprobación",
       "Logistic Regression y Random Forest por carrera",
-      "Entrenamiento con datos históricos consolidados (P60-P67)",
+      "Entrenamiento con datos históricos consolidados (P57-P67)",
       "Predicción batch y auto-reentrenamiento",
     ],
   },

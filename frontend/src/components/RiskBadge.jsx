@@ -23,7 +23,7 @@ export function PredictionBadge({ value, label }) {
     : "text-green-700 bg-green-100";
   const riskText = pct >= 70 ? "Alto" : pct >= 40 ? "Moderado" : "Bajo";
   const tooltipText = label === "Deserción"
-    ? `${riskText} riesgo de deserción (${pct}%). Modelo ML basado en: promedio, nota mínima, dispersión de notas y materias reprobadas. Comparado contra patrones históricos P60-P67.`
+    ? `${riskText} riesgo de deserción (${pct}%). Modelo ML basado en: promedio, nota mínima, dispersión de notas y materias reprobadas. Comparado contra patrones históricos.`
     : `${label}: ${pct}%`;
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${color}`}
