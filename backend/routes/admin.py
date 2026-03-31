@@ -152,6 +152,12 @@ async def upload_data_and_run_etl(
         # calificaciones.csv → root data dir
         if bl == "calificaciones.csv":
             return basename
+        # Formularios Practica*.xlsx → Practicas/
+        if bl.startswith("formularios practica") and bl.endswith(".xlsx"):
+            return f"Practicas/{basename}"
+        # Escuelas Bilingues SEIBE*.xlsx → Practicas/
+        if bl.startswith("escuelas bilingues") and bl.endswith(".xlsx"):
+            return f"Practicas/{basename}"
         # Unknown file: keep original path
         return member_name
 
@@ -206,6 +212,52 @@ def system_status(
         "total_estudiantes": total_students,
         "ultima_actualizacion": last_run.finished_at.isoformat() if last_run else None,
         "estado_pipeline": last_run.status if last_run else "nunca_ejecutado",
+    }
+
+
+@router.post("/etl/upload-practicas")
+async def upload_practicas_files(
+    background_tasks: BackgroundTasks,
+    files: list[UploadFile] = File(...),
+    current_user: User = Depends(require_admin),
+):
+    """
+    Sube archivos de Prácticas Preprofesionales y ejecuta el ETL.
+    Acepta archivos .xlsx directamente (no ZIP):
+      - Formularios Practica P*.xlsx — datos del formulario
+      - Escuelas Bilingues SEIBE*.xlsx — catálogo de escuelas
+    """
+    practicas_dir = os.path.abspath("./data/Practicas")
+    os.makedirs(practicas_dir, exist_ok=True)
+
+    saved_files = []
+    for f in files:
+        if not f.filename.lower().endswith(".xlsx"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Solo se aceptan archivos .xlsx. Archivo rechazado: {f.filename}",
+            )
+        content = await f.read()
+        dest = os.path.join(practicas_dir, f.filename)
+        with open(dest, "wb") as dst:
+            dst.write(content)
+        saved_files.append(f.filename)
+
+    # Ejecutar ETL de prácticas en background
+    def _run_practicas_etl():
+        from ..database import SessionLocal
+        from ..etl.practicas import run_practicas_etl
+        db_session = SessionLocal()
+        try:
+            run_practicas_etl(db_session, practicas_dir)
+        finally:
+            db_session.close()
+
+    background_tasks.add_task(_run_practicas_etl)
+
+    return {
+        "message": f"{len(saved_files)} archivo(s) guardados. ETL de prácticas iniciado.",
+        "archivos": saved_files,
     }
 
 

@@ -190,6 +190,19 @@ class ApiClient {
     });
   }
 
+  uploadPracticasFiles(files) {
+    const form = new FormData();
+    files.forEach((f) => form.append("files", f));
+    return fetch(`${this.baseUrl}/admin/etl/upload-practicas`, {
+      method: "POST",
+      credentials: "include",
+      body: form,
+    }).then(async (r) => {
+      if (!r.ok) throw new Error(sanitizeErrorMessage((await r.json().catch(() => ({}))).detail || r.statusText));
+      return r.json();
+    });
+  }
+
   // ── Export ──
   exportFichaPDF(studentId) { return this.get(`/export/ficha/${studentId}/pdf`); }
   getExportColumnas() { return this.get("/export/columnas-disponibles"); }

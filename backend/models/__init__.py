@@ -11,10 +11,12 @@ from .recommendation_log import RecommendationLog
 from .ml_model_store import MLModelStore
 from .docente_tracking import DocenteTracking
 from .alert_event import AlertEvent
+from .practica_preprofesional import PracticaPreprofesional, EscuelaPractica
 
 __all__ = [
     "User", "Student", "Course", "AvacAccess",
     "TaskSubmission", "Grade", "Intervention", "ScrapingRun",
     "CourseConfig", "SemesterConfig", "RecommendationLog", "MLModelStore",
     "DocenteTracking", "AlertEvent",
+    "PracticaPreprofesional", "EscuelaPractica",
 ]

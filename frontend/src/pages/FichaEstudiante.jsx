@@ -612,6 +612,170 @@ function SectionHeader({ children, className = "" }) {
   );
 }
 
+// ── Prácticas Preprofesionales ────────────────────────────────────────────────
+/** Componente colapsable que muestra las prácticas preprofesionales del estudiante.
+ *  Solo se expande por defecto si hay prácticas asignadas. Diseño basado en tabla
+ *  Excel con encabezados naranja/azul similar a la ficha original.
+ */
+function PracticasSection({ practicas }) {
+  const hasPracticas = practicas.length > 0;
+  const [expanded, setExpanded] = useState(hasPracticas);
+
+  // Actualizar estado si cambia el estudiante (prácticas cambian)
+  useEffect(() => {
+    setExpanded(practicas.length > 0);
+  }, [practicas]);
+
+  return (
+    <div className="border-t border-gray-300">
+      {/* Header clickable para expandir/colapsar */}
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full bg-[#1B3A6B] text-white px-4 py-1 text-[10px] font-bold uppercase tracking-wider flex items-center justify-between hover:bg-[#24477a] transition-colors"
+      >
+        <span>
+          Prácticas Preprofesionales
+          {hasPracticas && <span className="ml-2 opacity-60">({practicas.length})</span>}
+        </span>
+        <span className="text-[9px] opacity-60">
+          {expanded ? "▲ Minimizar" : "▼ Expandir"}
+        </span>
+      </button>
+
+      {expanded && (
+        <div className="bg-white">
+          {!hasPracticas ? (
+            <div className="py-4 text-center text-[11px] text-gray-300 italic">
+              Sin prácticas preprofesionales asignadas en este período
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-200">
+              {practicas.map((p, idx) => (
+                <div key={p.id || idx} className="px-0">
+                  {/* Título de la práctica — barra naranja */}
+                  <div className="bg-[#F0B000] px-3 py-1 flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-[#1B3A6B] uppercase tracking-wide">
+                      {p.nombre_practica || p.nivel_y_practica || "Práctica Preprofesional"}
+                    </span>
+                    {p.periodo && (
+                      <span className="text-[10px] font-semibold text-[#1B3A6B]/60">{p.periodo}</span>
+                    )}
+                  </div>
+
+                  {/* Tabla de datos tipo Excel */}
+                  <table className="w-full border-collapse">
+                    <tbody>
+                      {/* Nombre de la práctica */}
+                      <tr>
+                        <td className="text-right text-[10px] text-gray-500 font-semibold px-2 py-0.5 border border-gray-200 bg-[#D6E4F0] whitespace-nowrap w-36">
+                          Nombre práctica
+                        </td>
+                        <td className="text-[11px] px-2 py-0.5 border border-gray-200 text-gray-800 font-medium" colSpan={3}>
+                          {p.nombre_practica || <span className="text-gray-300 italic">—</span>}
+                        </td>
+                      </tr>
+
+                      {/* IE Práctica */}
+                      <tr>
+                        <td className="text-right text-[10px] text-gray-500 font-semibold px-2 py-0.5 border border-gray-200 bg-[#D6E4F0] whitespace-nowrap">
+                          IE Práctica
+                        </td>
+                        <td className="text-[11px] px-2 py-0.5 border border-gray-200 text-gray-800 font-medium" colSpan={3}>
+                          {p.nombre_escuela || <span className="text-gray-300 italic">—</span>}
+                        </td>
+                      </tr>
+
+                      {/* Ubicación IE */}
+                      <tr>
+                        <td className="text-right text-[10px] text-gray-500 font-semibold px-2 py-0.5 border border-gray-200 bg-[#D6E4F0] whitespace-nowrap">
+                          Ubicación IE
+                        </td>
+                        <td className="text-[11px] px-2 py-0.5 border border-gray-200 text-gray-700" colSpan={3}>
+                          {p.ubicacion_escuela || <span className="text-gray-300 italic">—</span>}
+                        </td>
+                      </tr>
+
+                      {/* Distrito y AMIE */}
+                      <tr>
+                        <td className="text-right text-[10px] text-gray-500 font-semibold px-2 py-0.5 border border-gray-200 bg-[#D6E4F0] whitespace-nowrap">
+                          Distrito y AMIE
+                        </td>
+                        <td className="text-[11px] px-2 py-0.5 border border-gray-200 text-gray-700" colSpan={3}>
+                          {p.distrito || ""}
+                          {p.distrito && p.amie_escuela ? " | " : ""}
+                          {p.amie_escuela ? <span>AMIE: <strong className="font-mono">{p.amie_escuela}</strong></span> : ""}
+                          {!p.distrito && !p.amie_escuela && <span className="text-gray-300 italic">—</span>}
+                        </td>
+                      </tr>
+
+                      {/* Jurisdicción */}
+                      <tr>
+                        <td className="text-right text-[10px] text-gray-500 font-semibold px-2 py-0.5 border border-gray-200 bg-[#D6E4F0] whitespace-nowrap">
+                          Jurisdicción
+                        </td>
+                        <td className="text-[11px] px-2 py-0.5 border border-gray-200" colSpan={3}>
+                          {p.jurisdiccion ? (
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                              p.jurisdiccion?.toLowerCase().includes("bilingüe") || p.jurisdiccion?.toLowerCase().includes("bilingue")
+                                ? "bg-amber-100 text-amber-800"
+                                : "bg-blue-100 text-blue-700"
+                            }`}>
+                              {p.jurisdiccion}
+                            </span>
+                          ) : <span className="text-gray-300 italic">—</span>}
+                        </td>
+                      </tr>
+
+                      {/* Autoridad */}
+                      <tr className="bg-[#FFF8E7]">
+                        <td className="text-right text-[10px] text-gray-500 font-semibold px-2 py-0.5 border border-gray-200 bg-[#D6E4F0] whitespace-nowrap">
+                          Nombre autoridad
+                        </td>
+                        <td className="text-[11px] px-2 py-0.5 border border-gray-200 text-gray-800 font-medium">
+                          {p.nombre_autoridad || <span className="text-gray-300 italic">—</span>}
+                        </td>
+                        <td className="text-right text-[10px] text-gray-500 font-semibold px-2 py-0.5 border border-gray-200 bg-[#D6E4F0] whitespace-nowrap w-20">
+                          Celular
+                        </td>
+                        <td className="text-[11px] px-2 py-0.5 border border-gray-200 text-gray-700 font-mono">
+                          {p.telefono_autoridad || <span className="text-gray-300 italic">—</span>}
+                        </td>
+                      </tr>
+
+                      {/* Cargo */}
+                      <tr>
+                        <td className="text-right text-[10px] text-gray-500 font-semibold px-2 py-0.5 border border-gray-200 bg-[#D6E4F0] whitespace-nowrap">
+                          Cargo
+                        </td>
+                        <td className="text-[11px] px-2 py-0.5 border border-gray-200 text-gray-700">
+                          {p.cargo_autoridad || <span className="text-gray-300 italic">—</span>}
+                        </td>
+                        <td className="text-right text-[10px] text-gray-500 font-semibold px-2 py-0.5 border border-gray-200 bg-[#D6E4F0] whitespace-nowrap">
+                          Mineduc
+                        </td>
+                        <td className="text-[11px] px-2 py-0.5 border border-gray-200">
+                          {p.en_mineduc ? (
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                              p.en_mineduc.toLowerCase() === "sí" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600"
+                            }`}>
+                              {p.en_mineduc}
+                            </span>
+                          ) : <span className="text-gray-300 italic">—</span>}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 // ── Componente principal ───────────────────────────────────────────────────────
 export default function FichaEstudiante() {
   const { studentId } = useParams();
@@ -1907,15 +2071,10 @@ export default function FichaEstudiante() {
             </div>
           </div>
 
-          {/* ═══ PRÁCTICAS PREPROFESIONALES (próximamente) ═══ */}
-          <div className="border-t border-gray-300">
-            <div className="bg-[#1B3A6B] text-white px-4 py-1 text-[10px] font-bold uppercase tracking-wider">
-              Prácticas Preprofesionales
-            </div>
-            <div className="bg-white py-4 text-center text-[11px] text-gray-400 italic">
-              Módulo en desarrollo — próximamente
-            </div>
-          </div>
+          {/* ═══ PRÁCTICAS PREPROFESIONALES ═══ */}
+          <PracticasSection practicas={ficha.practicas_preprofesionales || []} />
+
+          {/* ═══ SEGUIMIENTO E INTERVENCIONES ═══ */}
 
           {/* ═══ SEGUIMIENTO E INTERVENCIONES ═══ */}
           <div className="border-t border-gray-300">
