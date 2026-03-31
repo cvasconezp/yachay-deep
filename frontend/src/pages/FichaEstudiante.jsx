@@ -1547,12 +1547,34 @@ export default function FichaEstudiante() {
               <SectionHeader>Estado socioeconómico</SectionHeader>
               <table className="w-full border-collapse">
                 <tbody>
-                  <tr className={ficha.estado_matricula === "Matriculado" ? "bg-green-50" : "bg-red-50"}>
+                  <PersonalRow label="Nivel de beca" value={ficha.nivel_beca} />
+                  {/* Pago matrícula: Ya pagó / Aún no paga */}
+                  <tr className={ficha.estado_matricula === "Matriculado" ? "bg-green-50" : ficha.estado_matricula ? "bg-red-50" : ""}>
                     <td className="text-right text-[11px] text-gray-500 font-semibold px-2 py-0.5 border border-gray-200 bg-[#F2F2F2] whitespace-nowrap w-28">Pago matrícula</td>
-                    <td className={`text-[11px] px-2 py-0.5 border border-gray-200 font-semibold ${ficha.estado_matricula === "Matriculado" ? "text-green-700" : "text-red-600"}`}>
-                      {ficha.estado_matricula || "—"}
+                    <td className={`text-[11px] px-2 py-0.5 border border-gray-200 font-semibold ${
+                      ficha.estado_matricula === "Matriculado" ? "text-green-700" : ficha.estado_matricula ? "text-red-600" : "text-gray-300 italic"
+                    }`}>
+                      {ficha.estado_matricula === "Matriculado" ? "Ya pagó la matrícula"
+                        : ficha.estado_matricula ? "Aún no paga"
+                        : "—"}
                     </td>
                   </tr>
+                  {/* Pago colegiatura: valor total + deuda */}
+                  <tr>
+                    <td className="text-right text-[11px] text-gray-500 font-semibold px-2 py-0.5 border border-gray-200 bg-[#F2F2F2] whitespace-nowrap w-28">Pago colegiatura</td>
+                    <td className="text-[11px] px-2 py-0.5 border border-gray-200">
+                      {ficha.pago_colegiatura_total != null ? (
+                        <span>
+                          <span className="font-semibold text-gray-800">${ficha.pago_colegiatura_total}</span>
+                          {ficha.deuda_cuotas > 0 && (
+                            <span className="ml-1.5 text-red-600 font-medium">(deuda {ficha.deuda_cuotas} cuotas)</span>
+                          )}
+                        </span>
+                      ) : <span className="text-gray-300 italic">—</span>}
+                    </td>
+                  </tr>
+                  <PersonalRow label="Empleabilidad" value={ficha.empleabilidad} />
+                  <PersonalRow label="Madre o padre de familia" value={ficha.es_padre_madre != null ? (ficha.es_padre_madre ? "Sí" : "No") : null} />
                 </tbody>
               </table>
 
