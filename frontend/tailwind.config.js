@@ -14,6 +14,9 @@ export default {
           "ice-light": "#D8EFF4",
         },
       },
+      animation: {
+        "spin-slow": "spin 3s linear infinite",
+      },
     },
   },
   plugins: [],
