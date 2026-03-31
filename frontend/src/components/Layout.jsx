@@ -69,18 +69,22 @@ export function Layout({ children }) {
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
-      {/* Sidebar */}
-      <aside
-        className={`${sidebarOpen ? "w-64" : "w-16"} bg-brand text-white flex flex-col shadow-xl transition-all duration-300 relative flex-shrink-0 sticky top-0 h-screen overflow-y-auto`}
-      >
-        {/* Botón toggle */}
+      {/* Sidebar wrapper — relative so the toggle button can overflow outside */}
+      <div className={`${sidebarOpen ? "w-64" : "w-16"} relative flex-shrink-0 transition-all duration-300`}>
+        {/* Botón toggle — fuera del aside para evitar scroll horizontal */}
         <button
           onClick={toggleSidebar}
-          className="absolute -right-4 top-9 w-8 h-8 bg-brand-gold text-brand-dark border-2 border-white rounded-full flex items-center justify-center text-sm font-bold hover:bg-brand-gold-light transition-colors z-10 shadow-lg"
+          className="absolute -right-3.5 top-9 z-20 w-7 h-7 bg-brand-gold text-brand-dark border-2 border-white rounded-full flex items-center justify-center hover:bg-brand-gold-light hover:scale-110 transition-all shadow-lg"
           title={sidebarOpen ? "Ocultar panel" : "Mostrar panel"}
         >
-          {sidebarOpen ? "«" : "»"}
+          <svg xmlns="http://www.w3.org/2000/svg" className={`w-3.5 h-3.5 transition-transform ${sidebarOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+          </svg>
         </button>
+
+        <aside
+          className="w-full h-screen bg-brand text-white flex flex-col shadow-xl sticky top-0 overflow-y-auto overflow-x-hidden"
+        >
 
         {/* Header con logo */}
         <div className={`border-b border-white/10 bg-brand-dark/40 ${sidebarOpen ? "p-5" : "p-3 flex items-center justify-center"}`}>
@@ -153,7 +157,8 @@ export function Layout({ children }) {
             </button>
           )}
         </div>
-      </aside>
+        </aside>
+      </div>
 
       {/* Main content */}
       <main className="flex-1 overflow-auto">
