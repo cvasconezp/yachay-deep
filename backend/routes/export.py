@@ -602,25 +602,23 @@ def export_ficha_pdf(
     # ════════════════════ CALIFICACIONES ════════════════════
     if calificaciones:
         story.append(Paragraph("Calificaciones", section_style))
-        cal_headers = ["Período", "Asignatura", "Nota 1", "Nota 2", "Examen", "Final", "Estado"]
+        cal_headers = ["Período", "Asignatura", "Docente", "Nota Final", "Estado", "Repitencias"]
         cal_rows = [cal_headers]
         for g in calificaciones[:50]:
             estado = "Aprobado" if (g.nota_final or 0) >= 70 else "Reprobado" if g.nota_final is not None else "—"
             cal_rows.append([
-                v(g.periodo), v(g.asignatura),
-                str(round(g.nota_parcial_1, 1)) if g.nota_parcial_1 is not None else "—",
-                str(round(g.nota_parcial_2, 1)) if g.nota_parcial_2 is not None else "—",
-                str(round(g.nota_examen, 1)) if g.nota_examen is not None else "—",
+                v(g.periodo), v(g.asignatura), v(g.docente),
                 str(round(g.nota_final, 1)) if g.nota_final is not None else "—",
                 estado,
+                str(g.numero_repitencias) if g.numero_repitencias else "—",
             ])
-        t_cal = Table(cal_rows, colWidths=[2.5 * cm, 7.5 * cm, 2.2 * cm, 2.2 * cm, 2.2 * cm, 2.2 * cm, 2.5 * cm])
+        t_cal = Table(cal_rows, colWidths=[2.5 * cm, 8 * cm, 4 * cm, 2.5 * cm, 2.5 * cm, 2 * cm])
         t_cal.setStyle(header_table_style)
         # Color cells for reprobado
         for i, g in enumerate(calificaciones[:50], 1):
             if g.nota_final is not None and g.nota_final < 70:
                 t_cal.setStyle(TableStyle([
-                    ("TEXTCOLOR", (5, i), (6, i), colors.HexColor("#DC2626")),
+                    ("TEXTCOLOR", (3, i), (4, i), colors.HexColor("#DC2626")),
                 ]))
         story.append(t_cal)
         story.append(Spacer(1, 0.3 * cm))
