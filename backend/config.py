@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     # Carpeta con los archivos DatosEspecificos*.xlsx (formulario Microsoft Forms EIB)
     # Contiene: nivel académico, sede, residencia, whatsapp, etnia, lengua, trabajo
     DATA_PATH_DATOS_ESPECIFICOS: str = "./data/DatosEspecificos"
+    # Carpeta con archivos de Prácticas Preprofesionales
+    # - Formularios Practica P*.xlsx: datos de estudiantes y escuelas asignadas
+    # - Escuelas Bilingues SEIBE*.xlsx: catálogo de escuelas con ubicaciones
+    DATA_PATH_PRACTICAS: str = "./data/Practicas"
 
     # Email (SMTP para derivaciones a Bienestar Estudiantil)
     SMTP_HOST: Optional[str] = None

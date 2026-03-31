@@ -131,6 +131,9 @@ function TabSistema() {
             </div>
           )}
         </div>
+
+        {/* Subir archivos de Prácticas Preprofesionales */}
+        <PracticasUpload />
       </div>
 
       {/* Historial ETL */}
@@ -309,6 +312,56 @@ function TabSistema() {
 // ─────────────────────────────────────────────────────────────────────────────
 // TAB: CURSOS
 // ─────────────────────────────────────────────────────────────────────────────
+// ── Subcomponente: Upload de Prácticas Preprofesionales ──
+function PracticasUpload() {
+  const [loading, setLoading] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  return (
+    <div className="mt-4 pt-4 border-t border-gray-100">
+      <label className="block text-sm font-semibold text-gray-700 mb-2">
+        Subir datos de Prácticas Preprofesionales
+      </label>
+      <p className="text-xs text-gray-400 mb-2">
+        Sube los archivos .xlsx de prácticas: <strong>Formularios Practica P*.xlsx</strong> (datos de estudiantes y escuelas)
+        y <strong>Escuelas Bilingues SEIBE*.xlsx</strong> (catálogo con ubicaciones). Se cruzan por código AMIE.
+      </p>
+      <div className="flex items-center gap-3">
+        <input
+          type="file"
+          accept=".xlsx"
+          multiple
+          id="practicas-upload"
+          className="text-sm file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-amber-50 file:text-amber-700 hover:file:bg-amber-100"
+          disabled={loading}
+          onChange={async (e) => {
+            const files = Array.from(e.target.files || []);
+            if (!files.length) return;
+            setLoading(true);
+            setMsg("");
+            try {
+              const result = await api.uploadPracticasFiles(files);
+              setMsg(result.message || "Archivos subidos y ETL de prácticas iniciado");
+            } catch (err) {
+              setMsg("Error: " + err.message);
+            } finally {
+              setLoading(false);
+              e.target.value = "";
+            }
+          }}
+        />
+        {loading && <span className="text-sm text-amber-600 animate-pulse">Subiendo...</span>}
+      </div>
+      {msg && (
+        <div className={`text-sm mt-3 px-4 py-2 rounded-lg ${msg.startsWith("Error") ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
+          {msg}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 function TabCursos() {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);

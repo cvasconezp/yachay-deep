@@ -19,7 +19,7 @@ from datetime import datetime, date
 logger = logging.getLogger(__name__)
 
 from ..database import get_db
-from ..models import Student, AvacAccess, TaskSubmission, Grade, Intervention
+from ..models import Student, AvacAccess, TaskSubmission, Grade, Intervention, PracticaPreprofesional, EscuelaPractica
 from ..models.course_config import CourseConfig
 from ..auth.jwt import get_current_user
 from ..models.user import User
@@ -287,6 +287,29 @@ class MallaCurricular(BaseModel):
     total_asignaturas_malla: int = 0
 
 
+class PracticaOut(BaseModel):
+    """Práctica preprofesional asignada a un estudiante."""
+    id: int
+    nombre_practica: Optional[str] = None
+    nivel_practica: Optional[str] = None
+    nivel_y_practica: Optional[str] = None
+    centro_apoyo: Optional[str] = None
+    en_mineduc: Optional[str] = None
+    amie_escuela: Optional[str] = None
+    nombre_escuela: Optional[str] = None
+    distrito: Optional[str] = None
+    sistema_educativo: Optional[str] = None
+    ubicacion_escuela: Optional[str] = None   # Cantón, Parroquia, Dirección (cruzado desde SEIBE)
+    jurisdiccion: Optional[str] = None        # Derivado del sistema educativo
+    nombre_autoridad: Optional[str] = None
+    cargo_autoridad: Optional[str] = None
+    telefono_autoridad: Optional[str] = None
+    periodo: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
 class InterventionOut(BaseModel):
     id: int
     monitor_nombre: Optional[str] = None
@@ -351,6 +374,9 @@ class FichaEstudiante(BaseModel):
     calificaciones_historicas: list[GradeOut] = []  # histórico (periodo IS NOT NULL), ordenado por periodo
     intervenciones: list[InterventionOut] = []
     malla_curricular: Optional[MallaCurricular] = None  # malla fija por niveles
+
+    # Prácticas preprofesionales
+    practicas_preprofesionales: list[PracticaOut] = []
 
     # Resumen
     total_intervenciones: int = 0
@@ -778,6 +804,46 @@ def get_ficha(
         .all()
     )
 
+    # Prácticas preprofesionales
+    practicas_raw = (
+        db.query(PracticaPreprofesional)
+        .filter(PracticaPreprofesional.student_id == student_id)
+        .order_by(PracticaPreprofesional.periodo.desc())
+        .all()
+    )
+
+    # Enriquecer con datos de la escuela (jurisdicción, ubicación completa)
+    practicas_out = []
+    for p in practicas_raw:
+        jurisdiccion = None
+        ubicacion = p.ubicacion_escuela
+        if p.escuela_id:
+            escuela = db.query(EscuelaPractica).filter(EscuelaPractica.id == p.escuela_id).first()
+            if escuela:
+                jurisdiccion = escuela.jurisdiccion
+                # Si la ubicación no estaba en el formulario, usar SEIBE
+                if not ubicacion:
+                    parts = [escuela.canton, escuela.parroquia, escuela.direccion]
+                    ubicacion = ", ".join(pt for pt in parts if pt)
+        practicas_out.append(PracticaOut(
+            id=p.id,
+            nombre_practica=p.nombre_practica,
+            nivel_practica=p.nivel_practica,
+            nivel_y_practica=p.nivel_y_practica,
+            centro_apoyo=p.centro_apoyo,
+            en_mineduc=p.en_mineduc,
+            amie_escuela=p.amie_escuela,
+            nombre_escuela=p.nombre_escuela,
+            distrito=p.distrito,
+            sistema_educativo=p.sistema_educativo,
+            ubicacion_escuela=ubicacion,
+            jurisdiccion=jurisdiccion or p.sistema_educativo,
+            nombre_autoridad=p.nombre_autoridad,
+            cargo_autoridad=p.cargo_autoridad,
+            telefono_autoridad=p.telefono_autoridad,
+            periodo=p.periodo,
+        ))
+
     # ── Construir mapa codigo_avac → CourseConfig para enriquecer accesos y tareas ──
     all_codigos = set(
         [a.codigo_curso for a in accesos] + [t.codigo_curso for t in tareas]
@@ -910,6 +976,7 @@ def get_ficha(
         calificaciones_historicas=calificaciones_historicas,
         malla_curricular=malla,
         intervenciones=intervenciones,
+        practicas_preprofesionales=practicas_out,
         total_intervenciones=len(intervenciones),
         ultima_intervencion=ultima_intervencion,
     )

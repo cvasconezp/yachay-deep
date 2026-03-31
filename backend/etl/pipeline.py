@@ -384,6 +384,25 @@ class ETLPipeline:
             except Exception:
                 pass
 
+            # 7e. Prácticas preprofesionales (si hay datos en ./data/Practicas)
+            try:
+                from .practicas import run_practicas_etl
+                practicas_path = Path(settings.DATA_PATH_PRACTICAS)
+                if practicas_path.exists() and any(practicas_path.glob("*.xlsx")):
+                    logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Procesando Prácticas Preprofesionales...")
+                    pstats = run_practicas_etl(self.db, str(practicas_path))
+                    sin_est = pstats["sin_estudiante"]
+                    suffix = f", {sin_est} sin match de estudiante" if sin_est else ""
+                    logs.append(
+                        f"  → {pstats['escuelas_cargadas']} escuelas, "
+                        f"{pstats['practicas_cargadas']} prácticas asignadas{suffix}"
+                    )
+                else:
+                    logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Sin datos de Prácticas Preprofesionales — omitiendo")
+            except Exception as prac_err:
+                logs.append(f"  ⚠️ Error en Prácticas Preprofesionales (no crítico): {prac_err}")
+                logger.error("Error en ETL de prácticas: %s", prac_err, exc_info=True)
+
             # 8. Reentrenar modelos ML con datos históricos actualizados
             try:
                 from ..ml.train import train_models

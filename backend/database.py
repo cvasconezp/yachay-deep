@@ -34,6 +34,10 @@ def upgrade_tables():
     from sqlalchemy import inspect, text
 
     # Mapa tabla → columnas nuevas a agregar si no existen
+    # Las tablas nuevas (escuelas_practica, practicas_preprofesionales) se crean
+    # automáticamente por create_tables() ya que están registradas en models/__init__.py.
+    # Aquí solo gestionamos ALTER TABLE para columnas nuevas en tablas existentes.
+
     new_columns: dict[str, list[tuple[str, str]]] = {
         "students": [
             ("whatsapp",       "VARCHAR"),
