@@ -1585,19 +1585,17 @@ export default function FichaEstudiante() {
             <div className="flex-1 overflow-hidden flex flex-col">
 
               {/* Barra de info: Datos Académicos | Centro de Apoyo (EIB) | Nivel */}
-              <SectionHeader>
-                <span className="flex items-center gap-4">
-                  <span>Datos académicos</span>
-                  {isEIB && (
-                    <span className="font-normal text-[9px] text-[#1B3A6B]/60 normal-case tracking-normal">
-                      Centro de apoyo: <strong className="text-[#1B3A6B] font-semibold">{sedeDisplay}</strong>
-                    </span>
-                  )}
-                  <span className="font-normal text-[9px] text-[#1B3A6B]/60 normal-case tracking-normal">
-                    Nivel: <strong className="text-[#1B3A6B] font-semibold">{formatNivel(ficha.nivel_academico, ficha.calificaciones, ficha.calificaciones_historicas) || "—"}</strong>
+              <div className="bg-[#1B3A6B] text-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider flex items-center gap-4">
+                <span>Datos académicos</span>
+                {isEIB && (
+                  <span className="font-normal text-[9px] text-white/60 normal-case tracking-normal">
+                    Centro de apoyo: <strong className="text-white font-semibold">{sedeDisplay}</strong>
                   </span>
+                )}
+                <span className="font-normal text-[9px] text-white/60 normal-case tracking-normal">
+                  Nivel: <strong className="text-white font-semibold">{formatNivel(ficha.nivel_academico, ficha.calificaciones, ficha.calificaciones_historicas) || "—"}</strong>
                 </span>
-              </SectionHeader>
+              </div>
 
               {/* Tabla de cursos AVAC activos — semestre actual (primera mano) */}
               {Object.keys(cursos).length > 0 && (
