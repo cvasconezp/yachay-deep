@@ -257,7 +257,7 @@ class MallaIntento(BaseModel):
     """Un intento de cursar una asignatura (un registro en un período)."""
     periodo: Optional[str] = None
     nota: Optional[float] = None
-    estado: str  # aprobada | reprobada | en_proceso | cursando
+    estado: str  # aprobada | reprobada | cursando
 
 class MallaAsignatura(BaseModel):
     """Una asignatura dentro de la malla canónica."""
@@ -265,7 +265,7 @@ class MallaAsignatura(BaseModel):
     nivel_canonico: int
     intentos: list[MallaIntento] = []
     nota_vigente: Optional[float] = None
-    estado: str  # aprobada | reprobada | en_proceso | cursando | no_cursado
+    estado: str  # aprobada | reprobada | cursando | no_cursado
     es_repeticion: bool = False
     num_intentos: int = 0
 
@@ -668,8 +668,6 @@ def _build_malla_canonica(
                 nota = g.nota_final
                 if nota is not None and nota >= 70:
                     est = "aprobada"
-                elif nota is not None and nota >= 60:
-                    est = "en_proceso"
                 elif nota is not None:
                     est = "reprobada"
                 else:
@@ -694,7 +692,7 @@ def _build_malla_canonica(
                     total_aprobadas += 1
                 elif estado_final == "cursando":
                     total_cursando += 1
-                elif estado_final in ("reprobada", "en_proceso"):
+                elif estado_final == "reprobada":
                     total_reprobadas += 1
 
             num_intentos = len(intentos)
