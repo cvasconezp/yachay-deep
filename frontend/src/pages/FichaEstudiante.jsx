@@ -1429,22 +1429,36 @@ export default function FichaEstudiante() {
 
             {/* ─── COLUMNA IZQUIERDA (colapsable) ─── */}
             <div
-              className="flex-shrink-0 bg-white transition-all duration-300 overflow-hidden"
-              style={{ width: sidebarCollapsed ? "36px" : "300px" }}
+              className="flex-shrink-0 bg-white transition-all duration-300 overflow-hidden relative"
+              style={{ width: sidebarCollapsed ? "28px" : "300px" }}
             >
-              {/* Botón colapsar/expandir */}
-              <button
-                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                className="w-full flex items-center justify-center gap-1 py-1.5 bg-blue-50 hover:bg-blue-100 text-[#1B3A6B] transition-colors border-b border-gray-200"
-                title={sidebarCollapsed ? "Expandir datos personales" : "Minimizar datos personales"}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className={`w-3.5 h-3.5 transition-transform ${sidebarCollapsed ? "" : "rotate-180"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                </svg>
-                {!sidebarCollapsed && <span className="text-[10px] font-medium">Minimizar</span>}
-              </button>
+              {/* Collapsed state: vertical tab with label */}
+              {sidebarCollapsed && (
+                <button
+                  onClick={() => setSidebarCollapsed(false)}
+                  className="absolute inset-0 w-full h-full flex flex-col items-center justify-center gap-2 bg-gradient-to-b from-[#1B3A6B] to-[#24477a] hover:from-[#24477a] hover:to-[#2d5594] text-white cursor-pointer transition-all"
+                  title="Expandir datos del estudiante"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 opacity-80" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                  </svg>
+                  <span className="text-[9px] font-semibold tracking-widest uppercase" style={{ writingMode: "vertical-lr" }}>Datos del estudiante</span>
+                </button>
+              )}
 
               {!sidebarCollapsed && (<>
+
+              {/* Header con botón de minimizar integrado */}
+              <button
+                onClick={() => setSidebarCollapsed(true)}
+                className="w-full flex items-center justify-between px-3 py-1.5 bg-[#1B3A6B] text-white hover:bg-[#24477a] transition-colors"
+                title="Minimizar datos del estudiante"
+              >
+                <span className="text-[10px] font-bold uppercase tracking-wider">Datos del estudiante</span>
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
 
               {/* Datos personales */}
               <SectionHeader>Datos personales</SectionHeader>
@@ -1529,8 +1543,8 @@ export default function FichaEstudiante() {
                 </tbody>
               </table>
 
-              {/* Datos socioeconómicos */}
-              <SectionHeader>Estado académico</SectionHeader>
+              {/* Estado socioeconómico */}
+              <SectionHeader>Estado socioeconómico</SectionHeader>
               <table className="w-full border-collapse">
                 <tbody>
                   <tr className={ficha.estado_matricula === "Matriculado" ? "bg-green-50" : "bg-red-50"}>
