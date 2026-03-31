@@ -932,7 +932,11 @@ def transform_datos_especificos(carpeta_o_archivos) -> pd.DataFrame:
             # La hoja de datos se llama 'Sheet1'; si no existe, leer la primera
             xl = pd.ExcelFile(archivo, engine="openpyxl")
             sheet = "Sheet1" if "Sheet1" in xl.sheet_names else xl.sheet_names[0]
-            df = xl.parse(sheet)
+            # Leer cédula como string para preservar ceros iniciales
+            cedula_cols = [c for c in xl.parse(sheet, nrows=0).columns
+                           if "cédula" in c.lower() or "cedula" in c.lower()]
+            dtype_map = {c: str for c in cedula_cols}
+            df = xl.parse(sheet, dtype=dtype_map if dtype_map else None)
             df["_fuente"] = archivo.name
             dfs.append(df)
             logger.info(f"  DatosEspecificos leído: {archivo.name} ({len(df)} filas)")
@@ -962,7 +966,12 @@ def transform_datos_especificos(carpeta_o_archivos) -> pd.DataFrame:
             if val is None or pd.isna(val):
                 return None
             s = str(val).strip().split(".")[0]
-            return s if s.isdigit() else None
+            if not s.isdigit():
+                return None
+            # Cédulas ecuatorianas tienen 10 dígitos; restaurar 0 inicial si Excel lo eliminó
+            if len(s) == 9:
+                s = s.zfill(10)
+            return s
         df["cedula"] = df[col_cedula].apply(_limpiar_cedula)
     else:
         df["cedula"] = None

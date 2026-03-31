@@ -46,10 +46,14 @@ def _clean_amie(val) -> str:
 
 
 def _clean_cedula(val) -> str:
-    """Limpia cédula: quita .0, espacios."""
+    """Limpia cédula: quita .0, espacios y rellena con 0 a la izquierda hasta 10 dígitos."""
     s = _clean(val)
     s = re.sub(r"\.0$", "", s)
-    return s.strip()
+    s = s.strip()
+    # Cédulas ecuatorianas tienen 10 dígitos; si Excel eliminó el 0 inicial, restaurarlo
+    if s.isdigit() and len(s) == 9:
+        s = s.zfill(10)
+    return s
 
 
 def _parse_nivel_practica(nivel_y_practica: str) -> tuple[str, str]:
@@ -151,7 +155,7 @@ def load_formularios_practicas(data_path: str) -> pd.DataFrame:
     periodo = f"P{match.group(1)}" if match else None
 
     try:
-        df = pd.read_excel(form_file, sheet_name="Formularios", engine="openpyxl")
+        df = pd.read_excel(form_file, sheet_name="Formularios", engine="openpyxl", dtype={"ID ESTUDIANTE": str})
     except Exception as e:
         logger.error("Error leyendo formularios de prácticas %s: %s", form_file, e)
         return pd.DataFrame()

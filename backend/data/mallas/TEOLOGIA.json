@@ -1,73 +1,73 @@
 {
-  "carrera": "TEOLOGÍA",
-  "modalidad": "En Línea",
+  "carrera": "Teología",
+  "modalidad": "En línea",
   "sede": "Matriz Cuenca",
   "total_niveles": 8,
   "total_asignaturas": 47,
-  "fuente": "Malla Curricular Oficial UPS - Teología",
+  "fuente": "Malla curricular oficial UPS - Teología",
   "niveles": {
     "1": [
-      "PROBLEMAS DE LA HISTORIA DE LA FILOSOFÍA",
-      "INTRODUCCIÓN A LA BIBLIA",
-      "FENOMENOLOGÍA DE LA RELIGIÓN",
-      "TEORÍA DEL CONOCIMIENTO",
-      "COMUNICACIÓN ORAL Y ESCRITA",
-      "INTRODUCCIÓN A LA TEOLOGÍA"
+      "Problemas de la historia de la filosofía",
+      "Introducción a la Biblia",
+      "Fenomenología de la religión",
+      "Teoría del conocimiento",
+      "Comunicación oral y escrita",
+      "Introducción a la teología"
     ],
     "2": [
-      "ANTROPOLOGÍA FILOSÓFICA",
-      "PENSAMIENTO CRÍTICO",
-      "PENTATEUCO Y LIBROS HISTÓRICOS",
-      "ONTOLOGÍA",
-      "GRIEGO I",
-      "TEOLOGÍA FUNDAMENTAL"
+      "Antropología filosófica",
+      "Pensamiento crítico",
+      "Pentateuco y libros históricos",
+      "Ontología",
+      "Griego I",
+      "Teología fundamental"
     ],
     "3": [
-      "ANTROPOLOGÍA TEOLÓGICA",
-      "SAPIENCIALES Y POÉTICOS",
-      "PSICOLOGÍA GENERAL Y PASTORAL",
-      "HISTORIA DE LAS RELIGIONES Y ECUMENISMO",
-      "PROFETAS",
-      "GRIEGO II"
+      "Antropología teológica",
+      "Sapienciales y poéticos",
+      "Psicología general y pastoral",
+      "Historia de las religiones y ecumenismo",
+      "Profetas",
+      "Griego II"
     ],
     "4": [
-      "PATRÍSTICA",
-      "MISIONOLOGÍA",
-      "SINÓPTICOS Y HECHOS",
-      "HISTORIA DE LA IGLESIA ANTIGUA Y MEDIEVAL",
-      "DOCTRINA SOCIAL DE LA IGLESIA"
+      "Patrística",
+      "Misionología",
+      "Sinópticos y Hechos",
+      "Historia de la Iglesia antigua y medieval",
+      "Doctrina social de la Iglesia"
     ],
     "5": [
-      "CRISTOLOGÍA",
-      "LITERATURA JOÁNICA",
-      "HISTORIA DE LA IGLESIA MODERNA Y CONTEMPORÁNEA",
-      "TEOLOGÍA SACRAMENTAL I: SACRAMENTOS DE INICIACIÓN",
-      "HISTORIA DE LA IGLESIA LATINOAMERICANA Y ECUATORIANA",
-      "LITERATURA PAULINA Y CARTAS CATÓLICAS"
+      "Cristología",
+      "Literatura joánica",
+      "Historia de la Iglesia moderna y contemporánea",
+      "Teología sacramental I: sacramentos de iniciación",
+      "Historia de la Iglesia latinoamericana y ecuatoriana",
+      "Literatura paulina y cartas católicas"
     ],
     "6": [
-      "REVELACIÓN TRINITARIA",
-      "TEOLOGÍA LATINOAMERICANA",
-      "DIDÁCTICA GENERAL",
-      "MARIOLOGÍA",
-      "TEOLOGÍA SACRAMENTAL II: SACRAMENTOS DE CURACIÓN Y SERVICIO",
-      "INVESTIGACIÓN",
-      "MORAL FUNDAMENTAL",
-      "FUNDAMENTOS DE LA PEDAGOGÍA RELIGIOSA"
+      "Revelación trinitaria",
+      "Teología latinoamericana",
+      "Didáctica general",
+      "Mariología",
+      "Teología sacramental II: sacramentos de curación y servicio",
+      "Investigación",
+      "Moral fundamental",
+      "Fundamentos de la pedagogía religiosa"
     ],
     "7": [
-      "LITURGIA",
-      "PRÁCTICAS DE SERVICIO COMUNITARIO I",
-      "DERECHO CANÓNICO",
-      "ECLESIOLOGÍA",
-      "PRÁCTICAS PRE PROFESIONALES: PLANEACIÓN PASTORAL"
+      "Liturgia",
+      "Prácticas de servicio comunitario I",
+      "Derecho canónico",
+      "Eclesiología",
+      "Prácticas pre profesionales: planeación pastoral"
     ],
     "8": [
-      "ESCATOLOGÍA",
-      "PLANIFICACIÓN PASTORAL",
-      "INTEGRACIÓN CURRICULAR",
-      "PRÁCTICAS DE SERVICIO COMUNITARIO II",
-      "TEOLOGÍA PASTORAL"
+      "Escatología",
+      "Planificación pastoral",
+      "Integración curricular",
+      "Prácticas de servicio comunitario II",
+      "Teología pastoral"
     ]
   }
 }
