@@ -666,16 +666,14 @@ def _build_malla_canonica(
             intentos = []
             for g in sorted(grades, key=lambda x: x.periodo or "Z999"):
                 nota = g.nota_final
-                if g.periodo is None:
-                    # Semestre actual → cursando
-                    est = "cursando"
-                elif nota is not None and nota >= 70:
+                if nota is not None and nota >= 70:
                     est = "aprobada"
                 elif nota is not None and nota >= 60:
                     est = "en_proceso"
                 elif nota is not None:
                     est = "reprobada"
                 else:
+                    # Matriculado pero sin nota aún → cursando
                     est = "cursando"
                 intentos.append(MallaIntento(
                     periodo=g.periodo,
