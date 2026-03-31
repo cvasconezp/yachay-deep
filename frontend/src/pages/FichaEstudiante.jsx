@@ -1584,21 +1584,20 @@ export default function FichaEstudiante() {
             {/* ─── SECCIÓN DERECHA ─── */}
             <div className="flex-1 overflow-hidden flex flex-col">
 
-              {/* Barra de info: sede (solo EIB) / nivel / carrera */}
-              <div className="flex divide-x divide-white/20 bg-[#1B3A6B] text-white">
-                {isEIB && (
-                  <div className="px-3 py-1.5 text-center flex-1">
-                    <div className="text-[9px] opacity-50 uppercase tracking-wider">Centro de Apoyo</div>
-                    <div className="text-xs font-semibold mt-0.5">{sedeDisplay}</div>
-                  </div>
-                )}
-                <div className="px-3 py-1.5 text-center flex-1">
-                  <div className="text-[9px] opacity-50 uppercase tracking-wider">Nivel</div>
-                  <div className="text-xs font-semibold mt-0.5">
-                    {formatNivel(ficha.nivel_academico, ficha.calificaciones, ficha.calificaciones_historicas) || "—"}
-                  </div>
-                </div>
-              </div>
+              {/* Barra de info: Datos Académicos | Centro de Apoyo (EIB) | Nivel */}
+              <SectionHeader>
+                <span className="flex items-center gap-4">
+                  <span>Datos académicos</span>
+                  {isEIB && (
+                    <span className="font-normal text-[9px] text-[#1B3A6B]/60 normal-case tracking-normal">
+                      Centro de apoyo: <strong className="text-[#1B3A6B] font-semibold">{sedeDisplay}</strong>
+                    </span>
+                  )}
+                  <span className="font-normal text-[9px] text-[#1B3A6B]/60 normal-case tracking-normal">
+                    Nivel: <strong className="text-[#1B3A6B] font-semibold">{formatNivel(ficha.nivel_academico, ficha.calificaciones, ficha.calificaciones_historicas) || "—"}</strong>
+                  </span>
+                </span>
+              </SectionHeader>
 
               {/* Tabla de cursos AVAC activos — semestre actual (primera mano) */}
               {Object.keys(cursos).length > 0 && (

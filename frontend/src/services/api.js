@@ -204,7 +204,7 @@ class ApiClient {
   }
 
   // ── Export ──
-  exportFichaPDF(studentId) { return this.get(`/export/ficha/${studentId}/pdf`); }
+  exportFichaPDF(studentId) { return this.getBlob(`/export/ficha/${studentId}/pdf`); }
   getExportColumnas() { return this.get("/export/columnas-disponibles"); }
   exportEstudiantesExcel(params) {
     const qs = new URLSearchParams(params).toString();
