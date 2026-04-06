@@ -1750,6 +1750,69 @@ export default function FichaEstudiante() {
                           </tr>
                         );
                       })}
+                      {/* Materias matriculadas (enrollment) sin AVAC ni calificación */}
+                      {ficha.enrollments?.length > 0 && (() => {
+                        // Deduplicar enrollments
+                        const seenEnr = {};
+                        const uniqEnr = [];
+                        ficha.enrollments.forEach(enr => {
+                          const key = (enr.asignatura || "").toUpperCase().trim();
+                          const isPrac = (enr.nombre_grupo || "").toUpperCase().includes("PRÁCTICA") || (enr.nombre_grupo || "").toUpperCase().includes("PRACTICA");
+                          if (!seenEnr[key]) { seenEnr[key] = { enr, isPrac }; uniqEnr.push(enr); }
+                          else if (seenEnr[key].isPrac && !isPrac) {
+                            const i = uniqEnr.indexOf(seenEnr[key].enr);
+                            if (i >= 0) uniqEnr[i] = enr;
+                            seenEnr[key] = { enr, isPrac };
+                          }
+                        });
+                        // Filtrar solo las que NO están ya cubiertas por AVAC ni calificaciones
+                        const avacNames = new Set();
+                        Object.values(cursos).forEach(({ acceso, tareas: ts }) => {
+                          const nm = (acceso?.nombre_curso || ts[0]?.nombre_curso || "").toUpperCase().replace(/\s+/g, " ").trim();
+                          if (nm) avacNames.add(nm);
+                        });
+                        const calNames = new Set((ficha.calificaciones || []).map(c => (c.asignatura || "").toUpperCase().replace(/\s+/g, " ").trim()));
+                        const missing = uniqEnr.filter(enr => {
+                          const nm = (enr.asignatura || "").toUpperCase().replace(/\s+/g, " ").trim();
+                          // Check if it's covered by AVAC or calificaciones (fuzzy: check containment)
+                          for (const an of avacNames) { if (an.includes(nm) || nm.includes(an)) return false; }
+                          for (const cn of calNames) { if (cn.includes(nm) || nm.includes(cn)) return false; }
+                          return true;
+                        });
+                        const baseIdx = Object.keys(cursos).length + (ficha.calificaciones?.length || 0);
+                        return missing.map((enr, idx) => (
+                          <tr key={`enr-${idx}`} className={(baseIdx + idx) % 2 === 0 ? "bg-white" : "bg-[#F9F9F9]"}>
+                            <td className="px-2 py-1 border border-gray-200 text-center text-[11px] text-gray-500 whitespace-nowrap">
+                              {enr.nivel ? <>{enr.nivel}° Nivel</> : "—"}
+                            </td>
+                            <td className="px-2 py-1 border border-gray-200 font-medium text-gray-800">
+                              {toTitleCase(enr.asignatura)}
+                            </td>
+                            <td className="px-2 py-1 border border-gray-200 text-center">
+                              <span className="text-amber-600 font-semibold text-[10px]">Cursando</span>
+                            </td>
+                            <td className="px-2 py-1 border border-gray-200 text-center text-[11px] text-gray-500">
+                              {enr.numero_repitencias != null
+                                ? <span className={`px-1 rounded text-[10px] font-semibold ${enr.numero_repitencias > 1 ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-gray-700"}`}>
+                                    {enr.numero_repitencias}
+                                  </span>
+                                : "—"}
+                            </td>
+                            <td className="px-2 py-1 border border-gray-200 text-center">
+                              <span className="text-[10px] text-gray-300 italic">Sin AVAC</span>
+                            </td>
+                            <td className="px-2 py-1 border border-gray-200">
+                              <span className="text-[10px] text-gray-300 italic">—</span>
+                            </td>
+                            <td className="px-2 py-1 border border-gray-200 text-center">
+                              <span className="text-gray-300">—</span>
+                            </td>
+                            <td className="px-2 py-1 border border-gray-200 text-gray-600 text-[11px]">
+                              {toTitleCase(enr.docente) || <span className="text-gray-300 italic">—</span>}
+                            </td>
+                          </tr>
+                        ));
+                      })()}
                     </tbody>
                   </table>
                 </div>

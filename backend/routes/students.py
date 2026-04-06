@@ -43,8 +43,11 @@ def _strip_accents(text: str) -> str:
 
 
 def _normalize_asig(name: str) -> str:
-    """Normaliza nombre de asignatura: upper, colapsa whitespace/newlines."""
-    return re.sub(r"\s+", " ", name.strip().upper())
+    """Normaliza nombre de asignatura: upper, colapsa whitespace/newlines,
+    elimina artefactos de Excel (_x000d_, _x000a_)."""
+    clean = re.sub(r"_x[0-9a-fA-F]{4}_", " ", name)  # artefactos Excel
+    clean = re.sub(r"[\r\n]+", " ", clean)              # newlines
+    return re.sub(r"\s+", " ", clean.strip().upper())
 
 
 def _career_to_filename(carrera_upper: str) -> str:
@@ -729,19 +732,29 @@ def _build_malla_canonica(
                 self.periodo = periodo
                 self.nota_final = None
 
+        def _find_canon_key(enr_key: str) -> str | None:
+            """Busca la clave canónica que mejor corresponde a un enrollment."""
+            if enr_key in canonical:
+                return enr_key
+            # Match por contenido: la clave más larga que sea substring o viceversa
+            best = None
+            best_len = 0
+            for ck in canonical:
+                # Comparar: si uno contiene al otro (tolerante a nombres largos del reporte)
+                if ck in enr_key or enr_key in ck:
+                    overlap = min(len(ck), len(enr_key))
+                    if overlap > best_len:
+                        best = ck
+                        best_len = overlap
+            return best
+
         for key_enr, enr in seen_enr.items():
-            # Buscar si esta asignatura ya está en el mapa (por nombre canónico)
-            if key_enr not in student_grades_map:
-                # Intentar match fuzzy contra claves canónicas
-                matched = False
-                for canon_key in canonical:
-                    if canon_key == key_enr:
-                        matched = True
-                        break
-                if not matched:
-                    # Agregar igualmente por si la malla lo encuentra
-                    pass
-                student_grades_map[key_enr] = [
+            # Buscar si ya tiene grade (exacta o por clave canónica)
+            canon_match = _find_canon_key(key_enr)
+            target_key = canon_match or key_enr
+
+            if target_key not in student_grades_map:
+                student_grades_map[target_key] = [
                     _SyntheticGrade(enr.asignatura, enr.periodo or "actual")
                 ]
 

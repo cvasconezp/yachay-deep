@@ -1348,9 +1348,15 @@ def transform_enrollments(carpeta_o_archivos) -> pd.DataFrame:
     else:
         df["codigo_asignatura"] = None
 
-    # Asignatura
+    # Asignatura (limpiar artefactos Excel _x000d_ / _x000a_)
     if "ASIGNATURA" in df.columns:
-        df["asignatura"] = df["ASIGNATURA"].astype(str).str.strip()
+        df["asignatura"] = (
+            df["ASIGNATURA"].astype(str)
+            .str.replace(r"_x[0-9a-fA-F]{4}_", " ", regex=True)
+            .str.replace(r"[\r\n]+", " ", regex=True)
+            .str.replace(r"\s+", " ", regex=True)
+            .str.strip()
+        )
     else:
         df["asignatura"] = None
     df = df[df["asignatura"].notna() & (df["asignatura"] != "")]
@@ -1373,9 +1379,14 @@ def transform_enrollments(carpeta_o_archivos) -> pd.DataFrame:
     else:
         df["nivel"] = None
 
-    # Nombre grupo
+    # Nombre grupo (limpiar artefactos Excel)
     if "NOMBRE_GRUPO" in df.columns:
-        df["nombre_grupo"] = df["NOMBRE_GRUPO"].astype(str).str.strip()
+        df["nombre_grupo"] = (
+            df["NOMBRE_GRUPO"].astype(str)
+            .str.replace(r"_x[0-9a-fA-F]{4}_", " ", regex=True)
+            .str.replace(r"\s+", " ", regex=True)
+            .str.strip()
+        )
     else:
         df["nombre_grupo"] = None
 
