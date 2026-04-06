@@ -77,6 +77,43 @@ class ETLPipeline:
             .first()
         )
 
+    def _auto_activate_semester(self, sem_label: str, logs: list) -> bool:
+        """
+        Auto-detecta y activa un nuevo período desde el reporte.
+        Si el período del reporte (ej. P68) no coincide con el semestre activo,
+        desactiva el anterior y crea/activa el nuevo.
+        Retorna True si se activó un nuevo semestre.
+        """
+        current = self._get_active_semester()
+        if current and current.semestre == sem_label:
+            return False  # ya es el semestre activo
+
+        # Desactivar todos los semestres anteriores
+        self.db.query(SemesterConfig).filter(
+            SemesterConfig.activo == True
+        ).update({"activo": False})
+
+        # Buscar o crear el nuevo semestre
+        new_sem = self.db.query(SemesterConfig).filter(
+            SemesterConfig.semestre == sem_label
+        ).first()
+        if not new_sem:
+            new_sem = SemesterConfig(
+                semestre=sem_label,
+                activo=True,
+                bloque_actual="1",
+                bloque1_inicio=datetime.now(timezone.utc),
+            )
+            self.db.add(new_sem)
+            logs.append(f"  🆕 Nuevo semestre {sem_label} creado y activado automáticamente")
+        else:
+            new_sem.activo = True
+            logs.append(f"  🔄 Semestre {sem_label} activado automáticamente")
+
+        self.db.flush()
+        logger.info("SemesterConfig auto-activado: %s", sem_label)
+        return True
+
     def _get_codigos_for_bloque(self, semconfig: Optional[SemesterConfig]) -> Optional[List[str]]:
         """
         Devuelve lista de códigos AVAC activos para el bloque actual.
@@ -295,6 +332,17 @@ class ETLPipeline:
                     logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Cargando asignaturas matriculadas ({len(df_enrollments)} registros)...")
                     n_enrollments = self._upsert_enrollments(df_enrollments)
                     logs.append(f"  → {n_enrollments} asignaturas matriculadas cargadas")
+
+                    # Auto-detectar y activar nuevo período desde el reporte
+                    periodo_reporte = df_enrollments["periodo"].dropna().mode()
+                    if not periodo_reporte.empty:
+                        periodo_str = str(int(periodo_reporte.iloc[0]))
+                        sem_label = f"P{periodo_str}"
+                        updated = self._auto_activate_semester(sem_label, logs)
+                        if updated:
+                            # Refrescar semconfig para el resto del pipeline
+                            semconfig = self._get_active_semester()
+                            semestre_vigente = True
             except Exception as e:
                 logs.append(f"  ⚠ Error cargando enrollments: {e}")
                 logger.error(f"Error en _upsert_enrollments: {e}", exc_info=True)

@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, distinct
 
 from ...database import get_db
-from ...models import Student, Grade, Intervention
+from ...models import Student, Grade, Intervention, Enrollment
 from ...auth.jwt import get_current_user
 from ...models.user import User
 from ._helpers import apply_periodo_filter
@@ -24,14 +24,31 @@ def get_periodos_disponibles(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Lista de períodos disponibles en calificaciones."""
+    """Lista de períodos disponibles en calificaciones y enrollments."""
+    # Períodos de calificaciones
     periodos_raw = db.query(Grade.periodo).distinct().all()
-    periodos = []
+    periodos_set = set()
+    has_null = False
     for (p,) in periodos_raw:
         if p is None:
-            periodos.append({"key": "actual", "label": "Semestre actual"})
+            has_null = True
         else:
-            periodos.append({"key": p, "label": p})
+            periodos_set.add(p)
+
+    # Períodos de enrollments (matrícula) — incluir aunque no haya grades
+    enrollment_periodos = db.query(Enrollment.periodo).distinct().all()
+    for (p,) in enrollment_periodos:
+        if p is not None:
+            # Normalizar: el reporte usa "68", el dashboard muestra "P68"
+            p_str = str(p).strip()
+            p_key = p_str if p_str.startswith("P") else f"P{p_str}"
+            periodos_set.add(p_key)
+
+    periodos = []
+    if has_null:
+        periodos.append({"key": "actual", "label": "Semestre actual"})
+    for p in periodos_set:
+        periodos.append({"key": p, "label": p})
     periodos.sort(key=lambda x: ("0" if x["key"] == "actual" else "1" + x["key"]), reverse=True)
     periodos.reverse()
     return periodos

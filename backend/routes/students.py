@@ -617,6 +617,36 @@ def _get_canonical_for_career(db: Session, carrera: str) -> dict[str, int]:
             if total_apariciones >= min_apariciones and asig_upper not in canonical:
                 canonical[asig_upper] = counter.most_common(1)[0][0]
 
+    # ── Prioridad 3: Inferencia desde Enrollments (matrícula sin grades) ──
+    # Para carreras nuevas o estudiantes sin histórico, usar asignaturas
+    # matriculadas como fuente de la malla canónica.
+    if not canonical:
+        from ..models import Enrollment as EnrollmentModel
+        enrollment_asigs = (
+            db.query(EnrollmentModel.asignatura, EnrollmentModel.nivel)
+            .filter(
+                func.upper(EnrollmentModel.carrera) == carrera_key,
+                EnrollmentModel.nivel.isnot(None),
+                EnrollmentModel.nivel >= 1,
+            )
+            .distinct()
+            .all()
+        )
+        if enrollment_asigs:
+            enr_nivel_counts: dict[str, Counter] = {}
+            for asig, nivel in enrollment_asigs:
+                asig_upper = _normalize_asig(asig)
+                # Filtrar PRÁCTICA duplicadas
+                if "PRÁCTICA" in asig_upper or "PRACTICA" in asig_upper:
+                    continue
+                if asig_upper not in enr_nivel_counts:
+                    enr_nivel_counts[asig_upper] = Counter()
+                enr_nivel_counts[asig_upper][nivel] += 1
+            for asig_upper, counter in enr_nivel_counts.items():
+                if asig_upper not in canonical:
+                    canonical[asig_upper] = counter.most_common(1)[0][0]
+            logger.info("Malla desde enrollments para %s: +%d asignaturas", carrera_key, len(canonical))
+
     elapsed = time.time() - t0
     logger.info("Malla canónica para %s: %d asignaturas en %.2fs", carrera_key, len(canonical), elapsed)
 
