@@ -223,6 +223,19 @@ def update_semester(semestre: str, payload: SemesterConfigUpdate, db: Session = 
     return s
 
 
+@router.delete("/semester/{semestre}", dependencies=[Depends(require_admin)])
+def delete_semester(semestre: str, db: Session = Depends(get_db)):
+    """Elimina un semestre. No se permite eliminar el semestre activo."""
+    s = db.query(SemesterConfig).filter(SemesterConfig.semestre == semestre).first()
+    if not s:
+        raise HTTPException(status_code=404, detail="Semestre no encontrado")
+    if s.activo:
+        raise HTTPException(status_code=400, detail="No se puede eliminar el semestre activo. Desactívalo primero.")
+    db.delete(s)
+    db.commit()
+    return {"deleted": semestre}
+
+
 @router.post("/semester/deactivate-all", dependencies=[Depends(require_admin)])
 def deactivate_all_semesters(db: Session = Depends(get_db)):
     """Desactiva todos los semestres. Útil al finalizar un período académico

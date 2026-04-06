@@ -812,6 +812,17 @@ function TabSemestre() {
     }
   };
 
+  const handleDelete = async (semestre) => {
+    if (!window.confirm(`¿Eliminar el semestre "${semestre}"? Esta acción no se puede deshacer.`)) return;
+    try {
+      await api.delete(`/courses/semester/${semestre}`);
+      setMsg(`Semestre ${semestre} eliminado`);
+      loadSemesters();
+    } catch (err) {
+      setMsg("Error: " + (err?.response?.data?.detail || err.message));
+    }
+  };
+
   const handleDeactivateAll = async () => {
     if (!window.confirm("Esto desactivará todos los semestres y detendrá el scraping diario. ¿Continuar?")) return;
     try {
@@ -886,10 +897,17 @@ function TabSemestre() {
                   <span className="text-gray-500 text-xs">Bloque {s.bloque_actual}</span>
                   <div className="flex items-center gap-2 ml-auto">
                     {!s.activo && (
-                      <button onClick={() => handleActivate(s.semestre)}
-                        className="text-xs px-2 py-1 rounded bg-brand text-white hover:bg-brand-light">
-                        Activar
-                      </button>
+                      <>
+                        <button onClick={() => handleActivate(s.semestre)}
+                          className="text-xs px-2 py-1 rounded bg-brand text-white hover:bg-brand-light">
+                          Activar
+                        </button>
+                        <button onClick={() => handleDelete(s.semestre)}
+                          className="text-xs px-2 py-1 rounded border border-red-300 text-red-600 hover:bg-red-50"
+                          title="Eliminar semestre">
+                          Eliminar
+                        </button>
+                      </>
                     )}
                     <button onClick={() => handleSetBloque(s.semestre, "1")}
                       className={`text-xs px-2 py-1 rounded border ${s.bloque_actual === "1" ? "border-blue-500 text-blue-700 bg-blue-50" : "border-gray-300 text-gray-600 hover:bg-gray-50"}`}>

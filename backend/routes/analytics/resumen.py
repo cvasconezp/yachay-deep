@@ -24,33 +24,39 @@ def get_periodos_disponibles(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Lista de períodos disponibles en calificaciones y enrollments."""
-    # Períodos de calificaciones
-    periodos_raw = db.query(Grade.periodo).distinct().all()
-    periodos_set = set()
+    """Lista de períodos disponibles en calificaciones, enrollments y semestres."""
+    from ...models.course_config import SemesterConfig
+
+    def _norm(val: str) -> str:
+        """Normaliza un periodo a formato 'P##'."""
+        v = str(val).strip()
+        return v if v.startswith("P") else f"P{v}"
+
+    periodos_set: set[str] = set()
     has_null = False
-    for (p,) in periodos_raw:
+
+    # 1. Períodos de calificaciones
+    for (p,) in db.query(Grade.periodo).distinct().all():
         if p is None:
             has_null = True
         else:
-            periodos_set.add(p)
+            periodos_set.add(_norm(p))
 
-    # Períodos de enrollments (matrícula) — incluir aunque no haya grades
-    enrollment_periodos = db.query(Enrollment.periodo).distinct().all()
-    for (p,) in enrollment_periodos:
+    # 2. Períodos de enrollments (matrícula)
+    for (p,) in db.query(Enrollment.periodo).distinct().all():
         if p is not None:
-            # Normalizar: el reporte usa "68", el dashboard muestra "P68"
-            p_str = str(p).strip()
-            p_key = p_str if p_str.startswith("P") else f"P{p_str}"
-            periodos_set.add(p_key)
+            periodos_set.add(_norm(p))
+
+    # 3. Semestres configurados (siempre visibles aunque no tengan grades aún)
+    for (s,) in db.query(SemesterConfig.semestre).all():
+        if s is not None:
+            periodos_set.add(_norm(s))
 
     periodos = []
     if has_null:
         periodos.append({"key": "actual", "label": "Semestre actual"})
-    for p in periodos_set:
+    for p in sorted(periodos_set):
         periodos.append({"key": p, "label": p})
-    periodos.sort(key=lambda x: ("0" if x["key"] == "actual" else "1" + x["key"]), reverse=True)
-    periodos.reverse()
     return periodos
 
 

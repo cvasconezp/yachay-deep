@@ -316,12 +316,17 @@ def interventions_dashboard(
     from sqlalchemy import func, distinct
 
     # --- Filtro por período: solo intervenciones de estudiantes del período ---
+    from sqlalchemy import or_
     pf = periodo if periodo else "actual"
     period_sq = db.query(Grade.student_id).distinct()
     if pf == "actual":
         period_sq = period_sq.filter(Grade.periodo.is_(None))
     elif pf != "todos":
-        period_sq = period_sq.filter(Grade.periodo == pf)
+        # Buscar tanto "P68" como "68" para cubrir datos no normalizados
+        if pf.startswith("P"):
+            period_sq = period_sq.filter(or_(Grade.periodo == pf, Grade.periodo == pf[1:]))
+        else:
+            period_sq = period_sq.filter(or_(Grade.periodo == pf, Grade.periodo == f"P{pf}"))
 
     # --- Query principal: intervenciones + datos de estudiante ---
     query = (
