@@ -135,7 +135,7 @@ class ApiClient {
   getAsignaturaDetalle(asignatura, docente, periodo) {
     const params = new URLSearchParams();
     if (docente) params.set("docente", docente);
-    if (periodo && periodo !== "actual") params.set("periodo", periodo);
+    if (periodo) params.set("periodo", periodo);
     const qs = params.toString();
     return this.get(`/analytics/asignaturas/${encodeURIComponent(asignatura)}/detalle${qs ? "?" + qs : ""}`);
   }
@@ -145,7 +145,7 @@ class ApiClient {
   }
   getDocenteDetalle(docenteNombre, periodo) {
     const params = new URLSearchParams();
-    if (periodo && periodo !== "actual") params.set("periodo", periodo);
+    if (periodo) params.set("periodo", periodo);
     const qs = params.toString();
     return this.get(`/analytics/docentes/${encodeURIComponent(docenteNombre)}/detalle${qs ? "?" + qs : ""}`);
   }

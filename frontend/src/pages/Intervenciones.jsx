@@ -19,7 +19,7 @@ export default function Intervenciones() {
     estado: "",
     resultado: "",
     seguimiento: "",
-    periodo: "actual",
+    periodo: "",
   });
 
   // Edit modal
@@ -59,7 +59,7 @@ export default function Intervenciones() {
       if (filtros.estado) params.estado = filtros.estado;
       if (filtros.resultado) params.resultado = filtros.resultado;
       if (filtros.seguimiento) params.seguimiento = filtros.seguimiento;
-      if (filtros.periodo && filtros.periodo !== "actual") params.periodo = filtros.periodo;
+      if (filtros.periodo) params.periodo = filtros.periodo;
       const result = await api.getInterventionsDashboard(params);
       setData(result);
     } catch (e) {

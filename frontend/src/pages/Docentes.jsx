@@ -32,7 +32,7 @@ export default function Docentes() {
   const [carreras, setCarreras] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [filtros, setFiltros] = useState({ carrera: "", periodo: "actual" });
+  const [filtros, setFiltros] = useState({ carrera: "", periodo: "" });
   const [detalle, setDetalle] = useState(null);
   const [loadingDetalle, setLoadingDetalle] = useState(false);
   const navigate = useNavigate();
@@ -43,7 +43,7 @@ export default function Docentes() {
     try {
       const params = {};
       if (filtros.carrera) params.carrera = filtros.carrera;
-      if (filtros.periodo && filtros.periodo !== "actual") params.periodo = filtros.periodo;
+      if (filtros.periodo) params.periodo = filtros.periodo;
 
       const [data, carrerasData] = await Promise.all([
         api.getDocentesAnalytics(params),

@@ -24,7 +24,9 @@ def get_periodos_disponibles(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Lista de períodos disponibles en calificaciones, enrollments y semestres."""
+    """Lista de períodos disponibles en calificaciones, enrollments y semestres.
+    Devuelve ordenados de más reciente a más antiguo, con 'default' indicando
+    el período activo para preseleccionar en el frontend."""
     from ...models.course_config import SemesterConfig
 
     def _norm(val: str) -> str:
@@ -48,16 +50,28 @@ def get_periodos_disponibles(
             periodos_set.add(_norm(p))
 
     # 3. Semestres configurados (siempre visibles aunque no tengan grades aún)
-    for (s,) in db.query(SemesterConfig.semestre).all():
+    active_sem = None
+    for row in db.query(SemesterConfig.semestre, SemesterConfig.activo).all():
+        s, activo = row
         if s is not None:
-            periodos_set.add(_norm(s))
+            normed = _norm(s)
+            periodos_set.add(normed)
+            if activo:
+                active_sem = normed
+
+    # Ordenar descendente: P68, P67, P66, ... P57
+    sorted_keys = sorted(periodos_set, key=lambda x: x, reverse=True)
 
     periodos = []
-    if has_null:
-        periodos.append({"key": "actual", "label": "Semestre actual"})
-    for p in sorted(periodos_set):
+    for p in sorted_keys:
         periodos.append({"key": p, "label": p})
-    return periodos
+    if has_null:
+        periodos.append({"key": "actual", "label": "Semestre actual (sin periodo)"})
+
+    # Indicar el default: semestre activo, o el primero de la lista
+    default_key = active_sem or (sorted_keys[0] if sorted_keys else "actual")
+
+    return {"periodos": periodos, "default": default_key}
 
 
 @router.get("/resumen")

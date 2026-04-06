@@ -27,7 +27,7 @@ export default function Asignaturas() {
   const [carreras, setCarreras] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [filtros, setFiltros] = useState({ carrera: "", nivel: "", solo_criticas: false, periodo: "actual" });
+  const [filtros, setFiltros] = useState({ carrera: "", nivel: "", solo_criticas: false, periodo: "" });
   const [detalle, setDetalle] = useState(null);
   const [loadingDetalle, setLoadingDetalle] = useState(false);
   const navigate = useNavigate();
@@ -40,7 +40,7 @@ export default function Asignaturas() {
       if (filtros.carrera) params.carrera = filtros.carrera;
       if (filtros.nivel) params.nivel = filtros.nivel;
       if (filtros.solo_criticas) params.solo_criticas = true;
-      if (filtros.periodo && filtros.periodo !== "actual") params.periodo = filtros.periodo;
+      if (filtros.periodo) params.periodo = filtros.periodo;
 
       const [data, carrerasData] = await Promise.all([
         api.getAsignaturasAnalytics(params),

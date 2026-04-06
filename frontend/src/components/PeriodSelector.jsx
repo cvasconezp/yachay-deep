@@ -1,16 +1,31 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { api } from "../services/api";
 
 const FALLBACK = [{ key: "actual", label: "Semestre actual" }];
 
 export function PeriodSelector({ value, onChange, className = "" }) {
   const [periodos, setPeriodos] = useState(FALLBACK);
+  const initialized = useRef(false);
 
   useEffect(() => {
     api.getPeriodosDisponibles()
-      .then(p => { if (p && p.length > 0) setPeriodos(p); })
+      .then(data => {
+        // Nuevo formato: { periodos: [...], default: "P68" }
+        // Retrocompatible con formato viejo: [...]
+        const list = Array.isArray(data) ? data : data?.periodos;
+        const defaultKey = Array.isArray(data) ? null : data?.default;
+
+        if (list && list.length > 0) {
+          setPeriodos(list);
+          // Preseleccionar el default si el padre aún no tiene valor o tiene "actual"
+          if (!initialized.current && defaultKey && (!value || value === "actual")) {
+            onChange(defaultKey);
+            initialized.current = true;
+          }
+        }
+      })
       .catch(() => {});
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div>

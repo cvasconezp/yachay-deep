@@ -19,7 +19,7 @@ export default function Tutorias() {
   const [carreras, setCarreras] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [filtros, setFiltros] = useState({ carrera: "", nivel_riesgo: "Alto", periodo: "actual" });
+  const [filtros, setFiltros] = useState({ carrera: "", nivel_riesgo: "Alto", periodo: "" });
   const [expanded, setExpanded] = useState(new Set());
   const navigate = useNavigate();
 
@@ -29,7 +29,7 @@ export default function Tutorias() {
     try {
       const params = { nivel_riesgo: filtros.nivel_riesgo };
       if (filtros.carrera) params.carrera = filtros.carrera;
-      if (filtros.periodo && filtros.periodo !== "actual") params.periodo = filtros.periodo;
+      if (filtros.periodo) params.periodo = filtros.periodo;
 
       const [data, carrerasData] = await Promise.all([
         api.getTutoriasPorAsignatura(params),

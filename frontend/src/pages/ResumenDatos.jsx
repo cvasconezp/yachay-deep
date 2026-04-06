@@ -28,7 +28,7 @@ export default function ResumenDatos() {
   const [error, setError] = useState(null);
   const [carreras, setCarreras] = useState([]);
   const [filtroCarrera, setFiltroCarrera] = useState("");
-  const [filtroPeriodo, setFiltroPeriodo] = useState("actual");
+  const [filtroPeriodo, setFiltroPeriodo] = useState("");
   const [comparativa, setComparativa] = useState([]);
 
   // Export state
@@ -38,7 +38,7 @@ export default function ResumenDatos() {
   const [exportCarrera, setExportCarrera] = useState("");
   const [exportNivel, setExportNivel] = useState("");
   const [exportRiesgo, setExportRiesgo] = useState("");
-  const [exportPeriodo, setExportPeriodo] = useState("actual");
+  const [exportPeriodo, setExportPeriodo] = useState("");
   const [exporting, setExporting] = useState(false);
 
   // Carrera detail expand
@@ -55,7 +55,7 @@ export default function ResumenDatos() {
     try {
       const params = {};
       if (filtroCarrera) params.carrera = filtroCarrera;
-      if (filtroPeriodo && filtroPeriodo !== "actual") params.periodo = filtroPeriodo;
+      if (filtroPeriodo) params.periodo = filtroPeriodo;
       const compParams = {};
       if (filtroCarrera) compParams.carrera = filtroCarrera;
       const [result, compData] = await Promise.allSettled([
@@ -94,7 +94,7 @@ export default function ResumenDatos() {
       if (exportCarrera) params.set("carrera", exportCarrera);
       if (exportNivel) params.set("nivel", exportNivel);
       if (exportRiesgo) params.set("nivel_riesgo", exportRiesgo);
-      if (exportPeriodo && exportPeriodo !== "actual") params.set("periodo", exportPeriodo);
+      if (exportPeriodo) params.set("periodo", exportPeriodo);
 
       const blob = await api.exportEstudiantesExcel(params);
       const url = URL.createObjectURL(blob);

@@ -28,7 +28,7 @@ export default function Dashboard() {
   const [carreras, setCarreras] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [filtros, setFiltros] = useState({ carrera: "", nivel_riesgo: "", solo_sin_intervencion: false, periodo: "actual" });
+  const [filtros, setFiltros] = useState({ carrera: "", nivel_riesgo: "", solo_sin_intervencion: false, periodo: "" });
   const [cardFilter, setCardFilter] = useState(null); // Filtro dinámico por tarjeta
   const navigate = useNavigate();
 
@@ -40,10 +40,10 @@ export default function Dashboard() {
       if (filtros.carrera) params.carrera = filtros.carrera;
       if (filtros.nivel_riesgo) params.nivel_riesgo = filtros.nivel_riesgo;
       if (filtros.solo_sin_intervencion) params.solo_sin_intervencion = true;
-      if (filtros.periodo && filtros.periodo !== "actual") params.periodo = filtros.periodo;
+      if (filtros.periodo) params.periodo = filtros.periodo;
 
       const statsParams = {};
-      if (filtros.periodo && filtros.periodo !== "actual") statsParams.periodo = filtros.periodo;
+      if (filtros.periodo) statsParams.periodo = filtros.periodo;
 
       const [studentsData, statsData, carrerasData] = await Promise.all([
         api.getRiskDashboard(params),
