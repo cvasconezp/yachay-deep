@@ -630,6 +630,7 @@ def _build_malla_canonica(
     student: "Student",
     calificaciones_hist: list["Grade"],
     calificaciones_actual: list["Grade"],
+    enrollments: list["Enrollment"] | None = None,
 ) -> tuple["MallaCurricular", dict[str, int]]:
     """
     Construye la malla curricular fija del estudiante.
@@ -637,6 +638,9 @@ def _build_malla_canonica(
     Retorna (MallaCurricular, canonical_dict) donde canonical_dict es
     {ASIGNATURA_UPPER: nivel_canonico} para reutilizar al normalizar
     el nivel de las calificaciones del semestre actual.
+
+    Si hay enrollments (asignaturas matriculadas del reporte) sin Grade
+    correspondiente, se registran como "cursando" en la malla.
     """
     carrera = student.carrera
     if not carrera:
@@ -671,6 +675,45 @@ def _build_malla_canonica(
     for g in calificaciones_actual:
         key = _normalize_asig(g.asignatura)
         student_grades_map.setdefault(key, []).append(g)
+
+    # ── 3b. Inyectar enrollments como "cursando" si no tienen Grade ──
+    if enrollments:
+        # Deduplicar enrollments por asignatura (filtrar PRÁCTICA)
+        seen_enr: dict[str, "Enrollment"] = {}
+        for enr in enrollments:
+            key_enr = _normalize_asig(enr.asignatura)
+            is_practica = "PRÁCTICA" in (enr.nombre_grupo or "").upper() or \
+                          "PRACTICA" in (enr.nombre_grupo or "").upper()
+            if key_enr not in seen_enr:
+                seen_enr[key_enr] = enr
+            elif is_practica:
+                pass  # keep existing non-práctica entry
+            else:
+                seen_enr[key_enr] = enr  # replace práctica with main group
+
+        # Para cada enrollment, si no hay Grade, crear entrada sintética "cursando"
+        class _SyntheticGrade:
+            """Objeto ligero que imita Grade para inyectar cursando."""
+            def __init__(self, asignatura: str, periodo: str):
+                self.asignatura = asignatura
+                self.periodo = periodo
+                self.nota_final = None
+
+        for key_enr, enr in seen_enr.items():
+            # Buscar si esta asignatura ya está en el mapa (por nombre canónico)
+            if key_enr not in student_grades_map:
+                # Intentar match fuzzy contra claves canónicas
+                matched = False
+                for canon_key in canonical:
+                    if canon_key == key_enr:
+                        matched = True
+                        break
+                if not matched:
+                    # Agregar igualmente por si la malla lo encuentra
+                    pass
+                student_grades_map[key_enr] = [
+                    _SyntheticGrade(enr.asignatura, enr.periodo or "actual")
+                ]
 
     # ── 4. Construir la respuesta ──
     semestres = []
@@ -964,6 +1007,7 @@ def get_ficha(
     try:
         malla, canonical_niveles = _build_malla_canonica(
             db, student, calificaciones_historicas, calificaciones,
+            enrollments=enrollments_raw,
         )
     except Exception as e:
         logger.error("Error construyendo malla para estudiante %s (carrera: %s): %s",

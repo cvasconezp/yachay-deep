@@ -1756,10 +1756,27 @@ export default function FichaEstudiante() {
               )}
 
               {/* Tabla de asignaturas matriculadas desde reporte — cuando no hay cursos AVAC pero sí enrollments */}
-              {Object.keys(cursos).length === 0 && ficha.enrollments?.length > 0 && (
+              {Object.keys(cursos).length === 0 && ficha.enrollments?.length > 0 && (() => {
+                // Deduplicar por nombre de asignatura: preferir grupo principal (sin PRÁCTICA)
+                const seen = {};
+                const uniqueEnrollments = [];
+                ficha.enrollments.forEach(enr => {
+                  const key = (enr.asignatura || "").toUpperCase().trim();
+                  const isPractica = (enr.nombre_grupo || "").toUpperCase().includes("PRÁCTICA") || (enr.nombre_grupo || "").toUpperCase().includes("PRACTICA");
+                  if (!seen[key]) {
+                    seen[key] = { enr, isPractica };
+                    uniqueEnrollments.push(enr);
+                  } else if (seen[key].isPractica && !isPractica) {
+                    // Reemplazar el de práctica con el principal
+                    const idx = uniqueEnrollments.indexOf(seen[key].enr);
+                    if (idx >= 0) uniqueEnrollments[idx] = enr;
+                    seen[key] = { enr, isPractica };
+                  }
+                });
+                return (
                 <div>
                   <div className="flex items-center gap-4 px-3 py-1.5 bg-gray-50 border-b border-gray-200" style={{ fontSize: "10px" }}>
-                    <span className="text-gray-500">{ficha.enrollments.length} asignaturas matriculadas</span>
+                    <span className="text-gray-500">{uniqueEnrollments.length} asignaturas matriculadas</span>
                     <span className="ml-auto px-2 py-0.5 rounded bg-blue-50 text-blue-600 font-medium" style={{ fontSize: "9px" }}>
                       Datos del reporte institucional — Periodo {ficha.enrollments[0]?.periodo || "—"}
                     </span>
@@ -1778,7 +1795,7 @@ export default function FichaEstudiante() {
                         </tr>
                       </thead>
                       <tbody>
-                        {ficha.enrollments.map((enr, idx) => {
+                        {uniqueEnrollments.map((enr, idx) => {
                           const matchedCal = matchNota(enr.asignatura, ficha.calificaciones);
                           const nota = matchedCal?.nota_final ?? null;
                           const noteStyle = getNoteStyleHistorico(nota);
@@ -1829,7 +1846,8 @@ export default function FichaEstudiante() {
                     </table>
                   </div>
                 </div>
-              )}
+                );
+              })()}
 
               {/* Tabla de materias — fallback cuando no hay cursos AVAC, ni enrollments, pero sí calificaciones */}
               {Object.keys(cursos).length === 0 && !ficha.enrollments?.length && ficha.calificaciones?.length > 0 && (() => {

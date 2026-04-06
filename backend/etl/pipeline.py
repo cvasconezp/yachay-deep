@@ -564,6 +564,17 @@ class ETLPipeline:
                     if val_str and val_str.lower() not in ("nan", "none", ""):
                         setattr(student, col, val_str)
 
+            # ── Residencia (SIEMPRE actualizar desde reporte) ──────────────
+            for campo in ("pais", "provincia", "ciudad", "barrio"):
+                val = str(pr.get(campo, "") or "").strip()
+                if val and val.lower() not in ("nan", "none", "", "s/n"):
+                    setattr(student, campo, val)
+
+            # ── WhatsApp (si no lo tenemos aún) ──────────────────────────
+            wa = str(pr.get("whatsapp", "") or "").strip()
+            if wa and wa.lower() not in ("nan", "none", "") and not student.whatsapp:
+                student.whatsapp = wa
+
             if is_new:
                 count += 1
 
