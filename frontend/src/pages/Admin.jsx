@@ -407,15 +407,44 @@ function TabCursos() {
     docente: "", semestre: "", bloque: "1", grupo: "", activo: true, notas: "",
   });
   const [msg, setMsg] = useState("");
+  const [semesters, setSemesters] = useState([]);
+  const [filterSemestre, setFilterSemestre] = useState("__actual__");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 15;
+
+  // Cargar lista de semestres disponibles
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await api.get("/courses/semester/all");
+        setSemesters(data || []);
+        // Preseleccionar el semestre activo
+        const activo = (data || []).find(s => s.activo);
+        if (activo) setFilterSemestre(activo.semestre);
+      } catch { setSemesters([]); }
+    })();
+  }, []);
 
   const loadCourses = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api.get("/courses/");
+      const params = new URLSearchParams();
+      if (filterSemestre && filterSemestre !== "__todos__") {
+        if (filterSemestre === "__actual__") {
+          // Buscar el semestre activo
+          const activo = semesters.find(s => s.activo);
+          if (activo) params.set("semestre", activo.semestre);
+        } else {
+          params.set("semestre", filterSemestre);
+        }
+      }
+      const qs = params.toString();
+      const data = await api.get(`/courses/${qs ? "?" + qs : ""}`);
       setCourses(data);
+      setPage(1); // Reset page on filter change
     } catch { setCourses([]); }
     setLoading(false);
-  }, []);
+  }, [filterSemestre, semesters]);
 
   useEffect(() => { loadCourses(); }, [loadCourses]);
 
@@ -481,6 +510,24 @@ function TabCursos() {
         >
           + Agregar Curso
         </button>
+      </div>
+
+      {/* Filtro por período */}
+      <div className="flex items-center gap-3">
+        <label className="text-xs text-gray-500 font-medium">Período:</label>
+        <select
+          value={filterSemestre}
+          onChange={e => setFilterSemestre(e.target.value)}
+          className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+        >
+          <option value="__todos__">Todos los períodos</option>
+          {semesters.map(s => (
+            <option key={s.semestre} value={s.semestre}>
+              {s.semestre}{s.activo ? " (actual)" : ""}
+            </option>
+          ))}
+        </select>
+        <span className="text-xs text-gray-400">{courses.length} curso{courses.length !== 1 ? "s" : ""}</span>
       </div>
 
       {msg && (
@@ -579,55 +626,97 @@ function TabCursos() {
         {loading ? (
           <p className="text-center py-8 text-gray-400 text-sm">Cargando cursos...</p>
         ) : courses.length === 0 ? (
-          <p className="text-center py-8 text-gray-400 text-sm">No hay cursos configurados</p>
-        ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="text-left px-4 py-2.5 text-gray-600 font-medium">Código</th>
-                <th className="text-left px-4 py-2.5 text-gray-600 font-medium">Asignatura</th>
-                <th className="text-left px-4 py-2.5 text-gray-600 font-medium">Carrera</th>
-                <th className="text-center px-4 py-2.5 text-gray-600 font-medium">Semestre</th>
-                <th className="text-center px-4 py-2.5 text-gray-600 font-medium">Bloque</th>
-                <th className="text-center px-4 py-2.5 text-gray-600 font-medium">Estado</th>
-                <th className="text-center px-4 py-2.5 text-gray-600 font-medium">Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {courses.map(c => (
-                <tr key={c.id} className="border-t border-gray-100 hover:bg-gray-50">
-                  <td className="px-4 py-2.5 font-mono text-gray-800">{c.codigo_avac}</td>
-                  <td className="px-4 py-2.5 text-gray-700">{c.asignatura || c.nombre || "—"}</td>
-                  <td className="px-4 py-2.5 text-gray-500 text-xs">{c.carrera || "—"}</td>
-                  <td className="px-4 py-2.5 text-center text-gray-600">{c.semestre || "—"}</td>
-                  <td className="px-4 py-2.5 text-center">
-                    <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
-                      {c.bloque === "ambos" ? "1+2" : `B${c.bloque}`}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2.5 text-center">
-                    <button onClick={() => handleToggle(c)}
-                      className={`px-2 py-0.5 rounded-full text-xs font-medium ${c.activo ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
-                      {c.activo ? "Activo" : "Inactivo"}
+          <p className="text-center py-8 text-gray-400 text-sm">No hay cursos configurados para este período</p>
+        ) : (() => {
+          const totalPages = Math.ceil(courses.length / PAGE_SIZE);
+          const paged = courses.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+          return (
+            <>
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="text-left px-4 py-2.5 text-gray-600 font-medium">Código</th>
+                    <th className="text-left px-4 py-2.5 text-gray-600 font-medium">Asignatura</th>
+                    <th className="text-left px-4 py-2.5 text-gray-600 font-medium">Carrera</th>
+                    <th className="text-center px-4 py-2.5 text-gray-600 font-medium">Semestre</th>
+                    <th className="text-center px-4 py-2.5 text-gray-600 font-medium">Bloque</th>
+                    <th className="text-center px-4 py-2.5 text-gray-600 font-medium">Estado</th>
+                    <th className="text-center px-4 py-2.5 text-gray-600 font-medium">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paged.map(c => (
+                    <tr key={c.id} className="border-t border-gray-100 hover:bg-gray-50">
+                      <td className="px-4 py-2.5 font-mono text-gray-800">{c.codigo_avac}</td>
+                      <td className="px-4 py-2.5 text-gray-700">{c.asignatura || c.nombre || "—"}</td>
+                      <td className="px-4 py-2.5 text-gray-500 text-xs">{c.carrera || "—"}</td>
+                      <td className="px-4 py-2.5 text-center text-gray-600">{c.semestre || "—"}</td>
+                      <td className="px-4 py-2.5 text-center">
+                        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
+                          {c.bloque === "ambos" ? "1+2" : `B${c.bloque}`}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-center">
+                        <button onClick={() => handleToggle(c)}
+                          className={`px-2 py-0.5 rounded-full text-xs font-medium ${c.activo ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+                          {c.activo ? "Activo" : "Inactivo"}
+                        </button>
+                      </td>
+                      <td className="px-4 py-2.5 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          <button onClick={() => handleEdit(c)}
+                            className="text-blue-600 hover:text-blue-800 text-xs font-medium">
+                            Editar
+                          </button>
+                          <button onClick={() => handleDelete(c.id)}
+                            className="text-red-500 hover:text-red-700 text-xs font-medium">
+                            Eliminar
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 bg-gray-50">
+                  <span className="text-xs text-gray-500">
+                    Mostrando {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, courses.length)} de {courses.length}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setPage(p => Math.max(1, p - 1))}
+                      disabled={page === 1}
+                      className="px-2.5 py-1 rounded text-xs font-medium border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Anterior
                     </button>
-                  </td>
-                  <td className="px-4 py-2.5 text-center">
-                    <div className="flex items-center justify-center gap-2">
-                      <button onClick={() => handleEdit(c)}
-                        className="text-blue-600 hover:text-blue-800 text-xs font-medium">
-                        Editar
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+                      <button
+                        key={p}
+                        onClick={() => setPage(p)}
+                        className={`px-2.5 py-1 rounded text-xs font-medium border ${
+                          p === page
+                            ? "bg-brand text-white border-brand"
+                            : "border-gray-300 bg-white hover:bg-gray-50 text-gray-700"
+                        }`}
+                      >
+                        {p}
                       </button>
-                      <button onClick={() => handleDelete(c.id)}
-                        className="text-red-500 hover:text-red-700 text-xs font-medium">
-                        Eliminar
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+                    ))}
+                    <button
+                      onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                      disabled={page === totalPages}
+                      className="px-2.5 py-1 rounded text-xs font-medium border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Siguiente
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          );
+        })()}
       </div>
     </div>
   );
