@@ -72,6 +72,7 @@ class SemesterConfigCreate(BaseModel):
 
 
 class SemesterConfigUpdate(BaseModel):
+    semestre: Optional[str] = None  # permite renombrar (ej. "68" → "P68")
     bloque_actual: Optional[str] = None
     bloque1_inicio: Optional[datetime] = None
     bloque1_fin: Optional[datetime] = None
@@ -212,11 +213,18 @@ def set_bloque(semestre: str, payload: BloqueUpdate, db: Session = Depends(get_d
 
 @router.patch("/semester/{semestre}", response_model=SemesterConfigOut, dependencies=[Depends(require_admin)])
 def update_semester(semestre: str, payload: SemesterConfigUpdate, db: Session = Depends(get_db)):
-    """Actualiza las fechas y configuración de un semestre existente."""
+    """Actualiza las fechas, configuración o nombre de un semestre existente."""
     s = db.query(SemesterConfig).filter(SemesterConfig.semestre == semestre).first()
     if not s:
         raise HTTPException(status_code=404, detail="Semestre no encontrado")
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    data = payload.model_dump(exclude_unset=True)
+    # Si se está renombrando, verificar que no exista otro con el mismo nombre
+    new_name = data.get("semestre")
+    if new_name and new_name != s.semestre:
+        existing = db.query(SemesterConfig).filter(SemesterConfig.semestre == new_name).first()
+        if existing:
+            raise HTTPException(status_code=400, detail=f"Ya existe un semestre con el nombre '{new_name}'")
+    for field, value in data.items():
         setattr(s, field, value)
     db.commit()
     db.refresh(s)

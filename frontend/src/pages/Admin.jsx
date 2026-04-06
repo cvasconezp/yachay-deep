@@ -735,8 +735,11 @@ function TabSemestre() {
   const [semesters, setSemesters] = useState([]);
   const [newSem, setNewSem] = useState({ semestre: "", bloque_actual: "1" });
   const [msg, setMsg] = useState("");
-  const [editing, setEditing] = useState(null); // semestre string being edited
+  const [editing, setEditing] = useState(null); // semestre string being edited (dates)
   const [editDates, setEditDates] = useState({});
+  const [renamingSem, setRenamingSem] = useState(null); // semestre string being renamed
+  const [renameValue, setRenameValue] = useState("");
+  const [lastAction, setLastAction] = useState(null); // {type, data} for undo
 
   const loadSemesters = async () => {
     try {
@@ -761,7 +764,9 @@ function TabSemestre() {
 
   const handleActivate = async (semestre) => {
     try {
+      const prev = semesters.find(s => s.activo)?.semestre || null;
       await api.post(`/courses/semester/${semestre}/activate`);
+      setLastAction({ type: "activate", prev });
       setMsg(`Semestre ${semestre} activado`);
       loadSemesters();
     } catch (err) {
@@ -796,6 +801,15 @@ function TabSemestre() {
 
   const handleSaveDates = async () => {
     try {
+      // Guardar fechas previas para deshacer
+      const current = semesters.find(s => s.semestre === editing);
+      const prevDates = current ? {
+        bloque1_inicio: current.bloque1_inicio || null,
+        bloque1_fin: current.bloque1_fin || null,
+        bloque2_inicio: current.bloque2_inicio || null,
+        bloque2_fin: current.bloque2_fin || null,
+      } : null;
+
       const payload = {};
       for (const [k, v] of Object.entries(editDates)) {
         payload[k] = v ? `${v}T23:59:59` : null;
@@ -804,11 +818,54 @@ function TabSemestre() {
       if (payload.bloque1_inicio) payload.bloque1_inicio = `${editDates.bloque1_inicio}T00:00:00`;
       if (payload.bloque2_inicio) payload.bloque2_inicio = `${editDates.bloque2_inicio}T00:00:00`;
       await api.patch(`/courses/semester/${editing}`, payload);
+      setLastAction({ type: "dates", semestre: editing, prevDates });
       setMsg(`Fechas de ${editing} actualizadas`);
       setEditing(null);
       loadSemesters();
     } catch (err) {
       setMsg("Error: " + err.message);
+    }
+  };
+
+  const startRename = (s) => {
+    setRenamingSem(s.semestre);
+    setRenameValue(s.semestre);
+    setEditing(null); // close date editor if open
+  };
+
+  const handleRename = async () => {
+    const trimmed = renameValue.trim();
+    if (!trimmed || trimmed === renamingSem) { setRenamingSem(null); return; }
+    try {
+      await api.patch(`/courses/semester/${renamingSem}`, { semestre: trimmed });
+      setLastAction({ type: "rename", from: renamingSem, to: trimmed });
+      setMsg(`Semestre renombrado: ${renamingSem} → ${trimmed}`);
+      setRenamingSem(null);
+      loadSemesters();
+    } catch (err) {
+      setMsg("Error: " + (err?.response?.data?.detail || err.message));
+    }
+  };
+
+  const handleUndo = async () => {
+    if (!lastAction) return;
+    try {
+      if (lastAction.type === "rename") {
+        await api.patch(`/courses/semester/${lastAction.to}`, { semestre: lastAction.from });
+        setMsg(`Deshacer: ${lastAction.to} → ${lastAction.from}`);
+      } else if (lastAction.type === "activate") {
+        if (lastAction.prev) {
+          await api.post(`/courses/semester/${lastAction.prev}/activate`);
+          setMsg(`Deshacer: semestre activo restaurado a ${lastAction.prev}`);
+        }
+      } else if (lastAction.type === "dates") {
+        await api.patch(`/courses/semester/${lastAction.semestre}`, lastAction.prevDates);
+        setMsg(`Deshacer: fechas de ${lastAction.semestre} restauradas`);
+      }
+      setLastAction(null);
+      loadSemesters();
+    } catch (err) {
+      setMsg("Error al deshacer: " + (err?.response?.data?.detail || err.message));
     }
   };
 
@@ -885,7 +942,21 @@ function TabSemestre() {
               <div key={s.id} className="p-4">
                 {/* Row 1: semestre info + actions */}
                 <div className="flex items-center gap-4 flex-wrap">
-                  <span className="font-semibold text-gray-800 min-w-[80px]">{s.semestre}</span>
+                  {renamingSem === s.semestre ? (
+                    <span className="flex items-center gap-1 min-w-[80px]">
+                      <input value={renameValue} onChange={e => setRenameValue(e.target.value)}
+                        onKeyDown={e => { if (e.key === "Enter") handleRename(); if (e.key === "Escape") setRenamingSem(null); }}
+                        autoFocus
+                        className="border border-blue-400 rounded px-2 py-0.5 text-sm font-semibold w-24 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      <button onClick={handleRename} className="text-xs text-green-600 hover:text-green-800">&#10003;</button>
+                      <button onClick={() => setRenamingSem(null)} className="text-xs text-gray-400 hover:text-gray-600">&#10005;</button>
+                    </span>
+                  ) : (
+                    <span className="font-semibold text-gray-800 min-w-[80px] cursor-pointer hover:text-blue-700"
+                      onDoubleClick={() => startRename(s)} title="Doble clic para renombrar">
+                      {s.semestre}
+                    </span>
+                  )}
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${s.activo ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
                     {s.activo ? "Activo" : "Inactivo"}
                   </span>
@@ -897,17 +968,22 @@ function TabSemestre() {
                   <span className="text-gray-500 text-xs">Bloque {s.bloque_actual}</span>
                   <div className="flex items-center gap-2 ml-auto">
                     {!s.activo && (
-                      <>
-                        <button onClick={() => handleActivate(s.semestre)}
-                          className="text-xs px-2 py-1 rounded bg-brand text-white hover:bg-brand-light">
-                          Activar
-                        </button>
-                        <button onClick={() => handleDelete(s.semestre)}
-                          className="text-xs px-2 py-1 rounded border border-red-300 text-red-600 hover:bg-red-50"
-                          title="Eliminar semestre">
-                          Eliminar
-                        </button>
-                      </>
+                      <button onClick={() => handleActivate(s.semestre)}
+                        className="text-xs px-2 py-1 rounded bg-brand text-white hover:bg-brand-light">
+                        Activar
+                      </button>
+                    )}
+                    <button onClick={() => startRename(s)}
+                      className="text-xs px-2 py-1 rounded border border-gray-300 text-gray-600 hover:bg-gray-50"
+                      title="Renombrar semestre">
+                      Editar
+                    </button>
+                    {!s.activo && (
+                      <button onClick={() => handleDelete(s.semestre)}
+                        className="text-xs px-2 py-1 rounded border border-red-300 text-red-600 hover:bg-red-50"
+                        title="Eliminar semestre">
+                        Eliminar
+                      </button>
                     )}
                     <button onClick={() => handleSetBloque(s.semestre, "1")}
                       className={`text-xs px-2 py-1 rounded border ${s.bloque_actual === "1" ? "border-blue-500 text-blue-700 bg-blue-50" : "border-gray-300 text-gray-600 hover:bg-gray-50"}`}>
@@ -979,12 +1055,20 @@ function TabSemestre() {
         )}
       </div>
 
-      {semesters.some(s => s.activo) && (
-        <button onClick={handleDeactivateAll}
-          className="text-xs px-3 py-1.5 rounded border border-red-300 text-red-600 hover:bg-red-50">
-          Desactivar todos los semestres
-        </button>
-      )}
+      <div className="flex gap-3 items-center flex-wrap">
+        {lastAction && (
+          <button onClick={handleUndo}
+            className="text-xs px-3 py-1.5 rounded border border-amber-400 text-amber-700 bg-amber-50 hover:bg-amber-100 font-medium">
+            Deshacer {lastAction.type === "rename" ? `(${lastAction.from})` : lastAction.type === "activate" ? "(activación)" : "(fechas)"}
+          </button>
+        )}
+        {semesters.some(s => s.activo) && (
+          <button onClick={handleDeactivateAll}
+            className="text-xs px-3 py-1.5 rounded border border-red-300 text-red-600 hover:bg-red-50">
+            Desactivar todos los semestres
+          </button>
+        )}
+      </div>
 
       <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800">
         <strong>Al inicio de cada semestre:</strong> Crea el nuevo semestre, configura las fechas de bloque
