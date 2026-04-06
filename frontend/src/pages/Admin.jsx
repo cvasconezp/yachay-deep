@@ -691,19 +691,25 @@ function TabCursos() {
                     >
                       Anterior
                     </button>
-                    {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
-                      <button
-                        key={p}
-                        onClick={() => setPage(p)}
-                        className={`px-2.5 py-1 rounded text-xs font-medium border ${
-                          p === page
-                            ? "bg-brand text-white border-brand"
-                            : "border-gray-300 bg-white hover:bg-gray-50 text-gray-700"
-                        }`}
-                      >
-                        {p}
-                      </button>
-                    ))}
+                    {(() => {
+                      // Show max 7 page buttons: 1 ... p-1 p p+1 ... last
+                      const pages = [];
+                      const show = new Set([1, totalPages, page, page - 1, page + 1, page - 2, page + 2]
+                        .filter(p => p >= 1 && p <= totalPages));
+                      const sorted = [...show].sort((a, b) => a - b);
+                      sorted.forEach((p, i) => {
+                        if (i > 0 && p - sorted[i - 1] > 1) {
+                          pages.push(<span key={`e${p}`} className="px-1 text-xs text-gray-400">…</span>);
+                        }
+                        pages.push(
+                          <button key={p} onClick={() => setPage(p)}
+                            className={`px-2.5 py-1 rounded text-xs font-medium border ${
+                              p === page ? "bg-brand text-white border-brand" : "border-gray-300 bg-white hover:bg-gray-50 text-gray-700"
+                            }`}>{p}</button>
+                        );
+                      });
+                      return pages;
+                    })()}
                     <button
                       onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                       disabled={page === totalPages}
