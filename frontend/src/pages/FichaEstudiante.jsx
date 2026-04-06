@@ -921,27 +921,39 @@ export default function FichaEstudiante() {
     }
   };
 
-  // Construir mapa de cursos AVAC — filtrado por periodo actual (enrollments)
-  const cursos = {};
+  // Construir mapa de cursos AVAC (todos, sin filtrar — se cruzan luego por enrollment)
+  const cursosAvac = {};
   if (ficha) {
-    // Códigos de grupo del periodo actual (enrollments del reporte)
-    const enrollCodes = new Set(
-      (ficha.enrollments || []).map(e => String(e.codigo_grupo || "").trim()).filter(Boolean)
-    );
-    const hasEnrollments = enrollCodes.size > 0;
-
     (ficha.accesos_avac || []).forEach(a => {
-      // Si hay enrollments, solo mostrar cursos AVAC que coincidan con la matrícula actual
-      if (hasEnrollments && !enrollCodes.has(String(a.codigo_curso || "").trim())) return;
-      if (!cursos[a.codigo_curso]) cursos[a.codigo_curso] = { acceso: null, tareas: [] };
-      cursos[a.codigo_curso].acceso = a;
+      if (!cursosAvac[a.codigo_curso]) cursosAvac[a.codigo_curso] = { acceso: null, tareas: [] };
+      cursosAvac[a.codigo_curso].acceso = a;
     });
     (ficha.tareas || []).forEach(t => {
-      if (hasEnrollments && !enrollCodes.has(String(t.codigo_curso || "").trim())) return;
-      if (!cursos[t.codigo_curso]) cursos[t.codigo_curso] = { acceso: null, tareas: [] };
-      cursos[t.codigo_curso].tareas.push(t);
+      if (!cursosAvac[t.codigo_curso]) cursosAvac[t.codigo_curso] = { acceso: null, tareas: [] };
+      cursosAvac[t.codigo_curso].tareas.push(t);
     });
   }
+
+  // Deduplicar enrollments del reporte (preferir grupo principal sobre PRÁCTICA)
+  const enrollmentsUniq = (() => {
+    if (!ficha?.enrollments?.length) return [];
+    const seen = {};
+    const result = [];
+    ficha.enrollments.forEach(enr => {
+      const key = (enr.asignatura || "").toUpperCase().replace(/_x[0-9a-fA-F]{4}_/g, " ").replace(/\s+/g, " ").trim();
+      const isPrac = (enr.nombre_grupo || "").toUpperCase().includes("PRÁCTICA") || (enr.nombre_grupo || "").toUpperCase().includes("PRACTICA");
+      if (!seen[key]) { seen[key] = { enr, isPrac }; result.push(enr); }
+      else if (seen[key].isPrac && !isPrac) {
+        const i = result.indexOf(seen[key].enr);
+        if (i >= 0) result[i] = enr;
+        seen[key] = { enr, isPrac };
+      }
+    });
+    return result;
+  })();
+
+  // Cursos legacy (para fallback si no hay enrollments)
+  const cursos = cursosAvac;
 
   // Intentar hacer match entre cursos AVAC y calificaciones institucionales
   const matchNota = (courseName, calificaciones) => {
@@ -1607,8 +1619,114 @@ export default function FichaEstudiante() {
                 </span>
               </div>
 
-              {/* Tabla de cursos AVAC activos — semestre actual (primera mano) */}
-              {Object.keys(cursos).length > 0 && (
+              {/* ═══ TABLA DE DATOS ACADÉMICOS — basada en enrollments del reporte ═══ */}
+              {enrollmentsUniq.length > 0 && (
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-[#BDD7EE]">
+                        <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 whitespace-nowrap text-[10px]">Nivel y grupo</th>
+                        <th className="text-left px-2 py-1 border border-gray-300 font-semibold text-gray-700 text-[10px]" style={{ minWidth: "180px" }}>Asignaturas matriculadas</th>
+                        <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 w-14 text-[10px]">Nota</th>
+                        <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 w-10 text-[10px]">Mat</th>
+                        <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 w-16 text-[10px]">AVAC</th>
+                        <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 w-28 text-[10px]">Actividades</th>
+                        <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 w-14 text-[10px]">Link</th>
+                        <th className="text-left px-2 py-1 border border-gray-300 font-semibold text-gray-700 text-[10px]">Docente</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {enrollmentsUniq.map((enr, idx) => {
+                        const codigo = String(enr.codigo_grupo || "").trim();
+                        const avac = cursosAvac[codigo] || null;
+                        const acceso = avac?.acceso;
+                        const ts = avac?.tareas || [];
+                        const matchedCal = matchNota(enr.asignatura, ficha.calificaciones);
+                        const notaTableau = matchedCal?.nota_final ?? null;
+                        const totalCurso = ts.find(t => t.total_curso != null)?.total_curso ?? null;
+                        const nota = notaTableau ?? totalCurso;
+                        const noteStyle = getNoteStyleHistorico(nota);
+                        const sortedTasks = [...ts].sort((a, b) =>
+                          String(a.unidad).localeCompare(String(b.unidad), undefined, { numeric: true })
+                        );
+                        const diasInt = acceso?.dias_sin_acceso != null ? Math.round(acceso.dias_sin_acceso) : null;
+                        const diasColor = diasInt == null ? "text-gray-300"
+                          : diasInt > 14 ? "text-red-600 font-bold"
+                          : diasInt > 7 ? "text-orange-500"
+                          : "text-green-600";
+                        const grp = abbreviateGrupo(enr.nombre_grupo);
+
+                        return (
+                          <tr key={`enr-${idx}`} className={idx % 2 === 0 ? "bg-white" : "bg-[#F9F9F9]"}>
+                            <td className="px-2 py-1 border border-gray-200 text-center text-[11px] text-gray-500 whitespace-nowrap">
+                              {enr.nivel ? <>{enr.nivel}° Nivel</> : "—"}
+                              {grp ? <> | {grp}</> : ""}
+                            </td>
+                            <td className="px-2 py-1 border border-gray-200 font-medium text-gray-800">
+                              {toTitleCase(enr.asignatura)}
+                            </td>
+                            <td className={`px-2 py-1 border border-gray-200 text-center font-bold ${noteStyle.bg} ${noteStyle.text}`}>
+                              {nota != null ? nota : <span className="text-amber-600 font-semibold text-[10px]">Cursando</span>}
+                            </td>
+                            <td className="px-2 py-1 border border-gray-200 text-center text-[11px] text-gray-500">
+                              {(enr.numero_repitencias ?? matchedCal?.numero_repitencias) != null
+                                ? <span className={`px-1 rounded text-[10px] font-semibold ${(enr.numero_repitencias ?? matchedCal?.numero_repitencias) > 1 ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-gray-700"}`}>
+                                    {enr.numero_repitencias ?? matchedCal?.numero_repitencias}
+                                  </span>
+                                : "—"}
+                            </td>
+                            <td className="px-2 py-1 border border-gray-200 text-center">
+                              {acceso ? (
+                                <>
+                                  <span className={`font-mono text-[11px] ${diasColor}`}>
+                                    {diasInt != null ? `${diasInt}d` : "—"}
+                                  </span>
+                                  {acceso.ultimo_acceso_texto && (
+                                    <div className="text-[10px] text-gray-400 leading-tight whitespace-nowrap">
+                                      {compactarAcceso(acceso.ultimo_acceso_texto)}
+                                    </div>
+                                  )}
+                                </>
+                              ) : (
+                                <span className="text-[10px] text-gray-300 italic">Sin AVAC</span>
+                              )}
+                            </td>
+                            <td className="px-2 py-1 border border-gray-200">
+                              {sortedTasks.length > 0 ? (
+                                <div className="flex gap-0.5 justify-center flex-wrap">
+                                  {sortedTasks.slice(0, 8).map((t, i) => (
+                                    <TaskCell key={i} entregada={t.entregada} retrasada={t.retrasada}
+                                      title={`Unidad ${t.unidad}: ${t.entregada ? "Entregada" : t.retrasada ? "Retrasada" : "Pendiente"}`} />
+                                  ))}
+                                  {sortedTasks.length > 8 && <span className="text-[10px] text-gray-400 self-center">+{sortedTasks.length - 8}</span>}
+                                </div>
+                              ) : (
+                                <span className="text-[10px] text-gray-300 italic">—</span>
+                              )}
+                            </td>
+                            <td className="px-2 py-1 border border-gray-200 text-center">
+                              {codigo ? (
+                                <a href={`https://avac.ups.edu.ec/grado68/course/search.php?areaids=core_course-course&q=${codigo}`}
+                                   target="_blank" rel="noreferrer"
+                                   className="text-blue-500 hover:text-blue-700 font-mono text-[11px]">
+                                  {codigo}
+                                </a>
+                              ) : <span className="text-gray-300">—</span>}
+                            </td>
+                            <td className="px-2 py-1 border border-gray-200 text-gray-600 text-[11px]">
+                              {toTitleCase(enr.docente || acceso?.docente || matchedCal?.docente)
+                                || <span className="text-gray-300 italic">—</span>}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* ═══ FALLBACK: Tabla AVAC cuando NO hay enrollments ═══ */}
+              {enrollmentsUniq.length === 0 && Object.keys(cursos).length > 0 && (
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse text-xs">
                     <thead>
@@ -1628,307 +1746,30 @@ export default function FichaEstudiante() {
                         const courseName = acceso?.nombre_curso || ts[0]?.nombre_curso || codigo;
                         const matchedCal = matchNota(courseName, ficha.calificaciones)
                           || matchNota(courseName, ficha.calificaciones_historicas);
-                        const notaTableau = matchedCal?.nota_final ?? null;
-                        const totalCurso = ts.find(t => t.total_curso != null)?.total_curso ?? null;
-                        const nota = notaTableau ?? totalCurso;
+                        const nota = matchedCal?.nota_final ?? ts.find(t => t.total_curso != null)?.total_curso ?? null;
                         const noteStyle = getNoteStyleHistorico(nota);
-                        const sortedTasks = [...ts].sort((a, b) =>
-                          String(a.unidad).localeCompare(String(b.unidad), undefined, { numeric: true })
-                        );
+                        const sortedTasks = [...ts].sort((a, b) => String(a.unidad).localeCompare(String(b.unidad), undefined, { numeric: true }));
                         const diasInt = acceso?.dias_sin_acceso != null ? Math.round(acceso.dias_sin_acceso) : null;
-                        const diasColor = diasInt == null ? "text-gray-300"
-                          : diasInt > 14 ? "text-red-600 font-bold"
-                          : diasInt > 7 ? "text-orange-500"
-                          : "text-green-600";
-
+                        const diasColor = diasInt == null ? "text-gray-300" : diasInt > 14 ? "text-red-600 font-bold" : diasInt > 7 ? "text-orange-500" : "text-green-600";
                         return (
                           <tr key={codigo} className={idx % 2 === 0 ? "bg-white" : "bg-[#F9F9F9]"}>
                             <td className="px-2 py-1 border border-gray-200 text-center text-[11px] text-gray-500 whitespace-nowrap">
-                              {(() => {
-                                const nivNum = parseNivelNum(matchedCal?.nivel);
-                                const grp = abbreviateGrupo(matchedCal?.grupo || acceso?.grupo || ts[0]?.grupo);
-                                const nivFallback = !nivNum && ficha.nivel_academico > 0 && ficha.nivel_academico <= 12 ? ficha.nivel_academico : null;
-                                const niv = nivNum || nivFallback;
-                                if (niv && grp) return <>{niv}° Nivel | {grp}</>;
-                                if (niv) return <>{niv}° Nivel</>;
-                                if (grp) return grp;
-                                return <span className="text-gray-300">—</span>;
-                              })()}
+                              {(() => { const niv = parseNivelNum(matchedCal?.nivel) || (ficha.nivel_academico > 0 ? ficha.nivel_academico : null); const grp = abbreviateGrupo(matchedCal?.grupo || acceso?.grupo); return niv ? <>{niv}° Nivel{grp ? <> | {grp}</> : ""}</> : grp || <span className="text-gray-300">—</span>; })()}
                             </td>
-                            <td className="px-2 py-1 border border-gray-200 font-medium text-gray-800">
-                              {toTitleCase(courseName)}
-                            </td>
-                            <td className={`px-2 py-1 border border-gray-200 text-center font-bold ${noteStyle.bg} ${noteStyle.text}`}>
-                              {nota != null ? nota : <span className="text-gray-300">—</span>}
-                            </td>
-                            <td className="px-2 py-1 border border-gray-200 text-center text-[11px] text-gray-500">
-                              {matchedCal?.numero_repitencias != null
-                                ? <span className={`px-1 rounded text-[10px] font-semibold ${matchedCal.numero_repitencias > 1 ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-gray-700"}`}>
-                                    {matchedCal.numero_repitencias}
-                                  </span>
-                                : "—"}
-                            </td>
-                            <td className="px-2 py-1 border border-gray-200 text-center">
-                              <span className={`font-mono text-[11px] ${diasColor}`}>
-                                {diasInt != null ? `${diasInt}d` : "—"}
-                              </span>
-                              {acceso?.ultimo_acceso_texto && (
-                                <div className="text-[10px] text-gray-400 leading-tight whitespace-nowrap">
-                                  {compactarAcceso(acceso.ultimo_acceso_texto)}
-                                </div>
-                              )}
-                            </td>
-                            <td className="px-2 py-1 border border-gray-200">
-                              <div className="flex gap-0.5 justify-center flex-wrap">
-                                {sortedTasks.slice(0, 8).map((t, i) => (
-                                  <TaskCell
-                                    key={i}
-                                    entregada={t.entregada}
-                                    retrasada={t.retrasada}
-                                    title={`Unidad ${t.unidad}: ${t.entregada ? "Entregada" : t.retrasada ? "Retrasada" : "Pendiente"}`}
-                                  />
-                                ))}
-                                {sortedTasks.length > 8 && (
-                                  <span className="text-[10px] text-gray-400 self-center">+{sortedTasks.length - 8}</span>
-                                )}
-                                {sortedTasks.length === 0 && (
-                                  <span className="text-[10px] text-gray-300 italic">Sin tareas</span>
-                                )}
-                              </div>
-                            </td>
-                            <td className="px-2 py-1 border border-gray-200 text-center">
-                              <a href={`https://avac.ups.edu.ec/grado68/course/search.php?areaids=core_course-course&q=${codigo}`}
-                                 target="_blank" rel="noreferrer"
-                                 className="text-blue-500 hover:text-blue-700 font-mono text-[11px]">
-                                {codigo}
-                              </a>
-                            </td>
-                            <td className="px-2 py-1 border border-gray-200 text-gray-600 text-[11px]">
-                              {toTitleCase(acceso?.docente || ts[0]?.docente || matchedCal?.docente)
-                                || <span className="text-gray-300 italic">—</span>}
-                            </td>
+                            <td className="px-2 py-1 border border-gray-200 font-medium text-gray-800">{toTitleCase(courseName)}</td>
+                            <td className={`px-2 py-1 border border-gray-200 text-center font-bold ${noteStyle.bg} ${noteStyle.text}`}>{nota != null ? nota : <span className="text-gray-300">—</span>}</td>
+                            <td className="px-2 py-1 border border-gray-200 text-center text-[11px] text-gray-500">{matchedCal?.numero_repitencias != null ? <span className={`px-1 rounded text-[10px] font-semibold ${matchedCal.numero_repitencias > 1 ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-gray-700"}`}>{matchedCal.numero_repitencias}</span> : "—"}</td>
+                            <td className="px-2 py-1 border border-gray-200 text-center"><span className={`font-mono text-[11px] ${diasColor}`}>{diasInt != null ? `${diasInt}d` : "—"}</span>{acceso?.ultimo_acceso_texto && <div className="text-[10px] text-gray-400 leading-tight whitespace-nowrap">{compactarAcceso(acceso.ultimo_acceso_texto)}</div>}</td>
+                            <td className="px-2 py-1 border border-gray-200"><div className="flex gap-0.5 justify-center flex-wrap">{sortedTasks.slice(0, 8).map((t, i) => <TaskCell key={i} entregada={t.entregada} retrasada={t.retrasada} title={`Unidad ${t.unidad}: ${t.entregada ? "Entregada" : t.retrasada ? "Retrasada" : "Pendiente"}`} />)}{sortedTasks.length > 8 && <span className="text-[10px] text-gray-400 self-center">+{sortedTasks.length - 8}</span>}{sortedTasks.length === 0 && <span className="text-[10px] text-gray-300 italic">Sin tareas</span>}</div></td>
+                            <td className="px-2 py-1 border border-gray-200 text-center"><a href={`https://avac.ups.edu.ec/grado68/course/search.php?areaids=core_course-course&q=${codigo}`} target="_blank" rel="noreferrer" className="text-blue-500 hover:text-blue-700 font-mono text-[11px]">{codigo}</a></td>
+                            <td className="px-2 py-1 border border-gray-200 text-gray-600 text-[11px]">{toTitleCase(acceso?.docente || ts[0]?.docente || matchedCal?.docente) || <span className="text-gray-300 italic">—</span>}</td>
                           </tr>
                         );
                       })}
-                      {/* Materias con calificación pero sin actividad AVAC (solo del periodo actual) */}
-                      {ficha.calificaciones?.filter(cal => {
-                        // Filtrar: solo calificaciones que correspondan a una materia matriculada
-                        const enrollCodes = new Set((ficha.enrollments || []).map(e => (e.asignatura || "").toUpperCase().replace(/\s+/g, " ").trim()));
-                        if (enrollCodes.size > 0) {
-                          const calNorm = (cal.asignatura || "").toUpperCase().replace(/\s+/g, " ").trim();
-                          const inEnrollment = [...enrollCodes].some(en => en.includes(calNorm) || calNorm.includes(en));
-                          if (!inEnrollment) return false;
-                        }
-                        return !Object.entries(cursos).some(([, { acceso, tareas: ts }]) => {
-                          const cn = acceso?.nombre_curso || ts[0]?.nombre_curso || "";
-                          return matchNota(cn, [cal]);
-                        });
-                      }).map((cal, idx) => {
-                        const noteStyle = getNoteStyleHistorico(cal.nota_final);
-                        const rowIdx = Object.keys(cursos).length + idx;
-                        return (
-                          <tr key={`cal-${idx}`} className={rowIdx % 2 === 0 ? "bg-white" : "bg-[#F9F9F9]"}>
-                            <td className="px-2 py-1 border border-gray-200 text-center text-[11px] text-gray-500 whitespace-nowrap">
-                              {(() => {
-                                const nivNum = parseNivelNum(cal.nivel);
-                                const grp = abbreviateGrupo(cal.grupo);
-                                const nivFallback = !nivNum && ficha.nivel_academico > 0 && ficha.nivel_academico <= 12 ? ficha.nivel_academico : null;
-                                const niv = nivNum || nivFallback;
-                                if (niv && grp) return <>{niv}° Nivel | {grp}</>;
-                                if (niv) return <>{niv}° Nivel</>;
-                                if (grp) return grp;
-                                return <span className="text-gray-300">—</span>;
-                              })()}
-                            </td>
-                            <td className="px-2 py-1 border border-gray-200 font-medium text-gray-800">
-                              {toTitleCase(cal.asignatura)}
-                            </td>
-                            <td className={`px-2 py-1 border border-gray-200 text-center font-bold ${noteStyle.bg} ${noteStyle.text}`}>
-                              {cal.nota_final != null ? cal.nota_final : <span className="text-gray-300">—</span>}
-                            </td>
-                            <td className="px-2 py-1 border border-gray-200 text-center text-[11px] text-gray-500">
-                              {cal.numero_repitencias != null
-                                ? <span className={`px-1 rounded text-[10px] font-semibold ${cal.numero_repitencias > 1 ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-gray-700"}`}>
-                                    {cal.numero_repitencias}
-                                  </span>
-                                : "—"}
-                            </td>
-                            <td className="px-2 py-1 border border-gray-200 text-center">
-                              <span className="text-[10px] text-gray-300 italic">Sin AVAC</span>
-                            </td>
-                            <td className="px-2 py-1 border border-gray-200">
-                              <span className="text-[10px] text-gray-300 italic">—</span>
-                            </td>
-                            <td className="px-2 py-1 border border-gray-200 text-center">
-                              <span className="text-gray-300">—</span>
-                            </td>
-                            <td className="px-2 py-1 border border-gray-200 text-gray-600 text-[11px]">
-                              {toTitleCase(cal.docente) || <span className="text-gray-300 italic">—</span>}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                      {/* Materias matriculadas (enrollment) sin AVAC ni calificación */}
-                      {ficha.enrollments?.length > 0 && (() => {
-                        // Deduplicar enrollments
-                        const seenEnr = {};
-                        const uniqEnr = [];
-                        ficha.enrollments.forEach(enr => {
-                          const key = (enr.asignatura || "").toUpperCase().trim();
-                          const isPrac = (enr.nombre_grupo || "").toUpperCase().includes("PRÁCTICA") || (enr.nombre_grupo || "").toUpperCase().includes("PRACTICA");
-                          if (!seenEnr[key]) { seenEnr[key] = { enr, isPrac }; uniqEnr.push(enr); }
-                          else if (seenEnr[key].isPrac && !isPrac) {
-                            const i = uniqEnr.indexOf(seenEnr[key].enr);
-                            if (i >= 0) uniqEnr[i] = enr;
-                            seenEnr[key] = { enr, isPrac };
-                          }
-                        });
-                        // Filtrar solo las que NO están ya cubiertas por AVAC ni calificaciones
-                        const avacNames = new Set();
-                        Object.values(cursos).forEach(({ acceso, tareas: ts }) => {
-                          const nm = (acceso?.nombre_curso || ts[0]?.nombre_curso || "").toUpperCase().replace(/\s+/g, " ").trim();
-                          if (nm) avacNames.add(nm);
-                        });
-                        const calNames = new Set((ficha.calificaciones || []).map(c => (c.asignatura || "").toUpperCase().replace(/\s+/g, " ").trim()));
-                        const missing = uniqEnr.filter(enr => {
-                          const nm = (enr.asignatura || "").toUpperCase().replace(/\s+/g, " ").trim();
-                          // Check if it's covered by AVAC or calificaciones (fuzzy: check containment)
-                          for (const an of avacNames) { if (an.includes(nm) || nm.includes(an)) return false; }
-                          for (const cn of calNames) { if (cn.includes(nm) || nm.includes(cn)) return false; }
-                          return true;
-                        });
-                        const baseIdx = Object.keys(cursos).length + (ficha.calificaciones?.length || 0);
-                        return missing.map((enr, idx) => (
-                          <tr key={`enr-${idx}`} className={(baseIdx + idx) % 2 === 0 ? "bg-white" : "bg-[#F9F9F9]"}>
-                            <td className="px-2 py-1 border border-gray-200 text-center text-[11px] text-gray-500 whitespace-nowrap">
-                              {enr.nivel ? <>{enr.nivel}° Nivel</> : "—"}
-                            </td>
-                            <td className="px-2 py-1 border border-gray-200 font-medium text-gray-800">
-                              {toTitleCase(enr.asignatura)}
-                            </td>
-                            <td className="px-2 py-1 border border-gray-200 text-center">
-                              <span className="text-amber-600 font-semibold text-[10px]">Cursando</span>
-                            </td>
-                            <td className="px-2 py-1 border border-gray-200 text-center text-[11px] text-gray-500">
-                              {enr.numero_repitencias != null
-                                ? <span className={`px-1 rounded text-[10px] font-semibold ${enr.numero_repitencias > 1 ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-gray-700"}`}>
-                                    {enr.numero_repitencias}
-                                  </span>
-                                : "—"}
-                            </td>
-                            <td className="px-2 py-1 border border-gray-200 text-center">
-                              <span className="text-[10px] text-gray-300 italic">Sin AVAC</span>
-                            </td>
-                            <td className="px-2 py-1 border border-gray-200">
-                              <span className="text-[10px] text-gray-300 italic">—</span>
-                            </td>
-                            <td className="px-2 py-1 border border-gray-200 text-center">
-                              <span className="text-gray-300">—</span>
-                            </td>
-                            <td className="px-2 py-1 border border-gray-200 text-gray-600 text-[11px]">
-                              {toTitleCase(enr.docente) || <span className="text-gray-300 italic">—</span>}
-                            </td>
-                          </tr>
-                        ));
-                      })()}
                     </tbody>
                   </table>
                 </div>
               )}
-
-              {/* Tabla de asignaturas matriculadas desde reporte — cuando no hay cursos AVAC pero sí enrollments */}
-              {Object.keys(cursos).length === 0 && ficha.enrollments?.length > 0 && (() => {
-                // Deduplicar por nombre de asignatura: preferir grupo principal (sin PRÁCTICA)
-                const seen = {};
-                const uniqueEnrollments = [];
-                ficha.enrollments.forEach(enr => {
-                  const key = (enr.asignatura || "").toUpperCase().trim();
-                  const isPractica = (enr.nombre_grupo || "").toUpperCase().includes("PRÁCTICA") || (enr.nombre_grupo || "").toUpperCase().includes("PRACTICA");
-                  if (!seen[key]) {
-                    seen[key] = { enr, isPractica };
-                    uniqueEnrollments.push(enr);
-                  } else if (seen[key].isPractica && !isPractica) {
-                    // Reemplazar el de práctica con el principal
-                    const idx = uniqueEnrollments.indexOf(seen[key].enr);
-                    if (idx >= 0) uniqueEnrollments[idx] = enr;
-                    seen[key] = { enr, isPractica };
-                  }
-                });
-                return (
-                <div>
-                  <div className="flex items-center gap-4 px-3 py-1.5 bg-gray-50 border-b border-gray-200" style={{ fontSize: "10px" }}>
-                    <span className="text-gray-500">{uniqueEnrollments.length} asignaturas matriculadas</span>
-                    <span className="ml-auto px-2 py-0.5 rounded bg-blue-50 text-blue-600 font-medium" style={{ fontSize: "9px" }}>
-                      Datos del reporte institucional — Periodo {ficha.enrollments[0]?.periodo || "—"}
-                    </span>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-collapse text-xs">
-                      <thead>
-                        <tr className="bg-[#BDD7EE]">
-                          <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 whitespace-nowrap text-[10px]">Nivel y grupo</th>
-                          <th className="text-left px-2 py-1 border border-gray-300 font-semibold text-gray-700 text-[10px]" style={{ minWidth: "180px" }}>Asignaturas matriculadas</th>
-                          <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 w-14 text-[10px]">Nota</th>
-                          <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 w-10 text-[10px]">Mat</th>
-                          <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 w-16 text-[10px]">Pago</th>
-                          <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 w-14 text-[10px]">Link</th>
-                          <th className="text-left px-2 py-1 border border-gray-300 font-semibold text-gray-700 text-[10px]">Docente</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {uniqueEnrollments.map((enr, idx) => {
-                          const matchedCal = matchNota(enr.asignatura, ficha.calificaciones);
-                          const nota = matchedCal?.nota_final ?? null;
-                          const noteStyle = getNoteStyleHistorico(nota);
-                          const grp = abbreviateGrupo(enr.nombre_grupo);
-                          return (
-                            <tr key={`enr-${idx}`} className={idx % 2 === 0 ? "bg-white" : "bg-[#F9F9F9]"}>
-                              <td className="px-2 py-1 border border-gray-200 text-center text-[11px] text-gray-500 whitespace-nowrap">
-                                {enr.nivel ? <>{enr.nivel}° Nivel</> : "—"}
-                                {grp ? <> | {grp}</> : ""}
-                              </td>
-                              <td className="px-2 py-1 border border-gray-200 font-medium text-gray-800">
-                                {toTitleCase(enr.asignatura)}
-                                {enr.tipo_asignatura && (
-                                  <span className="ml-1 text-[9px] text-gray-400 font-normal">({enr.tipo_asignatura})</span>
-                                )}
-                              </td>
-                              <td className={`px-2 py-1 border border-gray-200 text-center font-bold ${noteStyle.bg} ${noteStyle.text}`}>
-                                {nota != null ? nota : <span className="text-gray-300">—</span>}
-                              </td>
-                              <td className="px-2 py-1 border border-gray-200 text-center text-[11px] text-gray-500">
-                                {enr.numero_repitencias != null
-                                  ? <span className={`px-1 rounded text-[10px] font-semibold ${enr.numero_repitencias > 1 ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-gray-700"}`}>
-                                      {enr.numero_repitencias}
-                                    </span>
-                                  : "—"}
-                              </td>
-                              <td className="px-2 py-1 border border-gray-200 text-center">
-                                {enr.pagado === "SI"
-                                  ? <span className="text-[10px] font-semibold text-green-600 bg-green-50 px-1.5 py-0.5 rounded">Sí</span>
-                                  : enr.pagado === "NO"
-                                  ? <span className="text-[10px] font-semibold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">No</span>
-                                  : <span className="text-gray-300">—</span>}
-                              </td>
-                              <td className="px-2 py-1 border border-gray-200 text-center">
-                                <a href={`https://avac.ups.edu.ec/grado68/course/search.php?areaids=core_course-course&q=${enr.codigo_grupo}`}
-                                   target="_blank" rel="noreferrer"
-                                   className="text-blue-500 hover:text-blue-700 font-mono text-[11px]">
-                                  {enr.codigo_grupo}
-                                </a>
-                              </td>
-                              <td className="px-2 py-1 border border-gray-200 text-gray-600 text-[11px]">
-                                {toTitleCase(enr.docente) || <span className="text-gray-300 italic">—</span>}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-                );
-              })()}
 
               {/* Tabla de materias — fallback cuando no hay cursos AVAC, ni enrollments, pero sí calificaciones */}
               {Object.keys(cursos).length === 0 && !ficha.enrollments?.length && ficha.calificaciones?.length > 0 && (() => {
