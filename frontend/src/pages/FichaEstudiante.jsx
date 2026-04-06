@@ -360,8 +360,10 @@ function TrendChart({ calificacionesHistoricas, calificaciones }) {
 /** Title Case: primera letra de cada palabra en mayúscula, excepto números romanos */
 function toTitleCase(str) {
   if (!str) return str;
+  // Limpiar artefactos Excel (_x000d_, _x000a_) antes de formatear
+  const clean = str.replace(/_x[0-9a-fA-F]{4}_/g, " ").replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
   const roman = /^(I{1,3}|IV|VI{0,3}|IX|X{0,3}|XI{0,3}|XII)$/;
-  return str.toLowerCase().split(/\s+/).map(word => {
+  return clean.toLowerCase().split(/\s+/).map(word => {
     if (roman.test(word.toUpperCase())) return word.toUpperCase();
     return word.charAt(0).toUpperCase() + word.slice(1);
   }).join(" ");
@@ -919,14 +921,23 @@ export default function FichaEstudiante() {
     }
   };
 
-  // Construir mapa de cursos AVAC
+  // Construir mapa de cursos AVAC — filtrado por periodo actual (enrollments)
   const cursos = {};
   if (ficha) {
+    // Códigos de grupo del periodo actual (enrollments del reporte)
+    const enrollCodes = new Set(
+      (ficha.enrollments || []).map(e => String(e.codigo_grupo || "").trim()).filter(Boolean)
+    );
+    const hasEnrollments = enrollCodes.size > 0;
+
     (ficha.accesos_avac || []).forEach(a => {
+      // Si hay enrollments, solo mostrar cursos AVAC que coincidan con la matrícula actual
+      if (hasEnrollments && !enrollCodes.has(String(a.codigo_curso || "").trim())) return;
       if (!cursos[a.codigo_curso]) cursos[a.codigo_curso] = { acceso: null, tareas: [] };
       cursos[a.codigo_curso].acceso = a;
     });
     (ficha.tareas || []).forEach(t => {
+      if (hasEnrollments && !enrollCodes.has(String(t.codigo_curso || "").trim())) return;
       if (!cursos[t.codigo_curso]) cursos[t.codigo_curso] = { acceso: null, tareas: [] };
       cursos[t.codigo_curso].tareas.push(t);
     });
@@ -1699,8 +1710,15 @@ export default function FichaEstudiante() {
                           </tr>
                         );
                       })}
-                      {/* Materias con calificación pero sin actividad AVAC */}
+                      {/* Materias con calificación pero sin actividad AVAC (solo del periodo actual) */}
                       {ficha.calificaciones?.filter(cal => {
+                        // Filtrar: solo calificaciones que correspondan a una materia matriculada
+                        const enrollCodes = new Set((ficha.enrollments || []).map(e => (e.asignatura || "").toUpperCase().replace(/\s+/g, " ").trim()));
+                        if (enrollCodes.size > 0) {
+                          const calNorm = (cal.asignatura || "").toUpperCase().replace(/\s+/g, " ").trim();
+                          const inEnrollment = [...enrollCodes].some(en => en.includes(calNorm) || calNorm.includes(en));
+                          if (!inEnrollment) return false;
+                        }
                         return !Object.entries(cursos).some(([, { acceso, tareas: ts }]) => {
                           const cn = acceso?.nombre_curso || ts[0]?.nombre_curso || "";
                           return matchNota(cn, [cal]);
