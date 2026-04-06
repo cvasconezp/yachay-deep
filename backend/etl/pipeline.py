@@ -82,11 +82,37 @@ class ETLPipeline:
         Auto-detecta y activa un nuevo período desde el reporte.
         Si el período del reporte (ej. P68) no coincide con el semestre activo,
         desactiva el anterior y crea/activa el nuevo.
+        También migra datos del semestre anterior: calificaciones con periodo=NULL
+        se etiquetan con el semestre saliente.
         Retorna True si se activó un nuevo semestre.
         """
+        from ..models import Grade
+        from ..models.course import Course
+
         current = self._get_active_semester()
         if current and current.semestre == sem_label:
             return False  # ya es el semestre activo
+
+        previous_label = current.semestre if current else None
+
+        # ── Migrar datos del semestre anterior ──
+        # Calificaciones con periodo=NULL → periodo del semestre saliente
+        if previous_label:
+            n_grades = self.db.query(Grade).filter(
+                Grade.periodo.is_(None)
+            ).update({"periodo": previous_label}, synchronize_session=False)
+            if n_grades:
+                logs.append(f"  📋 {n_grades} calificaciones migradas de periodo=NULL → {previous_label}")
+                logger.info("Migradas %d calificaciones a periodo=%s", n_grades, previous_label)
+
+            # Cursos (Course) sin periodo → asignar periodo anterior
+            n_courses = self.db.query(Course).filter(
+                Course.periodo.is_(None)
+            ).update({"periodo": previous_label}, synchronize_session=False)
+            if n_courses:
+                logs.append(f"  📋 {n_courses} cursos migrados de periodo=NULL → {previous_label}")
+
+            self.db.flush()
 
         # Desactivar todos los semestres anteriores
         self.db.query(SemesterConfig).filter(
@@ -346,6 +372,26 @@ class ETLPipeline:
             except Exception as e:
                 logs.append(f"  ⚠ Error cargando enrollments: {e}")
                 logger.error(f"Error en _upsert_enrollments: {e}", exc_info=True)
+
+            # 2c-bis. Migración única: etiquetar registros huérfanos (periodo=NULL) como P67
+            # Cualquier dato cargado antes de 2026-03-30 22:29:25 quedó sin periodo;
+            # corresponden al semestre P67.
+            try:
+                from ..models import Grade as _Grade
+                from ..models.course import Course as _Course
+                _n_g = self.db.query(_Grade).filter(
+                    _Grade.periodo.is_(None)
+                ).update({"periodo": "P67"}, synchronize_session=False)
+                _n_c = self.db.query(_Course).filter(
+                    _Course.periodo.is_(None)
+                ).update({"periodo": "P67"}, synchronize_session=False)
+                if _n_g or _n_c:
+                    self.db.flush()
+                    logs.append(f"  🔧 Migración P67: {_n_g} calificaciones + {_n_c} cursos etiquetados como P67")
+                    logger.info("Migración P67: %d grades, %d courses", _n_g, _n_c)
+            except Exception as e:
+                logs.append(f"  ⚠ Error en migración P67: {e}")
+                logger.error("Error en migración P67: %s", e, exc_info=True)
 
             # 2d. Procesar Resumen_General (seguimiento de calificación docente)
             try:
