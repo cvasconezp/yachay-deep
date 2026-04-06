@@ -19,7 +19,7 @@ from datetime import datetime, date
 logger = logging.getLogger(__name__)
 
 from ..database import get_db
-from ..models import Student, AvacAccess, TaskSubmission, Grade, Intervention, PracticaPreprofesional, EscuelaPractica
+from ..models import Student, AvacAccess, TaskSubmission, Grade, Intervention, PracticaPreprofesional, EscuelaPractica, Enrollment
 from ..models.course_config import CourseConfig
 from ..auth.jwt import get_current_user
 from ..models.user import User
@@ -251,6 +251,28 @@ class GradeOut(BaseModel):
         from_attributes = True
 
 
+class EnrollmentOut(BaseModel):
+    """Asignatura matriculada desde el reporte institucional."""
+    codigo_grupo: str                           # CODIGO_GRUPO (AVAC course ID)
+    codigo_asignatura: Optional[str] = None     # CODIGO_ASIGNATURA (plan de estudios)
+    asignatura: str                             # nombre de la asignatura
+    tipo_asignatura: Optional[str] = None       # COMUN/GENERICA/ESPECIFICA
+    carrera: Optional[str] = None
+    nivel: Optional[int] = None                 # nivel académico (1-8)
+    nombre_grupo: Optional[str] = None          # NOMBRE_GRUPO completo
+    bloque: Optional[int] = None                # bloque 1 o 2
+    docente: Optional[str] = None
+    correo_docente: Optional[str] = None
+    numero_repitencias: Optional[int] = None
+    pagado: Optional[str] = None                # SI/NO
+    estado_matriculado: Optional[str] = None
+    periodo: Optional[str] = None               # "68"
+    fecha_matricula: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
 # ── Schemas para Malla Curricular fija ────────────────────────────────────────
 
 class MallaIntento(BaseModel):
@@ -374,6 +396,9 @@ class FichaEstudiante(BaseModel):
     calificaciones_historicas: list[GradeOut] = []  # histórico (periodo IS NOT NULL), ordenado por periodo
     intervenciones: list[InterventionOut] = []
     malla_curricular: Optional[MallaCurricular] = None  # malla fija por niveles
+
+    # Asignaturas matriculadas (desde reporte institucional)
+    enrollments: list[EnrollmentOut] = []
 
     # Prácticas preprofesionales
     practicas_preprofesionales: list[PracticaOut] = []
@@ -907,6 +932,34 @@ def get_ficha(
 
     ultima_intervencion = intervenciones[0].created_at if intervenciones else None
 
+    # ── Asignaturas matriculadas desde el reporte institucional ──
+    enrollments_raw = (
+        db.query(Enrollment)
+        .filter(Enrollment.student_id == student_id)
+        .order_by(Enrollment.nivel, Enrollment.asignatura)
+        .all()
+    )
+    enrollments_out = [
+        EnrollmentOut(
+            codigo_grupo=e.codigo_grupo,
+            codigo_asignatura=e.codigo_asignatura,
+            asignatura=e.asignatura,
+            tipo_asignatura=e.tipo_asignatura,
+            carrera=e.carrera,
+            nivel=e.nivel,
+            nombre_grupo=e.nombre_grupo,
+            bloque=e.bloque,
+            docente=e.docente,
+            correo_docente=e.correo_docente,
+            numero_repitencias=e.numero_repitencias,
+            pagado=e.pagado,
+            estado_matriculado=e.estado_matriculado,
+            periodo=e.periodo,
+            fecha_matricula=e.fecha_matricula,
+        )
+        for e in enrollments_raw
+    ]
+
     # ── Construir malla curricular fija (con protección contra errores) ──
     try:
         malla, canonical_niveles = _build_malla_canonica(
@@ -971,6 +1024,7 @@ def get_ficha(
         calificaciones=calificaciones_out,
         calificaciones_historicas=calificaciones_historicas,
         malla_curricular=malla,
+        enrollments=enrollments_out,
         intervenciones=intervenciones,
         practicas_preprofesionales=practicas_out,
         total_intervenciones=len(intervenciones),

@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     AVAC_USERNAME: Optional[str] = None
     AVAC_PASSWORD: Optional[str] = None
     AVAC_TOTP_SECRET: Optional[str] = None   # secret base32 de la app autenticadora
-    AVAC_BASE_URL: str = "https://avac.ups.edu.ec/grado67"
+    AVAC_BASE_URL: str = "https://avac.ups.edu.ec/grado68"
 
     # Data paths (for ETL pipeline - where CSVs are stored)
     DATA_PATH_INGRESOS: str = "./data/IngresosAVAC"

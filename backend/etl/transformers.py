@@ -658,7 +658,7 @@ def transform_personales(carpeta_o_archivos) -> pd.DataFrame:
         ("PAIS_DOM",      "pais"),
         ("PROVINCIA_DOM", "provincia"),
         ("CIUDAD_DOM",    "ciudad"),
-        ("BARRIO",        "barrio"),
+        ("DIRECCION",     "barrio"),
     ]:
         if src_col in df.columns:
             df[dest_col] = df[src_col].apply(normalizar_texto_simple)
@@ -833,9 +833,15 @@ def extract_courses_from_reporte(carpeta_o_archivos) -> pd.DataFrame:
     else:
         df["docente"] = None
 
+    # Correo docente
+    if "CORREO_DOCENTE" in df.columns:
+        df["correo_docente"] = df["CORREO_DOCENTE"].apply(extraer_correo_usuario)
+    else:
+        df["correo_docente"] = None
+
     # Deduplicar: un registro por codigo_avac
     # Tomar first() de los demás campos (son iguales para un mismo código)
-    cols = ["codigo_avac", "nombre_asignatura", "carrera", "nivel", "grupo", "docente"]
+    cols = ["codigo_avac", "nombre_asignatura", "carrera", "nivel", "grupo", "docente", "correo_docente"]
     result = df[cols].drop_duplicates(subset=["codigo_avac"]).reset_index(drop=True)
 
     logger.info(f"extract_courses_from_reporte: {len(result)} cursos únicos extraídos")
@@ -1272,3 +1278,167 @@ def calcular_indicadores_estudiantes(
 
     logger.info(f"Estudiantes con indicadores calculados: {len(df_master)}")
     return df_master
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TRANSFORMER 7: Enrollments (asignaturas matriculadas) desde reporte.xlsx
+# Cada fila del reporte = 1 estudiante × 1 asignatura matriculada
+# ─────────────────────────────────────────────────────────────────────────────
+
+def transform_enrollments(carpeta_o_archivos) -> pd.DataFrame:
+    """
+    Lee los archivos *_reporte.xlsx y extrae TODAS las filas (no deduplicadas),
+    una por cada combinación estudiante × asignatura matriculada.
+
+    Retorna DataFrame con columnas:
+        correo_institucional, codigo_grupo, codigo_asignatura, asignatura,
+        tipo_asignatura, carrera, nivel, nombre_grupo, bloque,
+        docente, correo_docente, numero_repitencias, pagado,
+        estado_matriculado, periodo, fecha_matricula
+    """
+    archivos: list[Path] = []
+    if isinstance(carpeta_o_archivos, (str, Path)):
+        carpeta = Path(carpeta_o_archivos)
+        if carpeta.is_dir():
+            archivos = sorted(carpeta.glob("*_reporte.xlsx"))
+        else:
+            logger.warning(f"Carpeta de reportes no encontrada: {carpeta}")
+    else:
+        archivos = [Path(f) for f in carpeta_o_archivos]
+
+    if not archivos:
+        logger.warning("transform_enrollments: no se encontraron archivos *_reporte.xlsx")
+        return pd.DataFrame()
+
+    dfs = []
+    for archivo in archivos:
+        try:
+            df = pd.read_excel(
+                archivo,
+                engine="openpyxl",
+                dtype={"CEDULA": str, "TELEFONO": str, "CELULAR": str},
+            )
+            dfs.append(df)
+            logger.info(f"  Enrollments leído: {archivo.name} ({len(df)} filas)")
+        except Exception as e:
+            logger.error(f"Error leyendo {archivo.name}: {e}")
+
+    if not dfs:
+        return pd.DataFrame()
+
+    df = pd.concat(dfs, ignore_index=True)
+    df.columns = [c.strip().upper() for c in df.columns]
+
+    # Correo institucional (llave de cruce con Student)
+    if "CORREO_INSTITUCIONAL" not in df.columns:
+        logger.error("transform_enrollments: columna CORREO_INSTITUCIONAL no encontrada")
+        return pd.DataFrame()
+    df["correo_institucional"] = df["CORREO_INSTITUCIONAL"].apply(extraer_correo_usuario)
+    df = df[df["correo_institucional"].str.contains("@", na=False)]
+
+    # Código de grupo (AVAC course ID)
+    if "CODIGO_GRUPO" not in df.columns:
+        logger.warning("transform_enrollments: CODIGO_GRUPO no encontrado")
+        return pd.DataFrame()
+    df["codigo_grupo"] = df["CODIGO_GRUPO"].astype(str).str.strip()
+
+    # Código de asignatura (plan de estudios)
+    if "CODIGO_ASIGNATURA" in df.columns:
+        df["codigo_asignatura"] = df["CODIGO_ASIGNATURA"].astype(str).str.strip()
+    else:
+        df["codigo_asignatura"] = None
+
+    # Asignatura
+    if "ASIGNATURA" in df.columns:
+        df["asignatura"] = df["ASIGNATURA"].astype(str).str.strip()
+    else:
+        df["asignatura"] = None
+    df = df[df["asignatura"].notna() & (df["asignatura"] != "")]
+
+    # Tipo de asignatura
+    if "TIPO_ASIGNATURA" in df.columns:
+        df["tipo_asignatura"] = df["TIPO_ASIGNATURA"].astype(str).str.strip()
+    else:
+        df["tipo_asignatura"] = None
+
+    # Carrera
+    if "CARRERA" in df.columns:
+        df["carrera"] = df["CARRERA"].apply(normalizar_carrera)
+    else:
+        df["carrera"] = None
+
+    # Nivel
+    if "NIVEL" in df.columns:
+        df["nivel"] = pd.to_numeric(df["NIVEL"], errors="coerce").astype("Int64")
+    else:
+        df["nivel"] = None
+
+    # Nombre grupo
+    if "NOMBRE_GRUPO" in df.columns:
+        df["nombre_grupo"] = df["NOMBRE_GRUPO"].astype(str).str.strip()
+    else:
+        df["nombre_grupo"] = None
+
+    # Bloque
+    if "BLOQUE" in df.columns:
+        df["bloque"] = pd.to_numeric(df["BLOQUE"], errors="coerce").astype("Int64")
+    else:
+        df["bloque"] = None
+
+    # Docente
+    doc_col = next((c for c in df.columns if c in ("DOCENTES", "DOCENTE")), None)
+    if doc_col:
+        df["docente"] = df[doc_col].astype(str).str.strip()
+        df.loc[df["docente"].str.lower().isin(["nan", "none", ""]), "docente"] = None
+    else:
+        df["docente"] = None
+
+    # Correo docente
+    if "CORREO_DOCENTE" in df.columns:
+        df["correo_docente"] = df["CORREO_DOCENTE"].apply(extraer_correo_usuario)
+    else:
+        df["correo_docente"] = None
+
+    # Número de repitencias
+    if "NUMERO_REPITENCIAS" in df.columns:
+        df["numero_repitencias"] = pd.to_numeric(df["NUMERO_REPITENCIAS"], errors="coerce").astype("Int64")
+    else:
+        df["numero_repitencias"] = None
+
+    # Pagado
+    if "PAGADO" in df.columns:
+        df["pagado"] = df["PAGADO"].astype(str).str.strip().str.upper()
+        df.loc[df["pagado"].isin(["NAN", "NONE", ""]), "pagado"] = None
+    else:
+        df["pagado"] = None
+
+    # Estado matriculado
+    if "ESTADO_MATRICULADOS" in df.columns:
+        df["estado_matriculado"] = df["ESTADO_MATRICULADOS"].astype(str).str.strip()
+        df.loc[df["estado_matriculado"].str.lower().isin(["nan", "none", ""]), "estado_matriculado"] = None
+    else:
+        df["estado_matriculado"] = None
+
+    # Periodo
+    if "PERIODO" in df.columns:
+        df["periodo"] = df["PERIODO"].astype(str).str.strip()
+        df.loc[df["periodo"].str.lower().isin(["nan", "none", ""]), "periodo"] = None
+    else:
+        df["periodo"] = None
+
+    # Fecha matrícula
+    if "FECHA_MATRICULA" in df.columns:
+        df["fecha_matricula"] = pd.to_datetime(df["FECHA_MATRICULA"], errors="coerce")
+    else:
+        df["fecha_matricula"] = None
+
+    cols_salida = [
+        "correo_institucional", "codigo_grupo", "codigo_asignatura", "asignatura",
+        "tipo_asignatura", "carrera", "nivel", "nombre_grupo", "bloque",
+        "docente", "correo_docente", "numero_repitencias", "pagado",
+        "estado_matriculado", "periodo", "fecha_matricula",
+    ]
+    result = df[[c for c in cols_salida if c in df.columns]].copy()
+
+    logger.info(f"Enrollments: {len(archivos)} archivo(s) → {len(result)} matrículas extraídas")
+    return result.reset_index(drop=True)

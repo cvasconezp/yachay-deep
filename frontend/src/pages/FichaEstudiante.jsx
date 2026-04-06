@@ -1686,7 +1686,7 @@ export default function FichaEstudiante() {
                               </div>
                             </td>
                             <td className="px-2 py-1 border border-gray-200 text-center">
-                              <a href={`https://avac.ups.edu.ec/grado67/course/search.php?search=${codigo}`}
+                              <a href={`https://avac.ups.edu.ec/grado68/course/search.php?areaids=core_course-course&q=${codigo}`}
                                  target="_blank" rel="noreferrer"
                                  className="text-blue-500 hover:text-blue-700 font-mono text-[11px]">
                                 {codigo}
@@ -1755,8 +1755,84 @@ export default function FichaEstudiante() {
                 </div>
               )}
 
-              {/* Tabla de materias — fallback cuando no hay cursos AVAC pero sí calificaciones */}
-              {Object.keys(cursos).length === 0 && ficha.calificaciones?.length > 0 && (() => {
+              {/* Tabla de asignaturas matriculadas desde reporte — cuando no hay cursos AVAC pero sí enrollments */}
+              {Object.keys(cursos).length === 0 && ficha.enrollments?.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-4 px-3 py-1.5 bg-gray-50 border-b border-gray-200" style={{ fontSize: "10px" }}>
+                    <span className="text-gray-500">{ficha.enrollments.length} asignaturas matriculadas</span>
+                    <span className="ml-auto px-2 py-0.5 rounded bg-blue-50 text-blue-600 font-medium" style={{ fontSize: "9px" }}>
+                      Datos del reporte institucional — Periodo {ficha.enrollments[0]?.periodo || "—"}
+                    </span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-[#BDD7EE]">
+                          <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 whitespace-nowrap text-[10px]">Nivel y grupo</th>
+                          <th className="text-left px-2 py-1 border border-gray-300 font-semibold text-gray-700 text-[10px]" style={{ minWidth: "180px" }}>Asignaturas matriculadas</th>
+                          <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 w-14 text-[10px]">Nota</th>
+                          <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 w-10 text-[10px]">Mat</th>
+                          <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 w-16 text-[10px]">Pago</th>
+                          <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 w-14 text-[10px]">Link</th>
+                          <th className="text-left px-2 py-1 border border-gray-300 font-semibold text-gray-700 text-[10px]">Docente</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {ficha.enrollments.map((enr, idx) => {
+                          const matchedCal = matchNota(enr.asignatura, ficha.calificaciones);
+                          const nota = matchedCal?.nota_final ?? null;
+                          const noteStyle = getNoteStyleHistorico(nota);
+                          const grp = abbreviateGrupo(enr.nombre_grupo);
+                          return (
+                            <tr key={`enr-${idx}`} className={idx % 2 === 0 ? "bg-white" : "bg-[#F9F9F9]"}>
+                              <td className="px-2 py-1 border border-gray-200 text-center text-[11px] text-gray-500 whitespace-nowrap">
+                                {enr.nivel ? <>{enr.nivel}° Nivel</> : "—"}
+                                {grp ? <> | {grp}</> : ""}
+                              </td>
+                              <td className="px-2 py-1 border border-gray-200 font-medium text-gray-800">
+                                {toTitleCase(enr.asignatura)}
+                                {enr.tipo_asignatura && (
+                                  <span className="ml-1 text-[9px] text-gray-400 font-normal">({enr.tipo_asignatura})</span>
+                                )}
+                              </td>
+                              <td className={`px-2 py-1 border border-gray-200 text-center font-bold ${noteStyle.bg} ${noteStyle.text}`}>
+                                {nota != null ? nota : <span className="text-gray-300">—</span>}
+                              </td>
+                              <td className="px-2 py-1 border border-gray-200 text-center text-[11px] text-gray-500">
+                                {enr.numero_repitencias != null
+                                  ? <span className={`px-1 rounded text-[10px] font-semibold ${enr.numero_repitencias > 1 ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-gray-700"}`}>
+                                      {enr.numero_repitencias}
+                                    </span>
+                                  : "—"}
+                              </td>
+                              <td className="px-2 py-1 border border-gray-200 text-center">
+                                {enr.pagado === "SI"
+                                  ? <span className="text-[10px] font-semibold text-green-600 bg-green-50 px-1.5 py-0.5 rounded">Sí</span>
+                                  : enr.pagado === "NO"
+                                  ? <span className="text-[10px] font-semibold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">No</span>
+                                  : <span className="text-gray-300">—</span>}
+                              </td>
+                              <td className="px-2 py-1 border border-gray-200 text-center">
+                                <a href={`https://avac.ups.edu.ec/grado68/course/search.php?areaids=core_course-course&q=${enr.codigo_grupo}`}
+                                   target="_blank" rel="noreferrer"
+                                   className="text-blue-500 hover:text-blue-700 font-mono text-[11px]">
+                                  {enr.codigo_grupo}
+                                </a>
+                              </td>
+                              <td className="px-2 py-1 border border-gray-200 text-gray-600 text-[11px]">
+                                {toTitleCase(enr.docente) || <span className="text-gray-300 italic">—</span>}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Tabla de materias — fallback cuando no hay cursos AVAC, ni enrollments, pero sí calificaciones */}
+              {Object.keys(cursos).length === 0 && !ficha.enrollments?.length && ficha.calificaciones?.length > 0 && (() => {
                 const calsByNivel = {};
                 ficha.calificaciones.forEach(cal => {
                   const niv = parseNivelNum(cal.nivel) || parseNivelNum(ficha.nivel_academico) || 0;
@@ -2001,8 +2077,9 @@ export default function FichaEstudiante() {
               {/* Tendencia Académica */}
               <TrendChart calificacionesHistoricas={ficha.calificaciones_historicas} calificaciones={ficha.calificaciones} />
 
-              {/* Estado vacío: solo si no hay absolutamente nada (ni cursos, ni calificaciones, ni historial, ni malla) */}
+              {/* Estado vacío: solo si no hay absolutamente nada (ni cursos, ni enrollments, ni calificaciones, ni historial, ni malla) */}
               {Object.keys(cursos).length === 0
+                && !ficha.enrollments?.length
                 && !ficha.calificaciones?.length
                 && !ficha.calificaciones_historicas?.length
                 && !ficha.malla_curricular?.semestres?.length && (

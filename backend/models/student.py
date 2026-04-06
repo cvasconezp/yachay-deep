@@ -63,3 +63,4 @@ class Student(Base):
     task_submissions = relationship("TaskSubmission", back_populates="student", cascade="all, delete-orphan")
     grades = relationship("Grade", back_populates="student", cascade="all, delete-orphan")
     interventions = relationship("Intervention", back_populates="student", cascade="all, delete-orphan")
+    enrollments = relationship("Enrollment", back_populates="student", cascade="all, delete-orphan")

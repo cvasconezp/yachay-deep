@@ -18,6 +18,7 @@ class CourseConfig(Base):
     asignatura = Column(String, nullable=True)                  # nombre normalizado
     carrera = Column(String, nullable=True, index=True)
     docente = Column(String, nullable=True)
+    correo_docente = Column(String, nullable=True)              # correo del docente
     semestre = Column(String, nullable=True, index=True)        # ej: "2026-1"
     bloque = Column(String, nullable=True, index=True)          # "1", "2", o "ambos"
 

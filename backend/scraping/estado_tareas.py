@@ -44,7 +44,7 @@ EQUIVALENCIA_UNIDADES = {
 
 PALABRAS_EXCLUIDAS = ["autoevaluacion", "cuestionario", "examen", "recuperacion", "asistencia"]
 
-BASE_URL = os.getenv("AVAC_BASE_URL", "https://avac.ups.edu.ec/grado67")
+BASE_URL = os.getenv("AVAC_BASE_URL", "https://avac.ups.edu.ec/grado68")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

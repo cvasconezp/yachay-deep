@@ -23,8 +23,9 @@ from .transformers import (
     calcular_indicadores_estudiantes,
     extract_courses_from_reporte,
     transform_resumen_general,
+    transform_enrollments,
 )
-from ..models import Student, AvacAccess, TaskSubmission, Grade, ScrapingRun, DocenteTracking
+from ..models import Student, AvacAccess, TaskSubmission, Grade, ScrapingRun, DocenteTracking, Enrollment
 from ..models.course_config import CourseConfig, SemesterConfig
 from ..constants import EIB_GRUPO_SEDE
 from ..config import settings
@@ -287,7 +288,18 @@ class ETLPipeline:
                 logs.append(f"  ⚠ Error sincronizando cursos: {e}")
                 logger.error(f"Error en _sync_course_configs: {e}", exc_info=True)
 
-            # 2c. Procesar Resumen_General (seguimiento de calificación docente)
+            # 2c. Cargar asignaturas matriculadas (enrollments) desde reporte
+            try:
+                df_enrollments = transform_enrollments(settings.DATA_PATH_REPORTE)
+                if not df_enrollments.empty:
+                    logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Cargando asignaturas matriculadas ({len(df_enrollments)} registros)...")
+                    n_enrollments = self._upsert_enrollments(df_enrollments)
+                    logs.append(f"  → {n_enrollments} asignaturas matriculadas cargadas")
+            except Exception as e:
+                logs.append(f"  ⚠ Error cargando enrollments: {e}")
+                logger.error(f"Error en _upsert_enrollments: {e}", exc_info=True)
+
+            # 2d. Procesar Resumen_General (seguimiento de calificación docente)
             try:
                 df_resumen = transform_resumen_general(settings.DATA_PATH_REPORTE)
                 if not df_resumen.empty:
@@ -1274,6 +1286,8 @@ class ETLPipeline:
                     existing.carrera = str(row["carrera"]).strip()
                 if row.get("docente") and pd.notna(row["docente"]):
                     existing.docente = str(row["docente"]).strip()
+                if row.get("correo_docente") and pd.notna(row["correo_docente"]):
+                    existing.correo_docente = str(row["correo_docente"]).strip()
                 if row.get("nivel") and pd.notna(row["nivel"]):
                     try:
                         existing.nivel = int(row["nivel"])
@@ -1285,11 +1299,13 @@ class ETLPipeline:
                     existing.semestre = semestre
                 count_updated += 1
             else:
+                correo_doc = str(row.get("correo_docente", "")).strip() or None
                 cc = CourseConfig(
                     codigo_avac=codigo,
                     asignatura=str(row.get("nombre_asignatura", "")).strip() or None,
                     carrera=str(row.get("carrera", "")).strip() or None,
                     docente=str(row.get("docente", "")).strip() or None,
+                    correo_docente=correo_doc,
                     semestre=semestre,
                     activo=True,
                 )
@@ -1382,4 +1398,77 @@ class ETLPipeline:
 
         self.db.commit()
         logger.info(f"_upsert_resumen_general: {count} registros de seguimiento docente")
+        return count
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Enrollments — asignaturas matriculadas desde reporte.xlsx
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _upsert_enrollments(self, df_enrollments: pd.DataFrame) -> int:
+        """
+        Carga asignaturas matriculadas desde el reporte.
+        Full-refresh por periodo: borra enrollments del periodo actual y recarga.
+        Cada fila = 1 estudiante × 1 asignatura matriculada.
+        """
+        if df_enrollments.empty:
+            return 0
+
+        # Determinar periodo del reporte (tomar el más frecuente)
+        periodo_vals = df_enrollments["periodo"].dropna().unique()
+        periodo = str(periodo_vals[0]) if len(periodo_vals) > 0 else None
+
+        # Full-refresh del periodo actual
+        if periodo:
+            self.db.query(Enrollment).filter(
+                Enrollment.periodo == periodo
+            ).delete()
+            self.db.flush()
+
+        # Construir mapa correo → student_id
+        student_map: dict[str, int] = {}
+        students = self.db.query(Student.id, Student.correo_institucional).filter(
+            Student.correo_institucional.isnot(None)
+        ).all()
+        for sid, ci in students:
+            if ci:
+                student_map[ci.strip().lower()] = sid
+
+        count = 0
+        for _, row in df_enrollments.iterrows():
+            ci = str(row.get("correo_institucional", "")).strip().lower()
+            student_id = student_map.get(ci)
+            if not student_id:
+                continue
+
+            codigo_grupo = str(row.get("codigo_grupo", "")).strip()
+            asignatura = str(row.get("asignatura", "")).strip()
+            if not codigo_grupo or not asignatura:
+                continue
+
+            enrollment = Enrollment(
+                student_id=student_id,
+                codigo_grupo=codigo_grupo,
+                codigo_asignatura=_clean_str(row.get("codigo_asignatura")),
+                asignatura=asignatura,
+                tipo_asignatura=_clean_str(row.get("tipo_asignatura")) or None,
+                carrera=_clean_str(row.get("carrera")) or None,
+                nivel=int(row["nivel"]) if pd.notna(row.get("nivel")) else None,
+                nombre_grupo=_clean_str(row.get("nombre_grupo")) or None,
+                bloque=int(row["bloque"]) if pd.notna(row.get("bloque")) else None,
+                docente=_clean_str(row.get("docente")) or None,
+                correo_docente=_clean_str(row.get("correo_docente")) or None,
+                numero_repitencias=int(row["numero_repitencias"]) if pd.notna(row.get("numero_repitencias")) else None,
+                pagado=_clean_str(row.get("pagado")) or None,
+                estado_matriculado=_clean_str(row.get("estado_matriculado")) or None,
+                periodo=periodo,
+                fecha_matricula=row["fecha_matricula"] if pd.notna(row.get("fecha_matricula")) else None,
+            )
+            self.db.add(enrollment)
+            count += 1
+
+            if count % 500 == 0:
+                self.db.flush()
+
+        self.db.commit()
+        logger.info(f"_upsert_enrollments: {count} asignaturas matriculadas cargadas (periodo={periodo})")
         return count
