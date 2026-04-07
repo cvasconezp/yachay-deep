@@ -1217,23 +1217,48 @@ class ETLPipeline:
         return count
 
     def _upsert_grades(self, df_calificaciones: pd.DataFrame) -> int:
-        """Carga calificaciones institucionales del semestre actual (sin período).
+        """Carga calificaciones institucionales del semestre actual.
 
-        Estrategia full-refresh: elimina TODOS los registros con periodo=NULL
+        Estrategia full-refresh: elimina registros del periodo activo (o NULL)
         antes de recargar, evitando duplicados acumulativos.
+        Ahora etiqueta los grades con el periodo activo para que las queries
+        por periodo los encuentren correctamente.
         """
         if df_calificaciones.empty or "nombre_estudiante" not in df_calificaciones.columns:
             return 0
 
         from ..models.grade import Grade as _Grade
+        from sqlalchemy import or_
+
+        # Determinar periodo activo
+        active_sem = self._get_active_semester()
+        active_periodo = active_sem.semestre.strip() if active_sem and active_sem.semestre else None
+
         # Full-refresh: eliminar calificaciones del semestre actual antes de recargar
+        # Buscar tanto periodo=NULL como periodo=active (por migración gradual)
+        if active_periodo:
+            if active_periodo.startswith("P"):
+                del_filter = or_(
+                    _Grade.periodo.is_(None),
+                    _Grade.periodo == active_periodo,
+                    _Grade.periodo == active_periodo[1:],
+                )
+            else:
+                del_filter = or_(
+                    _Grade.periodo.is_(None),
+                    _Grade.periodo == active_periodo,
+                    _Grade.periodo == f"P{active_periodo}",
+                )
+        else:
+            del_filter = _Grade.periodo.is_(None)
+
         deleted = (
             self.db.query(_Grade)
-            .filter(_Grade.periodo.is_(None))
+            .filter(del_filter)
             .delete(synchronize_session=False)
         )
         if deleted:
-            logger.info(f"  Grades semestre actual: eliminados {deleted} registros previos (full-refresh)")
+            logger.info(f"  Grades periodo {active_periodo or 'NULL'}: eliminados {deleted} registros previos (full-refresh)")
         self.db.flush()
 
         count = 0
@@ -1273,7 +1298,7 @@ class ETLPipeline:
                 sede=str(row.get("sede", "")).strip() or None,
                 numero_repitencias=repitencias_val,
                 nivel=nivel_val,
-                periodo=None,  # sin período = semestre actual
+                periodo=active_periodo,  # etiquetar con periodo activo (ej. "P68")
             )
             self.db.add(grade)
             count += 1

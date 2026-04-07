@@ -17,8 +17,11 @@ from ..models.user import User
 
 
 def _period_student_ids(db: Session, periodo: Optional[str]):
-    """Subquery de student_ids filtrados por período (Grades + Enrollments)."""
+    """Subquery de student_ids filtrados por período (Grades + Enrollments).
+    Incluye grades con periodo=NULL si el periodo es el semestre activo."""
     from sqlalchemy import or_
+    from ..models.course_config import SemesterConfig
+
     pf = periodo if periodo else "actual"
 
     grade_sq = db.query(Grade.student_id).distinct()
@@ -28,21 +31,41 @@ def _period_student_ids(db: Session, periodo: Optional[str]):
         grade_sq = grade_sq.filter(Grade.periodo.is_(None))
         enroll_sq = enroll_sq.filter(Enrollment.periodo.is_(None))
     elif pf != "todos":
-        # Dual format: "P68" <-> "68"
+        # Verificar si este periodo es el activo → incluir NULL en grades
+        active = db.query(SemesterConfig.semestre).filter(SemesterConfig.activo == True).first()
+        active_norm = active[0].strip() if active and active[0] else None
+        is_active = False
+        if active_norm:
+            is_active = (active_norm == pf or
+                         (active_norm.startswith("P") and active_norm[1:] == pf) or
+                         f"P{active_norm}" == pf)
+
+        # Dual format: "P68" <-> "68", plus NULL for active period
+        g_conditions = []
+        e_conditions = []
         if pf.startswith("P"):
-            grade_sq = grade_sq.filter(or_(Grade.periodo == pf, Grade.periodo == pf[1:]))
-            enroll_sq = enroll_sq.filter(or_(Enrollment.periodo == pf, Enrollment.periodo == pf[1:]))
+            g_conditions = [Grade.periodo == pf, Grade.periodo == pf[1:]]
+            e_conditions = [Enrollment.periodo == pf, Enrollment.periodo == pf[1:]]
         else:
-            grade_sq = grade_sq.filter(or_(Grade.periodo == pf, Grade.periodo == f"P{pf}"))
-            enroll_sq = enroll_sq.filter(or_(Enrollment.periodo == pf, Enrollment.periodo == f"P{pf}"))
+            g_conditions = [Grade.periodo == pf, Grade.periodo == f"P{pf}"]
+            e_conditions = [Enrollment.periodo == pf, Enrollment.periodo == f"P{pf}"]
+
+        if is_active:
+            g_conditions.append(Grade.periodo.is_(None))
+
+        grade_sq = grade_sq.filter(or_(*g_conditions))
+        enroll_sq = enroll_sq.filter(or_(*e_conditions))
 
     sq = grade_sq.union(enroll_sq)
     return sq, pf
 
 
 def _period_has_grades(db: Session, periodo: Optional[str]) -> bool:
-    """Verifica si existen calificaciones reales para el período dado."""
+    """Verifica si existen calificaciones reales para el período dado.
+    También busca grades con periodo=NULL si el periodo coincide con el semestre activo."""
     from sqlalchemy import or_
+    from ..models.course_config import SemesterConfig
+
     pf = periodo if periodo else "actual"
     q = db.query(Grade.id)
     if pf == "actual":
@@ -50,10 +73,24 @@ def _period_has_grades(db: Session, periodo: Optional[str]) -> bool:
     elif pf == "todos":
         return True
     else:
+        # Incluir NULL si es el periodo activo (grades cargados antes del fix de etiquetado)
+        conditions = []
         if pf.startswith("P"):
-            q = q.filter(or_(Grade.periodo == pf, Grade.periodo == pf[1:]))
+            conditions = [Grade.periodo == pf, Grade.periodo == pf[1:]]
         else:
-            q = q.filter(or_(Grade.periodo == pf, Grade.periodo == f"P{pf}"))
+            conditions = [Grade.periodo == pf, Grade.periodo == f"P{pf}"]
+
+        # Verificar si este periodo es el activo → incluir NULL
+        active = db.query(SemesterConfig.semestre).filter(SemesterConfig.activo == True).first()
+        if active and active[0]:
+            active_norm = active[0].strip()
+            is_active = (active_norm == pf or
+                         (active_norm.startswith("P") and active_norm[1:] == pf) or
+                         f"P{active_norm}" == pf)
+            if is_active:
+                conditions.append(Grade.periodo.is_(None))
+
+        q = q.filter(or_(*conditions))
     return q.limit(1).first() is not None
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])

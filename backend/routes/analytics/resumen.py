@@ -117,9 +117,9 @@ def get_resumen_datos(
         _carrera_sids = set(s_id for (s_id,) in db.query(Student.id).filter(
             func.lower(Student.carrera).contains(carrera.lower())).all())
 
-    # Grades del periodo
+    # Grades del periodo (incluye NULL si es periodo activo)
     grades_q = db.query(Grade)
-    grades_q, periodo_filter = apply_periodo_filter(grades_q, periodo)
+    grades_q, periodo_filter = apply_periodo_filter(grades_q, periodo, db=db)
     if carrera and _carrera_sids:
         grades_q = grades_q.filter(Grade.student_id.in_(_carrera_sids))
     grades = grades_q.all()
@@ -188,16 +188,21 @@ def get_resumen_datos(
 
     reprobados_ids = set()
     repitentes_ids = set()
+    # Repitentes y reprobados desde grades
     for g in grades:
         if g.student_id in student_ids:
             if g.nota_final is not None and g.nota_final < 70:
                 reprobados_ids.add(g.student_id)
             if g.numero_repitencias and g.numero_repitencias > 0:
                 repitentes_ids.add(g.student_id)
+    # Repitentes desde enrollments (complemento cuando no hay grades)
+    for e in enrollments:
+        if e.student_id in student_ids and e.numero_repitencias and e.numero_repitencias > 0:
+            repitentes_ids.add(e.student_id)
 
     docentes_q = db.query(func.count(distinct(Grade.docente))).filter(
         Grade.docente.isnot(None), Grade.docente != "")
-    docentes_q, _ = apply_periodo_filter(docentes_q, periodo)
+    docentes_q, _ = apply_periodo_filter(docentes_q, periodo, db=db)
     if carrera and _carrera_sids:
         docentes_q = docentes_q.filter(Grade.student_id.in_(_carrera_sids))
     total_docentes = docentes_q.scalar() or 0
@@ -336,7 +341,7 @@ def get_resumen_datos(
 
     docentes_carrera_q = db.query(Student.carrera, func.count(distinct(Grade.docente))).join(
         Grade, Grade.student_id == Student.id).filter(Grade.docente.isnot(None), Grade.docente != "")
-    docentes_carrera_q, _ = apply_periodo_filter(docentes_carrera_q, periodo)
+    docentes_carrera_q, _ = apply_periodo_filter(docentes_carrera_q, periodo, db=db)
     docentes_por_carrera = {r[0]: r[1] for r in docentes_carrera_q.group_by(Student.carrera).all()}
 
     interv_carrera_motivo = {}

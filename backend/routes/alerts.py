@@ -19,18 +19,18 @@ from ..models.user import User
 
 def _active_period_has_grades(db: Session) -> bool:
     """Verifica si hay calificaciones para el semestre activo.
+    Incluye grades con periodo=NULL (legacy: cargados antes de etiquetar con periodo).
     Retorna False cuando no hay datos, para evitar mostrar alertas stale."""
     sem = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
     if not sem or not sem.semestre:
-        # Sin semestre activo configurado → no mostrar alertas stale
         return False
     pf = sem.semestre.strip()
     q = db.query(Grade.id)
-    # Buscar en todos los formatos posibles: "P68", "68", "2026-1"
+    # Buscar en todos los formatos: "P68", "68", y NULL (legacy)
     if pf.startswith("P"):
-        q = q.filter(or_(Grade.periodo == pf, Grade.periodo == pf[1:]))
+        q = q.filter(or_(Grade.periodo == pf, Grade.periodo == pf[1:], Grade.periodo.is_(None)))
     else:
-        q = q.filter(or_(Grade.periodo == pf, Grade.periodo == f"P{pf}"))
+        q = q.filter(or_(Grade.periodo == pf, Grade.periodo == f"P{pf}", Grade.periodo.is_(None)))
     return q.limit(1).first() is not None
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
