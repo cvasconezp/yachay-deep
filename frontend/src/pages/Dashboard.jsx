@@ -33,6 +33,9 @@ export default function Dashboard() {
   const navigate = useNavigate();
 
   const loadData = useCallback(async () => {
+    // No cargar hasta que PeriodSelector haya auto-seleccionado el periodo
+    if (!filtros.periodo) return;
+
     setLoading(true);
     setError("");
     try {
@@ -40,10 +43,9 @@ export default function Dashboard() {
       if (filtros.carrera) params.carrera = filtros.carrera;
       if (filtros.nivel_riesgo) params.nivel_riesgo = filtros.nivel_riesgo;
       if (filtros.solo_sin_intervencion) params.solo_sin_intervencion = true;
-      if (filtros.periodo) params.periodo = filtros.periodo;
+      params.periodo = filtros.periodo;
 
-      const statsParams = {};
-      if (filtros.periodo) statsParams.periodo = filtros.periodo;
+      const statsParams = { periodo: filtros.periodo };
 
       const [studentsData, statsData, carrerasData] = await Promise.all([
         api.getRiskDashboard(params),

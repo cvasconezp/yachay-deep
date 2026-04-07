@@ -4,16 +4,31 @@ Módulo de Alertas — eventos generados automáticamente basados en umbrales.
 """
 from typing import Optional
 from datetime import datetime, timezone, timedelta
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from pydantic import BaseModel
 
 from ..database import get_db
 from ..models import Student, Grade
 from ..models.alert_event import AlertEvent
+from ..models.course_config import SemesterConfig
 from ..auth.jwt import get_current_user
 from ..models.user import User
+
+
+def _active_period_has_grades(db: Session) -> bool:
+    """Verifica si hay calificaciones para el semestre activo."""
+    sem = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
+    if not sem or not sem.semestre:
+        return True  # si no hay config, asumir que sí hay datos
+    pf = sem.semestre
+    q = db.query(Grade.id)
+    if pf.startswith("P"):
+        q = q.filter(or_(Grade.periodo == pf, Grade.periodo == pf[1:]))
+    else:
+        q = q.filter(or_(Grade.periodo == pf, Grade.periodo == f"P{pf}"))
+    return q.limit(1).first() is not None
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
 
@@ -44,24 +59,34 @@ class AlertCountResponse(BaseModel):
 
 @router.get("/pending", response_model=list[AlertEventResponse])
 def get_pending_alerts(
+    limit: int = Query(200, le=1000),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Retorna alertas sin leer, ordenadas por recientes primero."""
-    alerts = db.query(AlertEvent).filter(
-        AlertEvent.leido == False
-    ).order_by(
-        AlertEvent.created_at.desc()
-    ).all()
+    """Retorna alertas sin leer, ordenadas por recientes primero.
+    Si no hay datos de AVAC/calificaciones para el periodo activo, retorna vacío."""
+    # Si el periodo activo no tiene grades, no mostrar alertas stale
+    if not _active_period_has_grades(db):
+        return []
 
-    result = []
-    for alert in alerts:
-        student = db.query(Student).filter(Student.id == alert.student_id).first()
-        result.append(AlertEventResponse(
+    # JOIN para evitar N+1 queries
+    rows = (
+        db.query(AlertEvent, Student.nombre, Student.carrera)
+        .outerjoin(Student, AlertEvent.student_id == Student.id)
+        .filter(AlertEvent.leido == False)
+        .order_by(AlertEvent.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+    return [
+        AlertEventResponse(
             id=alert.id,
             student_id=alert.student_id,
-            student_nombre=student.nombre if student else None,
-            student_carrera=student.carrera if student else None,
+            student_nombre=nombre,
+            student_carrera=carrera,
             tipo=alert.tipo,
             mensaje=alert.mensaje,
             severidad=alert.severidad,
@@ -69,9 +94,9 @@ def get_pending_alerts(
             leido_por=alert.leido_por,
             leido_at=alert.leido_at.isoformat() if alert.leido_at else None,
             created_at=alert.created_at.isoformat() if alert.created_at else None,
-        ))
-
-    return result
+        )
+        for alert, nombre, carrera in rows
+    ]
 
 
 @router.get("/count", response_model=AlertCountResponse)
@@ -79,7 +104,12 @@ def get_alert_count(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Retorna conteo de alertas sin leer por severidad."""
+    """Retorna conteo de alertas sin leer por severidad.
+    Si no hay datos para el periodo activo, retorna todo en 0."""
+    # Si el periodo activo no tiene grades, no mostrar conteo stale
+    if not _active_period_has_grades(db):
+        return AlertCountResponse(total=0, critico=0, alto=0, medio=0)
+
     unread = AlertEvent.leido == False
     total = db.query(func.count(AlertEvent.id)).filter(unread).scalar() or 0
     critico = db.query(func.count(AlertEvent.id)).filter(

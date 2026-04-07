@@ -50,12 +50,12 @@ export default function ResumenDatos() {
   }, []);
 
   const loadData = useCallback(async () => {
+    if (!filtroPeriodo) return;
     setLoading(true);
     setError(null);
     try {
-      const params = {};
+      const params = { periodo: filtroPeriodo };
       if (filtroCarrera) params.carrera = filtroCarrera;
-      if (filtroPeriodo) params.periodo = filtroPeriodo;
       const compParams = {};
       if (filtroCarrera) compParams.carrera = filtroCarrera;
       const [result, compData] = await Promise.allSettled([
