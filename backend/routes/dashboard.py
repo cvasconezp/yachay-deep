@@ -39,6 +39,23 @@ def _period_student_ids(db: Session, periodo: Optional[str]):
     sq = grade_sq.union(enroll_sq)
     return sq, pf
 
+
+def _period_has_grades(db: Session, periodo: Optional[str]) -> bool:
+    """Verifica si existen calificaciones reales para el período dado."""
+    from sqlalchemy import or_
+    pf = periodo if periodo else "actual"
+    q = db.query(Grade.id)
+    if pf == "actual":
+        q = q.filter(Grade.periodo.is_(None))
+    elif pf == "todos":
+        return True
+    else:
+        if pf.startswith("P"):
+            q = q.filter(or_(Grade.periodo == pf, Grade.periodo == pf[1:]))
+        else:
+            q = q.filter(or_(Grade.periodo == pf, Grade.periodo == f"P{pf}"))
+    return q.limit(1).first() is not None
+
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 
@@ -174,12 +191,16 @@ def get_stats(
     total_intervenciones = db.query(func.count(Intervention.id)).scalar()
     estudiantes_intervenidos = db.query(func.count(func.distinct(Intervention.student_id))).scalar()
 
+    # Detectar si hay datos reales (grades) para el periodo
+    has_grades = _period_has_grades(db, periodo)
+
     return {
         "total_estudiantes": total,
         "por_nivel_riesgo": [{"nivel": r.nivel_riesgo, "total": r.total} for r in por_riesgo],
         "por_carrera": [{"carrera": r.carrera, "total": r.total} for r in por_carrera],
         "total_intervenciones": total_intervenciones,
         "estudiantes_intervenidos": estudiantes_intervenidos,
+        "tiene_datos_periodo": has_grades,
     }
 
 

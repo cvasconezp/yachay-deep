@@ -157,6 +157,7 @@ export default function Alertas() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Alertas Académicas</h1>
           <p className="text-gray-500 text-sm">Alertas automáticas basadas en indicadores de riesgo estudiantil</p>
+          <p className="text-amber-600 text-xs mt-0.5">Las alertas se basan en el último scraping de AVAC disponible</p>
         </div>
         {user?.role === "admin" && (
           <button

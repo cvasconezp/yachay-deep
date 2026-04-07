@@ -170,7 +170,11 @@ export default function Asignaturas() {
         {loading ? (
           <div className="flex items-center justify-center py-20 text-gray-400">Cargando...</div>
         ) : asignaturas.length === 0 ? (
-          <div className="text-center py-20 text-gray-400">No hay asignaturas con los filtros seleccionados</div>
+          <div className="text-center py-16">
+            <div className="text-3xl mb-2 text-gray-300">📋</div>
+            <div className="text-sm text-gray-400">No hay datos de asignaturas para el período seleccionado</div>
+            <p className="text-xs text-gray-300 mt-1">Los datos aparecerán cuando se carguen calificaciones para este período</p>
+          </div>
         ) : (
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">

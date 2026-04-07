@@ -104,8 +104,11 @@ def get_resumen_datos(
         base_q = base_q.filter(Student.id.in_(grade_student_ids))
     students = base_q.all()
 
+    # Flag: hay calificaciones reales para este período?
+    tiene_datos_periodo = len(grades) > 0
+
     if not students:
-        return {"global": {}, "por_carrera": [], "periodos_disponibles": []}
+        return {"global": {}, "por_carrera": [], "tiene_datos_periodo": tiene_datos_periodo}
 
     student_ids = set(s.id for s in students)
 
@@ -273,7 +276,7 @@ def get_resumen_datos(
         stats["intervenciones"] = interv_carrera_motivo.get(nombre_carrera, {"total": 0, "por_motivo": {}, "pendientes": 0, "resueltas": 0})
         por_carrera.append(stats)
 
-    return {"global": global_stats, "por_carrera": por_carrera}
+    return {"global": global_stats, "por_carrera": por_carrera, "tiene_datos_periodo": tiene_datos_periodo}
 
 
 @router.get("/comparativa")

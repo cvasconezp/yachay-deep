@@ -215,8 +215,19 @@ export default function ResumenDatos() {
       {/* Loading */}
       {loading && <div className="text-center py-12 text-gray-400">Cargando resumen...</div>}
 
+      {/* Aviso: período sin datos */}
+      {!loading && data?.tiene_datos_periodo === false && (
+        <div className="bg-amber-50 border border-amber-300 rounded-xl px-5 py-8 text-center my-5">
+          <div className="text-3xl mb-2">📋</div>
+          <h3 className="text-lg font-semibold text-amber-800 mb-1">Aún no hay datos de calificaciones para este período</h3>
+          <p className="text-sm text-amber-700">
+            Las estadísticas se actualizarán cuando se carguen calificaciones y datos de AVAC para el período seleccionado.
+          </p>
+        </div>
+      )}
+
       {/* Global stats */}
-      {!loading && g.total_estudiantes && (
+      {!loading && g.total_estudiantes && data?.tiene_datos_periodo !== false && (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-5">
             <StatCard label="Total estudiantes" value={g.total_estudiantes} color="text-brand" />

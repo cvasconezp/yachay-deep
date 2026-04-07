@@ -107,8 +107,20 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Tarjetas interactivas */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 my-5">
+      {/* Aviso: período sin datos de AVAC/calificaciones */}
+      {!loading && stats && stats.tiene_datos_periodo === false && (
+        <div className="bg-amber-50 border border-amber-300 rounded-xl px-5 py-8 text-center my-5">
+          <div className="text-3xl mb-2">📋</div>
+          <h3 className="text-lg font-semibold text-amber-800 mb-1">Aún no hay datos de AVAC ni calificaciones para este período</h3>
+          <p className="text-sm text-amber-700">
+            Los indicadores de riesgo, compromiso y predicciones se actualizarán cuando se realice el primer scraping de AVAC y se carguen calificaciones para el período seleccionado.
+          </p>
+          <p className="text-xs text-amber-500 mt-2">Los estudiantes matriculados se pueden ver en la Ficha Estudiante.</p>
+        </div>
+      )}
+
+      {/* Tarjetas interactivas — ocultar si no hay datos del periodo */}
+      {stats?.tiene_datos_periodo !== false && <div className="grid grid-cols-2 md:grid-cols-4 gap-3 my-5">
         {cards.map(card => {
           const isActive = cardFilter === card.key;
           return (
@@ -126,7 +138,7 @@ export default function Dashboard() {
             </div>
           );
         })}
-      </div>
+      </div>}
 
       {/* Botón limpiar filtro de tarjeta */}
       {cardFilter && (
@@ -140,7 +152,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Filtros */}
+      {/* Filtros — siempre visibles para cambiar de periodo */}
       <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4 flex flex-wrap gap-3 items-end">
         <PeriodSelector
           value={filtros.periodo}
@@ -188,8 +200,8 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Tabla */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      {/* Tabla — ocultar si no hay datos del periodo */}
+      {stats?.tiene_datos_periodo !== false && <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         {error ? (
           <div className="text-center py-20">
             <p className="text-red-600 font-medium mb-2">Error al cargar datos</p>
@@ -248,7 +260,7 @@ export default function Dashboard() {
             </tbody>
           </table>
         )}
-      </div>
+      </div>}
     </div>
   );
 }
