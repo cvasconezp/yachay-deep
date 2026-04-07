@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from ..database import get_db
 from ..models import Student, Grade
+from ..models.enrollment import Enrollment
 from ..models.alert_event import AlertEvent
 from ..models.course_config import SemesterConfig
 from ..auth.jwt import get_current_user
@@ -26,12 +27,38 @@ def _active_period_has_grades(db: Session) -> bool:
         return False
     pf = sem.semestre.strip()
     q = db.query(Grade.id)
-    # Buscar en todos los formatos: "P68", "68", y NULL (legacy)
     if pf.startswith("P"):
         q = q.filter(or_(Grade.periodo == pf, Grade.periodo == pf[1:], Grade.periodo.is_(None)))
     else:
         q = q.filter(or_(Grade.periodo == pf, Grade.periodo == f"P{pf}", Grade.periodo.is_(None)))
     return q.limit(1).first() is not None
+
+
+def _active_period_student_ids(db: Session):
+    """Retorna subquery de student_ids para el periodo activo (grades + enrollments).
+    Usado para filtrar alertas solo a estudiantes del periodo actual."""
+    sem = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
+    if not sem or not sem.semestre:
+        return None
+    pf = sem.semestre.strip()
+
+    if pf.startswith("P"):
+        raw = pf[1:]
+        grade_sq = db.query(Grade.student_id).filter(
+            or_(Grade.periodo == pf, Grade.periodo == raw, Grade.periodo.is_(None))
+        ).distinct()
+        enroll_sq = db.query(Enrollment.student_id).filter(
+            or_(Enrollment.periodo == pf, Enrollment.periodo == raw)
+        ).distinct()
+    else:
+        grade_sq = db.query(Grade.student_id).filter(
+            or_(Grade.periodo == pf, Grade.periodo == f"P{pf}", Grade.periodo.is_(None))
+        ).distinct()
+        enroll_sq = db.query(Enrollment.student_id).filter(
+            or_(Enrollment.periodo == pf, Enrollment.periodo == f"P{pf}")
+        ).distinct()
+
+    return grade_sq.union(enroll_sq).subquery()
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
 
@@ -68,17 +95,24 @@ def get_pending_alerts(
     current_user: User = Depends(get_current_user),
 ):
     """Retorna alertas sin leer, ordenadas por recientes primero.
-    Si no hay datos de AVAC/calificaciones para el periodo activo, retorna vacío."""
-    # Si el periodo activo no tiene grades, no mostrar alertas stale
+    Solo incluye alertas de estudiantes del periodo activo."""
     if not _active_period_has_grades(db):
         return []
 
-    # JOIN para evitar N+1 queries
-    rows = (
+    period_sids = _active_period_student_ids(db)
+
+    q = (
         db.query(AlertEvent, Student.nombre, Student.carrera)
         .outerjoin(Student, AlertEvent.student_id == Student.id)
         .filter(AlertEvent.leido == False)
-        .order_by(AlertEvent.created_at.desc())
+    )
+
+    # Filtrar solo estudiantes del periodo activo
+    if period_sids is not None:
+        q = q.filter(AlertEvent.student_id.in_(db.query(period_sids.c.student_id)))
+
+    rows = (
+        q.order_by(AlertEvent.created_at.desc())
         .offset(offset)
         .limit(limit)
         .all()
@@ -108,22 +142,26 @@ def get_alert_count(
     current_user: User = Depends(get_current_user),
 ):
     """Retorna conteo de alertas sin leer por severidad.
-    Si no hay datos para el periodo activo, retorna todo en 0."""
-    # Si el periodo activo no tiene grades, no mostrar conteo stale
+    Solo cuenta alertas de estudiantes del periodo activo."""
     if not _active_period_has_grades(db):
         return AlertCountResponse(total=0, critico=0, alto=0, medio=0)
 
+    period_sids = _active_period_student_ids(db)
+
     unread = AlertEvent.leido == False
-    total = db.query(func.count(AlertEvent.id)).filter(unread).scalar() or 0
-    critico = db.query(func.count(AlertEvent.id)).filter(
-        unread, AlertEvent.severidad == "critico"
-    ).scalar() or 0
-    alto = db.query(func.count(AlertEvent.id)).filter(
-        unread, AlertEvent.severidad == "alto"
-    ).scalar() or 0
-    medio = db.query(func.count(AlertEvent.id)).filter(
-        unread, AlertEvent.severidad == "medio"
-    ).scalar() or 0
+
+    def _count(extra_filter=None):
+        q = db.query(func.count(AlertEvent.id)).filter(unread)
+        if period_sids is not None:
+            q = q.filter(AlertEvent.student_id.in_(db.query(period_sids.c.student_id)))
+        if extra_filter is not None:
+            q = q.filter(extra_filter)
+        return q.scalar() or 0
+
+    total = _count()
+    critico = _count(AlertEvent.severidad == "critico")
+    alto = _count(AlertEvent.severidad == "alto")
+    medio = _count(AlertEvent.severidad == "medio")
 
     return AlertCountResponse(
         total=total,
@@ -166,8 +204,15 @@ def generate_alerts(
     - porcentaje_tareas < 40 → "tareas_bajas" (alto)
 
     Solo crea alertas que no existan para el mismo student+tipo en los últimos 7 días.
+    Solo escanea estudiantes del período activo.
     """
-    students = db.query(Student).all()
+    period_sids = _active_period_student_ids(db)
+    if period_sids is not None:
+        students = db.query(Student).filter(
+            Student.id.in_(db.query(period_sids.c.student_id))
+        ).all()
+    else:
+        students = db.query(Student).all()
     created = 0
     threshold_date = datetime.now(timezone.utc) - timedelta(days=7)
 
