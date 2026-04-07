@@ -9,6 +9,7 @@ from datetime import datetime
 
 from ..database import get_db
 from ..models import Intervention, Student, Grade
+from ..models.enrollment import Enrollment
 from ..models.user import User
 from ..auth.jwt import get_current_user
 
@@ -33,13 +34,17 @@ class InterventionCreate(BaseModel):
     resultado: Optional[str] = Field(None, max_length=200)
     requiere_seguimiento: Optional[str] = Field(None, max_length=10)
     derivar_bienestar: Optional[bool] = False
+    derivar_financiero: Optional[bool] = False
+    derivar_coordinacion: Optional[bool] = False
+    derivar_docente: Optional[bool] = False
     tipo_evento_critico: Optional[str] = Field(None, max_length=200)
     reporte_bienestar: Optional[str] = Field(None, max_length=5000)
+    reporte_derivacion: Optional[str] = Field(None, max_length=5000)
     periodo: Optional[str] = Field(None, max_length=20)
 
     @field_validator("medio", "motivo", "estado", "asignatura", "docente",
                      "observacion", "resultado", "tipo_evento_critico", "reporte_bienestar",
-                     mode="before")
+                     "reporte_derivacion", mode="before")
     @classmethod
     def strip_whitespace(cls, v):
         return _strip_str(v)
@@ -55,13 +60,17 @@ class InterventionUpdate(BaseModel):
     resultado: Optional[str] = Field(None, max_length=200)
     requiere_seguimiento: Optional[str] = Field(None, max_length=10)
     derivar_bienestar: Optional[bool] = None
+    derivar_financiero: Optional[bool] = None
+    derivar_coordinacion: Optional[bool] = None
+    derivar_docente: Optional[bool] = None
     tipo_evento_critico: Optional[str] = Field(None, max_length=200)
     reporte_bienestar: Optional[str] = Field(None, max_length=5000)
+    reporte_derivacion: Optional[str] = Field(None, max_length=5000)
     periodo: Optional[str] = Field(None, max_length=20)
 
     @field_validator("medio", "motivo", "estado", "asignatura", "docente",
                      "observacion", "resultado", "tipo_evento_critico", "reporte_bienestar",
-                     mode="before")
+                     "reporte_derivacion", mode="before")
     @classmethod
     def strip_whitespace(cls, v):
         return _strip_str(v)
@@ -79,8 +88,12 @@ class InterventionResponse(BaseModel):
     resultado: Optional[str]
     requiere_seguimiento: Optional[str]
     derivar_bienestar: Optional[bool]
+    derivar_financiero: Optional[bool]
+    derivar_coordinacion: Optional[bool]
+    derivar_docente: Optional[bool]
     tipo_evento_critico: Optional[str]
     reporte_bienestar: Optional[str]
+    reporte_derivacion: Optional[str]
     email_enviado: Optional[bool]
     periodo: Optional[str]
     created_at: Optional[datetime]
@@ -125,8 +138,12 @@ def create_intervention(
         resultado=payload.resultado,
         requiere_seguimiento=payload.requiere_seguimiento,
         derivar_bienestar=payload.derivar_bienestar,
+        derivar_financiero=payload.derivar_financiero,
+        derivar_coordinacion=payload.derivar_coordinacion,
+        derivar_docente=payload.derivar_docente,
         tipo_evento_critico=payload.tipo_evento_critico,
         reporte_bienestar=payload.reporte_bienestar,
+        reporte_derivacion=payload.reporte_derivacion,
         periodo=_periodo,
         # [GAP-F5-01] Snapshot de indicadores al momento de la intervención
         snapshot_compromiso=student.indice_compromiso,
@@ -315,18 +332,28 @@ def interventions_dashboard(
     """
     from sqlalchemy import func, distinct
 
-    # --- Filtro por período: solo intervenciones de estudiantes del período ---
-    from sqlalchemy import or_
+    # --- Filtro por período: estudiantes del período (Grades OR Enrollments) ---
+    from sqlalchemy import or_, union
     pf = periodo if periodo else "actual"
-    period_sq = db.query(Grade.student_id).distinct()
+
+    # Students with grades in the period
+    grade_sq = db.query(Grade.student_id).distinct()
+    # Students with enrollments in the period
+    enroll_sq = db.query(Enrollment.student_id).distinct()
+
     if pf == "actual":
-        period_sq = period_sq.filter(Grade.periodo.is_(None))
+        grade_sq = grade_sq.filter(Grade.periodo.is_(None))
+        enroll_sq = enroll_sq.filter(Enrollment.periodo.is_(None))
     elif pf != "todos":
-        # Buscar tanto "P68" como "68" para cubrir datos no normalizados
         if pf.startswith("P"):
-            period_sq = period_sq.filter(or_(Grade.periodo == pf, Grade.periodo == pf[1:]))
+            grade_sq = grade_sq.filter(or_(Grade.periodo == pf, Grade.periodo == pf[1:]))
+            enroll_sq = enroll_sq.filter(or_(Enrollment.periodo == pf, Enrollment.periodo == pf[1:]))
         else:
-            period_sq = period_sq.filter(or_(Grade.periodo == pf, Grade.periodo == f"P{pf}"))
+            grade_sq = grade_sq.filter(or_(Grade.periodo == pf, Grade.periodo == f"P{pf}"))
+            enroll_sq = enroll_sq.filter(or_(Enrollment.periodo == pf, Enrollment.periodo == f"P{pf}"))
+
+    # Combine: students from grades OR enrollments
+    period_sq = grade_sq.union(enroll_sq)
 
     # --- Query principal: intervenciones + datos de estudiante ---
     query = (
@@ -363,6 +390,9 @@ def interventions_dashboard(
             "requiere_seguimiento": inv.requiere_seguimiento,
             "observacion": inv.observacion,
             "derivar_bienestar": inv.derivar_bienestar,
+            "derivar_financiero": inv.derivar_financiero,
+            "derivar_coordinacion": inv.derivar_coordinacion,
+            "derivar_docente": inv.derivar_docente,
             "tipo_evento_critico": inv.tipo_evento_critico,
             "email_enviado": inv.email_enviado,
             "monitor_nombre": inv.monitor_nombre,

@@ -26,10 +26,14 @@ class Intervention(Base):
     resultado = Column(String, nullable=True)        # Contactado / No contestó / etc
     requiere_seguimiento = Column(String, nullable=True)  # "si" / "no"
 
-    # Derivación a Bienestar Estudiantil (Fase 4)
+    # Derivaciones (Fase 4+)
     derivar_bienestar = Column(Boolean, nullable=True, default=False)
+    derivar_financiero = Column(Boolean, nullable=True, default=False)
+    derivar_coordinacion = Column(Boolean, nullable=True, default=False)
+    derivar_docente = Column(Boolean, nullable=True, default=False)
     tipo_evento_critico = Column(String, nullable=True)   # Enfermedad / Pérdida laboral / etc
     reporte_bienestar = Column(Text, nullable=True)       # Descripción detallada del caso
+    reporte_derivacion = Column(Text, nullable=True)      # Nota para otras derivaciones
     email_enviado = Column(Boolean, nullable=True, default=False)
 
     # [GAP-F5-01] Snapshot de indicadores al momento de la intervención

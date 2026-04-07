@@ -1,8 +1,54 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { api } from "../services/api";
-import { MEDIOS, MOTIVOS, ESTADOS, RESULTADOS, EVENTOS_CRITICOS } from "../constants/interventions";
+import { MEDIOS, MOTIVOS, ESTADOS, RESULTADOS, EVENTOS_CRITICOS, DERIVACIONES } from "../constants/interventions";
 
 export default function InterventionForm({ student, onClose, onSaved }) {
+  // Determine active periodo from student's enrollments or fallback
+  const activePeriodo = useMemo(() => {
+    if (student.enrollments?.length) {
+      // Pick the most common periodo from enrollments
+      const periodos = student.enrollments.map(e => e.periodo).filter(Boolean);
+      if (periodos.length) return periodos[0];
+    }
+    return "";
+  }, [student]);
+
+  // Build unique asignaturas from enrollments (primary) or calificaciones (fallback)
+  const asignaturas = useMemo(() => {
+    if (student.enrollments?.length) {
+      const seen = new Set();
+      return student.enrollments
+        .filter(e => {
+          const key = (e.asignatura || "").toUpperCase();
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        })
+        .map(e => ({
+          asignatura: e.asignatura,
+          docente: e.docente || "",
+          nivel: e.nivel,
+        }));
+    }
+    // Fallback to calificaciones
+    if (student.calificaciones?.length) {
+      const seen = new Set();
+      return student.calificaciones
+        .filter(g => {
+          const key = (g.asignatura || "").toUpperCase();
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        })
+        .map(g => ({
+          asignatura: g.asignatura,
+          docente: g.docente || "",
+          nivel: null,
+        }));
+    }
+    return [];
+  }, [student]);
+
   const [form, setForm] = useState({
     student_id: student.id,
     medio: "",
@@ -13,15 +59,35 @@ export default function InterventionForm({ student, onClose, onSaved }) {
     observacion: "",
     resultado: "",
     requiere_seguimiento: "no",
+    // Derivaciones
     derivar_bienestar: false,
+    derivar_financiero: false,
+    derivar_coordinacion: false,
+    derivar_docente: false,
     tipo_evento_critico: "",
     reporte_bienestar: "",
-    periodo: "",
+    reporte_derivacion: "",
+    periodo: activePeriodo,
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
   const update = (field, value) => setForm(f => ({ ...f, [field]: value }));
+
+  // Auto-fill docente when asignatura is selected
+  const handleAsignaturaChange = (value) => {
+    update("asignatura", value);
+    if (value) {
+      const match = asignaturas.find(a => a.asignatura === value);
+      if (match?.docente) {
+        update("docente", match.docente);
+      }
+    } else {
+      update("docente", "");
+    }
+  };
+
+  const anyDerivacion = form.derivar_bienestar || form.derivar_financiero || form.derivar_coordinacion || form.derivar_docente;
 
   const isDirty = form.medio || form.motivo || form.observacion || form.resultado;
 
@@ -90,16 +156,22 @@ export default function InterventionForm({ student, onClose, onSaved }) {
               value={form.periodo}
               onChange={e => update("periodo", e.target.value)}
               className={inputClass}
-              placeholder="P67, P68, etc. (opcional)"
+              placeholder="P67, P68, etc."
+              readOnly={!!activePeriodo}
             />
+            {activePeriodo && (
+              <p className="text-[10px] text-gray-400 mt-0.5">Auto-detectado del semestre activo</p>
+            )}
           </FormField>
 
           <div className="grid grid-cols-2 gap-4">
             <FormField label="Asignatura">
-              <select value={form.asignatura} onChange={e => update("asignatura", e.target.value)} className={selectClass}>
+              <select value={form.asignatura} onChange={e => handleAsignaturaChange(e.target.value)} className={selectClass}>
                 <option value="">Todas / General</option>
-                {student.calificaciones?.map(g => (
-                  <option key={g.asignatura} value={g.asignatura}>{g.asignatura}</option>
+                {asignaturas.map(a => (
+                  <option key={a.asignatura} value={a.asignatura}>
+                    {a.nivel ? `N${a.nivel} - ` : ""}{a.asignatura}
+                  </option>
                 ))}
               </select>
             </FormField>
@@ -111,6 +183,21 @@ export default function InterventionForm({ student, onClose, onSaved }) {
               </select>
             </FormField>
           </div>
+
+          {form.asignatura && (
+            <FormField label="Docente">
+              <input
+                type="text"
+                value={form.docente}
+                onChange={e => update("docente", e.target.value)}
+                className={inputClass}
+                placeholder="Nombre del docente"
+              />
+              {form.docente && (
+                <p className="text-[10px] text-gray-400 mt-0.5">Auto-llenado desde matrícula</p>
+              )}
+            </FormField>
+          )}
 
           <FormField label="Observaciones">
             <textarea
@@ -132,43 +219,66 @@ export default function InterventionForm({ student, onClose, onSaved }) {
             Requiere seguimiento posterior
           </label>
 
-          {/* Derivación a Bienestar Estudiantil */}
-          <div className={`border rounded-xl p-4 transition-colors ${form.derivar_bienestar ? "border-red-300 bg-red-50/50" : "border-gray-200 bg-gray-50/50"}`}>
-            <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
-              <input
-                type="checkbox"
-                checked={form.derivar_bienestar}
-                onChange={e => update("derivar_bienestar", e.target.checked)}
-                className="rounded accent-red-600"
-              />
-              <span className={form.derivar_bienestar ? "text-red-700" : "text-gray-700"}>
-                Derivar a Bienestar Estudiantil
-              </span>
-            </label>
-            <p className="text-[11px] text-gray-400 mt-1 ml-6">
-              Activar si el estudiante requiere atención psicológica o de bienestar
-            </p>
+          {/* ─── Sección de Derivaciones ─── */}
+          <div className="border rounded-xl p-4 border-gray-200 bg-gray-50/50 space-y-3">
+            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Derivaciones</p>
 
-            {form.derivar_bienestar && (
-              <div className="mt-3 space-y-3 ml-1">
-                <FormField label="Tipo de evento crítico *">
-                  <select value={form.tipo_evento_critico} onChange={e => update("tipo_evento_critico", e.target.value)} className={selectClass}>
-                    <option value="">Seleccionar evento...</option>
-                    {EVENTOS_CRITICOS.map(ev => <option key={ev} value={ev}>{ev}</option>)}
-                  </select>
-                </FormField>
+            {DERIVACIONES.map(d => {
+              const fieldKey = `derivar_${d.key}`;
+              const isActive = form[fieldKey];
+              return (
+                <div key={d.key} className={`rounded-lg p-3 transition-colors ${isActive ? "bg-amber-50 border border-amber-300" : "bg-white border border-gray-100"}`}>
+                  <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={!!isActive}
+                      onChange={e => update(fieldKey, e.target.checked)}
+                      className="rounded accent-amber-600"
+                    />
+                    <span className={isActive ? "text-amber-800" : "text-gray-700"}>
+                      {d.label}
+                    </span>
+                  </label>
+                  <p className="text-[11px] text-gray-400 mt-0.5 ml-6">{d.desc}</p>
 
-                <FormField label="Reporte para Bienestar *">
-                  <textarea
-                    value={form.reporte_bienestar}
-                    onChange={e => update("reporte_bienestar", e.target.value)}
-                    rows={4}
-                    className={inputClass + " resize-none"}
-                    placeholder="Describa la situación del estudiante con el mayor detalle posible. Esta información será enviada al departamento de Bienestar Estudiantil..."
-                  />
-                </FormField>
-              </div>
-            )}
+                  {/* Bienestar specific fields */}
+                  {d.key === "bienestar" && isActive && (
+                    <div className="mt-3 space-y-3 ml-1">
+                      <FormField label="Tipo de evento crítico *">
+                        <select value={form.tipo_evento_critico} onChange={e => update("tipo_evento_critico", e.target.value)} className={selectClass}>
+                          <option value="">Seleccionar evento...</option>
+                          {EVENTOS_CRITICOS.map(ev => <option key={ev} value={ev}>{ev}</option>)}
+                        </select>
+                      </FormField>
+                      <FormField label="Reporte para Bienestar *">
+                        <textarea
+                          value={form.reporte_bienestar}
+                          onChange={e => update("reporte_bienestar", e.target.value)}
+                          rows={4}
+                          className={inputClass + " resize-none"}
+                          placeholder="Describa la situación del estudiante con el mayor detalle posible..."
+                        />
+                      </FormField>
+                    </div>
+                  )}
+
+                  {/* Other derivations: optional note */}
+                  {d.key !== "bienestar" && isActive && (
+                    <div className="mt-3 ml-1">
+                      <FormField label={`Nota para ${d.label}`}>
+                        <textarea
+                          value={form.reporte_derivacion}
+                          onChange={e => update("reporte_derivacion", e.target.value)}
+                          rows={2}
+                          className={inputClass + " resize-none"}
+                          placeholder={`Detalle para ${d.label}...`}
+                        />
+                      </FormField>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           {error && (

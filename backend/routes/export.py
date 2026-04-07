@@ -11,6 +11,7 @@ from datetime import datetime
 
 from ..database import get_db
 from ..models import Student, AvacAccess, TaskSubmission, Grade, Intervention
+from ..models.enrollment import Enrollment
 from ..auth.jwt import get_current_user
 from ..models.user import User
 
@@ -78,21 +79,25 @@ def export_estudiantes_excel(
         raise HTTPException(status_code=500, detail="openpyxl no instalado")
 
     from ..models import Grade as _Grade
+    from sqlalchemy import or_
 
     periodo_filter = periodo if periodo else "actual"
 
-    # Si es período histórico, filtrar estudiantes por quienes tienen calificaciones en ese período
+    # Si es período histórico, filtrar estudiantes por quienes tienen calificaciones O matrículas en ese período
     student_ids_in_periodo = None
     if periodo_filter not in ("actual", "todos"):
-        grade_sids = (
-            db.query(_Grade.student_id)
-            .filter(_Grade.periodo == periodo_filter)
-            .distinct()
-            .all()
-        )
-        student_ids_in_periodo = set(sid for (sid,) in grade_sids)
+        pf = periodo_filter
+        # Dual format normalization: "P68" <-> "68"
+        if pf.startswith("P"):
+            grade_sids = db.query(_Grade.student_id).filter(or_(_Grade.periodo == pf, _Grade.periodo == pf[1:])).distinct().all()
+            enroll_sids = db.query(Enrollment.student_id).filter(or_(Enrollment.periodo == pf, Enrollment.periodo == pf[1:])).distinct().all()
+        else:
+            grade_sids = db.query(_Grade.student_id).filter(or_(_Grade.periodo == pf, _Grade.periodo == f"P{pf}")).distinct().all()
+            enroll_sids = db.query(Enrollment.student_id).filter(or_(Enrollment.periodo == pf, Enrollment.periodo == f"P{pf}")).distinct().all()
+
+        student_ids_in_periodo = set(sid for (sid,) in grade_sids) | set(sid for (sid,) in enroll_sids)
         if not student_ids_in_periodo:
-            raise HTTPException(status_code=404, detail=f"No hay calificaciones para el período {periodo_filter}")
+            raise HTTPException(status_code=404, detail=f"No hay estudiantes para el período {periodo_filter}")
 
     # Filtrar estudiantes
     query = db.query(Student)

@@ -80,6 +80,11 @@ def upgrade_tables():
             ("snapshot_nivel_riesgo", "VARCHAR"),
             # Periodo de la intervención (P67, P68, etc.)
             ("periodo", "VARCHAR"),
+            # Derivaciones ampliadas
+            ("derivar_financiero", "BOOLEAN"),
+            ("derivar_coordinacion", "BOOLEAN"),
+            ("derivar_docente", "BOOLEAN"),
+            ("reporte_derivacion", "TEXT"),
         ],
         "scraping_runs": [
             ("descripcion", "VARCHAR"),

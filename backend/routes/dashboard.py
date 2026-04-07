@@ -11,18 +11,32 @@ from sqlalchemy import distinct as sa_distinct
 
 from ..database import get_db
 from ..models import Student, Intervention, Grade
+from ..models.enrollment import Enrollment
 from ..auth.jwt import get_current_user
 from ..models.user import User
 
 
 def _period_student_ids(db: Session, periodo: Optional[str]):
-    """Subquery de student_ids filtrados por período."""
+    """Subquery de student_ids filtrados por período (Grades + Enrollments)."""
+    from sqlalchemy import or_
     pf = periodo if periodo else "actual"
-    sq = db.query(Grade.student_id).distinct()
+
+    grade_sq = db.query(Grade.student_id).distinct()
+    enroll_sq = db.query(Enrollment.student_id).distinct()
+
     if pf == "actual":
-        sq = sq.filter(Grade.periodo.is_(None))
+        grade_sq = grade_sq.filter(Grade.periodo.is_(None))
+        enroll_sq = enroll_sq.filter(Enrollment.periodo.is_(None))
     elif pf != "todos":
-        sq = sq.filter(Grade.periodo == pf)
+        # Dual format: "P68" <-> "68"
+        if pf.startswith("P"):
+            grade_sq = grade_sq.filter(or_(Grade.periodo == pf, Grade.periodo == pf[1:]))
+            enroll_sq = enroll_sq.filter(or_(Enrollment.periodo == pf, Enrollment.periodo == pf[1:]))
+        else:
+            grade_sq = grade_sq.filter(or_(Grade.periodo == pf, Grade.periodo == f"P{pf}"))
+            enroll_sq = enroll_sq.filter(or_(Enrollment.periodo == pf, Enrollment.periodo == f"P{pf}"))
+
+    sq = grade_sq.union(enroll_sq)
     return sq, pf
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
