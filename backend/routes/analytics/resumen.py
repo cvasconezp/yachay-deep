@@ -20,29 +20,6 @@ from ._helpers import apply_periodo_filter
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 
-@router.get("/debug-periodos")
-def debug_periodos(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """Diagnóstico temporal: valores REALES de periodo en grades y enrollments."""
-    from sqlalchemy import text
-    grade_periodos = db.execute(text(
-        "SELECT periodo, COUNT(*) as cnt FROM grades GROUP BY periodo ORDER BY periodo"
-    )).fetchall()
-    enroll_periodos = db.execute(text(
-        "SELECT periodo, COUNT(*) as cnt FROM enrollments GROUP BY periodo ORDER BY periodo"
-    )).fetchall()
-    sem_configs = db.execute(text(
-        "SELECT id, semestre, activo FROM semester_configs ORDER BY id"
-    )).fetchall()
-    return {
-        "grades_by_periodo": [{"periodo": r[0], "count": r[1]} for r in grade_periodos],
-        "enrollments_by_periodo": [{"periodo": r[0], "count": r[1]} for r in enroll_periodos],
-        "semester_configs": [{"id": r[0], "semestre": r[1], "activo": r[2]} for r in sem_configs],
-    }
-
-
 @router.get("/periodos")
 def get_periodos_disponibles(
     db: Session = Depends(get_db),
