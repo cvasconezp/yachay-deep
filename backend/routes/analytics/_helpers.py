@@ -5,23 +5,10 @@ from sqlalchemy.orm import Session
 from ...models.grade import Grade
 
 
-def _is_active_periodo(db_session, pf: str) -> bool:
-    """Verifica si un periodo coincide con el semestre activo."""
-    from ...models.course_config import SemesterConfig
-    active = db_session.query(SemesterConfig.semestre).filter(
-        SemesterConfig.activo == True).first()
-    if not active or not active[0]:
-        return False
-    a = active[0].strip()
-    return (a == pf or
-            (a.startswith("P") and a[1:] == pf) or
-            f"P{a}" == pf)
-
-
-def apply_periodo_filter(query, periodo: Optional[str], column=None, db=None):
+def apply_periodo_filter(query, periodo: Optional[str], column=None, include_null=False):
     """Aplica filtro de período a una query de SQLAlchemy.
     Maneja ambos formatos: 'P68' y '68' en la base de datos.
-    Si el periodo es el activo e incluye NULL (grades legacy sin etiquetar).
+    Si include_null=True, también incluye registros con periodo=NULL.
     Retorna (query_filtrado, periodo_normalizado)."""
     col = column or Grade.periodo
     pf = periodo if periodo else "actual"
@@ -35,8 +22,8 @@ def apply_periodo_filter(query, periodo: Optional[str], column=None, db=None):
         else:
             conditions = [col == pf, col == f"P{pf}"]
 
-        # Incluir NULL si es el periodo activo (grades cargados antes del fix)
-        if db is not None and _is_active_periodo(db, pf):
+        # Incluir NULL (grades legacy cargados antes del fix de etiquetado)
+        if include_null:
             conditions.append(col.is_(None))
 
         query = query.filter(or_(*conditions))

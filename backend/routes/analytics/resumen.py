@@ -110,6 +110,7 @@ def get_resumen_datos(
 ):
     """Resumen estadístico general y por carrera."""
     from sqlalchemy import or_
+    from ...models.course_config import SemesterConfig
     today = date.today()
 
     _carrera_sids = None
@@ -117,9 +118,23 @@ def get_resumen_datos(
         _carrera_sids = set(s_id for (s_id,) in db.query(Student.id).filter(
             func.lower(Student.carrera).contains(carrera.lower())).all())
 
-    # Grades del periodo (incluye NULL si es periodo activo)
+    # Detectar si periodo solicitado es el activo → incluir grades con NULL
+    _include_null = False
+    if periodo and periodo not in ("actual", "todos"):
+        try:
+            active_row = db.query(SemesterConfig.semestre).filter(SemesterConfig.activo == True).first()
+            if active_row and active_row[0]:
+                a = active_row[0].strip()
+                pn = periodo.strip()
+                _include_null = (a == pn or
+                                 (a.startswith("P") and a[1:] == pn) or
+                                 f"P{a}" == pn)
+        except Exception:
+            pass
+
+    # Grades del periodo (incluye NULL si es periodo activo para datos legacy)
     grades_q = db.query(Grade)
-    grades_q, periodo_filter = apply_periodo_filter(grades_q, periodo, db=db)
+    grades_q, periodo_filter = apply_periodo_filter(grades_q, periodo, include_null=_include_null)
     if carrera and _carrera_sids:
         grades_q = grades_q.filter(Grade.student_id.in_(_carrera_sids))
     grades = grades_q.all()
@@ -202,7 +217,7 @@ def get_resumen_datos(
 
     docentes_q = db.query(func.count(distinct(Grade.docente))).filter(
         Grade.docente.isnot(None), Grade.docente != "")
-    docentes_q, _ = apply_periodo_filter(docentes_q, periodo, db=db)
+    docentes_q, _ = apply_periodo_filter(docentes_q, periodo, include_null=_include_null)
     if carrera and _carrera_sids:
         docentes_q = docentes_q.filter(Grade.student_id.in_(_carrera_sids))
     total_docentes = docentes_q.scalar() or 0
@@ -341,7 +356,7 @@ def get_resumen_datos(
 
     docentes_carrera_q = db.query(Student.carrera, func.count(distinct(Grade.docente))).join(
         Grade, Grade.student_id == Student.id).filter(Grade.docente.isnot(None), Grade.docente != "")
-    docentes_carrera_q, _ = apply_periodo_filter(docentes_carrera_q, periodo, db=db)
+    docentes_carrera_q, _ = apply_periodo_filter(docentes_carrera_q, periodo, include_null=_include_null)
     docentes_por_carrera = {r[0]: r[1] for r in docentes_carrera_q.group_by(Student.carrera).all()}
 
     interv_carrera_motivo = {}
