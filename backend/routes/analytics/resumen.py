@@ -25,25 +25,64 @@ def debug_grades_68(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Diagnóstico: distribución temporal de grades con periodo='68'."""
+    """Diagnóstico: distribución temporal de grades y enrollments con periodo='68'."""
     from sqlalchemy import text
-    rows = db.execute(text("""
-        SELECT
-            DATE(created_at) as fecha,
-            COUNT(*) as cnt,
-            MIN(created_at) as min_ts,
-            MAX(created_at) as max_ts
-        FROM grades
-        WHERE periodo = '68'
-        GROUP BY DATE(created_at)
-        ORDER BY DATE(created_at)
+    g_rows = db.execute(text("""
+        SELECT DATE(created_at) as fecha, COUNT(*) as cnt,
+               MIN(created_at) as min_ts, MAX(created_at) as max_ts
+        FROM grades WHERE periodo = '68'
+        GROUP BY DATE(created_at) ORDER BY DATE(created_at)
+    """)).fetchall()
+    e_rows = db.execute(text("""
+        SELECT DATE(created_at) as fecha, COUNT(*) as cnt,
+               MIN(created_at) as min_ts, MAX(created_at) as max_ts
+        FROM enrollments WHERE periodo = '68'
+        GROUP BY DATE(created_at) ORDER BY DATE(created_at)
     """)).fetchall()
     return {
         "grades_68_by_date": [
             {"fecha": str(r[0]), "count": r[1], "min": str(r[2]), "max": str(r[3])}
-            for r in rows
+            for r in g_rows
         ],
-        "total": sum(r[1] for r in rows),
+        "enrollments_68_by_date": [
+            {"fecha": str(r[0]), "count": r[1], "min": str(r[2]), "max": str(r[3])}
+            for r in e_rows
+        ],
+        "total_grades": sum(r[1] for r in g_rows),
+        "total_enrollments": sum(r[1] for r in e_rows),
+    }
+
+
+@router.post("/migrate-p67")
+def migrate_p67(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Migra grades y enrollments creados antes del 31 de marzo de periodo='68' a 'P67'.
+    Datos cargados antes de esa fecha pertenecen al P67, no al P68."""
+    from sqlalchemy import text
+    from ...models.user import UserRole
+    if current_user.role != UserRole.admin:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Solo administradores")
+
+    cutoff = "2026-03-31"
+
+    n_grades = db.execute(text(
+        "UPDATE grades SET periodo = 'P67' WHERE periodo = '68' AND created_at < :cutoff"
+    ), {"cutoff": cutoff}).rowcount
+
+    n_enrollments = db.execute(text(
+        "UPDATE enrollments SET periodo = 'P67' WHERE periodo = '68' AND created_at < :cutoff"
+    ), {"cutoff": cutoff}).rowcount
+
+    db.commit()
+    return {
+        "status": "ok",
+        "grades_migrated": n_grades,
+        "enrollments_migrated": n_enrollments,
+        "cutoff_date": cutoff,
+        "message": f"Migrados {n_grades} grades y {n_enrollments} enrollments de periodo='68' a 'P67' (creados antes del {cutoff})",
     }
 
 
