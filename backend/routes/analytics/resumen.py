@@ -20,6 +20,33 @@ from ._helpers import apply_periodo_filter
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 
+@router.get("/debug-grades-68")
+def debug_grades_68(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Diagnóstico: distribución temporal de grades con periodo='68'."""
+    from sqlalchemy import text
+    rows = db.execute(text("""
+        SELECT
+            DATE(created_at) as fecha,
+            COUNT(*) as cnt,
+            MIN(created_at) as min_ts,
+            MAX(created_at) as max_ts
+        FROM grades
+        WHERE periodo = '68'
+        GROUP BY DATE(created_at)
+        ORDER BY DATE(created_at)
+    """)).fetchall()
+    return {
+        "grades_68_by_date": [
+            {"fecha": str(r[0]), "count": r[1], "min": str(r[2]), "max": str(r[3])}
+            for r in rows
+        ],
+        "total": sum(r[1] for r in rows),
+    }
+
+
 @router.get("/periodos")
 def get_periodos_disponibles(
     db: Session = Depends(get_db),
