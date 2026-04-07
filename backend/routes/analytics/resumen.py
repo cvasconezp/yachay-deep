@@ -6,6 +6,7 @@ Contiene: /analytics/periodos, /analytics/resumen, /analytics/comparativa
 """
 from typing import Optional
 from datetime import date
+from math import isnan as _math_isnan, isinf as _math_isinf
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import func, distinct
@@ -177,7 +178,10 @@ def get_resumen_datos(
         notas_por_est = {}
         for g in grade_list:
             if g.student_id in sid_set and g.nota_final is not None:
-                notas_por_est.setdefault(g.student_id, []).append(g.nota_final)
+                nf = g.nota_final
+                if isinstance(nf, float) and (_math_isnan(nf) or _math_isinf(nf)):
+                    continue
+                notas_por_est.setdefault(g.student_id, []).append(nf)
         if notas_por_est:
             promedios_ind = [sum(ns) / len(ns) for ns in notas_por_est.values()]
             promedio_calif = round(sum(promedios_ind) / len(promedios_ind), 1)
@@ -192,7 +196,9 @@ def get_resumen_datos(
         reprob = len(reprobados_ids & sid_set)
         repit = len(repitentes_ids & sid_set)
         desertores_prob = sum(1 for s in student_list if s.prob_desercion and s.prob_desercion > 0.5)
-        compromisos = [s.indice_compromiso for s in student_list if s.indice_compromiso is not None]
+        compromisos = [s.indice_compromiso for s in student_list
+                       if s.indice_compromiso is not None
+                       and not (isinstance(s.indice_compromiso, float) and (_math_isnan(s.indice_compromiso) or _math_isinf(s.indice_compromiso)))]
         promedio_comp = round(sum(compromisos) / len(compromisos), 2) if compromisos else None
         con_riesgo = sum(1 for s in student_list if s.nivel_riesgo)
         con_calif = len(notas_por_est)
@@ -286,6 +292,16 @@ def get_comparativa(
         _comp_sids = set(s_id for (s_id,) in db.query(Student.id).filter(
             func.lower(Student.carrera).contains(carrera.lower())).all())
 
+    import math
+
+    def _safe_float(v):
+        """Convierte NaN/Inf a None para serialización JSON."""
+        if v is None:
+            return None
+        if isinstance(v, float) and (math.isnan(v) or math.isinf(v)):
+            return None
+        return v
+
     result = []
     for per in periodos:
         g_q = db.query(Grade)
@@ -303,16 +319,16 @@ def get_comparativa(
         sids = set(g.student_id for g in gs)
         notas_por_est = {}
         for g in gs:
-            if g.nota_final is not None:
+            if g.nota_final is not None and not (isinstance(g.nota_final, float) and (math.isnan(g.nota_final) or math.isinf(g.nota_final))):
                 notas_por_est.setdefault(g.student_id, []).append(g.nota_final)
 
         promedio_calif = None
         tasa_aprob = None
         if notas_por_est:
             promedios = [sum(ns) / len(ns) for ns in notas_por_est.values()]
-            promedio_calif = round(sum(promedios) / len(promedios), 1)
+            promedio_calif = _safe_float(round(sum(promedios) / len(promedios), 1))
             aprobados = sum(1 for ns in notas_por_est.values() if (sum(ns) / len(ns)) >= 70)
-            tasa_aprob = round(aprobados / len(notas_por_est) * 100, 1)
+            tasa_aprob = _safe_float(round(aprobados / len(notas_por_est) * 100, 1))
 
         riesgo_alto = db.query(func.count(Student.id)).filter(
             Student.id.in_(sids), Student.nivel_riesgo == "Alto").scalar() or 0
@@ -322,8 +338,8 @@ def get_comparativa(
 
         result.append({
             "periodo": per, "label": "Actual" if per == "actual" else per,
-            "total_estudiantes": len(sids), "promedio_calificaciones": promedio_calif,
-            "tasa_aprobacion": tasa_aprob, "riesgo_alto": riesgo_alto,
+            "total_estudiantes": len(sids), "promedio_calificaciones": _safe_float(promedio_calif),
+            "tasa_aprobacion": _safe_float(tasa_aprob), "riesgo_alto": riesgo_alto,
             "total_docentes": len(docentes_set), "total_intervenciones": total_interv,
         })
 
