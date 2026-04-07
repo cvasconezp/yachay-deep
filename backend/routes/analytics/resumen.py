@@ -75,6 +75,32 @@ def get_periodos_disponibles(
     return {"periodos": periodos, "default": default_key}
 
 
+def _resumen_period_student_ids(db: Session, periodo: Optional[str], carrera_sids=None):
+    """Union de student_ids de Grade + Enrollment para el período (consistente con Dashboard)."""
+    from sqlalchemy import or_
+    pf = periodo if periodo else "actual"
+
+    grade_sq = db.query(Grade.student_id).distinct()
+    enroll_sq = db.query(Enrollment.student_id).distinct()
+
+    if pf == "actual":
+        grade_sq = grade_sq.filter(Grade.periodo.is_(None))
+        enroll_sq = enroll_sq.filter(Enrollment.periodo.is_(None))
+    elif pf != "todos":
+        if pf.startswith("P"):
+            grade_sq = grade_sq.filter(or_(Grade.periodo == pf, Grade.periodo == pf[1:]))
+            enroll_sq = enroll_sq.filter(or_(Enrollment.periodo == pf, Enrollment.periodo == pf[1:]))
+        else:
+            grade_sq = grade_sq.filter(or_(Grade.periodo == pf, Grade.periodo == f"P{pf}"))
+            enroll_sq = enroll_sq.filter(or_(Enrollment.periodo == pf, Enrollment.periodo == f"P{pf}"))
+
+    if carrera_sids:
+        grade_sq = grade_sq.filter(Grade.student_id.in_(carrera_sids))
+        enroll_sq = enroll_sq.filter(Enrollment.student_id.in_(carrera_sids))
+
+    return grade_sq.union(enroll_sq), pf
+
+
 @router.get("/resumen")
 def get_resumen_datos(
     carrera: Optional[str] = None,
@@ -83,6 +109,7 @@ def get_resumen_datos(
     current_user: User = Depends(get_current_user),
 ):
     """Resumen estadístico general y por carrera."""
+    from sqlalchemy import or_
     today = date.today()
 
     _carrera_sids = None
@@ -90,6 +117,7 @@ def get_resumen_datos(
         _carrera_sids = set(s_id for (s_id,) in db.query(Student.id).filter(
             func.lower(Student.carrera).contains(carrera.lower())).all())
 
+    # Grades del periodo
     grades_q = db.query(Grade)
     grades_q, periodo_filter = apply_periodo_filter(grades_q, periodo)
     if carrera and _carrera_sids:
@@ -97,15 +125,61 @@ def get_resumen_datos(
     grades = grades_q.all()
     grade_student_ids = set(g.student_id for g in grades)
 
+    # Enrollments del periodo
+    enroll_q = db.query(Enrollment)
+    enroll_q, _ = apply_periodo_filter(enroll_q, periodo, column=Enrollment.periodo)
+    if carrera and _carrera_sids:
+        enroll_q = enroll_q.filter(Enrollment.student_id.in_(_carrera_sids))
+    enrollments = enroll_q.all()
+    enroll_student_ids = set(e.student_id for e in enrollments)
+
+    # Union: estudiantes con grades O enrollments (consistente con Dashboard)
+    all_period_sids = grade_student_ids | enroll_student_ids
+
     base_q = db.query(Student)
     if carrera:
         base_q = base_q.filter(func.lower(Student.carrera).contains(carrera.lower()))
     if periodo_filter != "todos":
-        base_q = base_q.filter(Student.id.in_(grade_student_ids))
+        base_q = base_q.filter(Student.id.in_(all_period_sids))
     students = base_q.all()
 
     # Flag: hay calificaciones reales para este período?
     tiene_datos_periodo = len(grades) > 0
+
+    # === Métricas de enrollment ===
+    carreras_set = set()
+    asignaturas_set = set()
+    docentes_enroll_set = set()
+    enroll_por_tipo = {}
+    enroll_por_nivel = {}
+    enroll_pagado = {"SI": 0, "NO": 0, "Otro": 0}
+    enroll_repitencias = 0
+    for e in enrollments:
+        if e.carrera:
+            carreras_set.add(e.carrera)
+        if e.asignatura:
+            asignaturas_set.add(e.asignatura)
+        if e.docente:
+            docentes_enroll_set.add(e.docente)
+        tipo = e.tipo_asignatura or "Sin dato"
+        enroll_por_tipo[tipo] = enroll_por_tipo.get(tipo, 0) + 1
+        niv = e.nivel or 0
+        enroll_por_nivel[niv] = enroll_por_nivel.get(niv, 0) + 1
+        if e.pagado:
+            key = e.pagado.strip().upper()
+            if key == "SI":
+                enroll_pagado["SI"] += 1
+            elif key == "NO":
+                enroll_pagado["NO"] += 1
+            else:
+                enroll_pagado["Otro"] += 1
+        if e.numero_repitencias and e.numero_repitencias > 0:
+            enroll_repitencias += 1
+
+    # Carreras from students too
+    for s in students:
+        if s.carrera:
+            carreras_set.add(s.carrera)
 
     if not students:
         return {"global": {}, "por_carrera": [], "tiene_datos_periodo": tiene_datos_periodo}
@@ -221,6 +295,17 @@ def get_resumen_datos(
 
     global_stats = compute_stats(students, grades)
     global_stats["total_docentes"] = total_docentes
+
+    # Métricas de enrollment (carreras, asignaturas, etc.)
+    global_stats["total_carreras"] = len(carreras_set)
+    global_stats["total_asignaturas"] = len(asignaturas_set)
+    global_stats["total_docentes_enrollment"] = len(docentes_enroll_set)
+    global_stats["total_matriculas"] = len(enrollments)
+    global_stats["por_tipo_asignatura"] = dict(sorted(enroll_por_tipo.items(), key=lambda x: -x[1]))
+    global_stats["por_nivel_enrollment"] = dict(sorted(enroll_por_nivel.items()))
+    global_stats["matriculas_pagadas"] = enroll_pagado
+    global_stats["matriculas_con_repitencia"] = enroll_repitencias
+    global_stats["tiene_enrollments"] = len(enrollments) > 0
 
     # Intervenciones
     interv_base_q = db.query(Intervention)

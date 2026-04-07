@@ -18,12 +18,15 @@ from ..models.user import User
 
 
 def _active_period_has_grades(db: Session) -> bool:
-    """Verifica si hay calificaciones para el semestre activo."""
+    """Verifica si hay calificaciones para el semestre activo.
+    Retorna False cuando no hay datos, para evitar mostrar alertas stale."""
     sem = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
     if not sem or not sem.semestre:
-        return True  # si no hay config, asumir que sí hay datos
-    pf = sem.semestre
+        # Sin semestre activo configurado → no mostrar alertas stale
+        return False
+    pf = sem.semestre.strip()
     q = db.query(Grade.id)
+    # Buscar en todos los formatos posibles: "P68", "68", "2026-1"
     if pf.startswith("P"):
         q = q.filter(or_(Grade.periodo == pf, Grade.periodo == pf[1:]))
     else:
