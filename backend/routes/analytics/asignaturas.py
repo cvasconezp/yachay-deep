@@ -1,15 +1,19 @@
 """
 Módulo 8.2: Analítica de Asignaturas.
 Separado de analytics.py monolítico — [ARCH-03] Remediación.
+
+Cuando no hay calificaciones (grades) para un periodo, usa datos de
+Enrollment como fallback, mostrando la estructura académica matriculada
+sin métricas de rendimiento (inicio de semestre).
 """
 from typing import Optional
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from sqlalchemy import func, case, and_, distinct
+from sqlalchemy import func, case, and_, distinct, or_
 from pydantic import BaseModel
 
 from ...database import get_db
-from ...models import Student, Grade, Intervention
+from ...models import Student, Grade, Intervention, Enrollment
 from ...auth.jwt import get_current_user
 from ...models.user import User
 from ._helpers import apply_periodo_filter
@@ -42,6 +46,76 @@ class AsignaturaAnalytics(BaseModel):
         from_attributes = True
 
 
+def _enrollment_periodo_filter(query, periodo: Optional[str]):
+    """Aplica filtro de periodo a Enrollment (mismo dual-format que grades)."""
+    col = Enrollment.periodo
+    pf = periodo if periodo else "actual"
+    if pf == "actual":
+        # Para enrollment, 'actual' usa semestre activo
+        from ...models.semester_config import SemesterConfig
+        from sqlalchemy.orm import Session as _S
+        return query, pf
+    elif pf != "todos":
+        if pf.startswith("P"):
+            raw = pf[1:]
+            query = query.filter(or_(col == pf, col == raw))
+        else:
+            query = query.filter(or_(col == pf, col == f"P{pf}"))
+    return query, pf
+
+
+def _get_enrollment_results(db: Session, periodo: Optional[str], carrera: Optional[str], nivel: Optional[int]):
+    """Genera resultados de asignaturas desde Enrollment (sin calificaciones)."""
+    query = db.query(
+        Enrollment.asignatura, Enrollment.carrera, Enrollment.docente,
+        Enrollment.nivel, Enrollment.nombre_grupo.label("grupo"),
+        func.count(Enrollment.id).label("total_estudiantes"),
+        func.sum(case((Enrollment.numero_repitencias > 0, 1), else_=0)).label("total_repitentes"),
+    )
+    query, _ = _enrollment_periodo_filter(query, periodo)
+    query = query.group_by(
+        Enrollment.asignatura, Enrollment.carrera, Enrollment.docente,
+        Enrollment.nivel, Enrollment.nombre_grupo,
+    )
+    if carrera:
+        query = query.filter(func.lower(Enrollment.carrera).contains(carrera.lower()))
+    if nivel:
+        query = query.filter(Enrollment.nivel == nivel)
+
+    results = query.order_by(Enrollment.asignatura).all()
+
+    # Riesgo por asignatura+docente desde enrollments
+    risk_q = (
+        db.query(Enrollment.asignatura, Enrollment.docente, Student.nivel_riesgo,
+                 func.count(distinct(Student.id)).label("cnt"))
+        .join(Student, Student.id == Enrollment.student_id)
+    )
+    risk_q, _ = _enrollment_periodo_filter(risk_q, periodo)
+    risk_batch = risk_q.group_by(Enrollment.asignatura, Enrollment.docente, Student.nivel_riesgo).all()
+    risk_lookup = {}
+    for rb in risk_batch:
+        key = (rb.asignatura, rb.docente)
+        risk_lookup.setdefault(key, {})[rb.nivel_riesgo] = rb.cnt
+
+    output = []
+    for r in results:
+        key = (r.asignatura, r.docente)
+        risk_map = risk_lookup.get(key, {})
+        output.append(AsignaturaAnalytics(
+            asignatura=r.asignatura, carrera=r.carrera, docente=r.docente,
+            nivel=r.nivel, grupo=r.grupo, total_estudiantes=r.total_estudiantes,
+            promedio_general=None, nota_maxima=None, nota_minima=None,
+            aprobados=0, reprobados=0,
+            porcentaje_aprobacion=None, porcentaje_reprobacion=None,
+            total_repitentes=r.total_repitentes or 0,
+            estudiantes_riesgo_alto=risk_map.get("Alto", 0),
+            estudiantes_riesgo_medio=risk_map.get("Medio", 0),
+            estudiantes_riesgo_bajo=risk_map.get("Bajo", 0),
+            promedio_compromiso=None, total_intervenciones=0,
+        ))
+    return output
+
+
 @router.get("/asignaturas", response_model=list[AsignaturaAnalytics])
 def get_asignaturas_analytics(
     carrera: Optional[str] = None,
@@ -51,7 +125,8 @@ def get_asignaturas_analytics(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Vista agregada por asignatura. Framework §8.2."""
+    """Vista agregada por asignatura. Framework §8.2.
+    Si no hay grades para el periodo, usa Enrollment como fallback."""
     query = db.query(
         Grade.asignatura, Grade.carrera, Grade.docente, Grade.nivel, Grade.grupo,
         func.count(Grade.id).label("total_estudiantes"),
@@ -72,11 +147,16 @@ def get_asignaturas_analytics(
         if carrera_student_ids:
             query = query.filter(Grade.student_id.in_(carrera_student_ids))
         else:
-            return []
+            # Sin grades con esa carrera, intentar enrollment
+            return _get_enrollment_results(db, periodo, carrera, nivel)
     if nivel:
         query = query.filter(Grade.nivel == nivel)
 
     results = query.order_by(Grade.asignatura).all()
+
+    # Fallback a Enrollment si no hay grades
+    if not results:
+        return _get_enrollment_results(db, periodo, carrera, nivel)
 
     # Batch: riesgo por asignatura+docente
     risk_batch_q = (
@@ -148,15 +228,55 @@ def get_asignatura_detalle(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Detalle de una asignatura: lista de estudiantes con indicadores."""
+    """Detalle de una asignatura: lista de estudiantes con indicadores.
+    Si no hay grades, usa Enrollment como fallback."""
     query = db.query(Grade).filter(Grade.asignatura == asignatura)
     query, _ = apply_periodo_filter(query, periodo)
     if docente:
         query = query.filter(Grade.docente == docente)
 
     grades = query.all()
+
     if not grades:
-        return {"asignatura": asignatura, "estudiantes": [], "total_estudiantes": 0}
+        # Fallback: enrollment data
+        eq = db.query(Enrollment).filter(Enrollment.asignatura == asignatura)
+        eq, _ = _enrollment_periodo_filter(eq, periodo)
+        if docente:
+            eq = eq.filter(Enrollment.docente == docente)
+        enrolls = eq.all()
+        if not enrolls:
+            return {"asignatura": asignatura, "estudiantes": [], "total_estudiantes": 0}
+
+        student_ids = list(set(e.student_id for e in enrolls))
+        students = db.query(Student).filter(Student.id.in_(student_ids)).all()
+        student_map = {s.id: s for s in students}
+        first_e = enrolls[0]
+        estudiantes_out = []
+        for e in enrolls:
+            s = student_map.get(e.student_id)
+            if not s:
+                continue
+            estudiantes_out.append({
+                "student_id": s.id, "nombre": s.nombre,
+                "correo_institucional": s.correo_institucional, "cedula": s.cedula,
+                "nota_final": None, "numero_repitencias": e.numero_repitencias,
+                "nivel_riesgo": s.nivel_riesgo, "indice_compromiso": s.indice_compromiso,
+                "dias_sin_acceso": s.dias_sin_acceso, "porcentaje_tareas": s.porcentaje_tareas,
+                "estado_matricula": s.estado_matricula or e.estado_matriculado,
+                "intervenciones_asignatura": 0,
+            })
+        estudiantes_out.sort(key=lambda x: (x["nombre"] or ""))
+        return {
+            "asignatura": asignatura, "carrera": first_e.carrera,
+            "docente": first_e.docente or docente, "nivel": first_e.nivel,
+            "total_estudiantes": len(estudiantes_out),
+            "promedio_general": None,
+            "aprobados": 0, "reprobados": 0,
+            "porcentaje_aprobacion": None,
+            "total_repitentes": sum(1 for e in estudiantes_out if e["numero_repitencias"] and e["numero_repitencias"] > 0),
+            "estudiantes": estudiantes_out,
+            "fuente": "enrollment",
+        }
 
     student_ids = [g.student_id for g in grades]
     students = db.query(Student).filter(Student.id.in_(student_ids)).all()

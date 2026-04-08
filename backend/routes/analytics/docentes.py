@@ -1,15 +1,18 @@
 """
 Módulo 8.3: Analítica Docente.
 Separado de analytics.py monolítico — [ARCH-03] Remediación.
+
+Cuando no hay calificaciones (grades) para un periodo, usa datos de
+Enrollment como fallback (inicio de semestre sin AVAC).
 """
 from typing import Optional
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from sqlalchemy import func, distinct
+from sqlalchemy import func, distinct, or_
 from pydantic import BaseModel
 
 from ...database import get_db
-from ...models import Student, Grade, Intervention
+from ...models import Student, Grade, Intervention, Enrollment
 from ...auth.jwt import get_current_user
 from ...models.user import User
 from ._helpers import apply_periodo_filter
@@ -37,6 +40,69 @@ class DocenteAnalytics(BaseModel):
         from_attributes = True
 
 
+def _enroll_periodo_filter(query, periodo: Optional[str]):
+    """Aplica filtro de periodo a Enrollment (dual-format)."""
+    col = Enrollment.periodo
+    pf = periodo if periodo else "actual"
+    if pf == "actual" or pf == "todos":
+        return query, pf
+    if pf.startswith("P"):
+        raw = pf[1:]
+        query = query.filter(or_(col == pf, col == raw))
+    else:
+        query = query.filter(or_(col == pf, col == f"P{pf}"))
+    return query, pf
+
+
+def _docentes_from_enrollment(db: Session, periodo: Optional[str], carrera: Optional[str]):
+    """Genera lista de docentes desde Enrollment (fallback sin grades)."""
+    eq = db.query(Enrollment).filter(Enrollment.docente.isnot(None), Enrollment.docente != "")
+    eq, _ = _enroll_periodo_filter(eq, periodo)
+    if carrera:
+        eq = eq.filter(func.lower(Enrollment.carrera).contains(carrera.lower()))
+    enrolls = eq.all()
+    if not enrolls:
+        return []
+
+    docente_map = {}
+    for e in enrolls:
+        d = e.docente
+        docente_map.setdefault(d, {"asig": set(), "carreras": set(), "niveles": set(), "sids": set(), "repitentes": 0})
+        docente_map[d]["asig"].add(e.asignatura)
+        if e.carrera:
+            docente_map[d]["carreras"].add(e.carrera)
+        if e.nivel:
+            docente_map[d]["niveles"].add(e.nivel)
+        if e.student_id:
+            docente_map[d]["sids"].add(e.student_id)
+        if e.numero_repitencias and e.numero_repitencias > 0:
+            docente_map[d]["repitentes"] += 1
+
+    output = []
+    for docente_name, data in docente_map.items():
+        student_ids = list(data["sids"])
+        risk_counts = db.query(Student.nivel_riesgo, func.count(Student.id)).filter(
+            Student.id.in_(student_ids)).group_by(Student.nivel_riesgo).all() if student_ids else []
+        risk_map = {r[0]: r[1] for r in risk_counts}
+
+        output.append(DocenteAnalytics(
+            docente=docente_name,
+            total_asignaturas=len(data["asig"]),
+            total_estudiantes=len(student_ids),
+            carreras=sorted(data["carreras"]),
+            niveles=sorted(data["niveles"]),
+            promedio_general=None,
+            porcentaje_aprobacion=None, porcentaje_reprobacion=None,
+            estudiantes_riesgo_alto=risk_map.get("Alto", 0),
+            estudiantes_riesgo_medio=risk_map.get("Medio", 0),
+            estudiantes_riesgo_bajo=risk_map.get("Bajo", 0),
+            promedio_compromiso=None, total_intervenciones=0,
+            asignaturas=sorted(data["asig"]),
+        ))
+    output.sort(key=lambda x: x.total_estudiantes, reverse=True)
+    return output
+
+
 @router.get("/docentes", response_model=list[DocenteAnalytics])
 def get_docentes_analytics(
     carrera: Optional[str] = None,
@@ -44,7 +110,8 @@ def get_docentes_analytics(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Vista agregada por docente. Framework §8.3."""
+    """Vista agregada por docente. Framework §8.3.
+    Si no hay grades para el periodo, usa Enrollment como fallback."""
     docente_query = (
         db.query(Grade.docente).filter(Grade.docente.isnot(None), Grade.docente != "")
     )
@@ -59,9 +126,13 @@ def get_docentes_analytics(
         if _carrera_sids:
             docente_query = docente_query.filter(Grade.student_id.in_(_carrera_sids))
         else:
-            return []
+            return _docentes_from_enrollment(db, periodo, carrera)
 
     docentes = [d.docente for d in docente_query.all()]
+
+    # Fallback a Enrollment si no hay grades
+    if not docentes:
+        return _docentes_from_enrollment(db, periodo, carrera)
 
     output = []
     for docente_name in docentes:
@@ -117,12 +188,57 @@ def get_docente_detalle(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Ficha detallada del docente."""
+    """Ficha detallada del docente. Fallback a Enrollment sin grades."""
     grades_q = db.query(Grade).filter(Grade.docente == docente_nombre)
     grades_q, _ = apply_periodo_filter(grades_q, periodo)
     grades = grades_q.all()
+
     if not grades:
-        return {"docente": docente_nombre, "asignaturas_detalle": [], "total_estudiantes": 0}
+        # Fallback: enrollment
+        eq = db.query(Enrollment).filter(Enrollment.docente == docente_nombre)
+        eq, _ = _enroll_periodo_filter(eq, periodo)
+        enrolls = eq.all()
+        if not enrolls:
+            return {"docente": docente_nombre, "asignaturas_detalle": [], "total_estudiantes": 0}
+
+        all_sids = list(set(e.student_id for e in enrolls))
+        students = db.query(Student).filter(Student.id.in_(all_sids)).all()
+        student_map = {s.id: s for s in students}
+
+        asig_map = {}
+        for e in enrolls:
+            asig_map.setdefault(e.asignatura, {"asignatura": e.asignatura, "carrera": e.carrera, "nivel": e.nivel, "enrolls": []})
+            asig_map[e.asignatura]["enrolls"].append(e)
+
+        asignaturas_detalle = []
+        for key, data in sorted(asig_map.items()):
+            es = data["enrolls"]
+            est_list = []
+            for e in es:
+                s = student_map.get(e.student_id)
+                if s:
+                    est_list.append({
+                        "student_id": s.id, "nombre": s.nombre,
+                        "nota_final": None, "nivel_riesgo": s.nivel_riesgo,
+                        "indice_compromiso": s.indice_compromiso, "dias_sin_acceso": s.dias_sin_acceso,
+                    })
+            asignaturas_detalle.append({
+                "asignatura": data["asignatura"], "carrera": data["carrera"], "nivel": data["nivel"],
+                "total_estudiantes": len(es),
+                "promedio": None, "aprobados": 0, "reprobados": 0,
+                "porcentaje_aprobacion": None,
+                "riesgo_alto": sum(1 for e in est_list if e["nivel_riesgo"] == "Alto"),
+                "estudiantes": sorted(est_list, key=lambda x: (x["nombre"] or "")),
+            })
+
+        return {
+            "docente": docente_nombre, "total_asignaturas": len(asignaturas_detalle),
+            "total_estudiantes": len(all_sids),
+            "carreras": list(set(e.carrera for e in enrolls if e.carrera)),
+            "promedio_general": None,
+            "asignaturas_detalle": asignaturas_detalle,
+            "fuente": "enrollment",
+        }
 
     asig_map = {}
     for g in grades:

@@ -222,6 +222,10 @@ def get_resumen_datos(
     if carrera and _carrera_sids:
         docentes_q = docentes_q.filter(Grade.student_id.in_(_carrera_sids))
     total_docentes = docentes_q.scalar() or 0
+    # Fallback: si no hay docentes en grades, usar enrollment
+    if total_docentes == 0 and enrollments:
+        docentes_enroll = set(e.docente for e in enrollments if e.docente)
+        total_docentes = len(docentes_enroll)
 
     def compute_stats(student_list, grade_list):
         total = len(student_list)
