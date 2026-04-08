@@ -9,7 +9,7 @@ bcrypt==3.2.2
 python-multipart==0.0.12
 alembic==1.13.3
 pandas==2.2.3
-numpy==2.4.3
+numpy==2.4.4
 openpyxl==3.1.5
 reportlab==4.4.10
 psycopg2-binary==2.9.11
