@@ -1230,25 +1230,45 @@ class ETLPipeline:
         from ..models.grade import Grade as _Grade
         from sqlalchemy import or_
 
-        # Determinar periodo activo
-        active_sem = self._get_active_semester()
-        active_periodo = active_sem.semestre.strip() if active_sem and active_sem.semestre else None
+        # Determinar periodo: si es fallback del histórico, usar el periodo
+        # original del archivo (ej. P67) en vez del activo (ej. P68)
+        fallback_p = getattr(self, "_fallback_periodo", None)
+        if fallback_p:
+            active_periodo = fallback_p
+            logger.info(f"  _upsert_grades: usando periodo fallback '{fallback_p}' (archivo histórico como semestre activo)")
+        else:
+            active_sem = self._get_active_semester()
+            active_periodo = active_sem.semestre.strip() if active_sem and active_sem.semestre else None
 
-        # Full-refresh: eliminar calificaciones del semestre actual antes de recargar
-        # Buscar tanto periodo=NULL como periodo=active (por migración gradual)
+        # Full-refresh: eliminar calificaciones del periodo antes de recargar
+        # Cuando es fallback, NO borrar periodo=NULL (esos son legacy, no del archivo)
         if active_periodo:
-            if active_periodo.startswith("P"):
-                del_filter = or_(
-                    _Grade.periodo.is_(None),
-                    _Grade.periodo == active_periodo,
-                    _Grade.periodo == active_periodo[1:],
-                )
+            if fallback_p:
+                # Fallback: solo borrar el periodo específico (P67 / 67)
+                if active_periodo.startswith("P"):
+                    del_filter = or_(
+                        _Grade.periodo == active_periodo,
+                        _Grade.periodo == active_periodo[1:],
+                    )
+                else:
+                    del_filter = or_(
+                        _Grade.periodo == active_periodo,
+                        _Grade.periodo == f"P{active_periodo}",
+                    )
             else:
-                del_filter = or_(
-                    _Grade.periodo.is_(None),
-                    _Grade.periodo == active_periodo,
-                    _Grade.periodo == f"P{active_periodo}",
-                )
+                # Normal: borrar periodo activo + NULL (migración gradual)
+                if active_periodo.startswith("P"):
+                    del_filter = or_(
+                        _Grade.periodo.is_(None),
+                        _Grade.periodo == active_periodo,
+                        _Grade.periodo == active_periodo[1:],
+                    )
+                else:
+                    del_filter = or_(
+                        _Grade.periodo.is_(None),
+                        _Grade.periodo == active_periodo,
+                        _Grade.periodo == f"P{active_periodo}",
+                    )
         else:
             del_filter = _Grade.periodo.is_(None)
 
