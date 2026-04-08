@@ -16,7 +16,7 @@ psycopg2-binary==2.9.11
 pyotp==2.9.0
 selenium==4.41.0
 beautifulsoup4==4.14.3
-lxml==5.3.0
+lxml==6.0.2
 aiofiles==25.1.0
 scikit-learn==1.8.0
 joblib==1.5.3
