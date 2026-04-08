@@ -6,7 +6,7 @@ pydantic-settings==2.13.1
 python-jose[cryptography]==3.5.0
 passlib[bcrypt]==1.7.4
 bcrypt==3.2.2
-python-multipart==0.0.12
+python-multipart==0.0.24
 alembic==1.13.3
 pandas==2.2.3
 numpy==2.4.3
