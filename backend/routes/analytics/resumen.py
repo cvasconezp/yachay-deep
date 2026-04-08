@@ -20,59 +20,6 @@ from ._helpers import apply_periodo_filter
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 
-@router.get("/debug-grades-68")
-def debug_grades_68(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """Diagnóstico: distribución completa de periodos en grades y enrollments."""
-    from sqlalchemy import text
-    g_rows = db.execute(text(
-        "SELECT periodo, COUNT(*) as cnt FROM grades GROUP BY periodo ORDER BY periodo"
-    )).fetchall()
-    e_rows = db.execute(text(
-        "SELECT periodo, COUNT(*) as cnt FROM enrollments GROUP BY periodo ORDER BY periodo"
-    )).fetchall()
-    return {
-        "grades_by_periodo": [{"periodo": r[0], "count": r[1]} for r in g_rows],
-        "enrollments_by_periodo": [{"periodo": r[0], "count": r[1]} for r in e_rows],
-    }
-
-
-@router.post("/migrate-p67")
-def migrate_p67(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """Migra grades de P68 a P67.
-    El ETL fallback cargó _data(P67).csv como calificaciones del semestre activo,
-    etiquetándolos como P68 en vez de P67.
-    Este endpoint corrige el periodo de todos los grades que son P68 a P67.
-    Se asume que no existen calificaciones legítimas de P68 (calificaciones.csv vacío).
-    """
-    from sqlalchemy import text
-    from ...models.user import UserRole
-    if current_user.role != UserRole.admin:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=403, detail="Solo administradores")
-
-    # Verificar cuántos grades P68 hay antes de migrar
-    count_before = db.execute(text(
-        "SELECT COUNT(*) FROM grades WHERE periodo = 'P68'"
-    )).scalar()
-
-    n_grades = db.execute(text(
-        "UPDATE grades SET periodo = 'P67' WHERE periodo = 'P68'"
-    )).rowcount
-
-    db.commit()
-    return {
-        "status": "ok",
-        "grades_before": count_before,
-        "grades_migrated": n_grades,
-        "message": f"Migrados {n_grades} grades de periodo='P68' a 'P67'",
-    }
-
 
 @router.get("/periodos")
 def get_periodos_disponibles(
