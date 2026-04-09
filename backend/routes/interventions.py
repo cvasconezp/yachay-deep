@@ -332,7 +332,7 @@ def interventions_dashboard(
     """
     from sqlalchemy import func, distinct
 
-    # --- Filtro por período: estudiantes del período (Grades OR Enrollments) ---
+    # --- Filtro por período: estudiantes del período (Grades OR Enrollments OR Interventions) ---
     from sqlalchemy import or_, union
     pf = periodo if periodo else "actual"
 
@@ -340,20 +340,25 @@ def interventions_dashboard(
     grade_sq = db.query(Grade.student_id).distinct()
     # Students with enrollments in the period
     enroll_sq = db.query(Enrollment.student_id).distinct()
+    # Students with interventions in the period (even if not enrolled/graded)
+    interv_sq = db.query(Intervention.student_id).distinct()
 
     if pf == "actual":
         grade_sq = grade_sq.filter(Grade.periodo.is_(None))
         enroll_sq = enroll_sq.filter(Enrollment.periodo.is_(None))
+        interv_sq = interv_sq.filter(Intervention.periodo.is_(None))
     elif pf != "todos":
         if pf.startswith("P"):
             grade_sq = grade_sq.filter(or_(Grade.periodo == pf, Grade.periodo == pf[1:]))
             enroll_sq = enroll_sq.filter(or_(Enrollment.periodo == pf, Enrollment.periodo == pf[1:]))
+            interv_sq = interv_sq.filter(or_(Intervention.periodo == pf, Intervention.periodo == pf[1:]))
         else:
             grade_sq = grade_sq.filter(or_(Grade.periodo == pf, Grade.periodo == f"P{pf}"))
             enroll_sq = enroll_sq.filter(or_(Enrollment.periodo == pf, Enrollment.periodo == f"P{pf}"))
+            interv_sq = interv_sq.filter(or_(Intervention.periodo == pf, Intervention.periodo == f"P{pf}"))
 
-    # Combine: students from grades OR enrollments
-    period_sq = grade_sq.union(enroll_sq)
+    # Combine: students from grades OR enrollments OR interventions
+    period_sq = grade_sq.union(enroll_sq).union(interv_sq)
 
     # --- Query principal: intervenciones + datos de estudiante ---
     query = (
