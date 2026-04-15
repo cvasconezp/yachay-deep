@@ -193,6 +193,19 @@ class ApiClient {
     });
   }
 
+  uploadHistorico(file, periodo = "P67") {
+    const form = new FormData();
+    form.append("file", file);
+    return fetch(`${this.baseUrl}/admin/etl/upload-historico?periodo=${encodeURIComponent(periodo)}`, {
+      method: "POST",
+      credentials: "include",
+      body: form,
+    }).then(async (r) => {
+      if (!r.ok) throw new Error(sanitizeErrorMessage((await r.json().catch(() => ({}))).detail || r.statusText));
+      return r.json();
+    });
+  }
+
   uploadPracticasFiles(files) {
     const form = new FormData();
     files.forEach((f) => form.append("files", f));

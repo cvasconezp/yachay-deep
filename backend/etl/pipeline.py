@@ -575,6 +575,193 @@ class ETLPipeline:
         return run
 
     # ─────────────────────────────────────────────────────────────────────────
+    # CARGA HISTÓRICA — Subir datos AVAC/Reporte para un periodo pasado
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def run_historico(self, periodo: str, data_dir: str, triggered_by: str = "manual") -> ScrapingRun:
+        """
+        Carga datos AVAC + reporte para un periodo histórico (ej. P67).
+        NO toca el semestre activo ni recalcula indicadores/ML.
+
+        Acciones:
+        1. Lee CSVs de IngresosAVAC/ y Tareas/ del data_dir temporal
+        2. Inserta accesos y tareas etiquetados con el periodo dado
+        3. Lee *_reporte.xlsx del data_dir y re-enriquece calificaciones
+           existentes de ese periodo con NIVEL y NUMERO_REPITENCIAS
+        """
+        run = ScrapingRun(
+            tipo="historico",
+            status="running",
+            triggered_by=triggered_by,
+            descripcion=f"Carga histórica periodo {periodo}",
+        )
+        self.db.add(run)
+        self.db.commit()
+
+        logs = []
+        errores = []
+        total_registros = 0
+
+        try:
+            logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Carga histórica — periodo: {periodo}")
+
+            ingresos_dir = str(Path(data_dir) / "IngresosAVAC")
+            tareas_dir = str(Path(data_dir) / "Tareas")
+            reportes_dir = str(Path(data_dir) / "Reportes")
+
+            # 1. AVAC accesos
+            df_ingresos = transform_ingresos_avac(ingresos_dir, codigos_activos=None)
+            logs.append(f"  → {len(df_ingresos)} registros de acceso AVAC encontrados")
+
+            if not df_ingresos.empty:
+                n = self._upsert_avac_accesses(df_ingresos, periodo=periodo)
+                total_registros += n
+                logs.append(f"  → {n} accesos AVAC cargados con periodo={periodo}")
+
+            # 2. Tareas
+            df_tareas = transform_estado_tareas(tareas_dir, codigos_activos=None)
+            logs.append(f"  → {len(df_tareas)} registros de tareas encontrados")
+
+            if not df_tareas.empty:
+                n = self._upsert_task_submissions(df_tareas, periodo=periodo)
+                total_registros += n
+                logs.append(f"  → {n} tareas cargadas con periodo={periodo}")
+
+            # 3. Re-enriquecer calificaciones existentes del periodo con
+            #    NIVEL y NUMERO_REPITENCIAS del reporte
+            reportes_path = Path(reportes_dir)
+            reporte_files = sorted(reportes_path.glob("*_reporte.xlsx")) if reportes_path.is_dir() else []
+            logs.append(f"  → {len(reporte_files)} archivo(s) de reporte encontrados")
+
+            if reporte_files:
+                n_enriched = self._enrich_grades_from_reporte(periodo, reporte_files, logs)
+                total_registros += n_enriched
+
+                # 3b. También sembrar datos personales desde el reporte
+                #     (para llenar campos demográficos faltantes)
+                for rf in reporte_files:
+                    try:
+                        df_personales = transform_personales(str(rf.parent))
+                        if not df_personales.empty:
+                            n_seed = self._seed_students_from_personales(df_personales)
+                            if n_seed:
+                                logs.append(f"  → {n_seed} estudiantes enriquecidos con datos personales del reporte")
+                    except Exception as e:
+                        logs.append(f"  ⚠ Error sembrando datos personales: {e}")
+
+            run.status = "success"
+
+        except Exception as e:
+            logger.exception("Error en carga histórica")
+            run.status = "error"
+            errores.append({"error": str(e)})
+            logs.append(f"ERROR CRÍTICO: {e}")
+
+        finally:
+            run.registros_insertados = total_registros
+            run.errores = errores if errores else None
+            run.log_output = "\n".join(logs)
+            run.finished_at = datetime.now(timezone.utc)
+            self.db.commit()
+
+        return run
+
+    def _enrich_grades_from_reporte(self, periodo: str, reporte_files: list, logs: list) -> int:
+        """
+        Re-enriquece calificaciones existentes de un periodo con NIVEL
+        y NUMERO_REPITENCIAS desde archivos *_reporte.xlsx.
+
+        Busca grades del periodo dado y actualiza los campos faltantes
+        usando el mapa (nombre, asignatura) → valor del reporte.
+        """
+        from sqlalchemy import or_
+        from ..models.grade import Grade as _Grade
+
+        # Construir mapas desde reporte
+        _nivel_map = {}
+        _rep_map = {}
+        for rf in reporte_files:
+            try:
+                rdf = pd.read_excel(rf, engine="openpyxl")
+                rdf.columns = [c.strip().upper() for c in rdf.columns]
+                if "ESTUDIANTES" not in rdf.columns or "ASIGNATURA" not in rdf.columns:
+                    logs.append(f"  ⚠ {rf.name}: faltan columnas ESTUDIANTES/ASIGNATURA — omitido")
+                    continue
+
+                _has_nivel = "NIVEL" in rdf.columns
+                _rep_col = next((c for c in rdf.columns if "REPITENCIA" in c), None)
+
+                for _, rr in rdf.iterrows():
+                    nom = re.sub(r"\s+", " ", str(rr.get("ESTUDIANTES", "")).strip().upper())
+                    asig = str(rr.get("ASIGNATURA", "")).strip().upper()
+                    if not nom or not asig:
+                        continue
+                    key = (nom, asig)
+
+                    if _has_nivel:
+                        niv = rr.get("NIVEL")
+                        if pd.notna(niv):
+                            try:
+                                _nivel_map[key] = int(niv)
+                            except (ValueError, TypeError):
+                                pass
+
+                    if _rep_col:
+                        rep = rr.get(_rep_col)
+                        if pd.notna(rep):
+                            try:
+                                _rep_map[key] = int(rep)
+                            except (ValueError, TypeError):
+                                pass
+
+                logs.append(f"  → Reporte {rf.name}: {len(_nivel_map)} niveles, {len(_rep_map)} repitencias")
+            except Exception as e:
+                logs.append(f"  ⚠ Error leyendo {rf.name}: {e}")
+
+        if not _nivel_map and not _rep_map:
+            logs.append("  → Sin datos de enriquecimiento en el reporte")
+            return 0
+
+        # Buscar grades del periodo
+        if periodo.startswith("P"):
+            period_filter = or_(_Grade.periodo == periodo, _Grade.periodo == periodo[1:])
+        else:
+            period_filter = or_(_Grade.periodo == periodo, _Grade.periodo == f"P{periodo}")
+
+        grades = self.db.query(_Grade).filter(period_filter).all()
+        logs.append(f"  → {len(grades)} calificaciones encontradas para periodo {periodo}")
+
+        updated_nivel = 0
+        updated_rep = 0
+        for g in grades:
+            student = self.db.query(Student).filter(Student.id == g.student_id).first()
+            if not student or not student.nombre:
+                continue
+
+            nom = re.sub(r"\s+", " ", student.nombre.strip().upper())
+            asig = (g.asignatura or "").strip().upper()
+            key = (nom, asig)
+
+            # También intentar con nombre normalizado (sin tildes)
+            key_norm = (_normalize_name(nom), _normalize_name(asig))
+
+            if g.nivel is None and _nivel_map:
+                niv = _nivel_map.get(key) or _nivel_map.get(key_norm)
+                if niv is not None:
+                    g.nivel = niv
+                    updated_nivel += 1
+
+            if g.numero_repitencias is None and _rep_map:
+                rep = _rep_map.get(key) or _rep_map.get(key_norm)
+                if rep is not None:
+                    g.numero_repitencias = rep
+                    updated_rep += 1
+
+        self.db.commit()
+        logs.append(f"  → Enriquecido: {updated_nivel} niveles, {updated_rep} repitencias")
+        return updated_nivel + updated_rep
+
+    # ─────────────────────────────────────────────────────────────────────────
     # UPSERTS
     # ─────────────────────────────────────────────────────────────────────────
 

@@ -137,6 +137,9 @@ function TabSistema() {
           )}
         </div>
 
+        {/* Carga Histórica: subir datos AVAC/reporte de un periodo pasado */}
+        <HistoricoUpload />
+
         {/* Subir archivos de Prácticas Preprofesionales */}
         <PracticasUpload />
       </div>
@@ -347,6 +350,70 @@ function TabSistema() {
 // ─────────────────────────────────────────────────────────────────────────────
 // TAB: CURSOS
 // ─────────────────────────────────────────────────────────────────────────────
+// ── Subcomponente: Carga Histórica (AVAC + reporte para periodo pasado) ──
+function HistoricoUpload() {
+  const [loading, setLoading] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [periodo, setPeriodo] = useState("P67");
+
+  return (
+    <div className="mt-4 pt-4 border-t border-gray-100">
+      <label className="block text-sm font-semibold text-gray-700 mb-2">
+        Carga histórica (periodo pasado)
+      </label>
+      <p className="text-xs text-gray-400 mb-2">
+        Sube un ZIP con datos AVAC y reporte de un <strong>periodo anterior</strong> (ej. P67).
+        Los datos se etiquetan con ese periodo y NO afectan al semestre activo.
+        Incluye: <em>IngresosAVAC/*.csv</em>, <em>Tareas/*.csv</em>, <em>Reportes/*_reporte.xlsx</em>.
+        También re-enriquece las calificaciones del periodo con repitencias del reporte.
+      </p>
+      <div className="flex items-center gap-3 flex-wrap">
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Periodo</label>
+          <input
+            value={periodo}
+            onChange={e => setPeriodo(e.target.value)}
+            placeholder="P67"
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-24 focus:outline-none focus:ring-2 focus:ring-purple-500"
+          />
+        </div>
+        <div className="flex-1">
+          <label className="block text-xs text-gray-500 mb-1">Archivo ZIP</label>
+          <input
+            type="file"
+            accept=".zip"
+            id="historico-upload"
+            className="text-sm file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100"
+            disabled={loading}
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              if (!periodo.trim()) { setMsg("Error: Ingresa el periodo (ej. P67)"); return; }
+              setLoading(true);
+              setMsg("");
+              try {
+                const result = await api.uploadHistorico(file, periodo.trim());
+                setMsg(result.message || "ZIP histórico subido y ETL iniciado");
+              } catch (err) {
+                setMsg("Error: " + err.message);
+              } finally {
+                setLoading(false);
+                e.target.value = "";
+              }
+            }}
+          />
+        </div>
+        {loading && <span className="text-sm text-purple-600 animate-pulse self-end pb-2">Subiendo...</span>}
+      </div>
+      {msg && (
+        <div className={`text-sm mt-3 px-4 py-2 rounded-lg ${msg.startsWith("Error") ? "bg-red-50 text-red-700" : "bg-purple-50 text-purple-700"}`}>
+          {msg}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Subcomponente: Upload de Prácticas Preprofesionales ──
 function PracticasUpload() {
   const [loading, setLoading] = useState(false);

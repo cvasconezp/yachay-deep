@@ -5,6 +5,8 @@ Solo accesibles para el rol admin.
 import asyncio
 import io
 import os
+import shutil
+import tempfile
 import zipfile
 from fastapi import APIRouter, Depends, BackgroundTasks, File, UploadFile, HTTPException
 from sqlalchemy.orm import Session
@@ -103,6 +105,118 @@ def get_etl_log(
     if not run:
         raise HTTPException(status_code=404, detail="Run no encontrado")
     return {"log": run.log_output, "errores": run.errores}
+
+
+@router.post("/etl/upload-historico")
+async def upload_historico(
+    background_tasks: BackgroundTasks,
+    periodo: str = "P67",
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_admin),
+):
+    """
+    Sube un ZIP con datos AVAC + reporte para un periodo HISTÓRICO (ej. P67).
+    NO toca el semestre activo (P68). Los datos se etiquetan con el periodo dado.
+
+    Estructura esperada del ZIP:
+      IngresosAVAC/ingresosAVAC_XXXXX.csv   → accesos AVAC por curso
+      Tareas/estado_XXXXX.csv               → entregas por curso
+      Reportes/XXXXX_reporte.xlsx           → datos personales + repitencias
+
+    También re-enriquece las calificaciones existentes del periodo con
+    NIVEL y NUMERO_REPITENCIAS del reporte.
+    """
+    # Normalizar periodo: asegurar formato "P67" (no "67")
+    periodo = periodo.strip()
+    if periodo.isdigit():
+        periodo = f"P{periodo}"
+    if not periodo.startswith("P") or len(periodo) < 3:
+        raise HTTPException(status_code=400, detail=f"Periodo inválido: {periodo}. Use formato P67, P68, etc.")
+
+    if not file.filename.lower().endswith(".zip"):
+        raise HTTPException(status_code=400, detail="Solo se aceptan archivos .zip")
+
+    MAX_UPLOAD_SIZE = 500 * 1024 * 1024
+    content = await file.read()
+    if len(content) > MAX_UPLOAD_SIZE:
+        raise HTTPException(status_code=413, detail=f"Archivo demasiado grande ({len(content) // (1024*1024)} MB). Máximo: 500 MB")
+
+    # Extraer a directorio temporal separado (no contamina ./data del periodo activo)
+    temp_dir = tempfile.mkdtemp(prefix=f"historico_{periodo}_")
+
+    def _auto_route_historico(member_name: str) -> str:
+        basename = os.path.basename(member_name)
+        parts = member_name.replace("\\", "/").split("/")
+        if len(parts) > 1 and parts[0] in ("Reportes", "IngresosAVAC", "Tareas"):
+            return member_name
+        bl = basename.lower()
+        if bl.endswith("_reporte.xlsx"):
+            return f"Reportes/{basename}"
+        if bl.startswith("ingresosavac") and bl.endswith(".csv"):
+            return f"IngresosAVAC/{basename}"
+        if bl.startswith("estado_") and bl.endswith(".csv"):
+            return f"Tareas/{basename}"
+        return member_name
+
+    extracted_files = []
+    rerouted = []
+    try:
+        with zipfile.ZipFile(io.BytesIO(content)) as zf:
+            for member in zf.namelist():
+                if member.endswith("/") or os.path.basename(member).startswith("."):
+                    continue
+                routed = _auto_route_historico(member)
+                dest_path = os.path.join(temp_dir, routed)
+                if not os.path.abspath(dest_path).startswith(os.path.abspath(temp_dir)):
+                    continue
+                os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+                with zf.open(member) as src, open(dest_path, "wb") as dst:
+                    dst.write(src.read())
+                extracted_files.append(routed)
+                if routed != member:
+                    rerouted.append(f"{member} → {routed}")
+    except zipfile.BadZipFile:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        raise HTTPException(status_code=400, detail="El archivo no es un ZIP válido")
+
+    # Contar tipos de archivos
+    avac_count = sum(1 for f in extracted_files if f.startswith("IngresosAVAC/"))
+    tareas_count = sum(1 for f in extracted_files if f.startswith("Tareas/"))
+    reporte_count = sum(1 for f in extracted_files if f.startswith("Reportes/"))
+
+    def _run_historico_background():
+        from ..database import SessionLocal
+        db = SessionLocal()
+        try:
+            pipeline = ETLPipeline(db)
+            pipeline.run_historico(
+                periodo=periodo,
+                data_dir=temp_dir,
+                triggered_by=current_user.email,
+            )
+        finally:
+            db.close()
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    background_tasks.add_task(_run_historico_background)
+
+    msg = (
+        f"ZIP histórico extraído ({len(extracted_files)} archivos). "
+        f"AVAC: {avac_count}, Tareas: {tareas_count}, Reportes: {reporte_count}. "
+        f"ETL histórico ({periodo}) iniciado en background."
+    )
+    if rerouted:
+        msg += f" {len(rerouted)} archivo(s) reubicados automáticamente."
+
+    return {
+        "message": msg,
+        "periodo": periodo,
+        "archivos_extraidos": len(extracted_files),
+        "detalle": {"avac": avac_count, "tareas": tareas_count, "reportes": reporte_count},
+        "archivos": extracted_files,
+        "reubicados": rerouted,
+        "etl": "iniciado",
+    }
 
 
 @router.post("/etl/upload-and-run")
