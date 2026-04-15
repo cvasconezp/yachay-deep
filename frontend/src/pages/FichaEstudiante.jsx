@@ -1779,6 +1779,7 @@ export default function FichaEstudiante() {
                       </tr>
                     </thead>
                     <tbody>
+                      {/* Filas de cursos con datos AVAC */}
                       {Object.entries(cursos).map(([codigo, { acceso, tareas: ts }], idx) => {
                         const courseName = acceso?.nombre_curso || ts[0]?.nombre_curso || codigo;
                         const matchedCal = matchNota(courseName, ficha.calificaciones)
@@ -1803,6 +1804,45 @@ export default function FichaEstudiante() {
                           </tr>
                         );
                       })}
+                      {/* Filas de calificaciones SIN match AVAC (materias que no aparecen en cursos AVAC) */}
+                      {(() => {
+                        const avacCourseNames = Object.entries(cursos).map(([codigo, { acceso, tareas: ts }]) => {
+                          const name = acceso?.nombre_curso || ts[0]?.nombre_curso || codigo;
+                          return name;
+                        });
+                        const norm = s => (s || "").toLowerCase().replace(/[^a-záéíóúñ0-9]/gi, "").slice(0, 12);
+                        const avacNorms = avacCourseNames.map(n => norm(n));
+                        const unmatchedCals = (ficha.calificaciones || []).filter(cal => {
+                          const cn = norm(cal.asignatura);
+                          return !avacNorms.some(an => an && cn && (an.startsWith(cn.slice(0, 8)) || cn.startsWith(an.slice(0, 8))));
+                        });
+                        const baseIdx = Object.keys(cursos).length;
+                        return unmatchedCals.map((cal, idx) => {
+                          const noteStyle = getNoteStyleHistorico(cal.nota_final);
+                          const grp = abbreviateGrupo(cal.grupo);
+                          const nivNum = parseNivelNum(cal.nivel) || parseNivelNum(ficha.nivel_academico);
+                          return (
+                            <tr key={`cal-extra-${idx}`} className={(baseIdx + idx) % 2 === 0 ? "bg-white" : "bg-[#F9F9F9]"}>
+                              <td className="px-2 py-1 border border-gray-200 text-center text-[11px] text-gray-500 whitespace-nowrap">
+                                {nivNum ? <>{nivNum}° Nivel</> : "—"}{grp ? <> | {grp}</> : ""}
+                              </td>
+                              <td className="px-2 py-1 border border-gray-200 font-medium text-gray-800">{toTitleCase(cal.asignatura)}</td>
+                              <td className={`px-2 py-1 border border-gray-200 text-center font-bold ${noteStyle.bg} ${noteStyle.text}`}>
+                                {cal.nota_final != null ? cal.nota_final : <span className="text-gray-300 font-normal">—</span>}
+                              </td>
+                              <td className="px-2 py-1 border border-gray-200 text-center text-[11px] text-gray-500">
+                                {cal.numero_repitencias != null
+                                  ? <span className={`px-1 rounded text-[10px] font-semibold ${cal.numero_repitencias > 1 ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-gray-700"}`}>{cal.numero_repitencias}</span>
+                                  : "—"}
+                              </td>
+                              <td className="px-2 py-1 border border-gray-200 text-center"><span className="text-[10px] text-gray-300 italic">—</span></td>
+                              <td className="px-2 py-1 border border-gray-200 text-center"><span className="text-[10px] text-gray-300 italic">—</span></td>
+                              <td className="px-2 py-1 border border-gray-200 text-center"><span className="text-gray-300">—</span></td>
+                              <td className="px-2 py-1 border border-gray-200 text-gray-600 text-[11px]">{toTitleCase(cal.docente) || <span className="text-gray-300 italic">—</span>}</td>
+                            </tr>
+                          );
+                        });
+                      })()}
                     </tbody>
                   </table>
                 </div>
