@@ -410,6 +410,10 @@ class FichaEstudiante(BaseModel):
     total_intervenciones: int = 0
     ultima_intervencion: Optional[datetime] = None
 
+    # Período consultado (para el selector de período en el frontend)
+    periodo_consulta: Optional[str] = None      # e.g. "P68" — periodo que se está viendo
+    periodo_es_actual: bool = True               # True si es el semestre activo
+
     class Config:
         from_attributes = True
 
@@ -861,6 +865,7 @@ def _build_malla_canonica(
 @router.get("/{student_id}/ficha", response_model=FichaEstudiante)
 def get_ficha(
     student_id: int,
+    periodo: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -869,55 +874,118 @@ def get_ficha(
     Equivalente a la FichaEst del Excel pero para todos los cursos.
     Enriquece accesos_avac y tareas con nombre_curso, docente y grupo
     desde la tabla courses (codigo_avac == codigo_curso).
+
+    El parámetro 'periodo' permite ver datos de un período específico:
+    - Si coincide con el semestre activo (o no se envía): comportamiento actual
+    - Si es un período histórico (ej. P67): muestra calificaciones de ese período
+      como principales, y los demás como históricos. AVAC (accesos/tareas) solo
+      existen para el período actual.
     """
     student = db.query(Student).filter(Student.id == student_id).first()
     if not student:
         raise HTTPException(status_code=404, detail="Estudiante no encontrado")
 
-    accesos = (
-        db.query(AvacAccess)
-        .filter(AvacAccess.student_id == student_id)
-        .order_by(AvacAccess.dias_sin_acceso)
-        .all()
-    )
+    # ── Determinar si el periodo solicitado es el activo ──
+    from ..models.course_config import SemesterConfig as _SC
+    active_sc = db.query(_SC).filter(_SC.activo == True).first()  # noqa: E712
+    active_periodo = active_sc.semestre.strip() if active_sc and active_sc.semestre else None
 
-    tareas = (
-        db.query(TaskSubmission)
-        .filter(TaskSubmission.student_id == student_id)
-        .order_by(TaskSubmission.codigo_curso, TaskSubmission.unidad)
-        .all()
-    )
+    def _norm_p(val):
+        """Normaliza a formato 'P##'."""
+        if not val:
+            return None
+        v = str(val).strip()
+        return v if v.startswith("P") else f"P{v}"
 
-    # Calificaciones del semestre actual (sin período asignado)
-    calificaciones = (
-        db.query(Grade)
-        .filter(Grade.student_id == student_id, Grade.periodo.is_(None))
-        .order_by(Grade.asignatura)
-        .all()
-    )
+    req_periodo = _norm_p(periodo) if periodo else _norm_p(active_periodo)
+    active_norm = _norm_p(active_periodo)
+    is_current = (not periodo) or (req_periodo == active_norm)
 
-    # Calificaciones históricas (con período: P60, P61, … P67+)
-    calificaciones_historicas = (
-        db.query(Grade)
-        .filter(Grade.student_id == student_id, Grade.periodo.isnot(None))
-        .order_by(Grade.periodo, Grade.asignatura)
-        .all()
-    )
+    def _periodo_match(col, pval):
+        """Dual-format filter: P68 OR 68."""
+        if not pval:
+            return col.is_(None)
+        raw = pval[1:] if pval.startswith("P") else pval
+        return or_(col == pval, col == raw)
 
-    intervenciones = (
-        db.query(Intervention)
-        .filter(Intervention.student_id == student_id)
-        .order_by(Intervention.created_at.desc())
-        .all()
-    )
+    # ── AVAC: solo existe para el período actual ──
+    if is_current:
+        accesos = (
+            db.query(AvacAccess)
+            .filter(AvacAccess.student_id == student_id)
+            .order_by(AvacAccess.dias_sin_acceso)
+            .all()
+        )
+        tareas = (
+            db.query(TaskSubmission)
+            .filter(TaskSubmission.student_id == student_id)
+            .order_by(TaskSubmission.codigo_curso, TaskSubmission.unidad)
+            .all()
+        )
+    else:
+        accesos = []
+        tareas = []
 
-    # Prácticas preprofesionales
-    practicas_raw = (
-        db.query(PracticaPreprofesional)
-        .filter(PracticaPreprofesional.student_id == student_id)
-        .order_by(PracticaPreprofesional.periodo.desc())
-        .all()
-    )
+    # ── Calificaciones ──
+    if is_current:
+        # Semestre activo: calificaciones sin periodo = actuales
+        calificaciones = (
+            db.query(Grade)
+            .filter(Grade.student_id == student_id, Grade.periodo.is_(None))
+            .order_by(Grade.asignatura)
+            .all()
+        )
+        calificaciones_historicas = (
+            db.query(Grade)
+            .filter(Grade.student_id == student_id, Grade.periodo.isnot(None))
+            .order_by(Grade.periodo, Grade.asignatura)
+            .all()
+        )
+    else:
+        # Período histórico: calificaciones de ese periodo = principales
+        calificaciones = (
+            db.query(Grade)
+            .filter(Grade.student_id == student_id, _periodo_match(Grade.periodo, req_periodo))
+            .order_by(Grade.asignatura)
+            .all()
+        )
+        # Históricas: todos los demás periodos (incluye NULL y otros)
+        raw_p = req_periodo[1:] if req_periodo.startswith("P") else req_periodo
+        calificaciones_historicas = (
+            db.query(Grade)
+            .filter(
+                Grade.student_id == student_id,
+                Grade.periodo.isnot(None),
+                ~Grade.periodo.in_([req_periodo, raw_p]),
+            )
+            .order_by(Grade.periodo, Grade.asignatura)
+            .all()
+        )
+
+    # ── Intervenciones: filtrar por periodo si es histórico ──
+    if is_current:
+        intervenciones = (
+            db.query(Intervention)
+            .filter(Intervention.student_id == student_id)
+            .order_by(Intervention.created_at.desc())
+            .all()
+        )
+    else:
+        intervenciones = (
+            db.query(Intervention)
+            .filter(
+                Intervention.student_id == student_id,
+                _periodo_match(Intervention.periodo, req_periodo),
+            )
+            .order_by(Intervention.created_at.desc())
+            .all()
+        )
+
+    # Prácticas preprofesionales (filtrar por periodo si es histórico)
+    prac_q = db.query(PracticaPreprofesional).filter(PracticaPreprofesional.student_id == student_id)
+    if not is_current:
+        prac_q = prac_q.filter(_periodo_match(PracticaPreprofesional.periodo, req_periodo))
+    practicas_raw = prac_q.order_by(PracticaPreprofesional.periodo.desc()).all()
 
     # Enriquecer con datos de la escuela (jurisdicción, ubicación completa)
     practicas_out = []
@@ -1019,12 +1087,10 @@ def get_ficha(
     ultima_intervencion = intervenciones[0].created_at if intervenciones else None
 
     # ── Asignaturas matriculadas desde el reporte institucional ──
-    enrollments_raw = (
-        db.query(Enrollment)
-        .filter(Enrollment.student_id == student_id)
-        .order_by(Enrollment.nivel, Enrollment.asignatura)
-        .all()
-    )
+    enroll_q = db.query(Enrollment).filter(Enrollment.student_id == student_id)
+    if not is_current:
+        enroll_q = enroll_q.filter(_periodo_match(Enrollment.periodo, req_periodo))
+    enrollments_raw = enroll_q.order_by(Enrollment.nivel, Enrollment.asignatura).all()
     enrollments_out = [
         EnrollmentOut(
             codigo_grupo=e.codigo_grupo,
@@ -1116,6 +1182,8 @@ def get_ficha(
         practicas_preprofesionales=practicas_out,
         total_intervenciones=len(intervenciones),
         ultima_intervencion=ultima_intervencion,
+        periodo_consulta=req_periodo,
+        periodo_es_actual=is_current,
     )
 
 

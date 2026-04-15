@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { api } from "../services/api";
 import { RiskBadge } from "../components/RiskBadge";
+import { PeriodSelector } from "../components/PeriodSelector";
 import EcuadorMap from "../components/EcuadorMap";
 import InterventionForm from "./InterventionForm";
 
@@ -801,6 +802,7 @@ export default function FichaEstudiante() {
   const [loadingComparativa, setLoadingComparativa] = useState(false);
   const [mlPeriodos, setMlPeriodos] = useState(null);  // periodos dinámicos del modelo ML
   const [iaPanelExpanded, setIaPanelExpanded] = useState(true);  // expand/collapse del panel IA
+  const [selectedPeriodo, setSelectedPeriodo] = useState("");   // periodo seleccionado (PeriodSelector default)
   const searchTimeout = useRef(null);
   const searchAbort = useRef(null);
   const searchContainerRef = useRef(null);
@@ -885,13 +887,13 @@ export default function FichaEstudiante() {
     triggerSearch(query, carrera);
   };
 
-  const loadFicha = async (id) => {
+  const loadFicha = async (id, periodo) => {
     setLoading(true);
     setError(null);
     setSearchResults([]);
     setActiveTab("indicadores");
     try {
-      const data = await api.getFicha(id);
+      const data = await api.getFicha(id, periodo || selectedPeriodo || undefined);
       setFicha(data);
       setQuery(data.nombre || "");
       navigate(`/ficha/${id}`, { replace: true });
@@ -903,6 +905,14 @@ export default function FichaEstudiante() {
       setError(e.message || "Error al cargar la ficha del estudiante");
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Recargar ficha cuando cambia el periodo seleccionado
+  const handlePeriodoChange = (newPeriodo) => {
+    setSelectedPeriodo(newPeriodo);
+    if (ficha?.id) {
+      loadFicha(ficha.id, newPeriodo);
     }
   };
 
@@ -1062,6 +1072,18 @@ export default function FichaEstudiante() {
                 )}
               </div>
               <div className="flex items-center gap-2">
+                <div className="[&>div>label]:hidden">
+                  <PeriodSelector
+                    value={selectedPeriodo}
+                    onChange={handlePeriodoChange}
+                    className="!min-w-[120px] !py-1 !text-xs !bg-white/10 !text-white !border-white/20 !shadow-none !rounded-md [&>option]:text-gray-900"
+                  />
+                </div>
+                {!ficha.periodo_es_actual && (
+                  <span className="bg-amber-500/20 text-amber-200 text-[10px] px-2 py-0.5 rounded-full font-medium">
+                    Histórico
+                  </span>
+                )}
                 <button onClick={handleExportPDF}
                   className="bg-white/10 hover:bg-white/20 text-white px-4 py-1.5 rounded-lg text-xs font-medium transition border border-white/10">
                   PDF
@@ -1605,6 +1627,13 @@ export default function FichaEstudiante() {
 
             {/* ─── SECCIÓN DERECHA ─── */}
             <div className="flex-1 overflow-hidden flex flex-col">
+
+              {/* Aviso de período histórico (sin datos AVAC) */}
+              {!ficha.periodo_es_actual && (
+                <div className="bg-amber-50 border-b border-amber-200 px-3 py-1.5 flex items-center gap-2">
+                  <span className="text-amber-600 text-[10px]">Viendo datos del período <strong>{ficha.periodo_consulta}</strong> — los datos de AVAC (accesos y tareas) solo están disponibles para el período actual.</span>
+                </div>
+              )}
 
               {/* Barra de info: Datos Académicos | Centro de Apoyo (EIB) | Nivel */}
               <div className="bg-[#1B3A6B] text-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider flex items-center gap-4">

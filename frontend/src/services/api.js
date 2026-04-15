@@ -112,7 +112,10 @@ class ApiClient {
     if (options.nivel_riesgo) params.set("nivel_riesgo", options.nivel_riesgo);
     return this.get(`/students/search?${params.toString()}`);
   }
-  getFicha(studentId) { return this.get(`/students/${studentId}/ficha`); }
+  getFicha(studentId, periodo) {
+    const qs = periodo ? `?periodo=${encodeURIComponent(periodo)}` : "";
+    return this.get(`/students/${studentId}/ficha${qs}`);
+  }
   getStudentComparativa(studentId) { return this.get(`/students/${studentId}/comparativa`); }
 
   // ── Interventions ──
