@@ -1636,10 +1636,10 @@ export default function FichaEstudiante() {
             {/* ─── SECCIÓN DERECHA ─── */}
             <div className="flex-1 overflow-hidden flex flex-col">
 
-              {/* Aviso de período histórico (sin datos AVAC) */}
+              {/* Aviso de período histórico */}
               {!ficha.periodo_es_actual && (
                 <div className="bg-amber-50 border-b border-amber-200 px-3 py-1.5 flex items-center gap-2">
-                  <span className="text-amber-600 text-[10px]">Viendo datos del período <strong>{ficha.periodo_consulta}</strong> — los datos de AVAC (accesos y tareas) solo están disponibles para el período actual.</span>
+                  <span className="text-amber-600 text-[10px]">Viendo datos del período <strong>{ficha.periodo_consulta}</strong></span>
                 </div>
               )}
 

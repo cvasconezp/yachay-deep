@@ -908,23 +908,20 @@ def get_ficha(
         raw = pval[1:] if pval.startswith("P") else pval
         return or_(col == pval, col == raw)
 
-    # ── AVAC: solo existe para el período actual ──
-    if is_current:
-        accesos = (
-            db.query(AvacAccess)
-            .filter(AvacAccess.student_id == student_id)
-            .order_by(AvacAccess.dias_sin_acceso)
-            .all()
-        )
-        tareas = (
-            db.query(TaskSubmission)
-            .filter(TaskSubmission.student_id == student_id)
-            .order_by(TaskSubmission.codigo_curso, TaskSubmission.unidad)
-            .all()
-        )
-    else:
-        accesos = []
-        tareas = []
+    # ── AVAC: siempre retornar — los códigos de curso son específicos por período,
+    # así el frontend cruza automáticamente (código P67 ≠ código P68) ──
+    accesos = (
+        db.query(AvacAccess)
+        .filter(AvacAccess.student_id == student_id)
+        .order_by(AvacAccess.dias_sin_acceso)
+        .all()
+    )
+    tareas = (
+        db.query(TaskSubmission)
+        .filter(TaskSubmission.student_id == student_id)
+        .order_by(TaskSubmission.codigo_curso, TaskSubmission.unidad)
+        .all()
+    )
 
     # ── Calificaciones ──
     if is_current:
