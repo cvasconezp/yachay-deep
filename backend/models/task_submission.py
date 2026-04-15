@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Float, Boolean
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Float, Boolean, Index
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from ..database import Base
@@ -6,10 +6,15 @@ from ..database import Base
 
 class TaskSubmission(Base):
     __tablename__ = "task_submissions"
+    __table_args__ = (
+        Index("idx_task_periodo", "periodo"),
+        Index("idx_task_student_periodo", "student_id", "periodo"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     student_id = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), index=True)
     codigo_curso = Column(String, index=True, nullable=False)
+    periodo = Column(String, nullable=True)             # "P67", "P68" — identifies which semester
     unidad = Column(String, nullable=True)              # "1", "2", "3", "4"
     estado = Column(String, nullable=True)              # "Enviado para calificar Calificado" etc
     calificacion_texto = Column(String, nullable=True)  # "15,00 / 15,00"

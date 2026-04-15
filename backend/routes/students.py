@@ -908,17 +908,23 @@ def get_ficha(
         raw = pval[1:] if pval.startswith("P") else pval
         return or_(col == pval, col == raw)
 
-    # ── AVAC: siempre retornar — los códigos de curso son específicos por período,
-    # así el frontend cruza automáticamente (código P67 ≠ código P68) ──
+    # ── AVAC: filtrar por período ──
+    # Registros con periodo=NULL son legacy (previo a esta migración) → mostrar solo en período activo
+    def _avac_periodo_filter(periodo_col):
+        match_expr = _periodo_match(periodo_col, req_periodo)
+        if is_current:
+            return or_(match_expr, periodo_col.is_(None))
+        return match_expr
+
     accesos = (
         db.query(AvacAccess)
-        .filter(AvacAccess.student_id == student_id)
+        .filter(AvacAccess.student_id == student_id, _avac_periodo_filter(AvacAccess.periodo))
         .order_by(AvacAccess.dias_sin_acceso)
         .all()
     )
     tareas = (
         db.query(TaskSubmission)
-        .filter(TaskSubmission.student_id == student_id)
+        .filter(TaskSubmission.student_id == student_id, _avac_periodo_filter(TaskSubmission.periodo))
         .order_by(TaskSubmission.codigo_curso, TaskSubmission.unidad)
         .all()
     )

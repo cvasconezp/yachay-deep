@@ -89,6 +89,12 @@ def upgrade_tables():
         "scraping_runs": [
             ("descripcion", "VARCHAR"),
         ],
+        "avac_accesses": [
+            ("periodo", "VARCHAR"),
+        ],
+        "task_submissions": [
+            ("periodo", "VARCHAR"),
+        ],
     }
 
     inspector = inspect(engine)
@@ -102,4 +108,11 @@ def upgrade_tables():
             for col_name, col_type in columns:
                 if col_name not in existing_cols:
                     conn.execute(text(f'ALTER TABLE "{table}" ADD COLUMN "{col_name}" {col_type}'))
+
+        # ── Data migration: etiquetar registros AVAC sin periodo como P67 ──
+        # Los datos AVAC cargados antes de esta migración corresponden al P67.
+        for tbl in ("avac_accesses", "task_submissions"):
+            if tbl in existing_tables:
+                conn.execute(text(f'UPDATE "{tbl}" SET periodo = \'P67\' WHERE periodo IS NULL'))
+
         conn.commit()

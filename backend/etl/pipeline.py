@@ -385,10 +385,16 @@ class ETLPipeline:
                 _n_c = self.db.query(_Course).filter(
                     _Course.periodo.is_(None)
                 ).update({"periodo": "P67"}, synchronize_session=False)
-                if _n_g or _n_c:
+                _n_a = self.db.query(AvacAccess).filter(
+                    AvacAccess.periodo.is_(None)
+                ).update({"periodo": "P67"}, synchronize_session=False)
+                _n_t = self.db.query(TaskSubmission).filter(
+                    TaskSubmission.periodo.is_(None)
+                ).update({"periodo": "P67"}, synchronize_session=False)
+                if _n_g or _n_c or _n_a or _n_t:
                     self.db.flush()
-                    logs.append(f"  🔧 Migración P67: {_n_g} calificaciones + {_n_c} cursos etiquetados como P67")
-                    logger.info("Migración P67: %d grades, %d courses", _n_g, _n_c)
+                    logs.append(f"  🔧 Migración P67: {_n_g} calificaciones + {_n_c} cursos + {_n_a} accesos AVAC + {_n_t} tareas etiquetados como P67")
+                    logger.info("Migración P67: %d grades, %d courses, %d avac, %d tasks", _n_g, _n_c, _n_a, _n_t)
             except Exception as e:
                 logs.append(f"  ⚠ Error en migración P67: {e}")
                 logger.error("Error en migración P67: %s", e, exc_info=True)
@@ -419,15 +425,16 @@ class ETLPipeline:
                 logs.append(f"  → {n} estudiantes con indicadores actualizados")
 
                 # 4. Upsert accesos AVAC
-                logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Cargando accesos AVAC...")
-                n = self._upsert_avac_accesses(df_ingresos)
+                active_periodo = semconfig.semestre if semconfig else None
+                logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Cargando accesos AVAC (periodo={active_periodo})...")
+                n = self._upsert_avac_accesses(df_ingresos, periodo=active_periodo)
                 total_registros += n
                 logs.append(f"  → {n} registros de acceso")
 
                 # 5. Upsert tareas
                 if not df_tareas.empty:
                     logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Cargando submissions de tareas...")
-                    n = self._upsert_task_submissions(df_tareas)
+                    n = self._upsert_task_submissions(df_tareas, periodo=active_periodo)
                     total_registros += n
                     logs.append(f"  → {n} submissions de tareas")
 
@@ -1138,18 +1145,25 @@ class ETLPipeline:
         self.db.commit()
         return count
 
-    def _upsert_avac_accesses(self, df_ingresos: pd.DataFrame) -> int:
-        """Limpia y recarga los accesos AVAC (full refresh por período de extracción)."""
+    def _upsert_avac_accesses(self, df_ingresos: pd.DataFrame, periodo: Optional[str] = None) -> int:
+        """Limpia y recarga los accesos AVAC para el período dado (full refresh por período)."""
         if df_ingresos.empty:
             return 0
 
         count = 0
-        fecha_max_extraccion = df_ingresos["fecha_extraccion"].max()
 
-        self.db.query(AvacAccess).filter(
-            AvacAccess.fecha_extraccion >= fecha_max_extraccion.replace(hour=0, minute=0, second=0)
-            if pd.notna(fecha_max_extraccion) else True
-        ).delete(synchronize_session=False)
+        # Full-refresh: borrar registros AVAC del mismo período
+        if periodo:
+            self.db.query(AvacAccess).filter(
+                AvacAccess.periodo == periodo
+            ).delete(synchronize_session=False)
+        else:
+            # Fallback: borrar por fecha de extracción (comportamiento legacy)
+            fecha_max_extraccion = df_ingresos["fecha_extraccion"].max()
+            self.db.query(AvacAccess).filter(
+                AvacAccess.fecha_extraccion >= fecha_max_extraccion.replace(hour=0, minute=0, second=0)
+                if pd.notna(fecha_max_extraccion) else True
+            ).delete(synchronize_session=False)
 
         for _, row in df_ingresos.iterrows():
             correo = str(row.get("correo", "")).strip()
@@ -1160,6 +1174,7 @@ class ETLPipeline:
             acceso = AvacAccess(
                 student_id=student.id,
                 codigo_curso=str(row.get("codigo_curso", "")).strip(),
+                periodo=periodo,
                 nombre_estudiante_avac=row.get("nombre_avac"),
                 ultimo_acceso_texto=row.get("ultimo_acceso_texto"),
                 dias_sin_acceso=row.get("dias_sin_acceso"),
@@ -1172,8 +1187,8 @@ class ETLPipeline:
         self.db.commit()
         return count
 
-    def _upsert_task_submissions(self, df_tareas: pd.DataFrame) -> int:
-        """Carga submissions de tareas."""
+    def _upsert_task_submissions(self, df_tareas: pd.DataFrame, periodo: Optional[str] = None) -> int:
+        """Carga submissions de tareas para el período dado."""
         if df_tareas.empty:
             return 0
 
@@ -1184,10 +1199,14 @@ class ETLPipeline:
             if not student:
                 continue
 
+            codigo = str(row.get("codigo_curso", "")).strip()
+            unidad = str(row.get("unidad", "")).strip()
+
             existing = self.db.query(TaskSubmission).filter(
                 TaskSubmission.student_id == student.id,
-                TaskSubmission.codigo_curso == str(row.get("codigo_curso", "")),
-                TaskSubmission.unidad == str(row.get("unidad", "")),
+                TaskSubmission.codigo_curso == codigo,
+                TaskSubmission.unidad == unidad,
+                TaskSubmission.periodo == periodo,
             ).first()
 
             if existing:
@@ -1195,8 +1214,9 @@ class ETLPipeline:
             else:
                 sub = TaskSubmission(
                     student_id=student.id,
-                    codigo_curso=str(row.get("codigo_curso", "")).strip(),
-                    unidad=str(row.get("unidad", "")).strip(),
+                    codigo_curso=codigo,
+                    unidad=unidad,
+                    periodo=periodo,
                 )
                 self.db.add(sub)
 

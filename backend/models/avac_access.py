@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Float
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Float, Index
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from ..database import Base
@@ -6,10 +6,15 @@ from ..database import Base
 
 class AvacAccess(Base):
     __tablename__ = "avac_accesses"
+    __table_args__ = (
+        Index("idx_avac_periodo", "periodo"),
+        Index("idx_avac_student_periodo", "student_id", "periodo"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     student_id = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), index=True)
     codigo_curso = Column(String, index=True, nullable=False)
+    periodo = Column(String, nullable=True)                 # "P67", "P68" — identifies which semester this data belongs to
     nombre_estudiante_avac = Column(String, nullable=True)  # as stored in AVAC
     ultimo_acceso_texto = Column(String, nullable=True)     # "8 días 17 horas"
     dias_sin_acceso = Column(Float, nullable=True)          # parsed numeric value
