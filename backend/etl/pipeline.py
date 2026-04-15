@@ -1146,24 +1146,25 @@ class ETLPipeline:
         return count
 
     def _upsert_avac_accesses(self, df_ingresos: pd.DataFrame, periodo: Optional[str] = None) -> int:
-        """Limpia y recarga los accesos AVAC para el período dado (full refresh por período)."""
+        """Carga accesos AVAC preservando snapshots históricos.
+
+        Solo borra registros del MISMO DÍA (evita duplicados si se corre 2 veces),
+        pero conserva snapshots de días anteriores para análisis de tendencias.
+        """
         if df_ingresos.empty:
             return 0
 
+        from datetime import date as date_type
+        today = date_type.today()
         count = 0
 
-        # Full-refresh: borrar registros AVAC del mismo período
+        # Solo borrar snapshot de hoy (para evitar duplicados), preservar días anteriores
+        del_filter = AvacAccess.snapshot_date == today
         if periodo:
-            self.db.query(AvacAccess).filter(
-                AvacAccess.periodo == periodo
-            ).delete(synchronize_session=False)
-        else:
-            # Fallback: borrar por fecha de extracción (comportamiento legacy)
-            fecha_max_extraccion = df_ingresos["fecha_extraccion"].max()
-            self.db.query(AvacAccess).filter(
-                AvacAccess.fecha_extraccion >= fecha_max_extraccion.replace(hour=0, minute=0, second=0)
-                if pd.notna(fecha_max_extraccion) else True
-            ).delete(synchronize_session=False)
+            del_filter = del_filter & (AvacAccess.periodo == periodo)
+        deleted = self.db.query(AvacAccess).filter(del_filter).delete(synchronize_session=False)
+        if deleted:
+            logger.info(f"  Snapshot AVAC {today}: eliminados {deleted} registros del mismo día")
 
         for _, row in df_ingresos.iterrows():
             correo = str(row.get("correo", "")).strip()
@@ -1175,6 +1176,7 @@ class ETLPipeline:
                 student_id=student.id,
                 codigo_curso=str(row.get("codigo_curso", "")).strip(),
                 periodo=periodo,
+                snapshot_date=today,
                 nombre_estudiante_avac=row.get("nombre_avac"),
                 ultimo_acceso_texto=row.get("ultimo_acceso_texto"),
                 dias_sin_acceso=row.get("dias_sin_acceso"),
@@ -1188,38 +1190,39 @@ class ETLPipeline:
         return count
 
     def _upsert_task_submissions(self, df_tareas: pd.DataFrame, periodo: Optional[str] = None) -> int:
-        """Carga submissions de tareas para el período dado."""
+        """Carga submissions de tareas preservando snapshots históricos.
+
+        Solo borra registros del MISMO DÍA (evita duplicados), preserva días
+        anteriores para análisis de tendencias y seguimiento docente.
+        """
         if df_tareas.empty:
             return 0
 
+        from datetime import date as date_type
+        today = date_type.today()
         count = 0
+
+        # Solo borrar snapshot de hoy, preservar días anteriores
+        del_filter = TaskSubmission.snapshot_date == today
+        if periodo:
+            del_filter = del_filter & (TaskSubmission.periodo == periodo)
+        deleted = self.db.query(TaskSubmission).filter(del_filter).delete(synchronize_session=False)
+        if deleted:
+            logger.info(f"  Snapshot tareas {today}: eliminados {deleted} registros del mismo día")
+
         for _, row in df_tareas.iterrows():
             correo = str(row.get("correo", "")).strip()
             student = self._get_or_create_student(correo)
             if not student:
                 continue
 
-            codigo = str(row.get("codigo_curso", "")).strip()
-            unidad = str(row.get("unidad", "")).strip()
-
-            existing = self.db.query(TaskSubmission).filter(
-                TaskSubmission.student_id == student.id,
-                TaskSubmission.codigo_curso == codigo,
-                TaskSubmission.unidad == unidad,
-                TaskSubmission.periodo == periodo,
-            ).first()
-
-            if existing:
-                sub = existing
-            else:
-                sub = TaskSubmission(
-                    student_id=student.id,
-                    codigo_curso=codigo,
-                    unidad=unidad,
-                    periodo=periodo,
-                )
-                self.db.add(sub)
-
+            sub = TaskSubmission(
+                student_id=student.id,
+                codigo_curso=str(row.get("codigo_curso", "")).strip(),
+                unidad=str(row.get("unidad", "")).strip(),
+                periodo=periodo,
+                snapshot_date=today,
+            )
             sub.estado = row.get("estado")
             sub.calificacion = row.get("calificacion")
             sub.calificacion_maxima = row.get("calificacion_maxima")
@@ -1231,6 +1234,7 @@ class ETLPipeline:
             sub.comentarios_retroalimentacion = row.get("comentarios_retroalimentacion")
             sub.total_curso = row.get("total_curso")
             sub.fecha_extraccion = row.get("fecha_extraccion")
+            self.db.add(sub)
             count += 1
 
         self.db.commit()

@@ -218,3 +218,101 @@ def get_carreras(
         .all()
     )
     return [c.carrera for c in carreras]
+
+
+# ── Seguimiento docente: tareas pendientes de calificación ─────────────────
+
+class DocenteGradingSummary(BaseModel):
+    docente: Optional[str] = None
+    correo_docente: Optional[str] = None
+    codigo_curso: str
+    asignatura: Optional[str] = None
+    carrera: Optional[str] = None
+    total_tareas: int = 0
+    calificadas: int = 0
+    pendientes: int = 0
+    pct_calificadas: Optional[float] = None
+    estudiantes_afectados: int = 0
+    snapshot_date: Optional[str] = None
+
+
+@router.get("/docentes/calificacion", response_model=list[DocenteGradingSummary])
+def get_docente_grading_status(
+    periodo: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Estado de calificación por docente/curso — identifica docentes con tareas sin calificar.
+
+    Útil para seguimiento institucional: ¿qué docentes aún no califican actividades?
+    """
+    from sqlalchemy import or_
+    from ..models import TaskSubmission
+    from ..models.course_config import SemesterConfig, CourseConfig
+
+    # Determinar periodo
+    active_sem = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
+    active_periodo = active_sem.semestre if active_sem else None
+
+    req_p = periodo if periodo else active_periodo
+    if not req_p:
+        return []
+
+    raw_p = req_p[1:] if req_p.startswith("P") else req_p
+
+    # Obtener último snapshot
+    latest_snap = (
+        db.query(func.max(TaskSubmission.snapshot_date))
+        .filter(or_(TaskSubmission.periodo == req_p, TaskSubmission.periodo == raw_p))
+        .scalar()
+    )
+    if not latest_snap:
+        # Fallback: buscar registros sin snapshot_date (legacy)
+        latest_snap = None
+
+    snap_filter = (
+        or_(TaskSubmission.snapshot_date == latest_snap, TaskSubmission.snapshot_date.is_(None))
+        if latest_snap else TaskSubmission.snapshot_date.is_(None)
+    )
+
+    # Agrupar por codigo_curso
+    from collections import defaultdict
+    tareas = (
+        db.query(TaskSubmission)
+        .filter(
+            or_(TaskSubmission.periodo == req_p, TaskSubmission.periodo == raw_p),
+            snap_filter,
+        )
+        .all()
+    )
+
+    curso_data = defaultdict(lambda: {"tasks": [], "students": set()})
+    for t in tareas:
+        curso_data[t.codigo_curso]["tasks"].append(t)
+        curso_data[t.codigo_curso]["students"].add(t.student_id)
+
+    result = []
+    for codigo, data in curso_data.items():
+        cc = db.query(CourseConfig).filter(CourseConfig.codigo_avac == codigo).first()
+        tasks = data["tasks"]
+        total = len(tasks)
+        calificadas = sum(1 for t in tasks if t.calificada)
+        pendientes = total - calificadas
+
+        result.append(DocenteGradingSummary(
+            docente=cc.docente if cc else None,
+            correo_docente=cc.correo_docente if cc else None,
+            codigo_curso=codigo,
+            asignatura=cc.asignatura if cc else None,
+            carrera=cc.carrera if cc else None,
+            total_tareas=total,
+            calificadas=calificadas,
+            pendientes=pendientes,
+            pct_calificadas=round(calificadas / total * 100, 1) if total else None,
+            estudiantes_afectados=len(data["students"]),
+            snapshot_date=str(latest_snap) if latest_snap else None,
+        ))
+
+    # Ordenar: más pendientes primero
+    result.sort(key=lambda x: x.pendientes, reverse=True)
+    return result

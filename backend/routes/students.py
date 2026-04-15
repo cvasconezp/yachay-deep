@@ -908,23 +908,42 @@ def get_ficha(
         raw = pval[1:] if pval.startswith("P") else pval
         return or_(col == pval, col == raw)
 
-    # ── AVAC: filtrar por período ──
-    # Registros con periodo=NULL son legacy (previo a esta migración) → mostrar solo en período activo
+    # ── AVAC: filtrar por período + solo último snapshot ──
     def _avac_periodo_filter(periodo_col):
         match_expr = _periodo_match(periodo_col, req_periodo)
         if is_current:
             return or_(match_expr, periodo_col.is_(None))
         return match_expr
 
+    # Obtener la fecha del snapshot más reciente para este estudiante+periodo
+    latest_avac_snap = (
+        db.query(func.max(AvacAccess.snapshot_date))
+        .filter(AvacAccess.student_id == student_id, _avac_periodo_filter(AvacAccess.periodo))
+        .scalar()
+    )
+    avac_snap_filter = (
+        or_(AvacAccess.snapshot_date == latest_avac_snap, AvacAccess.snapshot_date.is_(None))
+        if latest_avac_snap else AvacAccess.snapshot_date.is_(None)  # legacy: NULL snapshot_date
+    )
     accesos = (
         db.query(AvacAccess)
-        .filter(AvacAccess.student_id == student_id, _avac_periodo_filter(AvacAccess.periodo))
+        .filter(AvacAccess.student_id == student_id, _avac_periodo_filter(AvacAccess.periodo), avac_snap_filter)
         .order_by(AvacAccess.dias_sin_acceso)
         .all()
     )
+
+    latest_task_snap = (
+        db.query(func.max(TaskSubmission.snapshot_date))
+        .filter(TaskSubmission.student_id == student_id, _avac_periodo_filter(TaskSubmission.periodo))
+        .scalar()
+    )
+    task_snap_filter = (
+        or_(TaskSubmission.snapshot_date == latest_task_snap, TaskSubmission.snapshot_date.is_(None))
+        if latest_task_snap else TaskSubmission.snapshot_date.is_(None)
+    )
     tareas = (
         db.query(TaskSubmission)
-        .filter(TaskSubmission.student_id == student_id, _avac_periodo_filter(TaskSubmission.periodo))
+        .filter(TaskSubmission.student_id == student_id, _avac_periodo_filter(TaskSubmission.periodo), task_snap_filter)
         .order_by(TaskSubmission.codigo_curso, TaskSubmission.unidad)
         .all()
     )
@@ -1187,6 +1206,161 @@ def get_ficha(
         ultima_intervencion=ultima_intervencion,
         periodo_consulta=req_periodo,
         periodo_es_actual=is_current,
+    )
+
+
+# ── Tendencias AVAC: snapshots históricos de acceso y tareas ──────────────────
+
+class AvacSnapshotItem(BaseModel):
+    snapshot_date: str
+    cursos: int = 0
+    promedio_dias_sin_acceso: Optional[float] = None
+    max_dias_sin_acceso: Optional[float] = None
+    total_tareas: int = 0
+    tareas_entregadas: int = 0
+    tareas_calificadas: int = 0
+    tareas_retrasadas: int = 0
+    pct_entregadas: Optional[float] = None
+    pct_calificadas: Optional[float] = None
+
+class DocenteGradingItem(BaseModel):
+    docente: Optional[str] = None
+    codigo_curso: str
+    asignatura: Optional[str] = None
+    total_tareas: int = 0
+    calificadas: int = 0
+    pendientes: int = 0
+    pct_calificadas: Optional[float] = None
+    snapshot_date: Optional[str] = None
+
+class TrendResponse(BaseModel):
+    student_id: int
+    periodo: str
+    snapshots: list[AvacSnapshotItem] = []
+    docente_grading: list[DocenteGradingItem] = []
+
+
+@router.get("/{student_id}/tendencias")
+def get_student_trends(
+    student_id: int,
+    periodo: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Devuelve snapshots históricos de acceso AVAC y tareas para un estudiante.
+
+    Permite analizar la evolución del compromiso del estudiante a lo largo del
+    semestre, y el estado de calificación por docente.
+    """
+    from ..models.course_config import SemesterConfig, CourseConfig
+
+    # Determinar periodo
+    active_sem = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
+    active_periodo = active_sem.semestre if active_sem else None
+
+    def _norm_p(val):
+        if not val:
+            return None
+        v = str(val).strip()
+        return v if v.startswith("P") else f"P{v}"
+
+    req_periodo = _norm_p(periodo) if periodo else _norm_p(active_periodo)
+    if not req_periodo:
+        return TrendResponse(student_id=student_id, periodo="", snapshots=[], docente_grading=[])
+
+    raw_p = req_periodo[1:] if req_periodo.startswith("P") else req_periodo
+
+    # ── Snapshots de acceso AVAC ──
+    accesos_all = (
+        db.query(AvacAccess)
+        .filter(
+            AvacAccess.student_id == student_id,
+            or_(AvacAccess.periodo == req_periodo, AvacAccess.periodo == raw_p),
+        )
+        .order_by(AvacAccess.snapshot_date)
+        .all()
+    )
+
+    # Agrupar por snapshot_date
+    from collections import defaultdict
+    snap_accesos = defaultdict(list)
+    for a in accesos_all:
+        key = str(a.snapshot_date) if a.snapshot_date else "legacy"
+        snap_accesos[key].append(a)
+
+    # ── Snapshots de tareas ──
+    tareas_all = (
+        db.query(TaskSubmission)
+        .filter(
+            TaskSubmission.student_id == student_id,
+            or_(TaskSubmission.periodo == req_periodo, TaskSubmission.periodo == raw_p),
+        )
+        .order_by(TaskSubmission.snapshot_date)
+        .all()
+    )
+    snap_tareas = defaultdict(list)
+    for t in tareas_all:
+        key = str(t.snapshot_date) if t.snapshot_date else "legacy"
+        snap_tareas[key].append(t)
+
+    # Combinar fechas de snapshots
+    all_dates = sorted(set(list(snap_accesos.keys()) + list(snap_tareas.keys())))
+
+    snapshots = []
+    for d in all_dates:
+        acc_list = snap_accesos.get(d, [])
+        tar_list = snap_tareas.get(d, [])
+        dias_vals = [a.dias_sin_acceso for a in acc_list if a.dias_sin_acceso is not None]
+        total_t = len(tar_list)
+        entregadas = sum(1 for t in tar_list if t.entregada)
+        calificadas = sum(1 for t in tar_list if t.calificada)
+        retrasadas = sum(1 for t in tar_list if t.retrasada)
+
+        snapshots.append(AvacSnapshotItem(
+            snapshot_date=d,
+            cursos=len(set(a.codigo_curso for a in acc_list)),
+            promedio_dias_sin_acceso=round(sum(dias_vals) / len(dias_vals), 1) if dias_vals else None,
+            max_dias_sin_acceso=max(dias_vals) if dias_vals else None,
+            total_tareas=total_t,
+            tareas_entregadas=entregadas,
+            tareas_calificadas=calificadas,
+            tareas_retrasadas=retrasadas,
+            pct_entregadas=round(entregadas / total_t * 100, 1) if total_t else None,
+            pct_calificadas=round(calificadas / total_t * 100, 1) if total_t else None,
+        ))
+
+    # ── Seguimiento docente: tareas pendientes de calificación (último snapshot) ──
+    latest_snap = all_dates[-1] if all_dates else None
+    docente_grading = []
+    if latest_snap:
+        latest_tareas = snap_tareas.get(latest_snap, [])
+        # Agrupar por codigo_curso
+        curso_tareas = defaultdict(list)
+        for t in latest_tareas:
+            curso_tareas[t.codigo_curso].append(t)
+
+        # Buscar docente y asignatura desde CourseConfig
+        for codigo, tasks in curso_tareas.items():
+            cc = db.query(CourseConfig).filter(CourseConfig.codigo_avac == codigo).first()
+            total = len(tasks)
+            calificadas = sum(1 for t in tasks if t.calificada)
+            pendientes = total - calificadas
+
+            docente_grading.append(DocenteGradingItem(
+                docente=cc.docente if cc else None,
+                codigo_curso=codigo,
+                asignatura=cc.asignatura if cc else None,
+                total_tareas=total,
+                calificadas=calificadas,
+                pendientes=pendientes,
+                pct_calificadas=round(calificadas / total * 100, 1) if total else None,
+                snapshot_date=latest_snap,
+            ))
+
+    return TrendResponse(
+        student_id=student_id,
+        periodo=req_periodo,
+        snapshots=snapshots,
+        docente_grading=docente_grading,
     )
 
 

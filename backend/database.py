@@ -91,9 +91,11 @@ def upgrade_tables():
         ],
         "avac_accesses": [
             ("periodo", "VARCHAR"),
+            ("snapshot_date", "DATE"),
         ],
         "task_submissions": [
             ("periodo", "VARCHAR"),
+            ("snapshot_date", "DATE"),
         ],
     }
 
