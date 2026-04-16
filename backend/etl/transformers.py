@@ -334,7 +334,7 @@ def transform_estado_tareas(carpeta: str, codigos_activos=None) -> pd.DataFrame:
             cal_txt = row.get(f"Calificación {u}", "")
             fecha_ent = row.get(f"Última modificación (entrega) {u}", "")
             fecha_cal = row.get(f"Última modificación (calificación) {u}", "")
-            archivos = row.get(f"Archivos enviados {u}", "")
+            archivos_env = row.get(f"Archivos enviados {u}", "")
             comentarios = row.get(f"Comentarios de retroalimentación {u}", "")
             cal_final_txt = row.get(f"Calificación final {u}", "")
 
@@ -358,7 +358,7 @@ def transform_estado_tareas(carpeta: str, codigos_activos=None) -> pd.DataFrame:
                 "calificada": calificada,
                 "retrasada": retrasada,
                 "fecha_entrega_texto": str(fecha_ent).strip() if fecha_ent and not pd.isna(fecha_ent) else None,
-                "archivos_enviados": str(archivos).strip() if archivos and not pd.isna(archivos) else None,
+                "archivos_enviados": str(archivos_env).strip() if archivos_env and not pd.isna(archivos_env) else None,
                 "comentarios_retroalimentacion": str(comentarios).strip() if comentarios and not pd.isna(comentarios) else None,
                 "total_curso": total_curso,
                 "total_entregas": row.get("Total Entregas"),
