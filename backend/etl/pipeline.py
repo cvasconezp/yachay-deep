@@ -39,6 +39,25 @@ def _clean_str(val) -> str:
     return "" if s.lower() in ("nan", "none", "null") else s
 
 
+def _nan_to_none(val):
+    """Convierte NaN/inf de pandas a None para inserción segura en BD/JSON.
+
+    Acepta cualquier tipo y retorna el mismo valor salvo si es NaN/Inf float,
+    en cuyo caso retorna None. Necesario porque JSON estándar no soporta
+    NaN/Infinity y rompe la serialización de respuestas.
+    """
+    import math
+    if val is None:
+        return None
+    try:
+        f = float(val)
+        if math.isnan(f) or math.isinf(f):
+            return None
+    except (TypeError, ValueError):
+        pass
+    return val
+
+
 def _normalize_name(nombre: str) -> str:
     """
     Normaliza un nombre para comparación: elimina tildes, diéresis y caracteres
@@ -1371,11 +1390,11 @@ class ETLPipeline:
                 codigo_curso=str(row.get("codigo_curso", "")).strip(),
                 periodo=periodo,
                 snapshot_date=today,
-                nombre_estudiante_avac=row.get("nombre_avac"),
-                ultimo_acceso_texto=row.get("ultimo_acceso_texto"),
-                dias_sin_acceso=row.get("dias_sin_acceso"),
-                estado_avac=row.get("estado_avac"),
-                fecha_extraccion=row.get("fecha_extraccion"),
+                nombre_estudiante_avac=_nan_to_none(row.get("nombre_avac")),
+                ultimo_acceso_texto=_nan_to_none(row.get("ultimo_acceso_texto")),
+                dias_sin_acceso=_nan_to_none(row.get("dias_sin_acceso")),
+                estado_avac=_nan_to_none(row.get("estado_avac")),
+                fecha_extraccion=_nan_to_none(row.get("fecha_extraccion")),
             )
             self.db.add(acceso)
             count += 1
@@ -1417,17 +1436,17 @@ class ETLPipeline:
                 periodo=periodo,
                 snapshot_date=today,
             )
-            sub.estado = row.get("estado")
-            sub.calificacion = row.get("calificacion")
-            sub.calificacion_maxima = row.get("calificacion_maxima")
-            sub.calificacion_final = row.get("calificacion_final")
+            sub.estado = _nan_to_none(row.get("estado"))
+            sub.calificacion = _nan_to_none(row.get("calificacion"))
+            sub.calificacion_maxima = _nan_to_none(row.get("calificacion_maxima"))
+            sub.calificacion_final = _nan_to_none(row.get("calificacion_final"))
             sub.entregada = bool(row.get("entregada", False))
             sub.calificada = bool(row.get("calificada", False))
             sub.retrasada = bool(row.get("retrasada", False))
-            sub.archivos_enviados = row.get("archivos_enviados")
-            sub.comentarios_retroalimentacion = row.get("comentarios_retroalimentacion")
-            sub.total_curso = row.get("total_curso")
-            sub.fecha_extraccion = row.get("fecha_extraccion")
+            sub.archivos_enviados = _nan_to_none(row.get("archivos_enviados"))
+            sub.comentarios_retroalimentacion = _nan_to_none(row.get("comentarios_retroalimentacion"))
+            sub.total_curso = _nan_to_none(row.get("total_curso"))
+            sub.fecha_extraccion = _nan_to_none(row.get("fecha_extraccion"))
             self.db.add(sub)
             count += 1
 

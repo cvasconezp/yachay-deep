@@ -117,4 +117,44 @@ def upgrade_tables():
             if tbl in existing_tables:
                 conn.execute(text(f'UPDATE "{tbl}" SET periodo = \'P67\' WHERE periodo IS NULL'))
 
+        # ── Sanitización de NaN/Inf en columnas float ──
+        # Celdas vacías en CSVs de pandas llegaban como NaN y se insertaban
+        # en la BD. JSON estándar no soporta NaN/Infinity, por lo que
+        # serializar respuestas con esos valores rompe el endpoint con
+        # "ValueError: Out of range float values are not JSON compliant".
+        # Solo aplica en PostgreSQL (SQLite no soporta 'nan'::float literal).
+        is_postgres = "postgres" in str(engine.url).lower()
+        if is_postgres:
+            nan_cleanups = [
+                ("avac_accesses", ["dias_sin_acceso"]),
+                ("task_submissions", ["calificacion", "calificacion_maxima",
+                                       "calificacion_final", "total_curso"]),
+                ("grades", ["nota_final"]),
+                ("students", ["indice_compromiso", "porcentaje_tareas",
+                              "promedio_calificaciones", "prob_desercion",
+                              "prob_reprobacion"]),
+            ]
+            for tbl, cols in nan_cleanups:
+                if tbl not in existing_tables:
+                    continue
+                existing_cols = {c["name"] for c in inspector.get_columns(tbl)}
+                for col in cols:
+                    if col not in existing_cols:
+                        continue
+                    try:
+                        result = conn.execute(text(
+                            f'UPDATE "{tbl}" SET "{col}" = NULL '
+                            f'WHERE "{col}"::text IN (\'NaN\', \'Infinity\', \'-Infinity\')'
+                        ))
+                        if result.rowcount:
+                            import logging as _lg
+                            _lg.getLogger(__name__).warning(
+                                "Sanitizados %d NaN/Inf en %s.%s", result.rowcount, tbl, col,
+                            )
+                    except Exception as _e:  # pragma: no cover
+                        import logging as _lg
+                        _lg.getLogger(__name__).warning(
+                            "No se pudo limpiar NaN en %s.%s: %s", tbl, col, _e,
+                        )
+
         conn.commit()
