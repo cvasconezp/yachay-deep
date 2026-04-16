@@ -150,6 +150,37 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 
+# ── Global exception handler ─────────────────────────────────────────────
+# Evita que excepciones no manejadas dejen al navegador con "NetworkError".
+# Captura cualquier Exception, la loguea con traceback completo y retorna
+# 500 JSON con headers CORS (la CORSMiddleware los añade automáticamente si
+# la respuesta pasa por la cadena).
+from fastapi import HTTPException
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    # Re-lanzar HTTPException estándar para que FastAPI las maneje normalmente
+    if isinstance(exc, HTTPException):
+        raise exc
+    logger.exception(
+        "Unhandled exception in %s %s: %s",
+        request.method, request.url.path, exc,
+    )
+    # Origin echo para CORS en error (FastAPI CORSMiddleware no siempre
+    # añade headers si el handler lanza antes del middleware)
+    origin = request.headers.get("origin")
+    cors_headers = {}
+    if origin and origin in settings.CORS_ORIGINS:
+        cors_headers["Access-Control-Allow-Origin"] = origin
+        cors_headers["Access-Control-Allow-Credentials"] = "true"
+        cors_headers["Vary"] = "Origin"
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"{type(exc).__name__}: {str(exc)[:300]}"},
+        headers=cors_headers,
+    )
+
+
 # Routers
 app.include_router(auth_router)
 app.include_router(students_router)

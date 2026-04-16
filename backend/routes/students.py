@@ -894,6 +894,10 @@ def get_ficha(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    import time as _t
+    _t0 = _t.time()
+    logger.info("FICHA start: student_id=%s periodo=%s user=%s",
+                student_id, periodo, getattr(current_user, "email", "?"))
     """
     Retorna la ficha completa del estudiante con todos sus datos.
     Equivalente a la FichaEst del Excel pero para todos los cursos.
@@ -1186,6 +1190,13 @@ def get_ficha(
             numero_repitencias=g.numero_repitencias,
             nivel=nivel_canon if nivel_canon is not None else g.nivel,
         ))
+
+    logger.info("FICHA done: student_id=%s periodo=%s elapsed=%.2fs "
+                "accesos=%d tareas=%d cal=%d cal_hist=%d enr=%d inter=%d prac=%d",
+                student_id, periodo, _t.time() - _t0,
+                len(accesos_out), len(tareas_out),
+                len(calificaciones_out), len(calificaciones_historicas),
+                len(enrollments_out), len(intervenciones), len(practicas_out))
 
     return FichaEstudiante(
         id=student.id,
