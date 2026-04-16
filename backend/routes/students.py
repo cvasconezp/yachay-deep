@@ -769,6 +769,35 @@ def _build_malla_canonica(
     total_cursando = 0
     total_no_cursado = 0
 
+    # ── PERF: pre-cargar nombres display para asignaturas canónicas sin Grade ──
+    # Antes hacíamos un query por cada asignatura faltante (N+1 → ~50 queries
+    # con func.upper() que no usa índice). Ahora una sola query batched.
+    missing_asigs: set[str] = set()
+    for niv in range(1, max_nivel + 1):
+        for asig_upper in niveles_asigs.get(niv, []):
+            if not student_grades_map.get(asig_upper):
+                missing_asigs.add(asig_upper)
+
+    display_names: dict[str, str] = {}
+    if missing_asigs:
+        try:
+            # Buscar una muestra del nombre original (primera coincidencia normalizada)
+            # Usamos ILIKE con upper para compatibilidad postgres/sqlite sin índice funcional.
+            samples = (
+                db.query(Grade.asignatura)
+                .filter(func.upper(Grade.asignatura).in_(list(missing_asigs)))
+                .distinct()
+                .all()
+            )
+            for (asig,) in samples:
+                if not asig:
+                    continue
+                key = _normalize_asig(asig)
+                if key in missing_asigs and key not in display_names:
+                    display_names[key] = asig.strip()
+        except Exception as exc:  # pragma: no cover — fallback a asig_upper
+            logger.warning("No se pudo pre-cargar nombres de asignaturas: %s", exc)
+
     for niv in range(1, max_nivel + 1):
         asigs_en_nivel = niveles_asigs.get(niv, [])
         malla_asigs = []
@@ -816,16 +845,12 @@ def _build_malla_canonica(
             # Nombre original (título) — buscar en las grades del estudiante
             nombre_display = asig_upper
             for g in grades:
-                if g.asignatura.strip():
+                if g.asignatura and g.asignatura.strip():
                     nombre_display = g.asignatura.strip()
                     break
-            # Si no tiene grades propias, buscar el nombre de cualquier grade
-            if not grades:
-                sample = db.query(Grade.asignatura).filter(
-                    func.upper(Grade.asignatura) == asig_upper,
-                ).first()
-                if sample:
-                    nombre_display = sample[0].strip()
+            # Si no tiene grades propias, usar el nombre pre-cargado (batched)
+            if not grades and asig_upper in display_names:
+                nombre_display = display_names[asig_upper]
 
             malla_asigs.append(MallaAsignatura(
                 nombre=nombre_display,

@@ -731,10 +731,17 @@ class ETLPipeline:
         grades = self.db.query(_Grade).filter(period_filter).all()
         logs.append(f"  → {len(grades)} calificaciones encontradas para periodo {periodo}")
 
+        # PERF: pre-cargar todos los estudiantes en un solo query (evita N+1)
+        student_ids = {g.student_id for g in grades if g.student_id}
+        students_map: dict[int, Student] = {}
+        if student_ids:
+            for s in self.db.query(Student).filter(Student.id.in_(student_ids)).all():
+                students_map[s.id] = s
+
         updated_nivel = 0
         updated_rep = 0
         for g in grades:
-            student = self.db.query(Student).filter(Student.id == g.student_id).first()
+            student = students_map.get(g.student_id)
             if not student or not student.nombre:
                 continue
 
