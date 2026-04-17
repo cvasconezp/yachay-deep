@@ -558,3 +558,87 @@ async def trigger_scraping(
             status_code=500,
             detail=f"GitHub API respondio {resp.status_code}: {resp.text[:300]}",
         )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AVAC SESSION COOKIE MANAGEMENT
+# ─────────────────────────────────────────────────────────────────────────────
+
+class CookieUpdate(BaseModel):
+    cookie: str
+
+@router.put("/system/avac-cookie")
+async def update_avac_cookie(
+    body: CookieUpdate,
+    current_user: User = Depends(require_admin),
+):
+    """
+    Actualiza la cookie MoodleSession para el scraping sin Selenium.
+
+    Flujo: el admin inicia sesión en AVAC desde su navegador,
+    copia la cookie MoodleSession, y la pega aquí.
+    Se guarda como variable de entorno en el proceso actual
+    y se usa en el siguiente scraping.
+    """
+    import requests as req
+    from ..config import settings
+
+    cookie_val = body.cookie.strip()
+    if not cookie_val:
+        raise HTTPException(status_code=400, detail="Cookie vacía")
+
+    # Validate the cookie works
+    session = req.Session()
+    domain = settings.AVAC_BASE_URL.split("//")[1].split("/")[0]
+    session.cookies.set("MoodleSession", cookie_val, domain=domain)
+    session.headers.update({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/125.0.0.0"})
+
+    try:
+        resp = session.get(f"{settings.AVAC_BASE_URL}/my/", timeout=15)
+        if "login/index.php" in resp.url:
+            raise HTTPException(
+                status_code=400,
+                detail="Cookie inválida o expirada — redirige a login. Inicia sesión en AVAC y copia una cookie nueva."
+            )
+    except req.exceptions.RequestException as e:
+        raise HTTPException(status_code=502, detail=f"Error conectando a AVAC: {e}")
+
+    # Store in environment (persists for this process lifetime)
+    os.environ["AVAC_SESSION_COOKIE"] = cookie_val
+    settings.AVAC_SESSION_COOKIE = cookie_val
+
+    return {
+        "message": "✅ Cookie MoodleSession actualizada y validada",
+        "avac_url": resp.url,
+        "status": "valid",
+    }
+
+
+@router.get("/system/avac-cookie")
+async def check_avac_cookie(
+    current_user: User = Depends(require_admin),
+):
+    """Verifica si hay una cookie MoodleSession configurada y si aún es válida."""
+    import requests as req
+    from ..config import settings
+
+    cookie_val = settings.AVAC_SESSION_COOKIE
+    if not cookie_val:
+        return {"configured": False, "message": "No hay cookie configurada. Usa PUT para establecerla."}
+
+    session = req.Session()
+    domain = settings.AVAC_BASE_URL.split("//")[1].split("/")[0]
+    session.cookies.set("MoodleSession", cookie_val, domain=domain)
+    session.headers.update({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/125.0.0.0"})
+
+    try:
+        resp = session.get(f"{settings.AVAC_BASE_URL}/my/", timeout=15)
+        is_valid = "login/index.php" not in resp.url
+        return {
+            "configured": True,
+            "valid": is_valid,
+            "message": "Cookie válida — sesión activa" if is_valid else "Cookie expirada — necesita actualización",
+            "cookie_preview": f"{cookie_val[:6]}...{cookie_val[-4:]}" if len(cookie_val) > 10 else "***",
+        }
+    except Exception as e:
+        return {"configured": True, "valid": False, "message": f"Error verificando: {e}"}

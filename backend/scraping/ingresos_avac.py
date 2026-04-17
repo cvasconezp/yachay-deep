@@ -520,6 +520,48 @@ def get_session_manual(base_url: str) -> requests.Session:
         driver.quit()
 
 
+def get_session_cookie(cookie_value: str, base_url: str) -> requests.Session:
+    """
+    Login via MoodleSession cookie — bypasses SSO/Selenium completely.
+
+    Use case: Microsoft Conditional Access blocks Selenium login from
+    datacenter IPs (GitHub Actions, Railway). The user logs in from their
+    browser, copies the MoodleSession cookie, and the scraper uses it directly.
+
+    The cookie can be set via:
+    - AVAC_SESSION_COOKIE env var (Railway/GitHub Secret)
+    - Admin panel → PUT /admin/system/avac-cookie
+    """
+    session = requests.Session()
+    domain = base_url.split("//")[1].split("/")[0]  # "avac.ups.edu.ec"
+    session.cookies.set("MoodleSession", cookie_value, domain=domain)
+    session.headers.update({
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+    })
+
+    # Validate the cookie is still active
+    logger.info("🍪 Modo cookie: validando sesión...")
+    try:
+        resp = session.get(f"{base_url}/my/", timeout=15, allow_redirects=False)
+        if resp.status_code == 303 or "login" in resp.headers.get("Location", ""):
+            raise RuntimeError(
+                "❌ Cookie MoodleSession expirada o inválida. "
+                "Inicia sesión en AVAC desde tu navegador y actualiza la cookie."
+            )
+        # Follow redirect and verify we're logged in
+        resp2 = session.get(f"{base_url}/my/", timeout=15)
+        if "login/index.php" in resp2.url:
+            raise RuntimeError(
+                "❌ Cookie MoodleSession expirada o inválida (redirect a login). "
+                "Actualiza la cookie desde Admin → Configuración."
+            )
+        logger.info(f"🍪 Sesión válida (URL: {resp2.url})")
+    except requests.exceptions.RequestException as e:
+        raise RuntimeError(f"❌ Error validando cookie: {e}")
+
+    return session
+
+
 def get_active_codigos(db=None) -> list:
     """
     Lee los códigos de cursos activos desde la BD (tabla course_configs).
@@ -553,12 +595,16 @@ def scrape_ingresos(output_dir: str, codigos: list = None,
         logger.error("❌ No hay cursos configurados. Agrega cursos en Admin → Configuración de Cursos.")
         return {"procesados": 0, "errores": [{"error": "Sin cursos configurados"}], "no_encontrados": []}
 
-    username     = settings.AVAC_USERNAME
-    password     = settings.AVAC_PASSWORD
-    totp_secret  = settings.AVAC_TOTP_SECRET
+    session_cookie = settings.AVAC_SESSION_COOKIE
+    username       = settings.AVAC_USERNAME
+    password       = settings.AVAC_PASSWORD
+    totp_secret    = settings.AVAC_TOTP_SECRET
 
-    if username and password:
-        logger.info("🔑 Modo automático (credenciales desde variables de entorno)")
+    if session_cookie:
+        logger.info("🍪 Modo cookie (MoodleSession directa — sin Selenium)")
+        session = get_session_cookie(session_cookie, base_url)
+    elif username and password:
+        logger.info("🔑 Modo Selenium (credenciales + SSO automático)")
         session = get_session_headless(username, password, base_url, totp_secret)
     else:
         logger.info("👤 Modo manual — login interactivo requerido")
@@ -570,9 +616,12 @@ def scrape_ingresos(output_dir: str, codigos: list = None,
         try:
             start_time = time.time()
 
-            resp = _get_with_retry(session, f"{base_url}/course/search.php?search={codigo_curso}")
+            resp = _get_with_retry(session, f"{base_url}/course/search.php?areaids=core_course-course&q={codigo_curso}")
             soup = BeautifulSoup(resp.content, "html.parser", from_encoding="utf-8")
-            enlace = soup.select_one(".coursebox a[href*='view.php?id=']")
+            enlace = (
+                soup.select_one(".coursebox a[href*='view.php?id=']") or
+                soup.select_one("a[href*='/course/view.php?id=']")
+            )
 
             if not enlace:
                 no_encontrados.append(codigo_curso)

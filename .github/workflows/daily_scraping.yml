@@ -82,6 +82,7 @@ jobs:
           AVAC_USERNAME: ${{ secrets.AVAC_USERNAME }}
           AVAC_PASSWORD: ${{ secrets.AVAC_PASSWORD }}
           AVAC_TOTP_SECRET: ${{ secrets.AVAC_TOTP_SECRET }}
+          AVAC_SESSION_COOKIE: ${{ secrets.AVAC_SESSION_COOKIE }}
           AVAC_BASE_URL: ${{ secrets.AVAC_BASE_URL || 'https://avac.ups.edu.ec/grado68' }}
 
           # Base de datos Railway
