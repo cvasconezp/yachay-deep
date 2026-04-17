@@ -53,6 +53,10 @@ class Settings(BaseSettings):
     COOKIE_SECURE: bool = True                    # False for localhost dev
     COOKIE_SAMESITE: str = "lax"                  # "lax" para navegación normal, "strict" para máxima seguridad
 
+        # GitHub API — para disparar scraping desde la UI sin esperar al cron
+        GITHUB_TOKEN: Optional[str] = None
+    GITHUB_REPO: str = "cvasconezp/yachay-deep"
+    GITHUB_WORKFLOW: str = "daily_scraping.yml"
     # Sentry DSN (optional, for error monitoring)
     SENTRY_DSN: Optional[str] = None
     # CORS_ORIGINS: set via env as JSON array ["url"] or comma-separated "url1,url2"
