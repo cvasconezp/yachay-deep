@@ -439,3 +439,71 @@ def deduplicate_students(
         "message": f"Deduplicación completada. {merged} estudiantes fusionados.",
         "fusionados": merged,
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TRIGGER SCRAPING VIA GITHUB ACTIONS
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.post("/etl/trigger-scraping")
+async def trigger_scraping(
+        mode: str = "full",
+        current_user: User = Depends(require_admin),
+):
+        """
+            Dispara el workflow de scraping en GitHub Actions.
+                Requiere GITHUB_TOKEN configurado en las variables de entorno de Railway.
+                    mode: 'full' | 'ingresos' | 'tareas'
+                        """
+        import httpx
+        from ..config import settings
+
+    if not settings.GITHUB_TOKEN:
+                raise HTTPException(
+                                status_code=400,
+                                detail="GITHUB_TOKEN no configurado. Agrega un Personal Access Token "
+                                       "de GitHub (scope: repo o actions) como variable de entorno en Railway.",
+                )
+
+    if mode not in ("full", "ingresos", "tareas"):
+                raise HTTPException(status_code=400, detail=f"Modo invalido: {mode}. Use full, ingresos o tareas.")
+
+    url = f"https://api.github.com/repos/{settings.GITHUB_REPO}/actions/workflows/{settings.GITHUB_WORKFLOW}/dispatches"
+    headers = {
+                "Authorization": f"Bearer {settings.GITHUB_TOKEN}",
+                "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
+    }
+    payload = {
+                "ref": "main",
+                "inputs": {"mode": mode},
+    }
+
+    async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.post(url, json=payload, headers=headers)
+
+    if resp.status_code == 204:
+                return {
+                                "message": f"Scraping '{mode}' disparado en GitHub Actions. "
+                                           "Revisa el progreso en https://github.com/"
+                                           f"{settings.GITHUB_REPO}/actions",
+                                "mode": mode,
+                                "github_status": resp.status_code,
+                }
+elif resp.status_code == 404:
+            raise HTTPException(
+                            status_code=400,
+                            detail=f"Workflow '{settings.GITHUB_WORKFLOW}' no encontrado en "
+                                   f"{settings.GITHUB_REPO}. Verifica GITHUB_REPO y GITHUB_WORKFLOW.",
+            )
+elif resp.status_code == 422:
+            raise HTTPException(
+                            status_code=400,
+                            detail="Error 422: El workflow no acepta los inputs enviados. "
+                                   f"Respuesta de GitHub: {resp.text[:300]}",
+            )
+else:
+            raise HTTPException(
+                            status_code=500,
+                            detail=f"GitHub API respondio {resp.status_code}: {resp.text[:300]}",
+            )
