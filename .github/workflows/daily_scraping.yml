@@ -3,7 +3,7 @@ name: Daily AVAC Scraping + ETL
 on:
   # Ejecutar todos los días a las 06:00 (hora Ecuador = UTC-5, entonces 11:00 UTC)
   schedule:
-    - cron: "0 11 * * 1-5"  # Lunes a viernes a las 11:00 UTC (06:00 Ecuador)
+    - cron: "0 11 * * *"  # Todos los días a las 11:00 UTC (06:00 Ecuador)
 
   # Permitir ejecución manual desde GitHub
   workflow_dispatch:
