@@ -218,12 +218,44 @@ async def add_security_headers(request: Request, call_next):
     return response
 
 
+@app.get("/health/avac")
+async def avac_connectivity_check():
+    """Check if Railway can reach AVAC (no auth required, for diagnostics)."""
+    import socket
+    import httpx
+    results = {}
+    domain = "avac.ups.edu.ec"
+    try:
+        ip = socket.gethostbyname(domain)
+        results["dns_resolved"] = True
+        results["dns_ip"] = ip
+    except socket.gaierror as e:
+        results["dns_resolved"] = False
+        results["dns_error"] = str(e)
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.head("https://avac.ups.edu.ec/grado68/login/index.php", follow_redirects=True)
+            results["http_status"] = resp.status_code
+            results["http_ok"] = resp.status_code < 400
+    except Exception as e:
+        results["http_ok"] = False
+        results["http_error"] = str(e)
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.head("https://login.microsoftonline.com", follow_redirects=True)
+            results["microsoft_sso_ok"] = resp.status_code < 400
+    except Exception as e:
+        results["microsoft_sso_ok"] = False
+    results["all_ok"] = results.get("dns_resolved", False) and results.get("http_ok", False) and results.get("microsoft_sso_ok", False)
+    return results
+
+
 @app.get("/health")
 def health_check():
     """Health check mejorado: verifica conexión a BD y versión del código."""
     from sqlalchemy import text
     # Version indicator — update on each significant deploy
-    CODE_VERSION = "2026-03-28-malla-reference-json-v8"
+    CODE_VERSION = "2026-04-17-network-check-v9"
     try:
         from .database import SessionLocal
         db = SessionLocal()
