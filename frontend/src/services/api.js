@@ -4,7 +4,7 @@
  * [SEC-02] Fase 2: HttpOnly cookies. Usa credentials:"include" en vez de
  *          localStorage token. El backend setea/borra la cookie.
  * [SEC-07/BUG-03] Sanitización de mensajes de error.
- */h
+ */
 
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
