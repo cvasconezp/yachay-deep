@@ -123,13 +123,44 @@ jobs:
             /tmp/avac_login_error.html
           retention-days: 30
 
-      - name: Notificar éxito
+      - name: Notificar éxito por email
         if: success()
-        run: |
-          echo "✅ Scraping completado exitosamente"
-          echo "Fecha: $(date)"
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 587
+          username: ${{ secrets.SMTP_USER }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: "✅ Yachay Deep — Scraping completado"
+          to: cvasconezp@gmail.com
+          from: ${{ secrets.SMTP_USER }}
+          body: |
+            El scraping diario de AVAC se completó exitosamente.
 
-      - name: Notificar fallo
+            Modo: ${{ inputs.mode || 'full' }}
+            Fecha: ${{ github.event.head_commit.timestamp || github.event.repository.updated_at }}
+            Run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+            Los datos ya fueron procesados por el ETL y la base de datos está actualizada.
+
+      - name: Notificar fallo por email
         if: failure()
-        run: |
-          echo "❌ El scraping falló. Revisa los logs en Actions."
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 587
+          username: ${{ secrets.SMTP_USER }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: "❌ Yachay Deep — Scraping FALLÓ"
+          to: cvasconezp@gmail.com
+          from: ${{ secrets.SMTP_USER }}
+          body: |
+            El scraping diario de AVAC falló.
+
+            Modo: ${{ inputs.mode || 'full' }}
+            Causa probable: cookie MoodleSession expirada o error de conexión a AVAC.
+
+            Revisa los logs: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+            Si la cookie expiró, abre el panel Admin de Yachay Deep,
+            pega una cookie nueva en "Cookie AVAC" y ejecuta el scraping manualmente.
