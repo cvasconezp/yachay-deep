@@ -4,7 +4,7 @@
  * [SEC-02] Fase 2: HttpOnly cookies. Usa credentials:"include" en vez de
  *          localStorage token. El backend setea/borra la cookie.
  * [SEC-07/BUG-03] Sanitización de mensajes de error.
- */
+ */h
 
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -178,6 +178,7 @@ class ApiClient {
 
   // ── Admin ──
   triggerETL() { return this.post("/admin/etl/run", {}); }
+    triggerScraping(mode = "full") { return this.post(`/admin/etl/trigger-scraping?mode=${encodeURIComponent(mode)}`, {}); }
   getETLRuns(page = 1, pageSize = 10) { return this.get(`/admin/etl/runs?page=${page}&page_size=${pageSize}`); }
   getSystemStatus() { return this.get("/admin/system/status"); }
   uploadAndRunETL(file) {
