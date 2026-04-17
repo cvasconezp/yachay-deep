@@ -162,6 +162,16 @@ def scrape_tareas(output_dir: str, codigos=None, base_url: str = None, db=None):
 
     # Autenticación: cookie → Selenium → error
     session_cookie = _settings.AVAC_SESSION_COOKIE
+    # Si no hay cookie en env/settings, intentar leer de BD
+    if not session_cookie and db:
+        try:
+            from ..models.system_setting import SystemSetting
+            session_cookie = SystemSetting.get(db, "avac_session_cookie")
+            if session_cookie:
+                logger.info("🍪 Cookie AVAC para tareas leída desde BD")
+        except Exception as e:
+            logger.warning(f"No se pudo leer cookie desde BD: {e}")
+
     username = _settings.AVAC_USERNAME
     password = _settings.AVAC_PASSWORD
     totp_secret = _settings.AVAC_TOTP_SECRET

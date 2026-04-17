@@ -13,6 +13,7 @@ from .docente_tracking import DocenteTracking
 from .alert_event import AlertEvent
 from .practica_preprofesional import PracticaPreprofesional, EscuelaPractica
 from .enrollment import Enrollment
+from .system_setting import SystemSetting
 
 __all__ = [
     "User", "Student", "Course", "AvacAccess",
@@ -20,5 +21,5 @@ __all__ = [
     "CourseConfig", "SemesterConfig", "RecommendationLog", "MLModelStore",
     "DocenteTracking", "AlertEvent",
     "PracticaPreprofesional", "EscuelaPractica",
-    "Enrollment",
+    "Enrollment", "SystemSetting",
 ]

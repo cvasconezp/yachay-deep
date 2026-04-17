@@ -570,6 +570,7 @@ class CookieUpdate(BaseModel):
 @router.put("/system/avac-cookie")
 async def update_avac_cookie(
     body: CookieUpdate,
+    db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
     """
@@ -577,11 +578,12 @@ async def update_avac_cookie(
 
     Flujo: el admin inicia sesión en AVAC desde su navegador,
     copia la cookie MoodleSession, y la pega aquí.
-    Se guarda como variable de entorno en el proceso actual
-    y se usa en el siguiente scraping.
+    Se guarda en la base de datos (persiste entre redeployments)
+    y en memoria para uso inmediato.
     """
     import httpx
     from ..config import settings
+    from ..models.system_setting import SystemSetting
 
     cookie_val = body.cookie.strip()
     if not cookie_val:
@@ -602,12 +604,15 @@ async def update_avac_cookie(
     except httpx.HTTPError as e:
         raise HTTPException(status_code=502, detail=f"Error conectando a AVAC: {e}")
 
-    # Store in environment (persists for this process lifetime)
+    # Persist in database (survives redeployments)
+    SystemSetting.set(db, "avac_session_cookie", cookie_val)
+
+    # Also keep in memory for immediate use
     os.environ["AVAC_SESSION_COOKIE"] = cookie_val
     settings.AVAC_SESSION_COOKIE = cookie_val
 
     return {
-        "message": "Cookie MoodleSession actualizada y validada",
+        "message": "Cookie MoodleSession actualizada, validada y guardada en BD",
         "avac_url": str(resp.url),
         "status": "valid",
     }
@@ -615,15 +620,23 @@ async def update_avac_cookie(
 
 @router.get("/system/avac-cookie")
 async def check_avac_cookie(
+    db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
     """Verifica si hay una cookie MoodleSession configurada y si aún es válida."""
     import httpx
     from ..config import settings
+    from ..models.system_setting import SystemSetting
 
-    cookie_val = settings.AVAC_SESSION_COOKIE
+    # Read from DB first (persistent), fall back to env/settings (legacy)
+    cookie_val = SystemSetting.get(db, "avac_session_cookie") or settings.AVAC_SESSION_COOKIE
     if not cookie_val:
         return {"configured": False, "message": "No hay cookie configurada. Usa PUT para establecerla."}
+
+    # Sync to memory if loaded from DB
+    if cookie_val != settings.AVAC_SESSION_COOKIE:
+        os.environ["AVAC_SESSION_COOKIE"] = cookie_val
+        settings.AVAC_SESSION_COOKIE = cookie_val
 
     cookies = {"MoodleSession": cookie_val}
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/125.0.0.0"}

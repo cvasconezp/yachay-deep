@@ -48,6 +48,7 @@ async def lifespan(app: FastAPI):
     upgrade_tables()   # agrega columnas nuevas sin borrar datos
     _create_default_admin()
     _cleanup_stuck_etl_runs()
+    _load_persistent_settings()
     logger.info("✅ Base de datos lista")
     yield
     logger.info("Apagando Yachay Deep API")
@@ -76,6 +77,27 @@ def _cleanup_stuck_etl_runs():
             db.rollback()
         except Exception:
             pass
+    finally:
+        db.close()
+
+
+def _load_persistent_settings():
+    """Carga configuraciones persistentes de la BD a memoria/env (ej. cookie AVAC)."""
+    from .database import SessionLocal
+    from .models.system_setting import SystemSetting
+    import os
+
+    db = SessionLocal()
+    try:
+        cookie = SystemSetting.get(db, "avac_session_cookie")
+        if cookie:
+            os.environ["AVAC_SESSION_COOKIE"] = cookie
+            settings.AVAC_SESSION_COOKIE = cookie
+            logger.info("🍪 Cookie AVAC cargada desde BD (%s...%s)", cookie[:6], cookie[-4:])
+        else:
+            logger.info("🍪 No hay cookie AVAC guardada en BD")
+    except Exception as e:
+        logger.warning(f"⚠️ Error cargando settings persistentes: {e}")
     finally:
         db.close()
 

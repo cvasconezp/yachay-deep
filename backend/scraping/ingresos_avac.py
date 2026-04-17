@@ -648,6 +648,16 @@ def scrape_ingresos(output_dir: str, codigos: list = None,
         return {"procesados": 0, "errores": [{"error": "Sin cursos configurados"}], "no_encontrados": []}
 
     session_cookie = settings.AVAC_SESSION_COOKIE
+    # Si no hay cookie en env/settings, intentar leer de BD
+    if not session_cookie and db:
+        try:
+            from ..models.system_setting import SystemSetting
+            session_cookie = SystemSetting.get(db, "avac_session_cookie")
+            if session_cookie:
+                logger.info("🍪 Cookie AVAC leída desde BD")
+        except Exception as e:
+            logger.warning(f"No se pudo leer cookie desde BD: {e}")
+
     username       = settings.AVAC_USERNAME
     password       = settings.AVAC_PASSWORD
     totp_secret    = settings.AVAC_TOTP_SECRET
