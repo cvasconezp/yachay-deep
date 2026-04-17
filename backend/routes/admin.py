@@ -580,27 +580,26 @@ async def update_avac_cookie(
     Se guarda como variable de entorno en el proceso actual
     y se usa en el siguiente scraping.
     """
-    import requests as req
+    import httpx
     from ..config import settings
 
     cookie_val = body.cookie.strip()
     if not cookie_val:
         raise HTTPException(status_code=400, detail="Cookie vacía")
 
-    # Validate the cookie works
-    session = req.Session()
-    domain = settings.AVAC_BASE_URL.split("//")[1].split("/")[0]
-    session.cookies.set("MoodleSession", cookie_val, domain=domain)
-    session.headers.update({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/125.0.0.0"})
+    # Validate the cookie works using httpx (available in requirements.txt)
+    cookies = {"MoodleSession": cookie_val}
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/125.0.0.0"}
 
     try:
-        resp = session.get(f"{settings.AVAC_BASE_URL}/my/", timeout=15)
-        if "login/index.php" in resp.url:
-            raise HTTPException(
-                status_code=400,
-                detail="Cookie inválida o expirada — redirige a login. Inicia sesión en AVAC y copia una cookie nueva."
-            )
-    except req.exceptions.RequestException as e:
+        async with httpx.AsyncClient(cookies=cookies, headers=headers, follow_redirects=True, timeout=15) as client:
+            resp = await client.get(f"{settings.AVAC_BASE_URL}/my/")
+            if "login/index.php" in str(resp.url):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Cookie inválida o expirada — redirige a login. Inicia sesión en AVAC y copia una cookie nueva."
+                )
+    except httpx.HTTPError as e:
         raise HTTPException(status_code=502, detail=f"Error conectando a AVAC: {e}")
 
     # Store in environment (persists for this process lifetime)
@@ -608,8 +607,8 @@ async def update_avac_cookie(
     settings.AVAC_SESSION_COOKIE = cookie_val
 
     return {
-        "message": "✅ Cookie MoodleSession actualizada y validada",
-        "avac_url": resp.url,
+        "message": "Cookie MoodleSession actualizada y validada",
+        "avac_url": str(resp.url),
         "status": "valid",
     }
 
@@ -619,21 +618,20 @@ async def check_avac_cookie(
     current_user: User = Depends(require_admin),
 ):
     """Verifica si hay una cookie MoodleSession configurada y si aún es válida."""
-    import requests as req
+    import httpx
     from ..config import settings
 
     cookie_val = settings.AVAC_SESSION_COOKIE
     if not cookie_val:
         return {"configured": False, "message": "No hay cookie configurada. Usa PUT para establecerla."}
 
-    session = req.Session()
-    domain = settings.AVAC_BASE_URL.split("//")[1].split("/")[0]
-    session.cookies.set("MoodleSession", cookie_val, domain=domain)
-    session.headers.update({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/125.0.0.0"})
+    cookies = {"MoodleSession": cookie_val}
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/125.0.0.0"}
 
     try:
-        resp = session.get(f"{settings.AVAC_BASE_URL}/my/", timeout=15)
-        is_valid = "login/index.php" not in resp.url
+        async with httpx.AsyncClient(cookies=cookies, headers=headers, follow_redirects=True, timeout=15) as client:
+            resp = await client.get(f"{settings.AVAC_BASE_URL}/my/")
+            is_valid = "login/index.php" not in str(resp.url)
         return {
             "configured": True,
             "valid": is_valid,
