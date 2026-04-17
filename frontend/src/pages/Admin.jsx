@@ -1016,6 +1016,12 @@ function TabSemestre() {
     return isoStr.slice(0, 10); // "YYYY-MM-DD"
   };
 
+  const [editCalendario, setEditCalendario] = useState([]);
+
+  const parseCalendario = (jsonStr) => {
+    try { return JSON.parse(jsonStr || "[]"); } catch { return []; }
+  };
+
   const startEditing = (s) => {
     setEditing(s.semestre);
     setEditDates({
@@ -1024,6 +1030,7 @@ function TabSemestre() {
       bloque2_inicio: toLocalDate(s.bloque2_inicio),
       bloque2_fin: toLocalDate(s.bloque2_fin),
     });
+    setEditCalendario(parseCalendario(s.calendario_academico));
   };
 
   const handleSaveDates = async () => {
@@ -1044,6 +1051,8 @@ function TabSemestre() {
       // For inicio fields, use start of day
       if (payload.bloque1_inicio) payload.bloque1_inicio = `${editDates.bloque1_inicio}T00:00:00`;
       if (payload.bloque2_inicio) payload.bloque2_inicio = `${editDates.bloque2_inicio}T00:00:00`;
+      // Include calendario_academico
+      payload.calendario_academico = JSON.stringify(editCalendario.filter(e => e.fecha));
       await api.patch(`/courses/semester/${editing}`, payload);
       setLastAction({ type: "dates", semestre: editing, prevDates });
       setMsg(`Fechas de ${editing} actualizadas`);
@@ -1227,14 +1236,27 @@ function TabSemestre() {
                   </div>
                 </div>
 
-                {/* Row 2: dates display */}
-                {(s.bloque1_inicio || s.bloque1_fin || s.bloque2_inicio || s.bloque2_fin) && editing !== s.semestre && (
-                  <div className="mt-2 flex gap-6 text-xs text-gray-500">
-                    {(s.bloque1_inicio || s.bloque1_fin) && (
-                      <span>B1: {toLocalDate(s.bloque1_inicio) || "?"} a {toLocalDate(s.bloque1_fin) || "?"}</span>
+                {/* Row 2: dates + calendario display */}
+                {editing !== s.semestre && (
+                  <div className="mt-2 space-y-1">
+                    {(s.bloque1_inicio || s.bloque1_fin || s.bloque2_inicio || s.bloque2_fin) && (
+                      <div className="flex gap-6 text-xs text-gray-500">
+                        {(s.bloque1_inicio || s.bloque1_fin) && (
+                          <span>B1: {toLocalDate(s.bloque1_inicio) || "?"} a {toLocalDate(s.bloque1_fin) || "?"}</span>
+                        )}
+                        {(s.bloque2_inicio || s.bloque2_fin) && (
+                          <span>B2: {toLocalDate(s.bloque2_inicio) || "?"} a {toLocalDate(s.bloque2_fin) || "?"}</span>
+                        )}
+                      </div>
                     )}
-                    {(s.bloque2_inicio || s.bloque2_fin) && (
-                      <span>B2: {toLocalDate(s.bloque2_inicio) || "?"} a {toLocalDate(s.bloque2_fin) || "?"}</span>
+                    {s.calendario_academico && parseCalendario(s.calendario_academico).length > 0 && (
+                      <div className="flex flex-wrap gap-2 text-[11px] text-gray-400">
+                        {parseCalendario(s.calendario_academico).map((e, i) => (
+                          <span key={i} className="bg-gray-100 px-2 py-0.5 rounded">
+                            {e.label || e.tipo}: {e.fecha}
+                          </span>
+                        ))}
+                      </div>
                     )}
                   </div>
                 )}
@@ -1269,9 +1291,56 @@ function TabSemestre() {
                           className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                       </div>
                     </div>
+
+                    {/* Calendario académico */}
+                    <div className="mt-4 border-t border-gray-200 pt-3">
+                      <p className="text-xs text-gray-600 font-medium mb-2">
+                        Calendario académico (fechas de entrega y paso de notas)
+                      </p>
+                      <p className="text-[11px] text-gray-400 mb-2">
+                        Las alertas de "nota cero" solo se generan 7 días después de la primera fecha de entrega.
+                      </p>
+                      {editCalendario.map((entry, i) => (
+                        <div key={i} className="flex gap-2 items-center mb-2">
+                          <input type="date" value={entry.fecha || ""}
+                            onChange={e => {
+                              const arr = [...editCalendario];
+                              arr[i] = { ...arr[i], fecha: e.target.value };
+                              setEditCalendario(arr);
+                            }}
+                            className="border border-gray-300 rounded-lg px-2 py-1 text-sm w-40" />
+                          <select value={entry.tipo || "entrega"}
+                            onChange={e => {
+                              const arr = [...editCalendario];
+                              arr[i] = { ...arr[i], tipo: e.target.value };
+                              setEditCalendario(arr);
+                            }}
+                            className="border border-gray-300 rounded-lg px-2 py-1 text-sm">
+                            <option value="entrega">Entrega</option>
+                            <option value="examen">Examen</option>
+                            <option value="paso_notas">Paso de notas</option>
+                            <option value="recuperacion">Recuperación</option>
+                          </select>
+                          <input type="text" value={entry.label || ""} placeholder="Descripción"
+                            onChange={e => {
+                              const arr = [...editCalendario];
+                              arr[i] = { ...arr[i], label: e.target.value };
+                              setEditCalendario(arr);
+                            }}
+                            className="flex-1 border border-gray-300 rounded-lg px-2 py-1 text-sm" />
+                          <button onClick={() => setEditCalendario(arr => arr.filter((_, j) => j !== i))}
+                            className="text-red-400 hover:text-red-600 text-sm px-1">✕</button>
+                        </div>
+                      ))}
+                      <button onClick={() => setEditCalendario(arr => [...arr, { fecha: "", tipo: "entrega", label: "" }])}
+                        className="text-xs text-blue-600 hover:text-blue-800 font-medium">
+                        + Agregar fecha
+                      </button>
+                    </div>
+
                     <button onClick={handleSaveDates}
-                      className="bg-brand text-white px-4 py-1.5 rounded-lg text-sm font-semibold hover:bg-brand-light">
-                      Guardar fechas
+                      className="bg-brand text-white px-4 py-1.5 rounded-lg text-sm font-semibold hover:bg-brand-light mt-3">
+                      Guardar fechas y calendario
                     </button>
                   </div>
                 )}

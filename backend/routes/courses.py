@@ -69,6 +69,7 @@ class SemesterConfigCreate(BaseModel):
     bloque1_fin: Optional[datetime] = None
     bloque2_inicio: Optional[datetime] = None
     bloque2_fin: Optional[datetime] = None
+    calendario_academico: Optional[str] = None  # JSON string
 
 
 class SemesterConfigUpdate(BaseModel):
@@ -78,6 +79,7 @@ class SemesterConfigUpdate(BaseModel):
     bloque1_fin: Optional[datetime] = None
     bloque2_inicio: Optional[datetime] = None
     bloque2_fin: Optional[datetime] = None
+    calendario_academico: Optional[str] = None  # JSON string
 
 
 class SemesterConfigOut(BaseModel):
@@ -89,6 +91,7 @@ class SemesterConfigOut(BaseModel):
     bloque1_fin: Optional[datetime]
     bloque2_inicio: Optional[datetime]
     bloque2_fin: Optional[datetime]
+    calendario_academico: Optional[str] = None
 
     class Config:
         from_attributes = True

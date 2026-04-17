@@ -67,8 +67,14 @@ export default function Alertas() {
   const [filterPeriodo, setFilterPeriodo] = useState("");
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [showBulkModal, setShowBulkModal] = useState(false);
+  const [carreras, setCarreras] = useState([]);
   const { user } = useAuth();
   const navigate = useNavigate();
+
+  // Load carreras on mount
+  useEffect(() => {
+    api.getCarreras().then(data => setCarreras(data || [])).catch(() => {});
+  }, []);
 
   const loadAlerts = useCallback(async () => {
     setLoading(true);
@@ -161,12 +167,7 @@ export default function Alertas() {
   const tiposCounts = {};
   alerts.forEach(a => { tiposCounts[a.tipo] = (tiposCounts[a.tipo] || 0) + 1; });
 
-  // Unique carreras from current alerts for filter dropdown
-  const alertCarreras = useMemo(() => {
-    const set = new Set();
-    alerts.forEach(a => { if (a.student_carrera) set.add(a.student_carrera); });
-    return [...set].sort();
-  }, [alerts]);
+  // carreras loaded from /dashboard/carreras on mount (all system carreras)
 
   // Selection handlers
   const toggleSelect = (alertObj, e) => {
@@ -279,7 +280,7 @@ export default function Alertas() {
             className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">Todas las carreras</option>
-            {alertCarreras.map(c => (
+            {carreras.map(c => (
               <option key={c} value={c}>{c}</option>
             ))}
           </select>

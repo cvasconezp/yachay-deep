@@ -224,6 +224,35 @@ def mark_alert_read(
     return {"id": alert.id, "leido": alert.leido}
 
 
+def _get_calendario(semconfig) -> list[dict]:
+    """Parsea el calendario_academico JSON de SemesterConfig."""
+    import json
+    if not semconfig or not semconfig.calendario_academico:
+        return []
+    try:
+        return json.loads(semconfig.calendario_academico)
+    except (json.JSONDecodeError, TypeError):
+        return []
+
+
+def _primera_fecha_notas(calendario: list[dict]) -> datetime | None:
+    """Retorna la fecha más temprana en que se esperan notas (primera entrega + 7 días)."""
+    from datetime import date as date_type
+    entregas = [e for e in calendario if e.get("tipo") in ("entrega", "paso_notas")]
+    if not entregas:
+        return None
+    fechas = []
+    for e in entregas:
+        try:
+            d = datetime.strptime(e["fecha"], "%Y-%m-%d")
+            if e.get("tipo") == "entrega":
+                d = d + timedelta(days=7)  # Se esperan notas 7 días después de entrega
+            fechas.append(d)
+        except (ValueError, KeyError):
+            continue
+    return min(fechas) if fechas else None
+
+
 @router.post("/generate")
 def generate_alerts(
     db: Session = Depends(get_db),
@@ -231,133 +260,152 @@ def generate_alerts(
 ):
     """
     Genera alertas barriendo todos los estudiantes por umbrales.
-    - dias_sin_acceso > 14 → "inactividad" (critico si > 21, alto si > 14)
-    - indice_compromiso < 0.3 → "compromiso_bajo" (critico)
-    - indice_compromiso < 0.55 → "compromiso_bajo" (alto)
-    - Nota final = 0 → "nota_cero" (critico)
-    - porcentaje_tareas < 40 → "tareas_bajas" (alto)
+
+    Reglas de inactividad (basado en AvacAccess del periodo actual):
+    - dias_sin_acceso > 14 → "inactividad" alto
+    - dias_sin_acceso > 21 → "inactividad" critico
+    - Días capeados al máximo de días desde inicio del bloque actual
+
+    Reglas de calificaciones (solo si ya pasó fecha esperada de notas):
+    - Nota final = 0 → "nota_cero" critico (solo del periodo activo)
+    - porcentaje_tareas < 40 → "tareas_bajas" alto
+
+    Compromiso: basado en indice_compromiso del estudiante.
 
     Solo crea alertas que no existan para el mismo student+tipo en los últimos 7 días.
     Solo escanea estudiantes del período activo.
     """
+    # Obtener configuración del semestre activo
+    semconfig = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
+    if not semconfig:
+        return {"created": 0, "timestamp": datetime.now(timezone.utc).isoformat(), "detail": "No hay semestre activo"}
+
+    pf = semconfig.semestre.strip() if semconfig.semestre else None
+    if not pf:
+        return {"created": 0, "timestamp": datetime.now(timezone.utc).isoformat(), "detail": "Semestre sin nombre"}
+
+    # Determinar inicio del bloque actual para capear inactividad
+    bloque_inicio = None
+    if semconfig.bloque_actual == "2" and semconfig.bloque2_inicio:
+        bloque_inicio = semconfig.bloque2_inicio
+    elif semconfig.bloque1_inicio:
+        bloque_inicio = semconfig.bloque1_inicio
+
+    now = datetime.now(timezone.utc)
+    max_dias_periodo = None
+    if bloque_inicio:
+        if bloque_inicio.tzinfo is None:
+            from datetime import timezone as tz
+            bloque_inicio = bloque_inicio.replace(tzinfo=tz.utc)
+        max_dias_periodo = (now - bloque_inicio).days
+
+    # Calendario académico: ¿ya se esperan notas?
+    calendario = _get_calendario(semconfig)
+    fecha_notas = _primera_fecha_notas(calendario)
+    hay_notas_esperadas = fecha_notas is not None and now >= fecha_notas.replace(tzinfo=timezone.utc)
+
+    # Period format normalization
+    if pf.startswith("P"):
+        raw_p = pf[1:]
+        periodo_variants = (pf, raw_p)
+    else:
+        raw_p = pf
+        periodo_variants = (pf, f"P{pf}")
+
     period_sids = _active_period_student_ids(db)
     if period_sids:
-        students = db.query(Student).filter(
-            Student.id.in_(period_sids)
-        ).all()
+        students = db.query(Student).filter(Student.id.in_(period_sids)).all()
     else:
         students = db.query(Student).all()
+
+    # Pre-load per-period AvacAccess: max dias_sin_acceso por estudiante
+    from sqlalchemy import case as sa_case
+    avac_inactividad = dict(
+        db.query(
+            AvacAccess.student_id,
+            func.max(AvacAccess.dias_sin_acceso),
+        )
+        .filter(
+            AvacAccess.periodo.in_(periodo_variants),
+            AvacAccess.student_id.isnot(None),
+            AvacAccess.dias_sin_acceso.isnot(None),
+        )
+        .group_by(AvacAccess.student_id)
+        .all()
+    )
+
     created = 0
-    threshold_date = datetime.now(timezone.utc) - timedelta(days=7)
+    threshold_date = now - timedelta(days=7)
+
+    def _add_alert(student_id, tipo, severidad, mensaje):
+        nonlocal created
+        existing = db.query(AlertEvent).filter(
+            AlertEvent.student_id == student_id,
+            AlertEvent.tipo == tipo,
+            AlertEvent.created_at >= threshold_date,
+        ).first()
+        if not existing:
+            db.add(AlertEvent(student_id=student_id, tipo=tipo, mensaje=mensaje, severidad=severidad))
+            created += 1
 
     for student in students:
-        # ========== Inactividad ==========
-        if student.dias_sin_acceso is not None:
-            if student.dias_sin_acceso > 21:
-                tipo, severidad = "inactividad", "critico"
-                mensaje = f"Estudiante inactivo por {student.dias_sin_acceso} días (CRÍTICO)"
-            elif student.dias_sin_acceso > 14:
-                tipo, severidad = "inactividad", "alto"
-                mensaje = f"Estudiante inactivo por {student.dias_sin_acceso} días"
-            else:
-                tipo = None
+        # ========== Inactividad (per-period AvacAccess) ==========
+        dias = avac_inactividad.get(student.id)
+        if dias is not None:
+            # Capear al máximo de días desde inicio del período
+            if max_dias_periodo is not None:
+                dias = min(dias, max_dias_periodo)
 
-            if tipo:
-                # Verificar si existe alerta similar reciente
-                existing = db.query(AlertEvent).filter(
-                    AlertEvent.student_id == student.id,
-                    AlertEvent.tipo == tipo,
-                    AlertEvent.created_at >= threshold_date,
-                ).first()
-
-                if not existing:
-                    alert = AlertEvent(
-                        student_id=student.id,
-                        tipo=tipo,
-                        mensaje=mensaje,
-                        severidad=severidad,
-                    )
-                    db.add(alert)
-                    created += 1
+            if dias > 21:
+                _add_alert(student.id, "inactividad", "critico",
+                           f"Estudiante inactivo por {int(dias)} días (CRÍTICO)")
+            elif dias > 14:
+                _add_alert(student.id, "inactividad", "alto",
+                           f"Estudiante inactivo por {int(dias)} días")
 
         # ========== Compromiso Bajo ==========
         if student.indice_compromiso is not None:
             if student.indice_compromiso < 0.3:
-                severidad = "critico"
-                mensaje = f"Índice de compromiso muy bajo: {student.indice_compromiso:.2f}"
+                _add_alert(student.id, "compromiso_bajo", "critico",
+                           f"Índice de compromiso muy bajo: {student.indice_compromiso:.2f}")
             elif student.indice_compromiso < 0.55:
-                severidad = "alto"
-                mensaje = f"Índice de compromiso bajo: {student.indice_compromiso:.2f}"
-            else:
-                severidad = None
+                _add_alert(student.id, "compromiso_bajo", "alto",
+                           f"Índice de compromiso bajo: {student.indice_compromiso:.2f}")
 
-            if severidad:
-                tipo = "compromiso_bajo"
-                existing = db.query(AlertEvent).filter(
-                    AlertEvent.student_id == student.id,
-                    AlertEvent.tipo == tipo,
-                    AlertEvent.created_at >= threshold_date,
-                ).first()
-
-                if not existing:
-                    alert = AlertEvent(
-                        student_id=student.id,
-                        tipo=tipo,
-                        mensaje=mensaje,
-                        severidad=severidad,
-                    )
-                    db.add(alert)
-                    created += 1
-
-        # ========== Nota Cero ==========
-        # Verificar si hay alguna nota = 0
-        nota_cero = db.query(Grade).filter(
-            Grade.student_id == student.id,
-            Grade.nota_final == 0,
-        ).first()
-
-        if nota_cero:
-            tipo = "nota_cero"
-            severidad = "critico"
-            mensaje = f"Calificación de 0 en {nota_cero.asignatura}"
-
-            existing = db.query(AlertEvent).filter(
-                AlertEvent.student_id == student.id,
-                AlertEvent.tipo == tipo,
-                AlertEvent.created_at >= threshold_date,
+        # ========== Nota Cero (solo si ya se esperan notas según calendario) ==========
+        if hay_notas_esperadas:
+            nota_cero = db.query(Grade).filter(
+                Grade.student_id == student.id,
+                Grade.nota_final == 0,
+                or_(Grade.periodo == periodo_variants[0], Grade.periodo == periodo_variants[1]),
             ).first()
 
-            if not existing:
-                alert = AlertEvent(
-                    student_id=student.id,
-                    tipo=tipo,
-                    mensaje=mensaje,
-                    severidad=severidad,
-                )
-                db.add(alert)
-                created += 1
+            if nota_cero:
+                _add_alert(student.id, "nota_cero", "critico",
+                           f"Calificación de 0 en {nota_cero.asignatura}")
 
-        # ========== Tareas Bajas ==========
+        # ========== Tareas Bajas (solo si hay datos de tareas del periodo) ==========
         if student.porcentaje_tareas is not None and student.porcentaje_tareas < 40:
-            tipo = "tareas_bajas"
-            severidad = "alto"
-            mensaje = f"Porcentaje de tareas entregadas muy bajo: {student.porcentaje_tareas:.1f}%"
-
-            existing = db.query(AlertEvent).filter(
-                AlertEvent.student_id == student.id,
-                AlertEvent.tipo == tipo,
-                AlertEvent.created_at >= threshold_date,
-            ).first()
-
-            if not existing:
-                alert = AlertEvent(
-                    student_id=student.id,
-                    tipo=tipo,
-                    mensaje=mensaje,
-                    severidad=severidad,
-                )
-                db.add(alert)
-                created += 1
+            # Solo alertar si hay registros de tareas del periodo actual
+            from ..models import TaskSubmission
+            has_tasks = db.query(TaskSubmission.id).filter(
+                TaskSubmission.student_id == student.id,
+                or_(TaskSubmission.periodo == periodo_variants[0], TaskSubmission.periodo == periodo_variants[1]),
+            ).limit(1).first()
+            if has_tasks:
+                _add_alert(student.id, "tareas_bajas", "alto",
+                           f"Porcentaje de tareas entregadas muy bajo: {student.porcentaje_tareas:.1f}%")
 
     db.commit()
-    return {"created": created, "timestamp": datetime.now(timezone.utc).isoformat()}
+
+    detail_parts = []
+    if not hay_notas_esperadas:
+        detail_parts.append(f"Alertas de nota_cero desactivadas (primera fecha esperada de notas: {fecha_notas.strftime('%d/%m/%Y') if fecha_notas else 'no configurada'})")
+    if max_dias_periodo is not None:
+        detail_parts.append(f"Inactividad capeada a máx {max_dias_periodo} días (inicio bloque: {bloque_inicio.strftime('%d/%m/%Y')})")
+
+    return {
+        "created": created,
+        "timestamp": now.isoformat(),
+        "detail": " | ".join(detail_parts) if detail_parts else None,
+    }

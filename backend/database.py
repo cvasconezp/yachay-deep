@@ -97,6 +97,9 @@ def upgrade_tables():
             ("periodo", "VARCHAR"),
             ("snapshot_date", "DATE"),
         ],
+        "semester_configs": [
+            ("calendario_academico", "VARCHAR"),
+        ],
     }
 
     inspector = inspect(engine)

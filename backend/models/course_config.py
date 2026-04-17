@@ -54,6 +54,10 @@ class SemesterConfig(Base):
     bloque2_inicio = Column(DateTime(timezone=True), nullable=True)
     bloque2_fin = Column(DateTime(timezone=True), nullable=True)
 
+    # Calendario académico: fechas de entrega y paso de notas (JSON)
+    # Formato: [{"fecha": "2026-04-19", "tipo": "entrega", "label": "Entrega act. 1"}, ...]
+    calendario_academico = Column(String, nullable=True)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
