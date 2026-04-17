@@ -12,9 +12,24 @@ from sqlalchemy import distinct as sa_distinct
 from ..database import get_db
 from ..models import Student, Intervention, Grade, AvacAccess
 from ..models.enrollment import Enrollment
-from ..models.course_config import SemesterConfig
+from ..models.course_config import SemesterConfig, CourseConfig
 from ..auth.jwt import get_current_user
 from ..models.user import User
+
+
+def _active_bloque_courses(db: Session, semconfig) -> set[str] | None:
+    """Retorna set de codigo_avac activos en el bloque actual, o None si no hay filtro."""
+    if not semconfig:
+        return None
+    bloque = semconfig.bloque_actual  # "1" o "2"
+    # Cursos con bloque="ambos" siempre activos; filtrar los del otro bloque
+    codes = set()
+    for cc in db.query(CourseConfig.codigo_avac).filter(
+        CourseConfig.activo == True,
+        CourseConfig.bloque.in_([bloque, "ambos", None]),
+    ).all():
+        codes.add(cc[0])
+    return codes if codes else None
 
 
 def _period_student_ids(db: Session, periodo: Optional[str]):
@@ -99,6 +114,7 @@ def get_risk_dashboard(
     nivel_riesgo: Optional[str] = None,
     solo_sin_intervencion: bool = False,
     periodo: Optional[str] = None,
+    asignatura: Optional[str] = None,
     offset: int = Query(0, ge=0),
     limit: int = Query(500, le=2500),
     db: Session = Depends(get_db),
@@ -135,6 +151,9 @@ def get_risk_dashboard(
     else:
         periodo_variants = (pf, f"P{pf}")
 
+    # Filtrar cursos del bloque activo (excluir bloque 2 si estamos en bloque 1)
+    active_courses = _active_bloque_courses(db, semconfig)
+
     # Pre-load per-period AvacAccess: max dias_sin_acceso por estudiante
     avac_q = db.query(
         AvacAccess.student_id,
@@ -145,6 +164,8 @@ def get_risk_dashboard(
     )
     if pf != "todos":
         avac_q = avac_q.filter(AvacAccess.periodo.in_(periodo_variants))
+    if active_courses is not None:
+        avac_q = avac_q.filter(AvacAccess.codigo_curso.in_(active_courses))
     avac_inactividad = dict(avac_q.group_by(AvacAccess.student_id).all())
 
     # Subquery: contar intervenciones y última intervención por estudiante
@@ -170,6 +191,19 @@ def get_risk_dashboard(
 
     if carrera:
         query = query.filter(func.lower(Student.carrera).contains(carrera.lower()))
+    if asignatura:
+        # Filtrar: solo estudiantes que tienen AvacAccess en cursos de esa asignatura
+        asig_codes = [r[0] for r in db.query(CourseConfig.codigo_avac).filter(
+            func.lower(CourseConfig.asignatura).contains(asignatura.lower()),
+        ).all()]
+        if asig_codes:
+            asig_students = db.query(AvacAccess.student_id).filter(
+                AvacAccess.codigo_curso.in_(asig_codes),
+                AvacAccess.student_id.isnot(None),
+            ).distinct()
+            query = query.filter(Student.id.in_(asig_students))
+        else:
+            return []  # no matching courses
     if nivel_riesgo:
         query = query.filter(Student.nivel_riesgo == nivel_riesgo)
     if solo_sin_intervencion:
@@ -270,6 +304,9 @@ def get_student_inactivity_by_course(
                 bloque_inicio = bloque_inicio.replace(tzinfo=timezone.utc)
             max_dias_periodo = (datetime.now(timezone.utc) - bloque_inicio).days
 
+    # Filtrar cursos del bloque activo
+    active_courses = _active_bloque_courses(db, semconfig)
+
     # Último snapshot por curso para este estudiante en el periodo
     latest_snap = (
         db.query(func.max(AvacAccess.snapshot_date))
@@ -288,6 +325,8 @@ def get_student_inactivity_by_course(
             AvacAccess.dias_sin_acceso.isnot(None),
         )
     )
+    if active_courses is not None:
+        records = records.filter(AvacAccess.codigo_curso.in_(active_courses))
     if latest_snap:
         records = records.filter(AvacAccess.snapshot_date == latest_snap)
 
@@ -375,6 +414,23 @@ def get_carreras(
         .all()
     )
     return [c.carrera for c in carreras]
+
+
+@router.get("/asignaturas")
+def get_asignaturas(
+    carrera: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Lista única de asignaturas, opcionalmente filtradas por carrera."""
+    q = db.query(CourseConfig.asignatura).filter(
+        CourseConfig.asignatura.isnot(None),
+        CourseConfig.asignatura != "",
+        CourseConfig.activo == True,
+    )
+    if carrera:
+        q = q.filter(func.lower(CourseConfig.carrera).contains(carrera.lower()))
+    return [r[0] for r in q.distinct().order_by(CourseConfig.asignatura).all()]
 
 
 # ── Seguimiento docente: tareas pendientes de calificación ─────────────────

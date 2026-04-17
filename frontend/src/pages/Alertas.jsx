@@ -64,10 +64,12 @@ export default function Alertas() {
   const [filterSeverity, setFilterSeverity] = useState("all");
   const [filterTipo, setFilterTipo] = useState("all");
   const [filterCarrera, setFilterCarrera] = useState("");
+  const [filterAsignatura, setFilterAsignatura] = useState("");
   const [filterPeriodo, setFilterPeriodo] = useState("");
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [carreras, setCarreras] = useState([]);
+  const [asignaturas, setAsignaturas] = useState([]);
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -76,12 +78,21 @@ export default function Alertas() {
     api.getCarreras().then(data => setCarreras(data || [])).catch(() => {});
   }, []);
 
+  // Load asignaturas when carrera changes
+  useEffect(() => {
+    setFilterAsignatura("");
+    api.getAsignaturas(filterCarrera || undefined)
+      .then(data => setAsignaturas(data || []))
+      .catch(() => setAsignaturas([]));
+  }, [filterCarrera]);
+
   const loadAlerts = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
       const params = {};
       if (filterCarrera) params.carrera = filterCarrera;
+      if (filterAsignatura) params.asignatura = filterAsignatura;
       if (filterPeriodo) params.periodo = filterPeriodo;
       const data = await api.getAlertsPending(params);
       setAlerts(data || []);
@@ -92,7 +103,7 @@ export default function Alertas() {
     } finally {
       setLoading(false);
     }
-  }, [filterCarrera, filterPeriodo]);
+  }, [filterCarrera, filterAsignatura, filterPeriodo]);
 
   useEffect(() => {
     loadAlerts();
@@ -286,6 +297,20 @@ export default function Alertas() {
             <option value="">Todas las carreras</option>
             {carreras.map(c => (
               <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-gray-500 block mb-1">Asignatura</label>
+          <select
+            value={filterAsignatura}
+            onChange={e => setFilterAsignatura(e.target.value)}
+            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">Todas las asignaturas</option>
+            {asignaturas.map(a => (
+              <option key={a} value={a}>{a}</option>
             ))}
           </select>
         </div>

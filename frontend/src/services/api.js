@@ -176,6 +176,10 @@ class ApiClient {
     return this.get(`/dashboard/stats${qs ? "?" + qs : ""}`);
   }
   getCarreras() { return this.get("/dashboard/carreras"); }
+  getAsignaturas(carrera) {
+    const params = carrera ? `?carrera=${encodeURIComponent(carrera)}` : "";
+    return this.get(`/dashboard/asignaturas${params}`);
+  }
   getStudentInactivity(studentId, periodo) {
     const params = periodo ? `?periodo=${encodeURIComponent(periodo)}` : "";
     return this.get(`/dashboard/risk/${studentId}/inactividad${params}`);

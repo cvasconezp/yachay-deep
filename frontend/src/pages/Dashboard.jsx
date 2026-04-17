@@ -79,13 +79,22 @@ export default function Dashboard() {
   const [carreras, setCarreras] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [filtros, setFiltros] = useState({ carrera: "", nivel_riesgo: "", solo_sin_intervencion: false, periodo: "" });
+  const [filtros, setFiltros] = useState({ carrera: "", asignatura: "", nivel_riesgo: "", solo_sin_intervencion: false, periodo: "" });
+  const [asignaturas, setAsignaturas] = useState([]);
   const [cardFilter, setCardFilter] = useState(null);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [expandedId, setExpandedId] = useState(null);
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
   const navigate = useNavigate();
+
+  // Load asignaturas when carrera changes
+  useEffect(() => {
+    setFiltros(f => ({ ...f, asignatura: "" }));
+    api.getAsignaturas(filtros.carrera || undefined)
+      .then(data => setAsignaturas(data || []))
+      .catch(() => setAsignaturas([]));
+  }, [filtros.carrera]);
 
   const loadData = useCallback(async () => {
     if (!filtros.periodo) return;
@@ -95,6 +104,7 @@ export default function Dashboard() {
     try {
       const params = {};
       if (filtros.carrera) params.carrera = filtros.carrera;
+      if (filtros.asignatura) params.asignatura = filtros.asignatura;
       if (filtros.nivel_riesgo) params.nivel_riesgo = filtros.nivel_riesgo;
       if (filtros.solo_sin_intervencion) params.solo_sin_intervencion = true;
       params.periodo = filtros.periodo;
@@ -256,6 +266,18 @@ export default function Dashboard() {
           >
             <option value="">Todas las carreras</option>
             {carreras.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-gray-600 block mb-1">Asignatura</label>
+          <select
+            value={filtros.asignatura}
+            onChange={e => setFiltros(f => ({ ...f, asignatura: e.target.value }))}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">Todas las asignaturas</option>
+            {asignaturas.map(a => <option key={a} value={a}>{a}</option>)}
           </select>
         </div>
 

@@ -13,7 +13,7 @@ from ..database import get_db
 from ..models import Student, Grade, AvacAccess
 from ..models.enrollment import Enrollment
 from ..models.alert_event import AlertEvent
-from ..models.course_config import SemesterConfig
+from ..models.course_config import SemesterConfig, CourseConfig
 from ..auth.jwt import get_current_user
 from ..models.user import User
 
@@ -102,13 +102,14 @@ def get_pending_alerts(
     limit: int = Query(200, le=1000),
     offset: int = Query(0, ge=0),
     carrera: Optional[str] = None,
+    asignatura: Optional[str] = None,
     periodo: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Retorna alertas sin leer, ordenadas por recientes primero.
     Solo incluye alertas de estudiantes del periodo activo.
-    Filtros opcionales: carrera (case-insensitive contains), periodo (override del activo)."""
+    Filtros opcionales: carrera, asignatura, periodo."""
 
     # Si se proporciona periodo explícito, construir student_ids para ese periodo
     if periodo:
@@ -146,6 +147,16 @@ def get_pending_alerts(
     # Filtrar por carrera (case-insensitive contains)
     if carrera:
         q = q.filter(func.lower(Student.carrera).contains(carrera.lower()))
+
+    # Filtrar por asignatura: solo alertas cuyo codigo_curso pertenece a esa asignatura
+    if asignatura:
+        asig_codes = [r[0] for r in db.query(CourseConfig.codigo_avac).filter(
+            func.lower(CourseConfig.asignatura).contains(asignatura.lower()),
+        ).all()]
+        if asig_codes:
+            q = q.filter(AlertEvent.codigo_curso.in_(asig_codes))
+        else:
+            return []
 
     rows = (
         q.order_by(AlertEvent.created_at.desc())
@@ -335,6 +346,16 @@ def generate_alerts(
     else:
         students = db.query(Student).all()
 
+    # Filtrar cursos del bloque activo (excluir bloque 2 si estamos en bloque 1)
+    active_course_codes = None
+    if semconfig:
+        bloque = semconfig.bloque_actual
+        active_cc = db.query(CourseConfig.codigo_avac).filter(
+            CourseConfig.activo == True,
+            CourseConfig.bloque.in_([bloque, "ambos", None]),
+        ).all()
+        active_course_codes = {r[0] for r in active_cc} if active_cc else None
+
     # Pre-load per-period AvacAccess: dias_sin_acceso por estudiante POR CURSO
     # Último snapshot disponible
     latest_snap = (
@@ -353,6 +374,8 @@ def generate_alerts(
     )
     if latest_snap:
         avac_q = avac_q.filter(AvacAccess.snapshot_date == latest_snap)
+    if active_course_codes is not None:
+        avac_q = avac_q.filter(AvacAccess.codigo_curso.in_(active_course_codes))
 
     # Dict: student_id → [(codigo_curso, dias_sin_acceso), ...]
     from collections import defaultdict
@@ -440,6 +463,8 @@ def generate_alerts(
     db.commit()
 
     detail_parts = []
+    if active_course_codes is not None:
+        detail_parts.append(f"Bloque {semconfig.bloque_actual}: {len(active_course_codes)} cursos activos (cursos de otro bloque excluidos)")
     if not hay_notas_esperadas:
         detail_parts.append(f"Alertas de nota_cero desactivadas (primera fecha esperada de notas: {fecha_notas.strftime('%d/%m/%Y') if fecha_notas else 'no configurada'})")
     if max_dias_periodo is not None:
