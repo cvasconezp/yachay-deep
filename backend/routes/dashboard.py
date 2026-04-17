@@ -163,7 +163,11 @@ def get_risk_dashboard(
         AvacAccess.dias_sin_acceso.isnot(None),
     )
     if pf != "todos":
-        avac_q = avac_q.filter(AvacAccess.periodo.in_(periodo_variants))
+        from sqlalchemy import or_ as _or
+        avac_q = avac_q.filter(_or(
+            AvacAccess.periodo.in_(periodo_variants),
+            AvacAccess.periodo.is_(None),
+        ))
     if active_courses is not None:
         avac_q = avac_q.filter(AvacAccess.codigo_curso.in_(active_courses))
     avac_inactividad = dict(avac_q.group_by(AvacAccess.student_id).all())
@@ -307,12 +311,19 @@ def get_student_inactivity_by_course(
     # Filtrar cursos del bloque activo
     active_courses = _active_bloque_courses(db, semconfig)
 
+    # Incluir periodo NULL como fallback (datos cargados antes de configurar periodo)
+    from sqlalchemy import or_
+    periodo_filter = or_(
+        AvacAccess.periodo.in_(periodo_variants),
+        AvacAccess.periodo.is_(None),
+    )
+
     # Último snapshot por curso para este estudiante en el periodo
     latest_snap = (
         db.query(func.max(AvacAccess.snapshot_date))
         .filter(
             AvacAccess.student_id == student_id,
-            AvacAccess.periodo.in_(periodo_variants),
+            periodo_filter,
         )
         .scalar()
     )
@@ -321,7 +332,7 @@ def get_student_inactivity_by_course(
         db.query(AvacAccess)
         .filter(
             AvacAccess.student_id == student_id,
-            AvacAccess.periodo.in_(periodo_variants),
+            periodo_filter,
             AvacAccess.dias_sin_acceso.isnot(None),
         )
     )

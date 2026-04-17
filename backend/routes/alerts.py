@@ -357,10 +357,16 @@ def generate_alerts(
         active_course_codes = {r[0] for r in active_cc} if active_cc else None
 
     # Pre-load per-period AvacAccess: dias_sin_acceso por estudiante POR CURSO
+    # Incluir periodo NULL como fallback (datos cargados antes de configurar periodo)
+    periodo_filter = or_(
+        AvacAccess.periodo.in_(periodo_variants),
+        AvacAccess.periodo.is_(None),
+    )
+
     # Último snapshot disponible
     latest_snap = (
         db.query(func.max(AvacAccess.snapshot_date))
-        .filter(AvacAccess.periodo.in_(periodo_variants), AvacAccess.student_id.isnot(None))
+        .filter(periodo_filter, AvacAccess.student_id.isnot(None))
         .scalar()
     )
     avac_q = db.query(
@@ -368,7 +374,7 @@ def generate_alerts(
         AvacAccess.codigo_curso,
         AvacAccess.dias_sin_acceso,
     ).filter(
-        AvacAccess.periodo.in_(periodo_variants),
+        periodo_filter,
         AvacAccess.student_id.isnot(None),
         AvacAccess.dias_sin_acceso.isnot(None),
     )
