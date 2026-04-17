@@ -201,6 +201,8 @@ def get_risk_dashboard(
             dias = student.dias_sin_acceso  # fallback al global
         if dias is not None and max_dias_periodo is not None:
             dias = min(dias, max_dias_periodo)
+        if dias is not None:
+            dias = int(dias)
 
         output.append(RiskStudentOut(
             id=student.id,
