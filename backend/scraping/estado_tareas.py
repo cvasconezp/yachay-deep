@@ -137,7 +137,7 @@ def _procesar_reporte_general(soup, es_especial=False):
 def scrape_tareas(output_dir: str, codigos=None, base_url: str = None, db=None):
     """
     Scraping de estado de tareas para cada curso activo.
-    Usa login headless con TOTP si las credenciales están en env.
+    Prioridad de autenticación: cookie → Selenium → error.
 
     Args:
         output_dir: carpeta donde guardar los CSVs estado_*.csv
@@ -145,7 +145,7 @@ def scrape_tareas(output_dir: str, codigos=None, base_url: str = None, db=None):
         base_url: URL base de AVAC (default env AVAC_BASE_URL)
         db: SQLAlchemy session (para leer CourseConfig)
     """
-    from .ingresos_avac import get_active_codigos, get_session_headless
+    from .ingresos_avac import get_active_codigos, get_session_headless, get_session_cookie
     from ..config import settings as _settings
 
     base_url = base_url or _settings.AVAC_BASE_URL
@@ -160,19 +160,27 @@ def scrape_tareas(output_dir: str, codigos=None, base_url: str = None, db=None):
         logger.warning("No hay códigos de cursos activos para scrapear tareas.")
         return {"codigos_procesados": 0, "errores": []}
 
+    # Autenticación: cookie → Selenium → error
+    session_cookie = _settings.AVAC_SESSION_COOKIE
     username = _settings.AVAC_USERNAME
     password = _settings.AVAC_PASSWORD
     totp_secret = _settings.AVAC_TOTP_SECRET
+    session = None
 
-    if username and password:
-        logger.info("Iniciando sesión headless en AVAC para tareas...")
+    if session_cookie:
+        logger.info("🍪 Tareas: modo cookie (MoodleSession directa)")
+        try:
+            session = get_session_cookie(session_cookie, base_url)
+        except RuntimeError as e:
+            logger.warning(f"Cookie inválida para tareas: {e}")
+
+    if session is None and username and password:
+        logger.info("🔑 Tareas: modo Selenium (credenciales + SSO)")
         session = get_session_headless(username, password, base_url, totp_secret=totp_secret)
-        if not session:
-            logger.error("No se pudo iniciar sesión. Abortando scraping de tareas.")
-            return {"codigos_procesados": 0, "errores": ["Login fallido"]}
-    else:
-        logger.warning("AVAC_USERNAME no configurado. Scraping de tareas requiere credenciales automáticas.")
-        return {"codigos_procesados": 0, "errores": ["Credenciales no configuradas"]}
+
+    if session is None:
+        logger.error("No se pudo autenticar en AVAC para tareas (ni cookie ni Selenium).")
+        return {"codigos_procesados": 0, "errores": ["Autenticación fallida"]}
 
     logger.info(f"Procesando tareas de {len(codigos)} cursos...")
     errores = []
@@ -182,12 +190,16 @@ def scrape_tareas(output_dir: str, codigos=None, base_url: str = None, db=None):
         try:
             start_time = time.time()
 
-            # A. Buscar ID del curso
+            # A. Buscar ID del curso (formato Moodle 4.x)
             resp = session.get(
-                f"{base_url}/course/search.php?search={codigo_curso}", timeout=30
+                f"{base_url}/course/search.php?areaids=core_course-course&q={codigo_curso}",
+                timeout=30,
             )
             soup = BeautifulSoup(resp.content, "html.parser", from_encoding="utf-8")
-            link_curso = soup.select_one(".coursebox a[href*='view.php?id=']")
+            link_curso = (
+                soup.select_one(".coursebox a[href*='view.php?id=']")
+                or soup.select_one("a[href*='/course/view.php?id=']")
+            )
 
             if not link_curso:
                 logger.warning(f"Curso {codigo_curso} no encontrado en AVAC.")
