@@ -10,7 +10,7 @@ from sqlalchemy import func, or_
 from pydantic import BaseModel
 
 from ..database import get_db
-from ..models import Student, Grade
+from ..models import Student, Grade, AvacAccess
 from ..models.enrollment import Enrollment
 from ..models.alert_event import AlertEvent
 from ..models.course_config import SemesterConfig
@@ -18,24 +18,35 @@ from ..auth.jwt import get_current_user
 from ..models.user import User
 
 
-def _active_period_has_grades(db: Session) -> bool:
-    """Verifica si hay calificaciones para el semestre activo.
+def _active_period_has_data(db: Session) -> bool:
+    """Verifica si hay datos (calificaciones o accesos AVAC) para el semestre activo.
     Incluye grades con periodo=NULL (legacy: cargados antes de etiquetar con periodo).
     Retorna False cuando no hay datos, para evitar mostrar alertas stale."""
     sem = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
     if not sem or not sem.semestre:
         return False
     pf = sem.semestre.strip()
-    q = db.query(Grade.id)
+
+    # Check grades
+    q_grades = db.query(Grade.id)
     if pf.startswith("P"):
-        q = q.filter(or_(Grade.periodo == pf, Grade.periodo == pf[1:], Grade.periodo.is_(None)))
+        q_grades = q_grades.filter(or_(Grade.periodo == pf, Grade.periodo == pf[1:], Grade.periodo.is_(None)))
     else:
-        q = q.filter(or_(Grade.periodo == pf, Grade.periodo == f"P{pf}", Grade.periodo.is_(None)))
-    return q.limit(1).first() is not None
+        q_grades = q_grades.filter(or_(Grade.periodo == pf, Grade.periodo == f"P{pf}", Grade.periodo.is_(None)))
+    if q_grades.limit(1).first() is not None:
+        return True
+
+    # Check AvacAccess
+    q_avac = db.query(AvacAccess.id).filter(AvacAccess.student_id.isnot(None))
+    if pf.startswith("P"):
+        q_avac = q_avac.filter(or_(AvacAccess.periodo == pf, AvacAccess.periodo == pf[1:]))
+    else:
+        q_avac = q_avac.filter(or_(AvacAccess.periodo == pf, AvacAccess.periodo == f"P{pf}"))
+    return q_avac.limit(1).first() is not None
 
 
 def _active_period_student_ids(db: Session) -> set:
-    """Retorna set de student_ids para el periodo activo (grades + enrollments).
+    """Retorna set de student_ids para el periodo activo (grades + enrollments + avac_accesses).
     Usado para filtrar alertas solo a estudiantes del periodo actual."""
     sem = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
     if not sem or not sem.semestre:
@@ -46,13 +57,16 @@ def _active_period_student_ids(db: Session) -> set:
         raw = pf[1:]
         g_cond = or_(Grade.periodo == pf, Grade.periodo == raw, Grade.periodo.is_(None))
         e_cond = or_(Enrollment.periodo == pf, Enrollment.periodo == raw)
+        a_cond = or_(AvacAccess.periodo == pf, AvacAccess.periodo == raw)
     else:
         g_cond = or_(Grade.periodo == pf, Grade.periodo == f"P{pf}", Grade.periodo.is_(None))
         e_cond = or_(Enrollment.periodo == pf, Enrollment.periodo == f"P{pf}")
+        a_cond = or_(AvacAccess.periodo == pf, AvacAccess.periodo == f"P{pf}")
 
     grade_ids = {r[0] for r in db.query(Grade.student_id).filter(g_cond).distinct().all()}
     enroll_ids = {r[0] for r in db.query(Enrollment.student_id).filter(e_cond).distinct().all()}
-    return grade_ids | enroll_ids
+    avac_ids = {r[0] for r in db.query(AvacAccess.student_id).filter(a_cond, AvacAccess.student_id.isnot(None)).distinct().all()}
+    return grade_ids | enroll_ids | avac_ids
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
 
@@ -90,7 +104,7 @@ def get_pending_alerts(
 ):
     """Retorna alertas sin leer, ordenadas por recientes primero.
     Solo incluye alertas de estudiantes del periodo activo."""
-    if not _active_period_has_grades(db):
+    if not _active_period_has_data(db):
         return []
 
     period_sids = _active_period_student_ids(db)
@@ -137,7 +151,7 @@ def get_alert_count(
 ):
     """Retorna conteo de alertas sin leer por severidad.
     Solo cuenta alertas de estudiantes del periodo activo."""
-    if not _active_period_has_grades(db):
+    if not _active_period_has_data(db):
         return AlertCountResponse(total=0, critico=0, alto=0, medio=0)
 
     period_sids = _active_period_student_ids(db)

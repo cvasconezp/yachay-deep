@@ -10,51 +10,63 @@ from pydantic import BaseModel
 from sqlalchemy import distinct as sa_distinct
 
 from ..database import get_db
-from ..models import Student, Intervention, Grade
+from ..models import Student, Intervention, Grade, AvacAccess
 from ..models.enrollment import Enrollment
 from ..auth.jwt import get_current_user
 from ..models.user import User
 
 
 def _period_student_ids(db: Session, periodo: Optional[str]):
-    """Subquery de student_ids filtrados por período (Grades + Enrollments)."""
+    """Subquery de student_ids filtrados por período (Grades + Enrollments + AvacAccess)."""
     from sqlalchemy import or_
     pf = periodo if periodo else "actual"
 
     grade_sq = db.query(Grade.student_id).distinct()
     enroll_sq = db.query(Enrollment.student_id).distinct()
+    avac_sq = db.query(AvacAccess.student_id).filter(AvacAccess.student_id.isnot(None)).distinct()
 
     if pf == "actual":
         grade_sq = grade_sq.filter(Grade.periodo.is_(None))
         enroll_sq = enroll_sq.filter(Enrollment.periodo.is_(None))
+        avac_sq = avac_sq.filter(AvacAccess.periodo.is_(None))
     elif pf != "todos":
         # Dual format: "P68" <-> "68"
         if pf.startswith("P"):
             grade_sq = grade_sq.filter(or_(Grade.periodo == pf, Grade.periodo == pf[1:]))
             enroll_sq = enroll_sq.filter(or_(Enrollment.periodo == pf, Enrollment.periodo == pf[1:]))
+            avac_sq = avac_sq.filter(or_(AvacAccess.periodo == pf, AvacAccess.periodo == pf[1:]))
         else:
             grade_sq = grade_sq.filter(or_(Grade.periodo == pf, Grade.periodo == f"P{pf}"))
             enroll_sq = enroll_sq.filter(or_(Enrollment.periodo == pf, Enrollment.periodo == f"P{pf}"))
+            avac_sq = avac_sq.filter(or_(AvacAccess.periodo == pf, AvacAccess.periodo == f"P{pf}"))
 
-    sq = grade_sq.union(enroll_sq)
+    sq = grade_sq.union(enroll_sq).union(avac_sq)
     return sq, pf
 
 
-def _period_has_grades(db: Session, periodo: Optional[str]) -> bool:
-    """Verifica si existen calificaciones reales para el período dado."""
+def _period_has_data(db: Session, periodo: Optional[str]) -> bool:
+    """Verifica si existen datos (calificaciones O accesos AVAC) para el período dado."""
     from sqlalchemy import or_
     pf = periodo if periodo else "actual"
-    q = db.query(Grade.id)
+
+    # Check grades
+    q_grades = db.query(Grade.id)
+    q_avac = db.query(AvacAccess.id).filter(AvacAccess.student_id.isnot(None))
+
     if pf == "actual":
-        q = q.filter(Grade.periodo.is_(None))
+        q_grades = q_grades.filter(Grade.periodo.is_(None))
+        q_avac = q_avac.filter(AvacAccess.periodo.is_(None))
     elif pf == "todos":
         return True
     else:
         if pf.startswith("P"):
-            q = q.filter(or_(Grade.periodo == pf, Grade.periodo == pf[1:]))
+            q_grades = q_grades.filter(or_(Grade.periodo == pf, Grade.periodo == pf[1:]))
+            q_avac = q_avac.filter(or_(AvacAccess.periodo == pf, AvacAccess.periodo == pf[1:]))
         else:
-            q = q.filter(or_(Grade.periodo == pf, Grade.periodo == f"P{pf}"))
-    return q.limit(1).first() is not None
+            q_grades = q_grades.filter(or_(Grade.periodo == pf, Grade.periodo == f"P{pf}"))
+            q_avac = q_avac.filter(or_(AvacAccess.periodo == pf, AvacAccess.periodo == f"P{pf}"))
+
+    return q_grades.limit(1).first() is not None or q_avac.limit(1).first() is not None
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -191,8 +203,8 @@ def get_stats(
     total_intervenciones = db.query(func.count(Intervention.id)).scalar()
     estudiantes_intervenidos = db.query(func.count(func.distinct(Intervention.student_id))).scalar()
 
-    # Detectar si hay datos reales (grades) para el periodo
-    has_grades = _period_has_grades(db, periodo)
+    # Detectar si hay datos reales (grades o accesos AVAC) para el periodo
+    has_data = _period_has_data(db, periodo)
 
     return {
         "total_estudiantes": total,
@@ -200,7 +212,7 @@ def get_stats(
         "por_carrera": [{"carrera": r.carrera, "total": r.total} for r in por_carrera],
         "total_intervenciones": total_intervenciones,
         "estudiantes_intervenidos": estudiantes_intervenidos,
-        "tiene_datos_periodo": has_grades,
+        "tiene_datos_periodo": has_data,
     }
 
 
