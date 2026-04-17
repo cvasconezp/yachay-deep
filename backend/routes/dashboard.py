@@ -224,6 +224,102 @@ def get_risk_dashboard(
     return output
 
 
+class CourseInactivityOut(BaseModel):
+    codigo_curso: str
+    asignatura: Optional[str] = None
+    dias_sin_acceso: int
+    ultimo_acceso_texto: Optional[str] = None
+    estado_avac: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/risk/{student_id}/inactividad", response_model=list[CourseInactivityOut])
+def get_student_inactivity_by_course(
+    student_id: int,
+    periodo: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Desglose de inactividad por asignatura para un estudiante."""
+    from datetime import datetime, timezone
+    from ..models.course_config import CourseConfig
+
+    # Resolver periodo
+    semconfig = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
+    pf = periodo if periodo else (semconfig.semestre if semconfig else None)
+    if not pf:
+        return []
+
+    if pf.startswith("P"):
+        periodo_variants = (pf, pf[1:])
+    else:
+        periodo_variants = (pf, f"P{pf}")
+
+    # Max dias posible desde inicio del bloque
+    max_dias_periodo = None
+    if semconfig:
+        bloque_inicio = None
+        if semconfig.bloque_actual == "2" and semconfig.bloque2_inicio:
+            bloque_inicio = semconfig.bloque2_inicio
+        elif semconfig.bloque1_inicio:
+            bloque_inicio = semconfig.bloque1_inicio
+        if bloque_inicio:
+            if bloque_inicio.tzinfo is None:
+                bloque_inicio = bloque_inicio.replace(tzinfo=timezone.utc)
+            max_dias_periodo = (datetime.now(timezone.utc) - bloque_inicio).days
+
+    # Último snapshot por curso para este estudiante en el periodo
+    latest_snap = (
+        db.query(func.max(AvacAccess.snapshot_date))
+        .filter(
+            AvacAccess.student_id == student_id,
+            AvacAccess.periodo.in_(periodo_variants),
+        )
+        .scalar()
+    )
+
+    records = (
+        db.query(AvacAccess)
+        .filter(
+            AvacAccess.student_id == student_id,
+            AvacAccess.periodo.in_(periodo_variants),
+            AvacAccess.dias_sin_acceso.isnot(None),
+        )
+    )
+    if latest_snap:
+        records = records.filter(AvacAccess.snapshot_date == latest_snap)
+
+    records = records.order_by(AvacAccess.dias_sin_acceso.desc()).all()
+
+    # Dedup: un solo registro por codigo_curso (el de mayor dias_sin_acceso)
+    seen = set()
+    output = []
+    for r in records:
+        if r.codigo_curso in seen:
+            continue
+        seen.add(r.codigo_curso)
+
+        dias = int(r.dias_sin_acceso)
+        if max_dias_periodo is not None:
+            dias = min(dias, max_dias_periodo)
+
+        # Buscar nombre de asignatura en CourseConfig
+        cc = db.query(CourseConfig).filter(CourseConfig.codigo_avac == r.codigo_curso).first()
+        asignatura = cc.asignatura if cc else None
+
+        output.append(CourseInactivityOut(
+            codigo_curso=r.codigo_curso,
+            asignatura=asignatura,
+            dias_sin_acceso=dias,
+            ultimo_acceso_texto=r.ultimo_acceso_texto,
+            estado_avac=r.estado_avac,
+        ))
+
+    return output
+
+
 @router.get("/stats")
 def get_stats(
     periodo: Optional[str] = None,

@@ -21,6 +21,9 @@ class AlertEvent(Base):
     # Tipo de alerta
     tipo = Column(String, nullable=False, index=True)  # inactividad, compromiso_bajo, nota_cero, tareas_bajas, calificacion_docente_pendiente
 
+    # Curso específico (para alertas por asignatura)
+    codigo_curso = Column(String, nullable=True, index=True)
+
     # Mensaje descriptivo
     mensaje = Column(Text, nullable=True)
 

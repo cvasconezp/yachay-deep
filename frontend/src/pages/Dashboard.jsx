@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../services/api";
 import { RiskBadge, CompromisoBar, PredictionBadge } from "../components/RiskBadge";
@@ -7,6 +7,56 @@ import ExportExcelButton from "../components/ExportExcelButton";
 import BulkInterventionModal from "../components/BulkInterventionModal";
 
 const RISK_ORDER = { Alto: 0, Medio: 1, Bajo: 2 };
+
+/** Sub-row: desglose de inactividad por asignatura */
+function InactivityDetail({ studentId, periodo }) {
+  const [rows, setRows] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    api.getStudentInactivity(studentId, periodo)
+      .then(data => { if (!cancelled) setRows(data); })
+      .catch(() => { if (!cancelled) setRows([]); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [studentId, periodo]);
+
+  if (loading) return <div className="px-8 py-3 text-xs text-gray-400">Cargando desglose...</div>;
+  if (!rows || rows.length === 0) return <div className="px-8 py-3 text-xs text-gray-400">Sin datos de acceso por asignatura</div>;
+
+  return (
+    <div className="px-8 py-3">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="text-gray-500 border-b border-gray-100">
+            <th className="text-left py-1.5 font-medium">Asignatura</th>
+            <th className="text-left py-1.5 font-medium">Código</th>
+            <th className="text-center py-1.5 font-medium">Días sin acceso</th>
+            <th className="text-left py-1.5 font-medium">Último acceso</th>
+            <th className="text-left py-1.5 font-medium">Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(r => (
+            <tr key={r.codigo_curso} className="border-b border-gray-50">
+              <td className="py-1.5 text-gray-700">{r.asignatura || "—"}</td>
+              <td className="py-1.5 text-gray-400 font-mono">{r.codigo_curso}</td>
+              <td className="py-1.5 text-center">
+                <span className={r.dias_sin_acceso > 14 ? "text-red-600 font-bold" : r.dias_sin_acceso > 7 ? "text-yellow-600 font-semibold" : "text-green-700"}>
+                  {r.dias_sin_acceso}d
+                </span>
+              </td>
+              <td className="py-1.5 text-gray-500">{r.ultimo_acceso_texto || "—"}</td>
+              <td className="py-1.5 text-gray-500">{r.estado_avac || "—"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 // Columnas disponibles para exportar
 const EXPORT_COLUMNS = [
@@ -32,6 +82,7 @@ export default function Dashboard() {
   const [filtros, setFiltros] = useState({ carrera: "", nivel_riesgo: "", solo_sin_intervencion: false, periodo: "" });
   const [cardFilter, setCardFilter] = useState(null);
   const [selectedIds, setSelectedIds] = useState(new Set());
+  const [expandedId, setExpandedId] = useState(null);
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
   const navigate = useNavigate();
@@ -296,44 +347,66 @@ export default function Dashboard() {
               </tr>
             </thead>
             <tbody>
-              {filteredStudents.map((s) => (
-                <tr
-                  key={s.id}
-                  onClick={() => navigate(`/ficha/${s.id}`)}
-                  className={`border-b border-gray-100 cursor-pointer hover:bg-blue-50 transition-colors
-                    ${selectedIds.has(s.id) ? "bg-blue-50/60" : s.nivel_riesgo === "Alto" ? "bg-red-50/30" : ""}`}
-                >
-                  <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
-                    <input
-                      type="checkbox"
-                      checked={selectedIds.has(s.id)}
-                      onChange={e => toggleSelect(s.id, e)}
-                      className="rounded"
-                    />
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-gray-900">{s.nombre}</div>
-                    <div className="text-xs text-gray-400">{s.correo_institucional}</div>
-                  </td>
-                  <td className="px-4 py-3 text-gray-600 max-w-[200px] truncate">{s.carrera || "—"}</td>
-                  <td className="px-4 py-3 text-center"><RiskBadge nivel={s.nivel_riesgo} /></td>
-                  <td className="px-4 py-3 text-center font-mono text-gray-700">
-                    {s.dias_sin_acceso != null
-                      ? <span className={s.dias_sin_acceso > 14 ? "text-red-600 font-bold" : ""}>{Math.round(s.dias_sin_acceso)}d</span>
-                      : "—"}
-                  </td>
-                  <td className="px-4 py-3"><CompromisoBar valor={s.indice_compromiso} /></td>
-                  <td className="px-4 py-3 text-center"><PredictionBadge value={s.prob_desercion} label="Deserción" /></td>
-                  <td className="px-4 py-3 text-center">
-                    <span className={`font-semibold ${s.total_intervenciones === 0 ? "text-gray-400" : "text-blue-600"}`}>
-                      {s.total_intervenciones}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-center text-xs text-gray-400">
-                    {s.ultima_intervencion ? new Date(s.ultima_intervencion).toLocaleDateString("es-EC") : "—"}
-                  </td>
-                </tr>
-              ))}
+              {filteredStudents.map((s) => {
+                const isExpanded = expandedId === s.id;
+                return (
+                  <React.Fragment key={s.id}>
+                    <tr
+                      onClick={() => navigate(`/ficha/${s.id}`)}
+                      className={`border-b border-gray-100 cursor-pointer hover:bg-blue-50 transition-colors
+                        ${selectedIds.has(s.id) ? "bg-blue-50/60" : s.nivel_riesgo === "Alto" ? "bg-red-50/30" : ""}`}
+                    >
+                      <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.has(s.id)}
+                          onChange={e => toggleSelect(s.id, e)}
+                          className="rounded"
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-gray-900">{s.nombre}</div>
+                        <div className="text-xs text-gray-400">{s.correo_institucional}</div>
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 max-w-[200px] truncate">{s.carrera || "—"}</td>
+                      <td className="px-4 py-3 text-center"><RiskBadge nivel={s.nivel_riesgo} /></td>
+                      <td className="px-4 py-3 text-center font-mono text-gray-700">
+                        <div className="flex items-center justify-center gap-1">
+                          {s.dias_sin_acceso != null
+                            ? <span className={s.dias_sin_acceso > 14 ? "text-red-600 font-bold" : ""}>{Math.round(s.dias_sin_acceso)}d</span>
+                            : "—"}
+                          <button
+                            onClick={e => { e.stopPropagation(); setExpandedId(isExpanded ? null : s.id); }}
+                            className="ml-1 text-gray-400 hover:text-blue-600 transition-colors"
+                            title="Ver desglose por asignatura"
+                          >
+                            <svg className={`w-3.5 h-3.5 transition-transform ${isExpanded ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                            </svg>
+                          </button>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3"><CompromisoBar valor={s.indice_compromiso} /></td>
+                      <td className="px-4 py-3 text-center"><PredictionBadge value={s.prob_desercion} label="Deserción" /></td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`font-semibold ${s.total_intervenciones === 0 ? "text-gray-400" : "text-blue-600"}`}>
+                          {s.total_intervenciones}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center text-xs text-gray-400">
+                        {s.ultima_intervencion ? new Date(s.ultima_intervencion).toLocaleDateString("es-EC") : "—"}
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr className="bg-gray-50/80">
+                        <td colSpan={9}>
+                          <InactivityDetail studentId={s.id} periodo={filtros.periodo} />
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
             </tbody>
           </table>
         )}

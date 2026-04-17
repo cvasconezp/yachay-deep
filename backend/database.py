@@ -100,6 +100,9 @@ def upgrade_tables():
         "semester_configs": [
             ("calendario_academico", "VARCHAR"),
         ],
+        "alert_events": [
+            ("codigo_curso", "VARCHAR"),
+        ],
     }
 
     inspector = inspect(engine)

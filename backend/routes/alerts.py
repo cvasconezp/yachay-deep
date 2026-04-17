@@ -79,6 +79,8 @@ class AlertEventResponse(BaseModel):
     tipo: str
     mensaje: Optional[str] = None
     severidad: str
+    codigo_curso: Optional[str] = None
+    asignatura: Optional[str] = None
     leido: bool
     leido_por: Optional[str] = None
     leido_at: Optional[str] = None
@@ -152,21 +154,31 @@ def get_pending_alerts(
         .all()
     )
 
+    # Pre-load asignatura names for alerts that have codigo_curso
+    from ..models.course_config import CourseConfig
+    curso_codes = {alert.codigo_curso for alert, _, _ in rows if alert.codigo_curso}
+    asignatura_map = {}
+    if curso_codes:
+        for cc in db.query(CourseConfig).filter(CourseConfig.codigo_avac.in_(curso_codes)).all():
+            asignatura_map[cc.codigo_avac] = cc.asignatura
+
     return [
         AlertEventResponse(
             id=alert.id,
             student_id=alert.student_id,
             student_nombre=nombre,
-            student_carrera=carrera,
+            student_carrera=student_carrera,
             tipo=alert.tipo,
             mensaje=alert.mensaje,
             severidad=alert.severidad,
+            codigo_curso=alert.codigo_curso,
+            asignatura=asignatura_map.get(alert.codigo_curso) if alert.codigo_curso else None,
             leido=alert.leido,
             leido_por=alert.leido_por,
             leido_at=alert.leido_at.isoformat() if alert.leido_at else None,
             created_at=alert.created_at.isoformat() if alert.created_at else None,
         )
-        for alert, nombre, carrera in rows
+        for alert, nombre, student_carrera in rows
     ]
 
 
@@ -323,50 +335,74 @@ def generate_alerts(
     else:
         students = db.query(Student).all()
 
-    # Pre-load per-period AvacAccess: max dias_sin_acceso por estudiante
-    from sqlalchemy import case as sa_case
-    avac_inactividad = dict(
-        db.query(
-            AvacAccess.student_id,
-            func.max(AvacAccess.dias_sin_acceso),
-        )
-        .filter(
-            AvacAccess.periodo.in_(periodo_variants),
-            AvacAccess.student_id.isnot(None),
-            AvacAccess.dias_sin_acceso.isnot(None),
-        )
-        .group_by(AvacAccess.student_id)
-        .all()
+    # Pre-load per-period AvacAccess: dias_sin_acceso por estudiante POR CURSO
+    # Último snapshot disponible
+    latest_snap = (
+        db.query(func.max(AvacAccess.snapshot_date))
+        .filter(AvacAccess.periodo.in_(periodo_variants), AvacAccess.student_id.isnot(None))
+        .scalar()
     )
+    avac_q = db.query(
+        AvacAccess.student_id,
+        AvacAccess.codigo_curso,
+        AvacAccess.dias_sin_acceso,
+    ).filter(
+        AvacAccess.periodo.in_(periodo_variants),
+        AvacAccess.student_id.isnot(None),
+        AvacAccess.dias_sin_acceso.isnot(None),
+    )
+    if latest_snap:
+        avac_q = avac_q.filter(AvacAccess.snapshot_date == latest_snap)
+
+    # Dict: student_id → [(codigo_curso, dias_sin_acceso), ...]
+    from collections import defaultdict
+    avac_por_curso = defaultdict(list)
+    for sid, codigo, dias in avac_q.all():
+        avac_por_curso[sid].append((codigo, dias))
+
+    # Pre-load asignatura names
+    from ..models.course_config import CourseConfig
+    all_codes = {codigo for entries in avac_por_curso.values() for codigo, _ in entries}
+    asignatura_map = {}
+    if all_codes:
+        for cc in db.query(CourseConfig).filter(CourseConfig.codigo_avac.in_(all_codes)).all():
+            asignatura_map[cc.codigo_avac] = cc.asignatura
 
     created = 0
     threshold_date = now - timedelta(days=7)
 
-    def _add_alert(student_id, tipo, severidad, mensaje):
+    def _add_alert(student_id, tipo, severidad, mensaje, codigo_curso=None):
         nonlocal created
-        existing = db.query(AlertEvent).filter(
+        q = db.query(AlertEvent).filter(
             AlertEvent.student_id == student_id,
             AlertEvent.tipo == tipo,
             AlertEvent.created_at >= threshold_date,
-        ).first()
-        if not existing:
-            db.add(AlertEvent(student_id=student_id, tipo=tipo, mensaje=mensaje, severidad=severidad))
+        )
+        if codigo_curso:
+            q = q.filter(AlertEvent.codigo_curso == codigo_curso)
+        if not q.first():
+            db.add(AlertEvent(
+                student_id=student_id, tipo=tipo, mensaje=mensaje,
+                severidad=severidad, codigo_curso=codigo_curso,
+            ))
             created += 1
 
     for student in students:
-        # ========== Inactividad (per-period AvacAccess) ==========
-        dias = avac_inactividad.get(student.id)
-        if dias is not None:
-            # Capear al máximo de días desde inicio del período
+        # ========== Inactividad POR ASIGNATURA (per-period AvacAccess) ==========
+        cursos = avac_por_curso.get(student.id, [])
+        for codigo_curso, dias in cursos:
             if max_dias_periodo is not None:
                 dias = min(dias, max_dias_periodo)
+            asig = asignatura_map.get(codigo_curso, codigo_curso)
 
             if dias > 21:
                 _add_alert(student.id, "inactividad", "critico",
-                           f"Estudiante inactivo por {int(dias)} días (CRÍTICO)")
+                           f"Inactivo {int(dias)} días en {asig} (CRÍTICO)",
+                           codigo_curso=codigo_curso)
             elif dias > 14:
                 _add_alert(student.id, "inactividad", "alto",
-                           f"Estudiante inactivo por {int(dias)} días")
+                           f"Inactivo {int(dias)} días en {asig}",
+                           codigo_curso=codigo_curso)
 
         # ========== Compromiso Bajo ==========
         if student.indice_compromiso is not None:

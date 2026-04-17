@@ -433,6 +433,12 @@ export default function Alertas() {
                           <div className="flex-1">
                             <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-0.5">
                               {TIPO_LABELS[alert.tipo] || alert.tipo || "Alerta"}
+                              {alert.asignatura && (
+                                <span className="ml-2 font-normal normal-case text-gray-500">· {alert.asignatura}</span>
+                              )}
+                              {!alert.asignatura && alert.codigo_curso && (
+                                <span className="ml-2 font-normal normal-case text-gray-400 font-mono">· {alert.codigo_curso}</span>
+                              )}
                             </div>
                             <div className="text-sm text-gray-700 leading-relaxed">
                               {alert.mensaje || "Sin detalle disponible"}
