@@ -145,6 +145,9 @@ function TabSistema() {
           )}
         </div>
 
+        {/* Cookie AVAC */}
+        <AvacCookieManager />
+
         <div className="mt-4 pt-4 border-t border-gray-100">
           <label className="block text-sm font-semibold text-gray-700 mb-2">
             Subir datos y ejecutar ETL
@@ -400,6 +403,114 @@ function TabSistema() {
 // TAB: CURSOS
 // ─────────────────────────────────────────────────────────────────────────────
 // ── Subcomponente: Carga Histórica (AVAC + reporte para periodo pasado) ──
+// ─────────────────────────────────────────────────────────────────────────────
+// Gestión de Cookie AVAC (MoodleSession)
+// ─────────────────────────────────────────────────────────────────────────────
+function AvacCookieManager() {
+  const [cookieValue, setCookieValue] = useState("");
+  const [cookieStatus, setCookieStatus] = useState(null); // {configured, valid, message, cookie_preview}
+  const [loading, setLoading] = useState(false);
+  const [checkLoading, setCheckLoading] = useState(true);
+  const [msg, setMsg] = useState("");
+
+  const checkCookie = useCallback(async () => {
+    setCheckLoading(true);
+    try {
+      const data = await api.getAvacCookie();
+      setCookieStatus(data);
+    } catch {
+      setCookieStatus(null);
+    } finally {
+      setCheckLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { checkCookie(); }, [checkCookie]);
+
+  const handleSave = async () => {
+    const trimmed = cookieValue.trim();
+    if (!trimmed) { setMsg("Error: Pega la cookie MoodleSession"); return; }
+    setLoading(true);
+    setMsg("");
+    try {
+      const result = await api.updateAvacCookie(trimmed);
+      setMsg(result.message || "Cookie guardada y validada");
+      setCookieValue("");
+      await checkCookie();
+    } catch (e) {
+      setMsg("Error: " + e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const statusColor = cookieStatus?.valid
+    ? "bg-green-100 text-green-700"
+    : cookieStatus?.configured
+      ? "bg-yellow-100 text-yellow-700"
+      : "bg-gray-100 text-gray-500";
+
+  const statusIcon = cookieStatus?.valid ? "\u2705" : cookieStatus?.configured ? "\u26A0\uFE0F" : "\u274C";
+
+  return (
+    <div className="mt-4 pt-4 border-t border-gray-100">
+      <label className="block text-sm font-semibold text-gray-700 mb-1">
+        Cookie AVAC (MoodleSession)
+      </label>
+      <p className="text-xs text-gray-400 mb-3">
+        Para el scraping automático, pega aquí la cookie MoodleSession de tu sesión AVAC.
+        Abre AVAC en tu navegador, inicia sesión, y copia la cookie desde DevTools (F12 &gt; Application &gt; Cookies).
+      </p>
+
+      {/* Estado actual */}
+      {checkLoading ? (
+        <p className="text-xs text-gray-400 mb-3">Verificando cookie...</p>
+      ) : (
+        <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium mb-3 ${statusColor}`}>
+          <span>{statusIcon}</span>
+          {cookieStatus?.valid
+            ? `Cookie activa${cookieStatus.cookie_preview ? ` (${cookieStatus.cookie_preview})` : ""}`
+            : cookieStatus?.configured
+              ? `Cookie expirada${cookieStatus.cookie_preview ? ` (${cookieStatus.cookie_preview})` : ""}`
+              : "Sin cookie configurada"}
+        </div>
+      )}
+
+      <div className="flex items-center gap-3">
+        <input
+          type="text"
+          value={cookieValue}
+          onChange={(e) => setCookieValue(e.target.value)}
+          placeholder="Pega aquí la cookie MoodleSession..."
+          className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-300 focus:border-blue-400 outline-none font-mono"
+          disabled={loading}
+        />
+        <button
+          onClick={handleSave}
+          disabled={loading || !cookieValue.trim()}
+          className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-60 whitespace-nowrap"
+        >
+          {loading ? "Validando..." : "Guardar Cookie"}
+        </button>
+        <button
+          onClick={checkCookie}
+          disabled={checkLoading}
+          className="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-lg text-sm border border-gray-200 hover:bg-gray-50 transition-colors disabled:opacity-60"
+          title="Verificar estado de la cookie"
+        >
+          {checkLoading ? "..." : "Verificar"}
+        </button>
+      </div>
+
+      {msg && (
+        <div className={`text-sm mt-3 px-4 py-2 rounded-lg ${msg.startsWith("Error") ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
+          {msg}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function HistoricoUpload() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState("");

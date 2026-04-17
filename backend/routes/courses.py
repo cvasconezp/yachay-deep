@@ -126,9 +126,10 @@ def bulk_create_courses(courses: list[CourseConfigCreate], db: Session = Depends
     created = 0
     updated = 0
     for c in courses:
+        # Dedup por codigo_avac solamente (consistente con ETL _sync_course_configs)
+        # Un codigo_avac es único en Moodle — no debe haber dos registros para el mismo código.
         existing = db.query(CourseConfig).filter(
             CourseConfig.codigo_avac == c.codigo_avac,
-            CourseConfig.semestre == c.semestre,
         ).first()
         if existing:
             for field, value in c.model_dump(exclude_unset=True).items():
@@ -161,6 +162,75 @@ def delete_course(course_id: int, db: Session = Depends(get_db)):
     db.delete(course)
     db.commit()
     return {"ok": True}
+
+
+@router.get("/duplicates", dependencies=[Depends(require_admin)])
+def check_duplicates(db: Session = Depends(get_db)):
+    """Detecta cursos con codigo_avac duplicado en course_configs."""
+    from sqlalchemy import func as sa_func
+    dupes = (
+        db.query(CourseConfig.codigo_avac, sa_func.count(CourseConfig.id).label("n"))
+        .group_by(CourseConfig.codigo_avac)
+        .having(sa_func.count(CourseConfig.id) > 1)
+        .all()
+    )
+    total_dupes = sum(row.n - 1 for row in dupes)  # cuántos registros sobran
+    return {
+        "codigos_duplicados": len(dupes),
+        "registros_sobrantes": total_dupes,
+        "detalle": [{"codigo_avac": row.codigo_avac, "count": row.n} for row in dupes[:50]],
+    }
+
+
+@router.post("/deduplicate", dependencies=[Depends(require_admin)])
+def deduplicate_courses(db: Session = Depends(get_db)):
+    """
+    Elimina registros duplicados de course_configs.
+    Para cada codigo_avac con N>1 registros, conserva el que tenga semestre más
+    reciente (o el de mayor ID si son iguales) y elimina los demás.
+    """
+    from sqlalchemy import func as sa_func
+    dupes = (
+        db.query(CourseConfig.codigo_avac)
+        .group_by(CourseConfig.codigo_avac)
+        .having(sa_func.count(CourseConfig.id) > 1)
+        .all()
+    )
+
+    removed = 0
+    for (codigo,) in dupes:
+        records = (
+            db.query(CourseConfig)
+            .filter(CourseConfig.codigo_avac == codigo)
+            .order_by(CourseConfig.semestre.desc().nulls_last(), CourseConfig.id.desc())
+            .all()
+        )
+        # Conservar el primero (semestre más reciente / ID más alto), eliminar el resto
+        keep = records[0]
+        for dup in records[1:]:
+            # Si el duplicado tiene datos que el principal no, fusionar
+            if not keep.asignatura and dup.asignatura:
+                keep.asignatura = dup.asignatura
+            if not keep.docente and dup.docente:
+                keep.docente = dup.docente
+            if not keep.carrera and dup.carrera:
+                keep.carrera = dup.carrera
+            if not keep.correo_docente and dup.correo_docente:
+                keep.correo_docente = dup.correo_docente
+            if not keep.nivel and dup.nivel:
+                keep.nivel = dup.nivel
+            if not keep.grupo and dup.grupo:
+                keep.grupo = dup.grupo
+            db.delete(dup)
+            removed += 1
+
+    db.commit()
+    total = db.query(sa_func.count(CourseConfig.id)).scalar()
+    return {
+        "removed": removed,
+        "total_remaining": total,
+        "message": f"Se eliminaron {removed} registros duplicados. Quedan {total} cursos únicos.",
+    }
 
 
 # ─── Semester Endpoints ───────────────────────────────────────────────────────

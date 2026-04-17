@@ -220,6 +220,10 @@ class ApiClient {
     });
   }
 
+  // ── AVAC Cookie ──
+  getAvacCookie() { return this.get("/admin/system/avac-cookie"); }
+  updateAvacCookie(cookie) { return this.put("/admin/system/avac-cookie", { cookie }); }
+
   // ── Export ──
   exportFichaPDF(studentId) { return this.getBlob(`/export/ficha/${studentId}/pdf`); }
   getExportColumnas() { return this.get("/export/columnas-disponibles"); }
