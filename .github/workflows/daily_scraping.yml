@@ -24,6 +24,19 @@ jobs:
       - name: Checkout código
         uses: actions/checkout@v6
 
+      - name: Configurar DNS (Google DNS para evitar bloqueos)
+        run: |
+          echo "🌐 Configurando Google DNS (8.8.8.8, 8.8.4.4)..."
+          sudo sed -i 's/^nameserver.*//' /etc/resolv.conf
+          echo "nameserver 8.8.8.8" | sudo tee /etc/resolv.conf
+          echo "nameserver 8.8.4.4" | sudo tee -a /etc/resolv.conf
+          echo "📋 DNS configurado:"
+          cat /etc/resolv.conf
+          echo "🔍 Test de resolución DNS:"
+          nslookup avac.ups.edu.ec 8.8.8.8 || true
+          echo "🔍 Test de conectividad HTTP:"
+          curl -sI --max-time 10 https://avac.ups.edu.ec/grado68/login/index.php | head -5 || true
+
       - name: Configurar Python 3.11
         uses: actions/setup-python@v6
         with:
@@ -46,16 +59,9 @@ jobs:
           mkdir -p data/TableauHistorico
           mkdir -p data/Reportes
           mkdir -p data/DatosEspecificos
+          mkdir -p /tmp/scraping_screenshots
 
       # ─── Descargar archivos estáticos (TableauHistorico, Reportes, DatosEspecificos) ───
-      # Configura el secret STATIC_DATA_URL con la URL directa a un .zip que contenga:
-      #   TableauHistorico/    → Detalle de Calificaciones _data(P60).csv ... (P67).csv
-      #   Reportes/            → *_reporte.xlsx
-      #   DatosEspecificos/    → DatosEspecificos*.xlsx
-      #
-      # Puedes usar Google Drive (link directo), Dropbox, S3, o cualquier URL de descarga.
-      # Ejemplo Google Drive: https://drive.google.com/uc?export=download&id=FILE_ID
-      # ──────────────────────────────────────────────────────────────────────────────────
       - name: Descargar datos estáticos (TableauHistorico, Reportes, DatosEspecificos)
         env:
           STATIC_DATA_URL: ${{ secrets.STATIC_DATA_URL }}
@@ -89,8 +95,20 @@ jobs:
           DATA_PATH_REPORTE: ./data/Reportes
           DATA_PATH_DATOS_ESPECIFICOS: ./data/DatosEspecificos
 
+          # Screenshots del login
+          SCRAPING_SCREENSHOTS_DIR: /tmp/scraping_screenshots
+
         run: |
           python -m backend.scraping.runner --mode ${{ inputs.mode || 'full' }}
+
+      - name: Subir screenshots del login como artefacto
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: login-screenshots-${{ github.run_number }}
+          path: /tmp/scraping_screenshots/
+          retention-days: 7
+          if-no-files-found: ignore
 
       - name: Subir logs y diagnóstico como artefacto
         if: always()
@@ -114,4 +132,3 @@ jobs:
         if: failure()
         run: |
           echo "❌ El scraping falló. Revisa los logs en Actions."
-          # Aquí puedes agregar notificación por email usando secrets.NOTIFICATION_EMAIL

@@ -236,6 +236,22 @@ def get_session_headless(username: str, password: str, base_url: str,
     from selenium.webdriver.support import expected_conditions as EC
     import time as _time
 
+    # ── Screenshots de diagnóstico ────────────────────────────────────────────
+    screenshots_dir = os.environ.get("SCRAPING_SCREENSHOTS_DIR", "/tmp/scraping_screenshots")
+    os.makedirs(screenshots_dir, exist_ok=True)
+    _step_counter = [0]
+
+    def _save_screenshot(driver, step_name: str):
+        """Guarda un screenshot con timestamp para diagnóstico visual."""
+        _step_counter[0] += 1
+        filename = f"{_step_counter[0]:02d}_{step_name}.png"
+        filepath = os.path.join(screenshots_dir, filename)
+        try:
+            driver.save_screenshot(filepath)
+            logger.info(f"📸 Screenshot guardado: {filename} (URL: {driver.current_url})")
+        except Exception as e:
+            logger.warning(f"📸 No se pudo guardar screenshot {filename}: {e}")
+
     logger.info("🚀 Iniciando Chrome headless...")
     opt = Options()
     opt.add_argument("--headless=new")
@@ -250,6 +266,7 @@ def get_session_headless(username: str, password: str, base_url: str,
         # ── Paso 1: Ir a AVAC login y clic en "Usuarios de la UPS" ────────────
         logger.info("📄 Paso 1: Cargando página de login AVAC...")
         driver.get(f"{base_url}/login/index.php")
+        _save_screenshot(driver, "paso1_avac_login")
         sso_button = wait.until(EC.element_to_be_clickable((
             By.XPATH,
             "//a[contains(.,'Usuarios de la UPS')] | "
@@ -264,6 +281,7 @@ def get_session_headless(username: str, password: str, base_url: str,
         email_field = wait.until(EC.presence_of_element_located((
             By.CSS_SELECTOR, "input[name='loginfmt']"
         )))
+        _save_screenshot(driver, "paso2_microsoft_login")
         email_field.clear()
         email_field.send_keys(username)
         logger.info("📧 Paso 2: Email ingresado, esperando botón 'Siguiente'...")
@@ -278,6 +296,7 @@ def get_session_headless(username: str, password: str, base_url: str,
         next_button.click()
         logger.info("📧 Paso 2 OK: Clic en 'Siguiente'")
         _time.sleep(PAUSE_AFTER_CLICK)
+        _save_screenshot(driver, "paso2_despues_siguiente")
 
         # ── Paso 3: Selector de cuenta (si aparece) ───────────────────────────
         try:
@@ -302,6 +321,7 @@ def get_session_headless(username: str, password: str, base_url: str,
         password_field = wait.until(EC.presence_of_element_located((
             By.CSS_SELECTOR, "input[name='passwd']"
         )))
+        _save_screenshot(driver, "paso4_campo_password")
         password_field.clear()
         password_field.send_keys(password)
         logger.info("🔑 Paso 4: Contraseña ingresada, esperando botón 'Iniciar sesión'...")
@@ -316,6 +336,7 @@ def get_session_headless(username: str, password: str, base_url: str,
         sign_in_button.click()
         logger.info("🔑 Paso 4 OK: Clic en 'Iniciar sesión'")
         _time.sleep(PAUSE_AFTER_CLICK + 1)
+        _save_screenshot(driver, "paso4_despues_signin")
 
         # ── Paso 4.5: Manejar MFA/TOTP si aparece ────────────────────────────
         try:
@@ -330,6 +351,7 @@ def get_session_headless(username: str, password: str, base_url: str,
             )
             logger.info("🔐 Paso 4.5: MFA detectado.")
             logger.info(f"🔐 Paso 4.5: URL={driver.current_url}, Título={driver.title}")
+            _save_screenshot(driver, "paso4.5_mfa_detectado")
             _resolve_totp(driver, wait, totp_secret, "Paso 4.5")
         except RuntimeError:
             raise
@@ -343,6 +365,7 @@ def get_session_headless(username: str, password: str, base_url: str,
         if 'login.microsoftonline.com/common' in driver.current_url:
             logger.info(f"🔄 Paso 4.6: Segundo login detectado en /common/login")
             logger.info(f"🔄 Paso 4.6: URL={driver.current_url}, Título={driver.title}")
+            _save_screenshot(driver, "paso4.6_segundo_login")
 
             try:
                 email_field2 = WebDriverWait(driver, WAIT_SHORT).until(
@@ -419,6 +442,7 @@ def get_session_headless(username: str, password: str, base_url: str,
                 ))
             )
             logger.info(f"🏠 Paso 5: Página detectada. URL={driver.current_url}")
+            _save_screenshot(driver, "paso5_mantener_sesion")
             stay_signed_in = WebDriverWait(driver, WAIT_SHORT).until(EC.element_to_be_clickable((
                 By.CSS_SELECTOR,
                 "input[type='submit']#idSIButton9, "
@@ -435,6 +459,7 @@ def get_session_headless(username: str, password: str, base_url: str,
             logger.info(f"ℹ️  Paso 5: No apareció pantalla 'mantener sesión'. URL={driver.current_url}")
 
         # ── Paso 6: Esperar redirect de vuelta a AVAC ─────────────────────────
+        _save_screenshot(driver, "paso6_esperando_redirect")
         logger.info(f"⏳ Paso 6: Esperando redirect a AVAC... URL actual={driver.current_url}")
         avac_host = base_url.split("//")[1].split("/")[0]
         WebDriverWait(driver, 60).until(lambda d: avac_host in d.current_url)
@@ -446,6 +471,7 @@ def get_session_headless(username: str, password: str, base_url: str,
             "[data-region='usermenu'], .userbutton, .logininfo, "
             "[aria-label='Menú de usuario']"
         )))
+        _save_screenshot(driver, "paso6_login_exitoso")
         logger.info("✅ Paso 6 OK: Login exitoso en AVAC. Transfiriendo sesión a modo HTTP rápido...")
 
         session = requests.Session()
