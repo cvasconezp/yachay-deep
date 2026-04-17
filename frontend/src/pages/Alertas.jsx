@@ -128,13 +128,17 @@ export default function Alertas() {
   };
 
   const handleGenerateAlerts = async () => {
-    if (!window.confirm("¿Generar nuevas alertas? Esta operación analiza todos los estudiantes y puede tomar un momento.")) return;
+    if (!window.confirm("¿Regenerar alertas? Se eliminarán las alertas pendientes actuales y se crearán nuevas basadas en los datos más recientes.")) return;
     setGeneratingAlerts(true);
     setError("");
     try {
       const result = await api.generateAlerts();
-      setSuccess(`Se generaron ${result.created || 0} alertas nuevas`);
-      setTimeout(() => setSuccess(""), 5000);
+      const parts = [];
+      if (result.cleaned) parts.push(`${result.cleaned} anteriores eliminadas`);
+      parts.push(`${result.created || 0} nuevas generadas`);
+      if (result.detail) parts.push(result.detail);
+      setSuccess(parts.join(" · "));
+      setTimeout(() => setSuccess(""), 8000);
       loadAlerts();
     } catch (e) {
       setError("Error al generar alertas: " + (e.message || "Intenta de nuevo"));

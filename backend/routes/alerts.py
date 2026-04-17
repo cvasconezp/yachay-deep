@@ -275,6 +275,11 @@ def generate_alerts(
     Solo crea alertas que no existan para el mismo student+tipo en los últimos 7 días.
     Solo escanea estudiantes del período activo.
     """
+    # ── Limpiar alertas stale: eliminar todas las no leídas antes de regenerar ──
+    # Las alertas leídas se conservan como registro histórico.
+    stale_deleted = db.query(AlertEvent).filter(AlertEvent.leido == False).delete()
+    db.flush()
+
     # Obtener configuración del semestre activo
     semconfig = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
     if not semconfig:
@@ -404,8 +409,12 @@ def generate_alerts(
     if max_dias_periodo is not None:
         detail_parts.append(f"Inactividad capeada a máx {max_dias_periodo} días (inicio bloque: {bloque_inicio.strftime('%d/%m/%Y')})")
 
+    if stale_deleted:
+        detail_parts.append(f"{stale_deleted} alertas anteriores eliminadas")
+
     return {
         "created": created,
+        "cleaned": stale_deleted,
         "timestamp": now.isoformat(),
         "detail": " | ".join(detail_parts) if detail_parts else None,
     }
