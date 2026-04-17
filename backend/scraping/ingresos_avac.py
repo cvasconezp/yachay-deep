@@ -28,11 +28,16 @@ PAUSE_AFTER_CLICK = 2  # pausa mínima después de click para que la página rea
 _COL_MAPS = {
     "nombre":        ["nombre", "name", "apellido(s), nombre(s)", "apellidos y nombre"],
     "correo":        ["correo electrónico", "email address", "dirección de correo electrónico",
-                      "correo", "email", "mail"],
-    "ultimo_acceso": ["último acceso al sitio", "last access to site", "último acceso",
-                      "last access", "acceso"],
-    "estado":        ["estado", "status", "roles", "rol"],
+                      "dirección de correo", "correo", "email", "mail"],
+    "ultimo_acceso": ["último acceso al curso", "último acceso al sitio",
+                      "last access to site", "last access to course",
+                      "último acceso", "last access"],
+    "estado":        ["estatus", "estado", "status"],
 }
+
+# Columnas que son solo UI (checkbox, imagen) y no generan <td> en el tbody.
+# Se detectan para calcular el offset entre headers y celdas.
+_SKIP_HEADERS = ["seleccionar"]
 
 
 def _match_header(header: str, candidates: list) -> bool:
@@ -42,12 +47,16 @@ def _match_header(header: str, candidates: list) -> bool:
 
 def _parse_participants_table(soup: BeautifulSoup) -> list:
     """
-    Parsea la tabla generaltable de participantes de forma robusta:
-    - Lee encabezados <th> y mapea columnas por nombre, no por posición.
-    - Detecta el correo por nombre de columna; cae a búsqueda de '@' como fallback.
-    - Filtra filas sin correo válido.
-    FIX: antes se usaban índices fijos (celdas[0..5]) que fallaban si AVAC
-    cambiaba el orden de columnas.
+    Parsea la tabla generaltable de participantes de forma robusta.
+
+    FIX (P68): Moodle 4.x agrega una columna <th> "Seleccionar todos" (checkbox)
+    en el thead que NO tiene un <td> correspondiente en el tbody. Esto causaba
+    un offset de +1 entre los índices de los headers y los de las celdas,
+    haciendo que el parser mapeara las columnas incorrectamente.
+
+    Solución: detectar headers sin <td> correspondiente y compensar el offset.
+    Además se corrigió _COL_MAPS: "roles"/"rol" ya no matchea como "estado"
+    (ahora "estado" solo matchea "estatus", "estado", "status").
     """
     table = soup.select_one("table.generaltable")
     if not table:
@@ -56,18 +65,36 @@ def _parse_participants_table(soup: BeautifulSoup) -> list:
     # Leer encabezados
     raw_headers = [th.get_text(strip=True) for th in table.select("thead tr th")]
     if not raw_headers:
-        # Algunas versiones de Moodle ponen la cabecera en tbody
         first_row = table.select_one("tbody tr")
         if first_row:
             raw_headers = [td.get_text(strip=True) for td in first_row.find_all(["th", "td"])]
 
-    # Detectar índice de cada columna de interés
+    # Calcular offset: cuántos headers NO tienen <td> (ej: "Seleccionar todos")
+    # En Moodle 4.x hay 7 <th> pero solo 6 <td> por fila
+    first_data_row = table.select_one("tbody tr")
+    num_cells = len(first_data_row.find_all("td")) if first_data_row else 0
+    num_headers = len(raw_headers)
+    offset = max(0, num_headers - num_cells)
+
+    logger.debug(f"  Headers: {num_headers}, Cells: {num_cells}, Offset: {offset}")
+
+    # Detectar índice de cada columna de interés (relativo a las celdas <td>)
     idx = {"nombre": None, "correo": None, "ultimo_acceso": None, "estado": None}
+    skipped = 0
     for i, hdr in enumerate(raw_headers):
+        # Detectar headers que no tienen <td> correspondiente
+        h_lower = hdr.strip().lower()
+        if any(s in h_lower for s in _SKIP_HEADERS):
+            skipped += 1
+            continue
+
+        cell_idx = i - skipped  # índice real en las celdas <td>
         for key, candidates in _COL_MAPS.items():
             if idx[key] is None and _match_header(hdr, candidates):
-                idx[key] = i
+                idx[key] = cell_idx
                 break
+
+    logger.debug(f"  Column mapping: {idx}")
 
     registros = []
     for fila in table.select("tbody tr"):
@@ -85,7 +112,7 @@ def _parse_participants_table(soup: BeautifulSoup) -> list:
             )
 
         if not correo or "@" not in correo:
-            continue  # no es una fila de alumno con correo válido
+            continue
 
         def _get(key, fallback_idx=0):
             i = idx[key]
@@ -95,8 +122,13 @@ def _parse_participants_table(soup: BeautifulSoup) -> list:
                 return celdas[fallback_idx].get_text(strip=True)
             return ""
 
+        # Limpiar nombre: Moodle 4.x prefija "Seleccionar 'NOMBRE'" en la celda
+        nombre_raw = _get("nombre", 0)
+        import re
+        nombre_clean = re.sub(r"^Seleccionar\s*'(.+)'$", r"\1", nombre_raw).strip()
+
         registros.append({
-            "Nombre":         _get("nombre", 0),
+            "Nombre":         nombre_clean or nombre_raw,
             "Correo":         correo,
             "Último acceso":  _get("ultimo_acceso"),
             "Estado":         _get("estado"),
