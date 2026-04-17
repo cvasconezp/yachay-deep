@@ -21,3 +21,4 @@ aiofiles==25.1.0
 scikit-learn==1.8.0
 joblib==1.5.3
 slowapi==0.1.9
+httpx==0.28.1
