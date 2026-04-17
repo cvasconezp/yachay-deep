@@ -345,6 +345,57 @@ def system_status(
     }
 
 
+@router.get("/system/network-check")
+async def network_check(
+    current_user: User = Depends(require_admin),
+):
+    """Diagnóstico de red: verifica si Railway puede acceder a AVAC."""
+    import socket
+    import httpx
+    from ..config import settings
+
+    results = {"avac_base_url": settings.AVAC_BASE_URL}
+
+    # Test 1: DNS resolution
+    domain = "avac.ups.edu.ec"
+    try:
+        ip = socket.gethostbyname(domain)
+        results["dns_resolved"] = True
+        results["dns_ip"] = ip
+    except socket.gaierror as e:
+        results["dns_resolved"] = False
+        results["dns_error"] = str(e)
+
+    # Test 2: HTTP connectivity
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.head(
+                f"{settings.AVAC_BASE_URL}/login/index.php",
+                follow_redirects=True,
+            )
+            results["http_status"] = resp.status_code
+            results["http_ok"] = resp.status_code < 400
+            results["http_final_url"] = str(resp.url)
+    except Exception as e:
+        results["http_ok"] = False
+        results["http_error"] = str(e)
+
+    # Test 3: Microsoft SSO reachable
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.head(
+                "https://login.microsoftonline.com",
+                follow_redirects=True,
+            )
+            results["microsoft_sso_ok"] = resp.status_code < 400
+    except Exception as e:
+        results["microsoft_sso_ok"] = False
+        results["microsoft_sso_error"] = str(e)
+
+    results["all_ok"] = results.get("dns_resolved", False) and results.get("http_ok", False) and results.get("microsoft_sso_ok", False)
+    return results
+
+
 @router.post("/etl/upload-practicas")
 async def upload_practicas_files(
     background_tasks: BackgroundTasks,
