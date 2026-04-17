@@ -12,6 +12,7 @@ from sqlalchemy import distinct as sa_distinct
 from ..database import get_db
 from ..models import Student, Intervention, Grade, AvacAccess
 from ..models.enrollment import Enrollment
+from ..models.course_config import SemesterConfig
 from ..auth.jwt import get_current_user
 from ..models.user import User
 
@@ -107,6 +108,45 @@ def get_risk_dashboard(
     Lista de estudiantes en riesgo con sus indicadores.
     Equivalente a EstudiantesEnRiesgo, pero filtrable y paginada.
     """
+    from datetime import datetime, timezone
+    from sqlalchemy import or_
+
+    # ── Capear dias_sin_acceso al inicio del bloque actual ──────────────
+    semconfig = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
+    max_dias_periodo = None
+    if semconfig:
+        bloque_inicio = None
+        if semconfig.bloque_actual == "2" and semconfig.bloque2_inicio:
+            bloque_inicio = semconfig.bloque2_inicio
+        elif semconfig.bloque1_inicio:
+            bloque_inicio = semconfig.bloque1_inicio
+        if bloque_inicio:
+            if bloque_inicio.tzinfo is None:
+                bloque_inicio = bloque_inicio.replace(tzinfo=timezone.utc)
+            max_dias_periodo = (datetime.now(timezone.utc) - bloque_inicio).days
+
+    # Determinar variantes de periodo para AvacAccess
+    _, pf = _period_student_ids(db, periodo)
+    # "actual" no matchea en AvacAccess — resolver al semestre activo real
+    if pf == "actual" and semconfig:
+        pf = semconfig.semestre
+    if pf.startswith("P"):
+        periodo_variants = (pf, pf[1:])
+    else:
+        periodo_variants = (pf, f"P{pf}")
+
+    # Pre-load per-period AvacAccess: max dias_sin_acceso por estudiante
+    avac_q = db.query(
+        AvacAccess.student_id,
+        func.max(AvacAccess.dias_sin_acceso),
+    ).filter(
+        AvacAccess.student_id.isnot(None),
+        AvacAccess.dias_sin_acceso.isnot(None),
+    )
+    if pf != "todos":
+        avac_q = avac_q.filter(AvacAccess.periodo.in_(periodo_variants))
+    avac_inactividad = dict(avac_q.group_by(AvacAccess.student_id).all())
+
     # Subquery: contar intervenciones y última intervención por estudiante
     interv_sq = (
         db.query(
@@ -155,6 +195,13 @@ def get_risk_dashboard(
 
     output = []
     for student, total_interv, ultima_interv in results:
+        # Usar dias_sin_acceso del periodo (AvacAccess), capeado al inicio del bloque
+        dias = avac_inactividad.get(student.id)
+        if dias is None:
+            dias = student.dias_sin_acceso  # fallback al global
+        if dias is not None and max_dias_periodo is not None:
+            dias = min(dias, max_dias_periodo)
+
         output.append(RiskStudentOut(
             id=student.id,
             nombre=student.nombre,
@@ -163,7 +210,7 @@ def get_risk_dashboard(
             carrera=student.carrera,
             nivel_riesgo=student.nivel_riesgo,
             indice_compromiso=student.indice_compromiso,
-            dias_sin_acceso=student.dias_sin_acceso,
+            dias_sin_acceso=dias,
             porcentaje_tareas=student.porcentaje_tareas,
             promedio_calificaciones=student.promedio_calificaciones,
             estado_matricula=student.estado_matricula,
