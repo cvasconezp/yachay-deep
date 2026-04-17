@@ -18,6 +18,9 @@ function TabSistema() {
   const [mlStatus, setMlStatus] = useState(null);
   const [mlLoading, setMlLoading] = useState(false);
   const [mlMsg, setMlMsg] = useState("");
+  const [scrapingLoading, setScrapingLoading] = useState(false);
+  const [scrapingMsg, setScrapingMsg] = useState("");
+  const [scrapingMode, setScrapingMode] = useState("full");
 
   const loadMlStatus = () => api.getPredictionStatus().then(setMlStatus).catch(() => {});
 
@@ -42,6 +45,21 @@ function TabSistema() {
       setEtlMsg("Error: " + e.message);
     } finally {
       setEtlLoading(false);
+    }
+  };
+
+  const handleTriggerScraping = async () => {
+    if (!window.confirm(`¿Iniciar scraping en modo "${scrapingMode}"? Esto ejecutará el workflow de GitHub Actions y puede tardar varios minutos.`)) return;
+    setScrapingLoading(true);
+    setScrapingMsg("");
+    try {
+      const result = await api.triggerScraping(scrapingMode);
+      setScrapingMsg(result.message || "Scraping disparado correctamente en GitHub Actions");
+      setTimeout(() => loadRuns(1), 5000);
+    } catch (e) {
+      setScrapingMsg("Error: " + e.message);
+    } finally {
+      setScrapingLoading(false);
     }
   };
 
@@ -92,6 +110,37 @@ function TabSistema() {
           {etlMsg && (
             <div className={`text-sm mt-3 px-4 py-2 rounded-lg ${etlMsg.startsWith("Error") ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
               {etlMsg}
+            </div>
+          )}
+        </div>
+
+        <div className="mt-4 pt-4 border-t border-gray-100">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleTriggerScraping}
+              disabled={scrapingLoading}
+              className="bg-indigo-600 text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-60"
+            >
+              {scrapingLoading ? "Disparando scraping..." : "Iniciar Scraping AVAC"}
+            </button>
+            <select
+              value={scrapingMode}
+              onChange={(e) => setScrapingMode(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white"
+              disabled={scrapingLoading}
+            >
+              <option value="full">Completo (ingresos + tareas)</option>
+              <option value="ingresos">Solo ingresos AVAC</option>
+              <option value="tareas">Solo estado de tareas</option>
+            </select>
+          </div>
+          <p className="text-xs text-gray-400 mt-2">
+            Ejecuta el scraping de AVAC en GitHub Actions. Descarga datos de la plataforma y luego corre el ETL automáticamente.
+            Puede tardar 30–60 minutos dependiendo de la cantidad de cursos.
+          </p>
+          {scrapingMsg && (
+            <div className={`text-sm mt-3 px-4 py-2 rounded-lg ${scrapingMsg.startsWith("Error") ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
+              {scrapingMsg}
             </div>
           )}
         </div>
