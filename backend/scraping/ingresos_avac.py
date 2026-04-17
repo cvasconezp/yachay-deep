@@ -596,16 +596,36 @@ def get_session_cookie(cookie_value: str, base_url: str) -> requests.Session:
 
 def get_active_codigos(db=None) -> list:
     """
-    Lee los códigos de cursos activos desde la BD (tabla course_configs).
-    Si no hay BD disponible, retorna lista vacía.
+    Lee los códigos de cursos activos del semestre vigente desde la BD.
+    Filtra por semestre activo + bloque actual + activo=True.
+    Si no hay BD o semestre activo, retorna lista vacía.
     """
     if db is None:
         return []
     try:
-        from ..models.course_config import CourseConfig
-        configs = db.query(CourseConfig).filter(CourseConfig.activo == True).all()
+        from ..models.course_config import CourseConfig, SemesterConfig
+
+        # Obtener semestre activo
+        semconfig = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
+        if semconfig is None:
+            logger.warning("No hay semestre activo configurado — no se pueden obtener cursos")
+            return []
+
+        query = db.query(CourseConfig).filter(
+            CourseConfig.semestre == semconfig.semestre,
+            CourseConfig.activo == True,
+        )
+
+        # Filtrar por bloque si está configurado
+        bloque = semconfig.bloque_actual
+        if bloque:
+            query = query.filter(
+                (CourseConfig.bloque == bloque) | (CourseConfig.bloque == "ambos") | (CourseConfig.bloque.is_(None))
+            )
+
+        configs = query.all()
         codigos = [c.codigo_avac for c in configs]
-        logger.info(f"📋 {len(codigos)} cursos activos leídos desde BD")
+        logger.info(f"📋 {len(codigos)} cursos activos para {semconfig.semestre} (bloque {bloque}) leídos desde BD")
         return codigos
     except Exception as e:
         logger.warning(f"No se pudieron leer cursos desde BD: {e}")
