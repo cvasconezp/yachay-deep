@@ -99,15 +99,37 @@ class AlertCountResponse(BaseModel):
 def get_pending_alerts(
     limit: int = Query(200, le=1000),
     offset: int = Query(0, ge=0),
+    carrera: Optional[str] = None,
+    periodo: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Retorna alertas sin leer, ordenadas por recientes primero.
-    Solo incluye alertas de estudiantes del periodo activo."""
-    if not _active_period_has_data(db):
-        return []
+    Solo incluye alertas de estudiantes del periodo activo.
+    Filtros opcionales: carrera (case-insensitive contains), periodo (override del activo)."""
 
-    period_sids = _active_period_student_ids(db)
+    # Si se proporciona periodo explícito, construir student_ids para ese periodo
+    if periodo:
+        pf = periodo.strip()
+
+        if pf.startswith("P"):
+            raw = pf[1:]
+            g_cond = or_(Grade.periodo == pf, Grade.periodo == raw, Grade.periodo.is_(None))
+            e_cond = or_(Enrollment.periodo == pf, Enrollment.periodo == raw)
+            a_cond = or_(AvacAccess.periodo == pf, AvacAccess.periodo == raw)
+        else:
+            g_cond = or_(Grade.periodo == pf, Grade.periodo == f"P{pf}", Grade.periodo.is_(None))
+            e_cond = or_(Enrollment.periodo == pf, Enrollment.periodo == f"P{pf}")
+            a_cond = or_(AvacAccess.periodo == pf, AvacAccess.periodo == f"P{pf}")
+
+        grade_ids = {r[0] for r in db.query(Grade.student_id).filter(g_cond).distinct().all()}
+        enroll_ids = {r[0] for r in db.query(Enrollment.student_id).filter(e_cond).distinct().all()}
+        avac_ids = {r[0] for r in db.query(AvacAccess.student_id).filter(a_cond, AvacAccess.student_id.isnot(None)).distinct().all()}
+        period_sids = grade_ids | enroll_ids | avac_ids
+    else:
+        if not _active_period_has_data(db):
+            return []
+        period_sids = _active_period_student_ids(db)
 
     q = (
         db.query(AlertEvent, Student.nombre, Student.carrera)
@@ -115,9 +137,13 @@ def get_pending_alerts(
         .filter(AlertEvent.leido == False)
     )
 
-    # Filtrar solo estudiantes del periodo activo
+    # Filtrar solo estudiantes del periodo
     if period_sids:
         q = q.filter(AlertEvent.student_id.in_(period_sids))
+
+    # Filtrar por carrera (case-insensitive contains)
+    if carrera:
+        q = q.filter(func.lower(Student.carrera).contains(carrera.lower()))
 
     rows = (
         q.order_by(AlertEvent.created_at.desc())

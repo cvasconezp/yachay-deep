@@ -50,6 +50,33 @@ class InterventionCreate(BaseModel):
         return _strip_str(v)
 
 
+class BulkInterventionCreate(BaseModel):
+    student_ids: list[int]
+    medio: str = Field(..., max_length=100)
+    motivo: str = Field(..., max_length=200)
+    estado: str = Field(..., max_length=100)
+    asignatura: Optional[str] = Field(None, max_length=200)
+    docente: Optional[str] = Field(None, max_length=200)
+    observacion: Optional[str] = Field(None, max_length=2000)
+    resultado: Optional[str] = Field(None, max_length=200)
+    requiere_seguimiento: Optional[str] = Field(None, max_length=10)
+    derivar_bienestar: Optional[bool] = False
+    derivar_financiero: Optional[bool] = False
+    derivar_coordinacion: Optional[bool] = False
+    derivar_docente: Optional[bool] = False
+    tipo_evento_critico: Optional[str] = Field(None, max_length=200)
+    reporte_bienestar: Optional[str] = Field(None, max_length=5000)
+    reporte_derivacion: Optional[str] = Field(None, max_length=5000)
+    periodo: Optional[str] = Field(None, max_length=20)
+
+    @field_validator("medio", "motivo", "estado", "asignatura", "docente",
+                     "observacion", "resultado", "tipo_evento_critico", "reporte_bienestar",
+                     "reporte_derivacion", mode="before")
+    @classmethod
+    def strip_whitespace(cls, v):
+        return _strip_str(v)
+
+
 class InterventionUpdate(BaseModel):
     medio: Optional[str] = Field(None, max_length=100)
     motivo: Optional[str] = Field(None, max_length=200)
@@ -183,6 +210,96 @@ def create_intervention(
         db.refresh(intervention)
 
     return intervention
+
+
+@router.post("/bulk")
+def bulk_create_interventions(
+    payload: BulkInterventionCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Crea la misma intervención para múltiples estudiantes a la vez.
+    Retorna el conteo de creadas y una lista de errores (si los hay).
+    """
+    # Auto-poblar periodo desde SemesterConfig si no se envía
+    _periodo = payload.periodo
+    if not _periodo:
+        from ..models.course_config import SemesterConfig
+        semconfig = db.query(SemesterConfig).order_by(SemesterConfig.id.desc()).first()
+        if semconfig:
+            _periodo = semconfig.semestre
+
+    created = 0
+    errors = []
+
+    for student_id in payload.student_ids:
+        student = db.query(Student).filter(Student.id == student_id).first()
+        if not student:
+            errors.append({"student_id": student_id, "detail": "Estudiante no encontrado"})
+            continue
+
+        try:
+            intervention = Intervention(
+                student_id=student_id,
+                monitor_id=current_user.id,
+                monitor_nombre=current_user.nombre,
+                carrera=student.carrera,
+                medio=payload.medio,
+                motivo=payload.motivo,
+                estado=payload.estado,
+                asignatura=payload.asignatura,
+                docente=payload.docente,
+                observacion=payload.observacion,
+                resultado=payload.resultado,
+                requiere_seguimiento=payload.requiere_seguimiento,
+                derivar_bienestar=payload.derivar_bienestar,
+                derivar_financiero=payload.derivar_financiero,
+                derivar_coordinacion=payload.derivar_coordinacion,
+                derivar_docente=payload.derivar_docente,
+                tipo_evento_critico=payload.tipo_evento_critico,
+                reporte_bienestar=payload.reporte_bienestar,
+                reporte_derivacion=payload.reporte_derivacion,
+                periodo=_periodo,
+                snapshot_compromiso=student.indice_compromiso,
+                snapshot_dias_sin_acceso=student.dias_sin_acceso,
+                snapshot_porcentaje_tareas=student.porcentaje_tareas,
+                snapshot_prob_desercion=student.prob_desercion,
+                snapshot_prob_reprobacion=student.prob_reprobacion,
+                snapshot_nivel_riesgo=student.nivel_riesgo,
+            )
+            db.add(intervention)
+            db.flush()
+
+            # Enviar correo a Bienestar si se solicitó derivación
+            if payload.derivar_bienestar:
+                from ..services.email import send_bienestar_report
+
+                student_data = {
+                    "nombre": student.nombre,
+                    "cedula": student.cedula,
+                    "correo": student.correo,
+                    "correo_institucional": student.correo_institucional,
+                    "telefono": student.telefono,
+                    "whatsapp": getattr(student, "whatsapp", None),
+                    "carrera": student.carrera,
+                    "sede": student.sede,
+                }
+                intervention_data = {
+                    "tipo_evento_critico": payload.tipo_evento_critico,
+                    "reporte_bienestar": payload.reporte_bienestar,
+                    "motivo": payload.motivo,
+                    "observacion": payload.observacion,
+                }
+                email_ok = send_bienestar_report(student_data, intervention_data, current_user.nombre)
+                intervention.email_enviado = email_ok
+
+            created += 1
+        except Exception as e:
+            errors.append({"student_id": student_id, "detail": str(e)})
+
+    db.commit()
+    return {"created": created, "errors": errors}
 
 
 @router.patch("/{intervention_id}", response_model=InterventionResponse)

@@ -120,6 +120,7 @@ class ApiClient {
 
   // ── Interventions ──
   createIntervention(data) { return this.post("/interventions/", data); }
+  bulkCreateInterventions(data) { return this.post("/interventions/bulk", data); }
   listInterventions(studentId) { return this.get(`/interventions/?student_id=${studentId}`); }
   interventionStats() { return this.get("/interventions/stats"); }
   updateIntervention(id, data) { return this.patch(`/interventions/${id}`, data); }
@@ -244,7 +245,10 @@ class ApiClient {
 
   // ── Alerts ──
   getAlertCount() { return this.get("/alerts/count"); }
-  getAlertsPending() { return this.get("/alerts/pending"); }
+  getAlertsPending(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.get(`/alerts/pending${qs ? "?" + qs : ""}`);
+  }
   markAlertRead(id) { return this.patch(`/alerts/${id}/read`, {}); }
   generateAlerts() { return this.post("/alerts/generate", {}); }
 

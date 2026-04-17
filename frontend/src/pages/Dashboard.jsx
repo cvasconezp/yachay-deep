@@ -4,6 +4,7 @@ import { api } from "../services/api";
 import { RiskBadge, CompromisoBar, PredictionBadge } from "../components/RiskBadge";
 import { PeriodSelector } from "../components/PeriodSelector";
 import ExportExcelButton from "../components/ExportExcelButton";
+import BulkInterventionModal from "../components/BulkInterventionModal";
 
 const RISK_ORDER = { Alto: 0, Medio: 1, Bajo: 2 };
 
@@ -29,11 +30,13 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [filtros, setFiltros] = useState({ carrera: "", nivel_riesgo: "", solo_sin_intervencion: false, periodo: "" });
-  const [cardFilter, setCardFilter] = useState(null); // Filtro dinámico por tarjeta
+  const [cardFilter, setCardFilter] = useState(null);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [successMsg, setSuccessMsg] = useState("");
   const navigate = useNavigate();
 
   const loadData = useCallback(async () => {
-    // No cargar hasta que PeriodSelector haya auto-seleccionado el periodo
     if (!filtros.periodo) return;
 
     setLoading(true);
@@ -61,6 +64,7 @@ export default function Dashboard() {
       setStudents(sorted);
       setStats(statsData);
       setCarreras(carrerasData);
+      setSelectedIds(new Set());
     } catch (e) {
       console.error(e);
       setError(e.message || "No se pudieron cargar los datos.");
@@ -73,7 +77,6 @@ export default function Dashboard() {
 
   const riskCounts = stats?.por_nivel_riesgo?.reduce((acc, r) => ({ ...acc, [r.nivel]: r.total }), {}) || {};
 
-  // Filtrado dinámico por tarjeta
   const filteredStudents = useMemo(() => {
     if (!cardFilter) return students;
     switch (cardFilter) {
@@ -85,7 +88,34 @@ export default function Dashboard() {
     }
   }, [students, cardFilter]);
 
-  // Tarjetas de resumen interactivas
+  // Selection handlers
+  const toggleSelect = (id, e) => {
+    e.stopPropagation();
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredStudents.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredStudents.map(s => s.id)));
+    }
+  };
+
+  const selectedStudents = filteredStudents.filter(s => selectedIds.has(s.id));
+
+  const handleBulkSaved = (result) => {
+    setShowBulkModal(false);
+    setSelectedIds(new Set());
+    setSuccessMsg(`${result.created} intervención${result.created !== 1 ? "es" : ""} registrada${result.created !== 1 ? "s" : ""}`);
+    setTimeout(() => setSuccessMsg(""), 5000);
+    loadData();
+  };
+
   const cards = [
     { key: null, label: "Total monitoreados", value: stats?.total_estudiantes ?? "—", color: "text-blue-700", bg: "bg-blue-50 border-blue-200" },
     { key: "alto", label: "Riesgo Alto", value: riskCounts["Alto"] ?? 0, color: "text-red-700", bg: "bg-red-50 border-red-200" },
@@ -108,6 +138,11 @@ export default function Dashboard() {
           {error}
         </div>
       )}
+      {successMsg && (
+        <div className="bg-green-50 text-green-700 border border-green-200 rounded-lg px-4 py-3 text-sm mb-4 mt-4 flex items-center gap-2">
+          <span>✓</span> {successMsg}
+        </div>
+      )}
 
       {/* Aviso: período sin datos de AVAC/calificaciones */}
       {!loading && stats && stats.tiene_datos_periodo === false && (
@@ -121,7 +156,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Tarjetas interactivas — ocultar si no hay datos del periodo */}
+      {/* Tarjetas interactivas */}
       {stats?.tiene_datos_periodo !== false && <div className="grid grid-cols-2 md:grid-cols-4 gap-3 my-5">
         {cards.map(card => {
           const isActive = cardFilter === card.key;
@@ -154,7 +189,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Filtros — siempre visibles para cambiar de periodo */}
+      {/* Filtros */}
       <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4 flex flex-wrap gap-3 items-end">
         <PeriodSelector
           value={filtros.periodo}
@@ -202,7 +237,30 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Tabla — ocultar si no hay datos del periodo */}
+      {/* Selection bar */}
+      {selectedIds.size > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 mb-4 flex items-center justify-between">
+          <span className="text-sm text-blue-800 font-medium">
+            {selectedIds.size} estudiante{selectedIds.size !== 1 ? "s" : ""} seleccionado{selectedIds.size !== 1 ? "s" : ""}
+          </span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="text-xs px-3 py-1.5 border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"
+            >
+              Deseleccionar
+            </button>
+            <button
+              onClick={() => setShowBulkModal(true)}
+              className="text-xs px-4 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+            >
+              Registrar Intervención ({selectedIds.size})
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Tabla */}
       {stats?.tiene_datos_periodo !== false && <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         {error ? (
           <div className="text-center py-20">
@@ -218,6 +276,15 @@ export default function Dashboard() {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
+                <th className="px-3 py-3 w-10">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.size === filteredStudents.length && filteredStudents.length > 0}
+                    onChange={toggleSelectAll}
+                    className="rounded"
+                    title="Seleccionar todos"
+                  />
+                </th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-700">Estudiante</th>
                 <th className="text-left px-4 py-3 font-semibold text-gray-700">Carrera</th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-700">Riesgo</th>
@@ -234,8 +301,16 @@ export default function Dashboard() {
                   key={s.id}
                   onClick={() => navigate(`/ficha/${s.id}`)}
                   className={`border-b border-gray-100 cursor-pointer hover:bg-blue-50 transition-colors
-                    ${s.nivel_riesgo === "Alto" ? "bg-red-50/30" : ""}`}
+                    ${selectedIds.has(s.id) ? "bg-blue-50/60" : s.nivel_riesgo === "Alto" ? "bg-red-50/30" : ""}`}
                 >
+                  <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(s.id)}
+                      onChange={e => toggleSelect(s.id, e)}
+                      className="rounded"
+                    />
+                  </td>
                   <td className="px-4 py-3">
                     <div className="font-medium text-gray-900">{s.nombre}</div>
                     <div className="text-xs text-gray-400">{s.correo_institucional}</div>
@@ -263,6 +338,16 @@ export default function Dashboard() {
           </table>
         )}
       </div>}
+
+      {/* Bulk intervention modal */}
+      {showBulkModal && (
+        <BulkInterventionModal
+          selectedStudents={selectedStudents}
+          periodo={filtros.periodo}
+          onClose={() => setShowBulkModal(false)}
+          onSaved={handleBulkSaved}
+        />
+      )}
     </div>
   );
 }
