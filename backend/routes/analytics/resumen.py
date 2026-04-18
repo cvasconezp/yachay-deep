@@ -12,7 +12,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, distinct
 
 from ...database import get_db
-from ...models import Student, Grade, Intervention, Enrollment
+from ...models import Student, Grade, Intervention, Enrollment, AvacAccess
+from ...models.course_config import CourseConfig, SemesterConfig
 from ...auth.jwt import get_current_user
 from ...models.user import User
 from ._helpers import apply_periodo_filter
@@ -77,29 +78,44 @@ def get_periodos_disponibles(
 
 
 def _resumen_period_student_ids(db: Session, periodo: Optional[str], carrera_sids=None):
-    """Union de student_ids de Grade + Enrollment para el período (consistente con Dashboard)."""
+    """Union de student_ids de Grade + Enrollment + AvacAccess para el período.
+
+    Incluye AvacAccess (con fallback a periodo=NULL) para ser consistente con
+    el Dashboard de Riesgo y no perder estudiantes que solo tienen datos AVAC.
+    """
     from sqlalchemy import or_
     pf = periodo if periodo else "actual"
 
     grade_sq = db.query(Grade.student_id).distinct()
     enroll_sq = db.query(Enrollment.student_id).distinct()
+    avac_sq = db.query(AvacAccess.student_id).filter(AvacAccess.student_id.isnot(None)).distinct()
 
     if pf == "actual":
         grade_sq = grade_sq.filter(Grade.periodo.is_(None))
         enroll_sq = enroll_sq.filter(Enrollment.periodo.is_(None))
+        avac_sq = avac_sq.filter(AvacAccess.periodo.is_(None))
     elif pf != "todos":
         if pf.startswith("P"):
             grade_sq = grade_sq.filter(or_(Grade.periodo == pf, Grade.periodo == pf[1:]))
             enroll_sq = enroll_sq.filter(or_(Enrollment.periodo == pf, Enrollment.periodo == pf[1:]))
+            avac_sq = avac_sq.filter(or_(
+                AvacAccess.periodo == pf, AvacAccess.periodo == pf[1:],
+                AvacAccess.periodo.is_(None),
+            ))
         else:
             grade_sq = grade_sq.filter(or_(Grade.periodo == pf, Grade.periodo == f"P{pf}"))
             enroll_sq = enroll_sq.filter(or_(Enrollment.periodo == pf, Enrollment.periodo == f"P{pf}"))
+            avac_sq = avac_sq.filter(or_(
+                AvacAccess.periodo == pf, AvacAccess.periodo == f"P{pf}",
+                AvacAccess.periodo.is_(None),
+            ))
 
     if carrera_sids:
         grade_sq = grade_sq.filter(Grade.student_id.in_(carrera_sids))
         enroll_sq = enroll_sq.filter(Enrollment.student_id.in_(carrera_sids))
+        avac_sq = avac_sq.filter(AvacAccess.student_id.in_(carrera_sids))
 
-    return grade_sq.union(enroll_sq), pf
+    return grade_sq.union(enroll_sq).union(avac_sq), pf
 
 
 @router.get("/resumen")
@@ -111,7 +127,6 @@ def get_resumen_datos(
 ):
     """Resumen estadístico general y por carrera."""
     from sqlalchemy import or_
-    from ...models.course_config import SemesterConfig
     today = date.today()
 
     _carrera_sids = None
@@ -149,8 +164,30 @@ def get_resumen_datos(
     enrollments = enroll_q.all()
     enroll_student_ids = set(e.student_id for e in enrollments)
 
-    # Union: estudiantes con grades O enrollments (consistente con Dashboard)
-    all_period_sids = grade_student_ids | enroll_student_ids
+    # AvacAccess student IDs del periodo (incluir NULL como fallback)
+    from sqlalchemy import or_ as _or
+    avac_pf = periodo_filter
+    semconfig = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
+    if avac_pf == "actual" and semconfig and semconfig.semestre:
+        avac_pf = semconfig.semestre
+    avac_sid_q = db.query(AvacAccess.student_id).filter(AvacAccess.student_id.isnot(None)).distinct()
+    if avac_pf not in ("actual", "todos"):
+        if avac_pf.startswith("P"):
+            avac_variants = (avac_pf, avac_pf[1:])
+        else:
+            avac_variants = (avac_pf, f"P{avac_pf}")
+        avac_sid_q = avac_sid_q.filter(_or(
+            AvacAccess.periodo.in_(avac_variants),
+            AvacAccess.periodo.is_(None),
+        ))
+    elif avac_pf == "actual":
+        avac_sid_q = avac_sid_q.filter(AvacAccess.periodo.is_(None))
+    if carrera and _carrera_sids:
+        avac_sid_q = avac_sid_q.filter(AvacAccess.student_id.in_(_carrera_sids))
+    avac_student_ids = set(r[0] for r in avac_sid_q.all())
+
+    # Union: estudiantes con grades O enrollments O accesos AVAC
+    all_period_sids = grade_student_ids | enroll_student_ids | avac_student_ids
 
     base_q = db.query(Student)
     if carrera:
@@ -331,6 +368,15 @@ def get_resumen_datos(
     global_stats["matriculas_pagadas"] = enroll_pagado
     global_stats["matriculas_con_repitencia"] = enroll_repitencias
     global_stats["tiene_enrollments"] = len(enrollments) > 0
+
+    # ── Aulas virtuales: contar código_avac distintos en CourseConfig ──
+    # (sin filtro de bloque — el resumen muestra todas las aulas del periodo)
+    aulas_q = db.query(func.count(distinct(CourseConfig.codigo_avac))).filter(
+        CourseConfig.codigo_avac.isnot(None),
+    )
+    if carrera:
+        aulas_q = aulas_q.filter(func.lower(CourseConfig.carrera).contains(carrera.lower()))
+    global_stats["total_aulas_virtuales"] = aulas_q.scalar() or 0
 
     # Intervenciones
     interv_base_q = db.query(Intervention)

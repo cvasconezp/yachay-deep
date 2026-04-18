@@ -327,10 +327,11 @@ export default function ResumenDatos() {
       {!loading && g.total_estudiantes > 0 && (
         <>
           {/* ── KPI Row ─── */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mb-5">
             <KPICard icon="🎓" label="Estudiantes" value={g.total_estudiantes?.toLocaleString()} color="text-blue-700" bg="bg-blue-50/60" />
             <KPICard icon="📚" label="Carreras" value={g.total_carreras} color="text-purple-700" bg="bg-purple-50/60" />
             <KPICard icon="📖" label="Asignaturas" value={g.total_asignaturas} color="text-cyan-700" bg="bg-cyan-50/60" />
+            <KPICard icon="🖥️" label="Aulas Virtuales" value={g.total_aulas_virtuales ?? "—"} color="text-indigo-700" bg="bg-indigo-50/60" sub="cursos en AVAC" />
             <KPICard icon="👨‍🏫" label="Docentes" value={g.total_docentes_enrollment || g.total_docentes || "—"} color="text-gray-700" />
             <KPICard icon="📊" label="Prom. Calificaciones" value={g.promedio_calificaciones ?? "Sin datos"} color="text-gray-700" sub={g.promedio_calificaciones ? "sobre 100" : "Aún sin AVAC"} />
             <KPICard icon="📋" label="Total Matrículas" value={g.total_matriculas?.toLocaleString()} color="text-teal-700" bg="bg-teal-50/60" sub="registros est×materia" />
