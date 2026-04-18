@@ -226,7 +226,7 @@ def get_resumen_datos(
                 enroll_pagado["NO"] += 1
             else:
                 enroll_pagado["Otro"] += 1
-        if e.numero_repitencias and e.numero_repitencias > 0:
+        if e.numero_repitencias and e.numero_repitencias > 1:
             enroll_repitencias += 1
 
     # Carreras from students too
@@ -246,11 +246,11 @@ def get_resumen_datos(
         if g.student_id in student_ids:
             if g.nota_final is not None and g.nota_final < 70:
                 reprobados_ids.add(g.student_id)
-            if g.numero_repitencias and g.numero_repitencias > 0:
+            if g.numero_repitencias and g.numero_repitencias > 1:
                 repitentes_ids.add(g.student_id)
     # Repitentes desde enrollments (complemento cuando no hay grades)
     for e in enrollments:
-        if e.student_id in student_ids and e.numero_repitencias and e.numero_repitencias > 0:
+        if e.student_id in student_ids and e.numero_repitencias and e.numero_repitencias > 1:
             repitentes_ids.add(e.student_id)
 
     docentes_q = db.query(func.count(distinct(Grade.docente))).filter(

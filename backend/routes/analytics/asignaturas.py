@@ -70,7 +70,7 @@ def _get_enrollment_results(db: Session, periodo: Optional[str], carrera: Option
         Enrollment.asignatura, Enrollment.carrera, Enrollment.docente,
         Enrollment.nivel, Enrollment.nombre_grupo.label("grupo"),
         func.count(Enrollment.id).label("total_estudiantes"),
-        func.sum(case((Enrollment.numero_repitencias > 0, 1), else_=0)).label("total_repitentes"),
+        func.sum(case((Enrollment.numero_repitencias > 1, 1), else_=0)).label("total_repitentes"),
     )
     query, _ = _enrollment_periodo_filter(query, periodo)
     query = query.group_by(
@@ -135,7 +135,7 @@ def get_asignaturas_analytics(
         func.min(Grade.nota_final).label("nota_minima"),
         func.sum(case((Grade.nota_final >= 70, 1), else_=0)).label("aprobados"),
         func.sum(case((and_(Grade.nota_final < 70, Grade.nota_final.isnot(None)), 1), else_=0)).label("reprobados"),
-        func.sum(case((Grade.numero_repitencias > 0, 1), else_=0)).label("total_repitentes"),
+        func.sum(case((Grade.numero_repitencias > 1, 1), else_=0)).label("total_repitentes"),
     )
     query, _ = apply_periodo_filter(query, periodo)
     query = query.group_by(Grade.asignatura, Grade.carrera, Grade.docente, Grade.nivel, Grade.grupo)
@@ -273,7 +273,7 @@ def get_asignatura_detalle(
             "promedio_general": None,
             "aprobados": 0, "reprobados": 0,
             "porcentaje_aprobacion": None,
-            "total_repitentes": sum(1 for e in estudiantes_out if e["numero_repitencias"] and e["numero_repitencias"] > 0),
+            "total_repitentes": sum(1 for e in estudiantes_out if e["numero_repitencias"] and e["numero_repitencias"] > 1),
             "estudiantes": estudiantes_out,
             "fuente": "enrollment",
         }
@@ -315,6 +315,6 @@ def get_asignatura_detalle(
         "promedio_general": round(sum(e["nota_final"] or 0 for e in estudiantes_out) / max(total, 1), 1),
         "aprobados": aprobados, "reprobados": total - aprobados,
         "porcentaje_aprobacion": round((aprobados / max(total, 1)) * 100, 1),
-        "total_repitentes": sum(1 for e in estudiantes_out if e["numero_repitencias"] and e["numero_repitencias"] > 0),
+        "total_repitentes": sum(1 for e in estudiantes_out if e["numero_repitencias"] and e["numero_repitencias"] > 1),
         "estudiantes": estudiantes_out,
     }

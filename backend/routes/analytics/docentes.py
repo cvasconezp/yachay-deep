@@ -75,7 +75,7 @@ def _docentes_from_enrollment(db: Session, periodo: Optional[str], carrera: Opti
             docente_map[d]["niveles"].add(e.nivel)
         if e.student_id:
             docente_map[d]["sids"].add(e.student_id)
-        if e.numero_repitencias and e.numero_repitencias > 0:
+        if e.numero_repitencias and e.numero_repitencias > 1:
             docente_map[d]["repitentes"] += 1
 
     output = []

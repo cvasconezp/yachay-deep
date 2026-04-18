@@ -513,9 +513,21 @@ def calcular_indice_compromiso(
 
     indice = round(puntaje_acceso + puntaje_tareas + puntaje_rendimiento + puntaje_admin, 3)
 
+    # Contar cuántos componentes tienen datos reales (no defaults por ausencia)
+    data_points = sum([
+        dias_sin_acceso is not None,
+        tareas_totales > 0,
+        promedio_calificaciones is not None and promedio_calificaciones > 0,
+        estado_matricula is not None,
+    ])
+
     # [P4-FIX] Clasificación con umbrales ajustados para mayor sensibilidad
     # 0.65 y 0.35 en vez de 0.7 y 0.4 — detecta riesgo antes
-    if indice >= 0.65:
+    # PERO: con menos de 2 fuentes de datos, no clasificar (datos insuficientes)
+    if data_points < 2:
+        nivel = None       # datos insuficientes para clasificar
+        color = "#94a3b8"  # gris
+    elif indice >= 0.65:
         nivel = "Bajo"
         color = "#00B050"   # verde
     elif indice >= 0.35:

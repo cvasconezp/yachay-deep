@@ -21,6 +21,7 @@ from .transformers import (
     transform_personales,
     transform_datos_especificos,
     calcular_indicadores_estudiantes,
+    calcular_indice_compromiso,
     extract_courses_from_reporte,
     transform_resumen_general,
     transform_enrollments,
@@ -1288,14 +1289,27 @@ class ETLPipeline:
             # ── Indicadores de riesgo (siempre desde df_master) ────────────────
             dias = _nan_to_none(row.get("dias_sin_acceso_max"))
             student.dias_sin_acceso = int(dias) if dias is not None else None
-            student.indice_compromiso = _nan_to_none(row.get("indice_compromiso"))
-            student.nivel_riesgo = row.get("nivel_riesgo")
             student.porcentaje_tareas = _nan_to_none(row.get("porcentaje_tareas"))
 
             # Promedio de calificaciones (del transformer, escala 0-100)
             promedio_cal = _nan_to_none(row.get("promedio_notas"))
             if promedio_cal is not None:
                 student.promedio_calificaciones = round(float(promedio_cal), 2)
+
+            # Recalcular riesgo con estado_matricula del Student (si existe)
+            # El transformer no tiene acceso a estado_matricula; recalcular aquí
+            _entregas = _nan_to_none(row.get("total_entregas"))
+            _tot_tareas = _nan_to_none(row.get("total_tareas"))
+            ind = calcular_indice_compromiso(
+                dias_sin_acceso=dias,
+                tareas_entregadas=int(_entregas) if _entregas is not None else 0,
+                tareas_totales=int(_tot_tareas) if _tot_tareas is not None else 0,
+                notas=[],
+                promedio_calificaciones=promedio_cal,
+                estado_matricula=student.estado_matricula,
+            )
+            student.indice_compromiso = ind.get("indice_compromiso")
+            student.nivel_riesgo = ind.get("nivel_riesgo")
 
             count += 1
 
