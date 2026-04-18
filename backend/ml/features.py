@@ -254,24 +254,54 @@ def build_features(db: Session) -> pd.DataFrame:
     return features
 
 
+def _get_active_periodo(db: Session) -> Optional[str]:
+    """Obtiene el periodo del semestre activo desde SemesterConfig."""
+    try:
+        from ..models.course_config import SemesterConfig
+        sc = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
+        return sc.semestre.strip() if sc and sc.semestre else None
+    except Exception:
+        return None
+
+
+def _build_periodo_condition(periodo: Optional[str]) -> str:
+    """Construye la condición SQL para filtrar por periodo activo.
+    Maneja ambos formatos (P68/68) y fallback a NULL."""
+    if not periodo:
+        return "g.periodo IS NULL"
+
+    conditions = ["g.periodo IS NULL"]  # siempre incluir NULL como fallback
+    if periodo.startswith("P"):
+        conditions.append(f"g.periodo = '{periodo}'")
+        conditions.append(f"g.periodo = '{periodo[1:]}'")
+    else:
+        conditions.append(f"g.periodo = '{periodo}'")
+        conditions.append(f"g.periodo = 'P{periodo}'")
+    return f"({' OR '.join(conditions)})"
+
+
 def build_current_features(db: Session) -> pd.DataFrame:
     """
-    Construye features para estudiantes del semestre actual (periodo IS NULL).
-    Incluye carrera del estudiante para seleccionar modelo correcto.
+    Construye features para estudiantes del semestre actual.
+    Busca grades del periodo activo (SemesterConfig) o periodo=NULL como fallback.
 
     [GAP-F2-01] Enriquecido con variables conductuales de la tabla students:
     dias_sin_acceso, porcentaje_tareas, indice_compromiso.
     Estas features mejoran la predicción según la literatura de Learning Analytics.
     """
-    query = text("""
+    active_periodo = _get_active_periodo(db)
+    periodo_cond = _build_periodo_condition(active_periodo)
+
+    query = text(f"""
         SELECT g.student_id, g.nota_final, s.carrera,
                s.dias_sin_acceso, s.porcentaje_tareas, s.indice_compromiso
         FROM grades g
         JOIN students s ON s.id = g.student_id
-        WHERE g.periodo IS NULL
+        WHERE {periodo_cond}
     """)
 
     rows = db.execute(query).fetchall()
+    logger.info(f"build_current_features: periodo={active_periodo}, rows={len(rows)}")
     if not rows:
         return pd.DataFrame()
 

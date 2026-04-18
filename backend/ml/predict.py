@@ -313,15 +313,19 @@ class Predictor:
                 return None
 
         from sqlalchemy import text as sql_text
+        from .features import _get_active_periodo, _build_periodo_condition
 
         # Obtener carrera del estudiante
         from ..models.student import Student
         student = db.query(Student).filter(Student.id == student_id).first()
         carrera = student.carrera if student else None
 
-        query = sql_text("""
+        active_periodo = _get_active_periodo(db)
+        periodo_cond = _build_periodo_condition(active_periodo)
+
+        query = sql_text(f"""
             SELECT g.nota_final FROM grades g
-            WHERE g.student_id = :sid AND g.periodo IS NULL
+            WHERE g.student_id = :sid AND {periodo_cond}
         """)
         rows = db.execute(query, {"sid": student_id}).fetchall()
         if not rows:
