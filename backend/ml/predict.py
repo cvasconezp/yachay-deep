@@ -338,7 +338,7 @@ class Predictor:
         """)
         rows = db.execute(query, {"sid": student_id}).fetchall()
 
-        # Fallback: detectar periodo desde grades si SemesterConfig no coincide
+        # Fallback 1: detectar periodo desde grades si SemesterConfig no coincide
         if not rows and active_periodo:
             detected = _detect_current_periodo(db)
             if detected and detected != active_periodo:
@@ -348,6 +348,23 @@ class Predictor:
                     WHERE g.student_id = :sid AND {periodo_cond2}
                 """)
                 rows = db.execute(query2, {"sid": student_id}).fetchall()
+
+        # Fallback 2: si no hay notas del periodo actual (ej. inicio de semestre),
+        # usar el periodo más reciente del estudiante para XAI/contrafactual
+        used_fallback_periodo = None
+        if not rows:
+            fallback_q = sql_text("""
+                SELECT g.nota_final, g.periodo FROM grades g
+                WHERE g.student_id = :sid AND g.periodo IS NOT NULL
+                ORDER BY g.periodo DESC
+            """)
+            fallback_rows = db.execute(fallback_q, {"sid": student_id}).fetchall()
+            if fallback_rows:
+                # Tomar el periodo más reciente
+                latest_periodo = fallback_rows[0][1]
+                rows = [r for r in fallback_rows if r[1] == latest_periodo]
+                used_fallback_periodo = latest_periodo
+                logger.info(f"predict_single: sin notas actuales para student {student_id}, usando periodo fallback={latest_periodo}")
 
         if not rows:
             return None
@@ -376,6 +393,9 @@ class Predictor:
             "model_used": model_key,
             "carrera": carrera,
         }
+        if used_fallback_periodo:
+            result["periodo_usado"] = used_fallback_periodo
+            result["nota"] = "Predicción basada en notas del periodo anterior (aún no hay notas del semestre actual)"
 
         if "desercion" in models:
             result["prob_desercion"] = round(float(models["desercion"].predict_proba(X)[0, 1]), 4)
