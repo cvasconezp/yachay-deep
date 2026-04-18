@@ -264,6 +264,39 @@ def _get_active_periodo(db: Session) -> Optional[str]:
         return None
 
 
+def _detect_current_periodo(db: Session) -> Optional[str]:
+    """Detecta el periodo actual directamente de grades.
+    Busca periodos que NO están en PERIODOS_ORDENADOS (históricos P57-P67).
+    Si hay varios, toma el más reciente (mayor número)."""
+    try:
+        result = db.execute(text(
+            "SELECT DISTINCT periodo FROM grades WHERE periodo IS NOT NULL"
+        )).fetchall()
+        all_periodos = [r[0] for r in result if r[0]]
+
+        historicos = set(PERIODOS_ORDENADOS)
+        # También incluir variantes sin P (ej. "67")
+        for p in list(historicos):
+            if p.startswith("P"):
+                historicos.add(p[1:])
+
+        current = [p for p in all_periodos if p not in historicos]
+        if not current:
+            return None
+
+        # Ordenar: extraer número, el mayor es el más reciente
+        import re as _re
+        def _sort_key(p):
+            m = _re.search(r"(\d+)", p)
+            return int(m.group(1)) if m else 0
+
+        current.sort(key=_sort_key, reverse=True)
+        return current[0]
+    except Exception as e:
+        logger.warning(f"_detect_current_periodo error: {e}")
+        return None
+
+
 def _build_periodo_condition(periodo: Optional[str]) -> str:
     """Construye la condición SQL para filtrar por periodo activo.
     Maneja ambos formatos (P68/68) y fallback a NULL."""
@@ -283,7 +316,10 @@ def _build_periodo_condition(periodo: Optional[str]) -> str:
 def build_current_features(db: Session) -> pd.DataFrame:
     """
     Construye features para estudiantes del semestre actual.
-    Busca grades del periodo activo (SemesterConfig) o periodo=NULL como fallback.
+    Estrategia de detección de periodo:
+      1. SemesterConfig activo
+      2. Detección automática desde grades (periodo no histórico)
+      3. Fallback a periodo=NULL
 
     [GAP-F2-01] Enriquecido con variables conductuales de la tabla students:
     dias_sin_acceso, porcentaje_tareas, indice_compromiso.
@@ -301,7 +337,24 @@ def build_current_features(db: Session) -> pd.DataFrame:
     """)
 
     rows = db.execute(query).fetchall()
-    logger.info(f"build_current_features: periodo={active_periodo}, rows={len(rows)}")
+    logger.info(f"build_current_features: periodo_config={active_periodo}, rows={len(rows)}")
+
+    # Fallback: si SemesterConfig no coincide con grades, detectar desde la tabla
+    if not rows and active_periodo:
+        detected = _detect_current_periodo(db)
+        if detected and detected != active_periodo:
+            logger.info(f"build_current_features: fallback a periodo detectado={detected}")
+            periodo_cond2 = _build_periodo_condition(detected)
+            query2 = text(f"""
+                SELECT g.student_id, g.nota_final, s.carrera,
+                       s.dias_sin_acceso, s.porcentaje_tareas, s.indice_compromiso
+                FROM grades g
+                JOIN students s ON s.id = g.student_id
+                WHERE {periodo_cond2}
+            """)
+            rows = db.execute(query2).fetchall()
+            logger.info(f"build_current_features: fallback rows={len(rows)}")
+
     if not rows:
         return pd.DataFrame()
 

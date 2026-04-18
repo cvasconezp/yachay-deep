@@ -322,7 +322,7 @@ class Predictor:
                 return None
 
         from sqlalchemy import text as sql_text
-        from .features import _get_active_periodo, _build_periodo_condition
+        from .features import _get_active_periodo, _build_periodo_condition, _detect_current_periodo
 
         # Obtener carrera del estudiante
         from ..models.student import Student
@@ -337,6 +337,18 @@ class Predictor:
             WHERE g.student_id = :sid AND {periodo_cond}
         """)
         rows = db.execute(query, {"sid": student_id}).fetchall()
+
+        # Fallback: detectar periodo desde grades si SemesterConfig no coincide
+        if not rows and active_periodo:
+            detected = _detect_current_periodo(db)
+            if detected and detected != active_periodo:
+                periodo_cond2 = _build_periodo_condition(detected)
+                query2 = sql_text(f"""
+                    SELECT g.nota_final FROM grades g
+                    WHERE g.student_id = :sid AND {periodo_cond2}
+                """)
+                rows = db.execute(query2, {"sid": student_id}).fetchall()
+
         if not rows:
             return None
 
