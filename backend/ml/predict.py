@@ -409,10 +409,18 @@ class Predictor:
             )
 
         # [GAP-F3-02] Contexto conductual adicional (no depende del modelo ML)
-        # Enriquece las explicaciones con indicadores intuitivos para tutores
+        # Enriquece las explicaciones con indicadores intuitivos para tutores.
+        # Al inicio del semestre (usando fallback), ajustar mensajes y umbrales.
         if student:
             contexto = []
-            if student.dias_sin_acceso is not None and student.dias_sin_acceso > 7:
+
+            # Obtener contexto del semestre para evaluar si alertas aplican
+            from .recommendations import _get_semester_context
+            sem_ctx = _get_semester_context(db)
+            dias_desde_inicio = sem_ctx.get("dias_desde_inicio", 0)
+            primera_entrega = sem_ctx.get("primera_entrega_pasada", False)
+
+            if student.dias_sin_acceso is not None and student.dias_sin_acceso > 7 and dias_desde_inicio >= 7:
                 sev = "critica" if student.dias_sin_acceso >= 14 else "alerta"
                 contexto.append({
                     "factor": "Inactividad AVAC",
@@ -420,7 +428,7 @@ class Predictor:
                     "valor": student.dias_sin_acceso,
                     "severidad": sev,
                 })
-            if student.porcentaje_tareas is not None and student.porcentaje_tareas < 60:
+            if student.porcentaje_tareas is not None and student.porcentaje_tareas < 60 and primera_entrega:
                 sev = "critica" if student.porcentaje_tareas < 40 else "alerta"
                 contexto.append({
                     "factor": "Entrega de tareas baja",
