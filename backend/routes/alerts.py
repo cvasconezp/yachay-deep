@@ -346,15 +346,14 @@ def generate_alerts(
     else:
         students = db.query(Student).all()
 
-    # Filtrar cursos del bloque activo (excluir bloque 2 si estamos en bloque 1)
-    active_course_codes = None
+    # Excluir cursos del bloque contrario (ej: excluir bloque 2 si estamos en bloque 1)
+    excluded_course_codes = set()
     if semconfig:
-        bloque = semconfig.bloque_actual
-        active_cc = db.query(CourseConfig.codigo_avac).filter(
-            CourseConfig.activo == True,
-            CourseConfig.bloque.in_([bloque, "ambos", None]),
+        other_bloque = "2" if semconfig.bloque_actual == "1" else "1"
+        excluded_cc = db.query(CourseConfig.codigo_avac).filter(
+            CourseConfig.bloque == other_bloque,
         ).all()
-        active_course_codes = {r[0] for r in active_cc} if active_cc else None
+        excluded_course_codes = {r[0] for r in excluded_cc}
 
     # Pre-load per-period AvacAccess: dias_sin_acceso por estudiante POR CURSO
     # Incluir periodo NULL como fallback (datos cargados antes de configurar periodo)
@@ -380,8 +379,8 @@ def generate_alerts(
     )
     if latest_snap:
         avac_q = avac_q.filter(AvacAccess.snapshot_date == latest_snap)
-    if active_course_codes is not None:
-        avac_q = avac_q.filter(AvacAccess.codigo_curso.in_(active_course_codes))
+    if excluded_course_codes:
+        avac_q = avac_q.filter(~AvacAccess.codigo_curso.in_(excluded_course_codes))
 
     # Dict: student_id → [(codigo_curso, dias_sin_acceso), ...]
     from collections import defaultdict
@@ -469,8 +468,8 @@ def generate_alerts(
     db.commit()
 
     detail_parts = []
-    if active_course_codes is not None:
-        detail_parts.append(f"Bloque {semconfig.bloque_actual}: {len(active_course_codes)} cursos activos (cursos de otro bloque excluidos)")
+    if excluded_course_codes:
+        detail_parts.append(f"Bloque {semconfig.bloque_actual}: {len(excluded_course_codes)} cursos del otro bloque excluidos")
     if not hay_notas_esperadas:
         detail_parts.append(f"Alertas de nota_cero desactivadas (primera fecha esperada de notas: {fecha_notas.strftime('%d/%m/%Y') if fecha_notas else 'no configurada'})")
     if max_dias_periodo is not None:

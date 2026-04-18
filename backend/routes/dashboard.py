@@ -18,18 +18,30 @@ from ..models.user import User
 
 
 def _active_bloque_courses(db: Session, semconfig) -> set[str] | None:
-    """Retorna set de codigo_avac activos en el bloque actual, o None si no hay filtro."""
+    """Retorna set de codigo_avac que NO son del bloque contrario, o None si no hay filtro.
+
+    Lógica: en lugar de whitelist (solo cursos configurados), usamos blacklist
+    (excluir cursos explícitamente marcados como bloque contrario).
+    Así, cursos en AvacAccess que no están en course_configs no se excluyen.
+    """
     if not semconfig:
         return None
     bloque = semconfig.bloque_actual  # "1" o "2"
-    # Cursos con bloque="ambos" siempre activos; filtrar los del otro bloque
-    codes = set()
+    other_bloque = "2" if bloque == "1" else "1"
+    # Obtener códigos explícitamente del otro bloque (excluir estos)
+    excluded = set()
     for cc in db.query(CourseConfig.codigo_avac).filter(
-        CourseConfig.activo == True,
-        CourseConfig.bloque.in_([bloque, "ambos", None]),
+        CourseConfig.bloque == other_bloque,
     ).all():
-        codes.add(cc[0])
-    return codes if codes else None
+        excluded.add(cc[0])
+    return excluded if excluded else None
+
+
+def _apply_bloque_filter(query, excluded_courses):
+    """Aplica filtro de bloque: excluir cursos del bloque contrario."""
+    if excluded_courses:
+        return query.filter(~AvacAccess.codigo_curso.in_(excluded_courses))
+    return query
 
 
 def _period_student_ids(db: Session, periodo: Optional[str]):
@@ -151,8 +163,8 @@ def get_risk_dashboard(
     else:
         periodo_variants = (pf, f"P{pf}")
 
-    # Filtrar cursos del bloque activo (excluir bloque 2 si estamos en bloque 1)
-    active_courses = _active_bloque_courses(db, semconfig)
+    # Excluir cursos del bloque contrario (ej: excluir bloque 2 si estamos en bloque 1)
+    excluded_courses = _active_bloque_courses(db, semconfig)
 
     # Pre-load per-period AvacAccess: max dias_sin_acceso por estudiante
     avac_q = db.query(
@@ -168,8 +180,7 @@ def get_risk_dashboard(
             AvacAccess.periodo.in_(periodo_variants),
             AvacAccess.periodo.is_(None),
         ))
-    if active_courses is not None:
-        avac_q = avac_q.filter(AvacAccess.codigo_curso.in_(active_courses))
+    avac_q = _apply_bloque_filter(avac_q, excluded_courses)
     avac_inactividad = dict(avac_q.group_by(AvacAccess.student_id).all())
 
     # Subquery: contar intervenciones y última intervención por estudiante
@@ -308,8 +319,8 @@ def get_student_inactivity_by_course(
                 bloque_inicio = bloque_inicio.replace(tzinfo=timezone.utc)
             max_dias_periodo = (datetime.now(timezone.utc) - bloque_inicio).days
 
-    # Filtrar cursos del bloque activo
-    active_courses = _active_bloque_courses(db, semconfig)
+    # Excluir cursos del bloque contrario
+    excluded_courses = _active_bloque_courses(db, semconfig)
 
     # Incluir periodo NULL como fallback (datos cargados antes de configurar periodo)
     from sqlalchemy import or_
@@ -336,8 +347,7 @@ def get_student_inactivity_by_course(
             AvacAccess.dias_sin_acceso.isnot(None),
         )
     )
-    if active_courses is not None:
-        records = records.filter(AvacAccess.codigo_curso.in_(active_courses))
+    records = _apply_bloque_filter(records, excluded_courses)
     if latest_snap:
         records = records.filter(AvacAccess.snapshot_date == latest_snap)
 
