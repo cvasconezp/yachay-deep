@@ -209,30 +209,38 @@ def get_counterfactual(
 
     model_key = result.get("model_used", "global")
     features = result.get("features", {})
+    usando_fallback = bool(result.get("periodo_usado"))
 
     cf_desercion = None
     cf_reprobacion = None
 
-    if target in ("desercion", "ambos"):
-        cf_desercion = generate_counterfactual(
-            predictor, features, model_key, "desercion", target_prob
-        )
-    if target in ("reprobacion", "ambos"):
-        cf_reprobacion = generate_counterfactual(
-            predictor, features, model_key, "reprobacion", target_prob
-        )
+    # Solo generar contrafactuales ML si hay notas del periodo actual
+    # Al inicio del semestre (fallback P67), los escenarios de "mejorar materias"
+    # no aplican porque aún no hay calificaciones del semestre
+    if not usando_fallback:
+        if target in ("desercion", "ambos"):
+            cf_desercion = generate_counterfactual(
+                predictor, features, model_key, "desercion", target_prob
+            )
+        if target in ("reprobacion", "ambos"):
+            cf_reprobacion = generate_counterfactual(
+                predictor, features, model_key, "reprobacion", target_prob
+            )
 
     # Contrafactual conductual (siempre disponible, basado en compromiso)
     from ..ml.counterfactual_conductual import generate_behavioral_counterfactual
     cf_conductual = generate_behavioral_counterfactual(db, student_id)
 
-    return {
+    resp = {
         "student_id": student_id,
         "target_prob": target_prob,
         "contrafactual_desercion": cf_desercion,
         "contrafactual_reprobacion": cf_reprobacion,
         "contrafactual_conductual": cf_conductual,
     }
+    if usando_fallback:
+        resp["nota"] = "Predicción basada en periodo anterior — los escenarios se actualizarán cuando haya notas del semestre actual"
+    return resp
 
 
 @router.post("/student/{student_id}/what-if")

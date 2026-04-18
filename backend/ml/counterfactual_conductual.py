@@ -10,6 +10,8 @@ usando la misma fórmula del índice de compromiso (transformers.py v2).
 
 Se activa para TODOS los estudiantes con compromiso < 0.65 o días sin acceso > 7,
 independientemente de si el modelo ML tiene datos o no.
+Respeta el calendario académico: no sugiere acciones sobre tareas si no hay
+entregas vencidas, ni sobre inactividad si el bloque acaba de empezar.
 """
 import math
 import logging
@@ -64,6 +66,13 @@ def generate_behavioral_counterfactual(
     if not student:
         return None
 
+    # Obtener contexto del semestre para validar qué escenarios aplican
+    from .recommendations import _get_semester_context
+    sem_ctx = _get_semester_context(db)
+    dias_desde_inicio = sem_ctx.get("dias_desde_inicio", 0)
+    primera_entrega = sem_ctx.get("primera_entrega_pasada", False)
+    tiene_notas = sem_ctx.get("tiene_notas_actuales", False)
+
     dias = student.dias_sin_acceso
     tareas = student.porcentaje_tareas
     promedio = student.promedio_calificaciones
@@ -80,7 +89,8 @@ def generate_behavioral_counterfactual(
     escenarios = []
 
     # ── Escenario 1: Conectarse al AVAC esta semana ──
-    if dias is not None and dias > 3:
+    # Solo sugerir si el bloque lleva suficientes días activo
+    if dias is not None and dias > 3 and dias_desde_inicio >= 7:
         nuevo_compromiso = _simular_compromiso(1, tareas, promedio, matricula)
         delta = nuevo_compromiso - compromiso_simulado_base
         if delta > 0.01:
@@ -99,7 +109,8 @@ def generate_behavioral_counterfactual(
             })
 
     # ── Escenario 2: Entregar tareas pendientes ──
-    if tareas is not None and tareas < 80:
+    # Solo sugerir si ya pasó al menos una fecha de entrega del calendario
+    if tareas is not None and tareas < 80 and primera_entrega:
         # Simular subir a 80% de entrega
         target_tareas = min(tareas + 25, 90)  # incremento realista de 25pp
         nuevo_compromiso = _simular_compromiso(dias, target_tareas, promedio, matricula)
@@ -121,7 +132,7 @@ def generate_behavioral_counterfactual(
             })
 
     # ── Escenario 3: Conectarse + entregar tareas (combinado) ──
-    if dias is not None and dias > 7 and tareas is not None and tareas < 80:
+    if dias is not None and dias > 7 and tareas is not None and tareas < 80 and primera_entrega and dias_desde_inicio >= 7:
         target_tareas = min(tareas + 25, 90)
         nuevo_compromiso = _simular_compromiso(1, target_tareas, promedio, matricula)
         delta = nuevo_compromiso - compromiso_simulado_base
@@ -161,26 +172,42 @@ def generate_behavioral_counterfactual(
 
     # ── Escenario 5: Tutoría con docente (materias con bajo rendimiento) ──
     # Solo sugerir tutorías si hay materias con rendimiento realmente bajo
-    # NO sugerir si el promedio general es alto (≥70) y no hay materias reprobadas
-    from ..models.grade import Grade
+    # NO sugerir al inicio del semestre cuando no hay notas actuales
+    if not tiene_notas:
+        # Sin notas del semestre actual, no sugerir tutorías sobre materias
+        pass
+    else:
+        from ..models.grade import Grade
+        from sqlalchemy import or_
+        from .features import _get_active_periodo
 
-    materias_criticas = (
-        db.query(Grade)
-        .filter(
-            Grade.student_id == student_id,
-            Grade.periodo.is_(None),  # semestre actual
-        )
-        .all()
-    )
+        active_p = _get_active_periodo(db)
+        if active_p:
+            p_conds = [Grade.periodo == active_p, Grade.periodo.is_(None)]
+            if active_p.startswith("P"):
+                p_conds.append(Grade.periodo == active_p[1:])
+            else:
+                p_conds.append(Grade.periodo == f"P{active_p}")
+            materias_criticas = (
+                db.query(Grade)
+                .filter(Grade.student_id == student_id, or_(*p_conds))
+                .all()
+            )
+        else:
+            materias_criticas = (
+                db.query(Grade)
+                .filter(Grade.student_id == student_id, Grade.periodo.is_(None))
+                .all()
+            )
 
-    # Verificar si realmente hay materias con bajo rendimiento
-    notas_validas = [m.nota_final for m in materias_criticas if m.nota_final is not None]
-    promedio_general = sum(notas_validas) / len(notas_validas) if notas_validas else 0
-    tiene_reprobadas = any(n < 70 for n in notas_validas)
+        # Verificar si realmente hay materias con bajo rendimiento
+        notas_validas = [m.nota_final for m in materias_criticas if m.nota_final is not None]
+        promedio_general = sum(notas_validas) / len(notas_validas) if notas_validas else 0
+        tiene_reprobadas = any(n < 70 for n in notas_validas)
 
-    # Solo generar escenarios de tutoría si hay materias problemáticas
-    if tiene_reprobadas:
-        for materia in materias_criticas:
+        # Solo generar escenarios de tutoría si hay materias problemáticas
+        if tiene_reprobadas:
+          for materia in materias_criticas:
             necesita_tutoria = False
             motivo = ""
 
