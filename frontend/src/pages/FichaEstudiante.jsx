@@ -1,10 +1,47 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Component } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { api } from "../services/api";
 import { RiskBadge } from "../components/RiskBadge";
 import { PeriodSelector } from "../components/PeriodSelector";
 import EcuadorMap from "../components/EcuadorMap";
 import InterventionForm from "./InterventionForm";
+
+// ── ErrorBoundary: captura crashes de render y permite recargar ──────────────
+class FichaErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, info) {
+    console.error("FichaEstudiante crash:", error, info?.componentStack);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="max-w-2xl mx-auto mt-16 bg-white rounded-2xl shadow-lg p-8 text-center">
+          <div className="text-4xl mb-4">⚠️</div>
+          <h2 className="text-lg font-bold text-gray-800 mb-2">Algo salió mal</h2>
+          <p className="text-sm text-gray-500 mb-4">
+            Ocurrió un error al mostrar la ficha del estudiante.
+          </p>
+          <pre className="text-xs text-red-600 bg-red-50 rounded p-3 mb-4 text-left overflow-auto max-h-32">
+            {String(this.state.error?.message || this.state.error)}
+          </pre>
+          <button
+            onClick={() => { this.setState({ hasError: false, error: null }); window.location.reload(); }}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg text-sm font-medium transition"
+          >
+            Recargar página
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // ── Helpers de color ──────────────────────────────────────────────────────────
 function getNoteStyle(nota, max = 40) {
@@ -782,7 +819,7 @@ function PracticasSection({ practicas }) {
 
 
 // ── Componente principal ───────────────────────────────────────────────────────
-export default function FichaEstudiante() {
+function FichaEstudianteInner() {
   const { studentId } = useParams();
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
@@ -840,7 +877,7 @@ export default function FichaEstudiante() {
     const loadRecomendaciones = async () => {
       try {
         const data = await api.getRecommendations(studentId);
-        setRecomendaciones(Array.isArray(data) ? data : (data?.recomendaciones || []));
+        setRecomendaciones(Array.isArray(data) ? data : (data?.recommendations || data?.recomendaciones || []));
       } catch (err) {
         console.error('Error cargando recomendaciones:', err);
       }
@@ -2282,5 +2319,14 @@ export default function FichaEstudiante() {
         />
       )}
     </div>
+  );
+}
+
+// Wrapper con ErrorBoundary para capturar crashes de render
+export default function FichaEstudiante() {
+  return (
+    <FichaErrorBoundary>
+      <FichaEstudianteInner />
+    </FichaErrorBoundary>
   );
 }
