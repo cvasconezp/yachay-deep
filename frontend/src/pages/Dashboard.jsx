@@ -110,6 +110,7 @@ export default function Dashboard() {
       params.periodo = filtros.periodo;
 
       const statsParams = { periodo: filtros.periodo };
+      if (filtros.carrera) statsParams.carrera = filtros.carrera;
 
       const [studentsData, statsData, carrerasData] = await Promise.all([
         api.getRiskDashboard(params),
@@ -181,6 +182,7 @@ export default function Dashboard() {
     { key: null, label: "Total monitoreados", value: stats?.total_estudiantes ?? "—", color: "text-blue-700", bg: "bg-blue-50 border-blue-200" },
     { key: "alto", label: "Riesgo Alto", value: riskCounts["Alto"] ?? 0, color: "text-red-700", bg: "bg-red-50 border-red-200" },
     { key: "medio", label: "Riesgo Medio", value: riskCounts["Medio"] ?? 0, color: "text-yellow-700", bg: "bg-yellow-50 border-yellow-200" },
+    { key: "aulas", label: "Aulas virtuales", value: stats?.total_aulas_virtuales ?? 0, color: "text-purple-700", bg: "bg-purple-50 border-purple-200", noFilter: true },
     { key: "intervenciones", label: "Intervenciones", value: stats?.total_intervenciones ?? 0, color: "text-green-700", bg: "bg-green-50 border-green-200" },
   ];
 
@@ -218,17 +220,19 @@ export default function Dashboard() {
       )}
 
       {/* Tarjetas interactivas */}
-      {stats?.tiene_datos_periodo !== false && <div className="grid grid-cols-2 md:grid-cols-4 gap-3 my-5">
+      {stats?.tiene_datos_periodo !== false && <div className="grid grid-cols-2 md:grid-cols-5 gap-3 my-5">
         {cards.map(card => {
-          const isActive = cardFilter === card.key;
+          const isActive = !card.noFilter && cardFilter === card.key;
+          const clickable = !card.noFilter && card.key;
           return (
             <div
               key={card.key ?? "total"}
-              onClick={() => setCardFilter(isActive ? null : card.key)}
-              className={`rounded-xl border px-4 py-3 cursor-pointer transition-all duration-200
-                ${isActive ? "ring-2 ring-blue-500 shadow-md scale-[1.02]" : "hover:shadow-sm"}
+              onClick={clickable ? () => setCardFilter(isActive ? null : card.key) : undefined}
+              className={`rounded-xl border px-4 py-3 transition-all duration-200
+                ${clickable ? "cursor-pointer" : ""}
+                ${isActive ? "ring-2 ring-blue-500 shadow-md scale-[1.02]" : clickable ? "hover:shadow-sm" : ""}
                 ${card.bg}`}
-              title={isActive ? "Click para quitar filtro" : card.key ? `Click para filtrar por ${card.label}` : ""}
+              title={isActive ? "Click para quitar filtro" : clickable ? `Click para filtrar por ${card.label}` : ""}
             >
               <div className={`text-2xl font-bold ${card.color}`}>{card.value}</div>
               <div className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mt-0.5">{card.label}</div>

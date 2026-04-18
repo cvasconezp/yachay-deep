@@ -36,12 +36,12 @@ def _active_period_has_data(db: Session) -> bool:
     if q_grades.limit(1).first() is not None:
         return True
 
-    # Check AvacAccess
+    # Check AvacAccess (incluir periodo=NULL como fallback)
     q_avac = db.query(AvacAccess.id).filter(AvacAccess.student_id.isnot(None))
     if pf.startswith("P"):
-        q_avac = q_avac.filter(or_(AvacAccess.periodo == pf, AvacAccess.periodo == pf[1:]))
+        q_avac = q_avac.filter(or_(AvacAccess.periodo == pf, AvacAccess.periodo == pf[1:], AvacAccess.periodo.is_(None)))
     else:
-        q_avac = q_avac.filter(or_(AvacAccess.periodo == pf, AvacAccess.periodo == f"P{pf}"))
+        q_avac = q_avac.filter(or_(AvacAccess.periodo == pf, AvacAccess.periodo == f"P{pf}", AvacAccess.periodo.is_(None)))
     return q_avac.limit(1).first() is not None
 
 
@@ -57,11 +57,11 @@ def _active_period_student_ids(db: Session) -> set:
         raw = pf[1:]
         g_cond = or_(Grade.periodo == pf, Grade.periodo == raw, Grade.periodo.is_(None))
         e_cond = or_(Enrollment.periodo == pf, Enrollment.periodo == raw)
-        a_cond = or_(AvacAccess.periodo == pf, AvacAccess.periodo == raw)
+        a_cond = or_(AvacAccess.periodo == pf, AvacAccess.periodo == raw, AvacAccess.periodo.is_(None))
     else:
         g_cond = or_(Grade.periodo == pf, Grade.periodo == f"P{pf}", Grade.periodo.is_(None))
         e_cond = or_(Enrollment.periodo == pf, Enrollment.periodo == f"P{pf}")
-        a_cond = or_(AvacAccess.periodo == pf, AvacAccess.periodo == f"P{pf}")
+        a_cond = or_(AvacAccess.periodo == pf, AvacAccess.periodo == f"P{pf}", AvacAccess.periodo.is_(None))
 
     grade_ids = {r[0] for r in db.query(Grade.student_id).filter(g_cond).distinct().all()}
     enroll_ids = {r[0] for r in db.query(Enrollment.student_id).filter(e_cond).distinct().all()}

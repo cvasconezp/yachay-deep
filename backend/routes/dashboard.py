@@ -45,7 +45,11 @@ def _apply_bloque_filter(query, excluded_courses):
 
 
 def _period_student_ids(db: Session, periodo: Optional[str]):
-    """Subquery de student_ids filtrados por período (Grades + Enrollments + AvacAccess)."""
+    """Subquery de student_ids filtrados por período (Grades + Enrollments + AvacAccess).
+
+    Para AvacAccess siempre incluye periodo=NULL como fallback (registros
+    cargados antes de configurar semestre).
+    """
     from sqlalchemy import or_
     pf = periodo if periodo else "actual"
 
@@ -62,11 +66,17 @@ def _period_student_ids(db: Session, periodo: Optional[str]):
         if pf.startswith("P"):
             grade_sq = grade_sq.filter(or_(Grade.periodo == pf, Grade.periodo == pf[1:]))
             enroll_sq = enroll_sq.filter(or_(Enrollment.periodo == pf, Enrollment.periodo == pf[1:]))
-            avac_sq = avac_sq.filter(or_(AvacAccess.periodo == pf, AvacAccess.periodo == pf[1:]))
+            avac_sq = avac_sq.filter(or_(
+                AvacAccess.periodo == pf, AvacAccess.periodo == pf[1:],
+                AvacAccess.periodo.is_(None),
+            ))
         else:
             grade_sq = grade_sq.filter(or_(Grade.periodo == pf, Grade.periodo == f"P{pf}"))
             enroll_sq = enroll_sq.filter(or_(Enrollment.periodo == pf, Enrollment.periodo == f"P{pf}"))
-            avac_sq = avac_sq.filter(or_(AvacAccess.periodo == pf, AvacAccess.periodo == f"P{pf}"))
+            avac_sq = avac_sq.filter(or_(
+                AvacAccess.periodo == pf, AvacAccess.periodo == f"P{pf}",
+                AvacAccess.periodo.is_(None),
+            ))
 
     sq = grade_sq.union(enroll_sq).union(avac_sq)
     return sq, pf
@@ -89,10 +99,16 @@ def _period_has_data(db: Session, periodo: Optional[str]) -> bool:
     else:
         if pf.startswith("P"):
             q_grades = q_grades.filter(or_(Grade.periodo == pf, Grade.periodo == pf[1:]))
-            q_avac = q_avac.filter(or_(AvacAccess.periodo == pf, AvacAccess.periodo == pf[1:]))
+            q_avac = q_avac.filter(or_(
+                AvacAccess.periodo == pf, AvacAccess.periodo == pf[1:],
+                AvacAccess.periodo.is_(None),
+            ))
         else:
             q_grades = q_grades.filter(or_(Grade.periodo == pf, Grade.periodo == f"P{pf}"))
-            q_avac = q_avac.filter(or_(AvacAccess.periodo == pf, AvacAccess.periodo == f"P{pf}"))
+            q_avac = q_avac.filter(or_(
+                AvacAccess.periodo == pf, AvacAccess.periodo == f"P{pf}",
+                AvacAccess.periodo.is_(None),
+            ))
 
     return q_grades.limit(1).first() is not None or q_avac.limit(1).first() is not None
 
@@ -383,12 +399,18 @@ def get_student_inactivity_by_course(
 @router.get("/stats")
 def get_stats(
     periodo: Optional[str] = None,
+    carrera: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Resumen institucional: totales por riesgo, carreras, etc."""
-    period_sq, _ = _period_student_ids(db, periodo)
+    """Resumen institucional: totales por riesgo, carreras, aulas virtuales, etc."""
+    from sqlalchemy import or_ as _or
+
+    period_sq, pf = _period_student_ids(db, periodo)
     base = db.query(Student).filter(Student.id.in_(period_sq))
+
+    if carrera:
+        base = base.filter(func.lower(Student.carrera).contains(carrera.lower()))
 
     total = base.count()
     por_riesgo = (
@@ -408,6 +430,43 @@ def get_stats(
     total_intervenciones = db.query(func.count(Intervention.id)).scalar()
     estudiantes_intervenidos = db.query(func.count(func.distinct(Intervention.student_id))).scalar()
 
+    # ── Aulas virtuales: contar código_curso distintos para el periodo ──
+    semconfig = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
+    # Resolver periodo para AvacAccess
+    avac_pf = pf
+    if avac_pf == "actual" and semconfig:
+        avac_pf = semconfig.semestre or "actual"
+    if avac_pf in ("actual", "todos"):
+        periodo_variants = None  # no filtrar por periodo
+    elif avac_pf.startswith("P"):
+        periodo_variants = (avac_pf, avac_pf[1:])
+    else:
+        periodo_variants = (avac_pf, f"P{avac_pf}")
+
+    aulas_q = db.query(func.count(sa_distinct(AvacAccess.codigo_curso))).filter(
+        AvacAccess.codigo_curso.isnot(None),
+    )
+    if periodo_variants:
+        aulas_q = aulas_q.filter(_or(
+            AvacAccess.periodo.in_(periodo_variants),
+            AvacAccess.periodo.is_(None),
+        ))
+    # Filtrar por carrera: solo cursos de esa carrera via CourseConfig
+    if carrera:
+        carrera_codes = [r[0] for r in db.query(CourseConfig.codigo_avac).filter(
+            func.lower(CourseConfig.carrera).contains(carrera.lower()),
+        ).all()]
+        if carrera_codes:
+            aulas_q = aulas_q.filter(AvacAccess.codigo_curso.in_(carrera_codes))
+        else:
+            aulas_q = aulas_q.filter(AvacAccess.codigo_curso == "__NO_MATCH__")
+    # Excluir cursos del bloque contrario
+    excluded_courses = _active_bloque_courses(db, semconfig)
+    if excluded_courses:
+        aulas_q = aulas_q.filter(~AvacAccess.codigo_curso.in_(excluded_courses))
+
+    total_aulas_virtuales = aulas_q.scalar() or 0
+
     # Detectar si hay datos reales (grades o accesos AVAC) para el periodo
     has_data = _period_has_data(db, periodo)
 
@@ -417,6 +476,7 @@ def get_stats(
         "por_carrera": [{"carrera": r.carrera, "total": r.total} for r in por_carrera],
         "total_intervenciones": total_intervenciones,
         "estudiantes_intervenidos": estudiantes_intervenidos,
+        "total_aulas_virtuales": total_aulas_virtuales,
         "tiene_datos_periodo": has_data,
     }
 
