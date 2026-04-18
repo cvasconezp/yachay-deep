@@ -1696,6 +1696,9 @@ class ETLPipeline:
                         pass
                 if row.get("grupo") and pd.notna(row["grupo"]):
                     existing.grupo = str(row["grupo"]).strip()
+                # Propagar bloque del reporte (1, 2) → CourseConfig
+                if row.get("bloque") and pd.notna(row["bloque"]):
+                    existing.bloque = str(int(row["bloque"]))
                 if semestre:
                     existing.semestre = semestre
                 count_updated += 1
@@ -1717,6 +1720,9 @@ class ETLPipeline:
                         pass
                 if row.get("grupo") and pd.notna(row["grupo"]):
                     cc.grupo = str(row["grupo"]).strip()
+                # Propagar bloque del reporte (1, 2) → CourseConfig
+                if row.get("bloque") and pd.notna(row["bloque"]):
+                    cc.bloque = str(int(row["bloque"]))
                 self.db.add(cc)
                 count_new += 1
 

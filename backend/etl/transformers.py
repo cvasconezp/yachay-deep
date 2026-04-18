@@ -851,9 +851,15 @@ def extract_courses_from_reporte(carpeta_o_archivos) -> pd.DataFrame:
     else:
         df["correo_docente"] = None
 
+    # Extraer bloque si existe
+    if "BLOQUE" in df.columns:
+        df["bloque"] = pd.to_numeric(df["BLOQUE"], errors="coerce").astype("Int64")
+    else:
+        df["bloque"] = None
+
     # Deduplicar: un registro por codigo_avac
     # Tomar first() de los demás campos (son iguales para un mismo código)
-    cols = ["codigo_avac", "nombre_asignatura", "carrera", "nivel", "grupo", "docente", "correo_docente"]
+    cols = ["codigo_avac", "nombre_asignatura", "carrera", "nivel", "grupo", "docente", "correo_docente", "bloque"]
     result = df[cols].drop_duplicates(subset=["codigo_avac"]).reset_index(drop=True)
 
     logger.info(f"extract_courses_from_reporte: {len(result)} cursos únicos extraídos")

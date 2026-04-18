@@ -91,11 +91,10 @@ def _get_semester_context(db: Session) -> dict:
 
 def get_dias_sin_acceso_bloque(db: Session, student_id: int) -> Optional[float]:
     """
-    Calcula dias_sin_acceso considerando SOLO cursos del bloque actual.
+    Calcula dias_sin_acceso EXCLUYENDO cursos del bloque opuesto.
 
-    El campo student.dias_sin_acceso incluye todos los cursos (bloque 1 y 2).
-    Al inicio del semestre (bloque 1), cursos de bloque 2 aún no empezaron,
-    por lo que su inactividad es esperada y no debería generar alertas.
+    Usa enfoque de blacklist (como alerts.py): excluye cursos explícitamente
+    marcados como bloque contrario. Cursos con bloque=NULL o "ambos" se incluyen.
 
     Returns:
         dias_sin_acceso filtrado por bloque, o None si no hay datos.
@@ -110,31 +109,29 @@ def get_dias_sin_acceso_bloque(db: Session, student_id: int) -> Optional[float]:
             return None  # sin config, no podemos filtrar
 
         bloque_actual = sc.bloque_actual or "1"
+        otro_bloque = "2" if bloque_actual == "1" else "1"
 
-        # Obtener códigos de cursos del bloque actual (o "ambos")
-        cursos_bloque = (
+        # Obtener códigos de cursos del bloque OPUESTO (para excluirlos)
+        cursos_excluir = (
             db.query(CourseConfig.codigo_avac)
-            .filter(
-                CourseConfig.activo == True,
-                CourseConfig.bloque.in_([bloque_actual, "ambos"]),
-            )
+            .filter(CourseConfig.bloque == otro_bloque)
             .all()
         )
-        codigos = {c[0] for c in cursos_bloque if c[0]}
+        codigos_excluir = {c[0] for c in cursos_excluir if c[0]}
 
-        if not codigos:
-            return None  # sin cursos configurados para este bloque
-
-        # Buscar el acceso más reciente del estudiante en esos cursos
+        # Buscar el acceso más reciente del estudiante, excluyendo bloque opuesto
         from sqlalchemy import func as sqlfunc
-        result = db.query(
+        query = db.query(
             sqlfunc.min(AvacAccess.dias_sin_acceso)
         ).filter(
             AvacAccess.student_id == student_id,
-            AvacAccess.codigo_curso.in_(codigos),
             AvacAccess.dias_sin_acceso.isnot(None),
-        ).scalar()
+        )
 
+        if codigos_excluir:
+            query = query.filter(~AvacAccess.codigo_curso.in_(codigos_excluir))
+
+        result = query.scalar()
         return result
 
     except Exception as e:
