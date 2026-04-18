@@ -1666,6 +1666,7 @@ export default function FichaEstudiante() {
                         <th className="text-left px-2 py-1 border border-gray-300 font-semibold text-gray-700 text-[10px]" style={{ minWidth: "180px" }}>Asignaturas matriculadas</th>
                         <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 w-14 text-[10px]">Nota</th>
                         <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 w-10 text-[10px]">Mat</th>
+                        <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 w-12 text-[10px]">Bloque</th>
                         <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 w-16 text-[10px]">AVAC</th>
                         <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 w-28 text-[10px]">Actividades</th>
                         <th className="text-center px-2 py-1 border border-gray-300 font-semibold text-gray-700 w-14 text-[10px]">Link</th>
@@ -1711,6 +1712,13 @@ export default function FichaEstudiante() {
                                     {enr.numero_repitencias ?? matchedCal?.numero_repitencias}
                                   </span>
                                 : "—"}
+                            </td>
+                            <td className="px-2 py-1 border border-gray-200 text-center text-[11px]">
+                              {enr.bloque != null
+                                ? <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${enr.bloque === 1 ? "bg-blue-100 text-blue-700" : "bg-purple-100 text-purple-700"}`}>
+                                    B{enr.bloque}
+                                  </span>
+                                : <span className="text-gray-300">—</span>}
                             </td>
                             <td className="px-2 py-1 border border-gray-200 text-center">
                               {acceso ? (
