@@ -370,10 +370,12 @@ def get_resumen_datos(
     global_stats["tiene_enrollments"] = len(enrollments) > 0
 
     # ── Aulas virtuales: contar código_avac distintos en CourseConfig ──
-    # (sin filtro de bloque — el resumen muestra todas las aulas del periodo)
+    # Filtrar por semestre activo (consistente con Admin/Cursos)
     aulas_q = db.query(func.count(distinct(CourseConfig.codigo_avac))).filter(
         CourseConfig.codigo_avac.isnot(None),
     )
+    if semconfig and semconfig.semestre:
+        aulas_q = aulas_q.filter(CourseConfig.semestre == semconfig.semestre)
     if carrera:
         aulas_q = aulas_q.filter(func.lower(CourseConfig.carrera).contains(carrera.lower()))
     global_stats["total_aulas_virtuales"] = aulas_q.scalar() or 0
