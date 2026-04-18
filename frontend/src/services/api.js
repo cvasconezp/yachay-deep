@@ -165,6 +165,10 @@ class ApiClient {
     const qs = new URLSearchParams(params).toString();
     return this.get(`/analytics/comparativa${qs ? "?" + qs : ""}`);
   }
+  getEstudiantesListado(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.get(`/analytics/resumen/estudiantes-listado${qs ? "?" + qs : ""}`);
+  }
 
   // ── Dashboard ──
   getRiskDashboard(params = {}) {

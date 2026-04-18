@@ -18,15 +18,126 @@ const CHART_COLORS = [
 const GENDER_COLORS = { Masculino: "#3b82f6", Femenino: "#ec4899", "Sin dato": "#94a3b8" };
 
 /* ── KPI Card ──────────────────────────── */
-function KPICard({ label, value, sub, icon, color = "text-gray-900", bg = "bg-white" }) {
+function KPICard({ label, value, sub, icon, color = "text-gray-900", bg = "bg-white", onClick }) {
+  const clickable = !!onClick;
   return (
-    <div className={`${bg} rounded-xl border border-gray-200 p-4 shadow-sm flex flex-col`}>
+    <div
+      className={`${bg} rounded-xl border border-gray-200 p-4 shadow-sm flex flex-col ${clickable ? "cursor-pointer hover:ring-2 hover:ring-blue-300 hover:shadow-md transition-all" : ""}`}
+      onClick={onClick}
+      title={clickable ? "Clic para ver listado" : undefined}
+    >
       <div className="flex items-center gap-2 mb-1">
         {icon && <span className="text-lg">{icon}</span>}
         <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">{label}</span>
+        {clickable && <span className="text-[10px] text-blue-400 ml-auto">▸ ver lista</span>}
       </div>
       <div className={`text-2xl font-bold ${color} leading-tight`}>{value ?? "—"}</div>
       {sub && <span className="text-[11px] text-gray-400 mt-0.5">{sub}</span>}
+    </div>
+  );
+}
+
+/* ── Student List Modal ───────────────── */
+function StudentListModal({ open, onClose, tipo, estudiantes, total, loading }) {
+  if (!open) return null;
+
+  const TIPO_LABELS = {
+    repitentes: "Estudiantes Repitentes",
+    riesgo_alto: "Estudiantes — Riesgo Alto",
+    riesgo_medio: "Estudiantes — Riesgo Medio",
+    riesgo_bajo: "Estudiantes — Riesgo Bajo",
+  };
+  const TIPO_COLORS = {
+    repitentes: "text-orange-700",
+    riesgo_alto: "text-red-700",
+    riesgo_medio: "text-yellow-700",
+    riesgo_bajo: "text-green-700",
+  };
+
+  const exportCSV = () => {
+    if (!estudiantes || estudiantes.length === 0) return;
+    const headers = ["Cédula", "Nombre", "Correo", "Carrera", "Nivel", "Riesgo", "Promedio", "Días sin acceso", "% Tareas", "Estado matrícula"];
+    const rows = estudiantes.map(e => [
+      e.cedula || "", e.nombre || "", e.correo_institucional || "", e.carrera || "",
+      e.nivel_academico ?? "", e.nivel_riesgo || "", e.promedio_calificaciones ?? "",
+      e.dias_sin_acceso ?? "", e.porcentaje_tareas != null ? `${Math.round(e.porcentaje_tareas)}%` : "",
+      e.estado_matricula || "",
+    ]);
+    const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${tipo}_estudiantes.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-[95vw] max-w-4xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+          <div>
+            <h2 className={`text-lg font-bold ${TIPO_COLORS[tipo] || "text-gray-800"}`}>
+              {TIPO_LABELS[tipo] || tipo}
+            </h2>
+            <p className="text-xs text-gray-400">{total} estudiante{total !== 1 ? "s" : ""}</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button onClick={exportCSV} disabled={!estudiantes?.length}
+              className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors">
+              {"📥"} Exportar CSV
+            </button>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="overflow-auto flex-1 px-6 py-3">
+          {loading ? (
+            <div className="text-center py-12 text-gray-400">Cargando listado...</div>
+          ) : !estudiantes?.length ? (
+            <div className="text-center py-12 text-gray-400">No se encontraron estudiantes</div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-200">
+                  <th className="py-2 pr-2">Nombre</th>
+                  <th className="py-2 pr-2">Cédula</th>
+                  <th className="py-2 pr-2">Carrera</th>
+                  <th className="py-2 pr-2 text-center">Nivel</th>
+                  <th className="py-2 pr-2 text-center">Riesgo</th>
+                  <th className="py-2 pr-2 text-center">Prom.</th>
+                  <th className="py-2 pr-2 text-center">Días s/a</th>
+                  <th className="py-2 pr-2 text-center">% Tareas</th>
+                </tr>
+              </thead>
+              <tbody>
+                {estudiantes.map((e, i) => (
+                  <tr key={e.id || i} className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="py-2 pr-2 font-medium text-gray-800 max-w-[200px] truncate" title={e.nombre}>{e.nombre}</td>
+                    <td className="py-2 pr-2 text-gray-500 text-xs">{e.cedula}</td>
+                    <td className="py-2 pr-2 text-gray-600 text-xs max-w-[160px] truncate" title={e.carrera}>{e.carrera}</td>
+                    <td className="py-2 pr-2 text-center text-gray-600">{e.nivel_academico ?? "—"}</td>
+                    <td className="py-2 pr-2 text-center">
+                      <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                        e.nivel_riesgo === "Alto" ? "bg-red-100 text-red-700" :
+                        e.nivel_riesgo === "Medio" ? "bg-yellow-100 text-yellow-700" :
+                        e.nivel_riesgo === "Bajo" ? "bg-green-100 text-green-700" :
+                        "bg-gray-100 text-gray-500"
+                      }`}>{e.nivel_riesgo || "—"}</span>
+                    </td>
+                    <td className="py-2 pr-2 text-center text-gray-700">{e.promedio_calificaciones != null ? Math.round(e.promedio_calificaciones) : "—"}</td>
+                    <td className="py-2 pr-2 text-center text-gray-700">{e.dias_sin_acceso ?? "—"}</td>
+                    <td className="py-2 pr-2 text-center text-gray-700">{e.porcentaje_tareas != null ? `${Math.round(e.porcentaje_tareas)}%` : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -46,7 +157,7 @@ function MiniBar({ label, value, total, color = "bg-blue-500" }) {
 }
 
 /* ── Donut chart section ───────────────── */
-function DonutSection({ title, data, colors, total }) {
+function DonutSection({ title, data, colors, total, onItemClick }) {
   if (!data || data.length === 0) return null;
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
@@ -61,14 +172,20 @@ function DonutSection({ title, data, colors, total }) {
           </PieChart>
         </ResponsiveContainer>
         <div className="flex-1 space-y-1.5">
-          {data.map((d, i) => (
-            <div key={d.name} className="flex items-center gap-2 text-xs">
-              <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: colors[i % colors.length] }} />
-              <span className="text-gray-600 truncate flex-1">{d.name}</span>
-              <span className="font-semibold text-gray-800">{d.value.toLocaleString()}</span>
-              <span className="text-gray-400 w-10 text-right">{total > 0 ? `${Math.round(d.value / total * 100)}%` : ""}</span>
-            </div>
-          ))}
+          {data.map((d, i) => {
+            const clickHandler = onItemClick ? () => onItemClick(d.name) : undefined;
+            return (
+              <div key={d.name}
+                className={`flex items-center gap-2 text-xs ${clickHandler ? "cursor-pointer hover:bg-gray-50 rounded-md px-1 -mx-1 py-0.5 transition-colors" : ""}`}
+                onClick={clickHandler} title={clickHandler ? "Clic para ver listado" : undefined}>
+                <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: colors[i % colors.length] }} />
+                <span className="text-gray-600 truncate flex-1">{d.name}</span>
+                <span className="font-semibold text-gray-800">{d.value.toLocaleString()}</span>
+                <span className="text-gray-400 w-10 text-right">{total > 0 ? `${Math.round(d.value / total * 100)}%` : ""}</span>
+                {clickHandler && <span className="text-[10px] text-blue-400">▸</span>}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -125,6 +242,32 @@ export default function ResumenDatos() {
 
   // Carrera expand
   const [expandedCarrera, setExpandedCarrera] = useState(null);
+
+  // Student list modal
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalTipo, setModalTipo] = useState("");
+  const [modalEstudiantes, setModalEstudiantes] = useState([]);
+  const [modalTotal, setModalTotal] = useState(0);
+  const [modalLoading, setModalLoading] = useState(false);
+
+  const openStudentList = async (tipo) => {
+    setModalTipo(tipo);
+    setModalOpen(true);
+    setModalLoading(true);
+    setModalEstudiantes([]);
+    try {
+      const params = { tipo };
+      if (filtroPeriodo) params.periodo = filtroPeriodo;
+      if (filtroCarrera) params.carrera = filtroCarrera;
+      const res = await api.getEstudiantesListado(params);
+      setModalEstudiantes(res.estudiantes || []);
+      setModalTotal(res.total || 0);
+    } catch (e) {
+      console.error("Error loading student list:", e);
+    } finally {
+      setModalLoading(false);
+    }
+  };
 
   // Tab
   const [activeTab, setActiveTab] = useState("general");
@@ -352,7 +495,11 @@ export default function ResumenDatos() {
             <div className="space-y-5">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {/* Risk donut */}
-                <DonutSection title="Distribución de Riesgo" data={riskData} colors={riskColors} total={g.total_estudiantes} />
+                <DonutSection title="Distribución de Riesgo" data={riskData} colors={riskColors} total={g.total_estudiantes}
+                  onItemClick={(name) => {
+                    const map = { Alto: "riesgo_alto", Medio: "riesgo_medio", Bajo: "riesgo_bajo" };
+                    if (map[name]) openStudentList(map[name]);
+                  }} />
 
                 {/* Gender donut */}
                 <DonutSection title="Género" data={genderData} colors={genderColors} total={g.total_estudiantes} />
@@ -365,9 +512,10 @@ export default function ResumenDatos() {
                       <span className="text-sm text-gray-500">Reprobados</span>
                       <span className="text-lg font-bold text-red-600">{g.reprobados ?? 0}</span>
                     </div>
-                    <div className="flex justify-between items-center">
+                    <div className="flex justify-between items-center cursor-pointer hover:bg-orange-50 rounded-lg px-2 py-1 -mx-2 transition-colors"
+                         onClick={() => openStudentList("repitentes")} title="Clic para ver listado">
                       <span className="text-sm text-gray-500">Repitentes</span>
-                      <span className="text-lg font-bold text-orange-600">{g.repitentes ?? 0}</span>
+                      <span className="text-lg font-bold text-orange-600 flex items-center gap-1">{g.repitentes ?? 0} <span className="text-[10px] text-orange-300">▸</span></span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-gray-500">Prob. deserción alta</span>
@@ -654,6 +802,16 @@ export default function ResumenDatos() {
           <p className="text-xs text-gray-400 mt-1">Ejecuta el proceso ETL para cargar datos de estudiantes</p>
         </div>
       )}
+
+      {/* ── Student List Modal ─── */}
+      <StudentListModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        tipo={modalTipo}
+        estudiantes={modalEstudiantes}
+        total={modalTotal}
+        loading={modalLoading}
+      />
     </div>
   );
 }

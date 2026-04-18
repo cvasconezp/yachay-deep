@@ -437,6 +437,88 @@ def get_resumen_datos(
     return {"global": global_stats, "por_carrera": por_carrera, "tiene_datos_periodo": tiene_datos_periodo}
 
 
+@router.get("/resumen/estudiantes-listado")
+def get_estudiantes_listado(
+    tipo: str = "repitentes",
+    carrera: Optional[str] = None,
+    periodo: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Lista de estudiantes filtrados por tipo: repitentes, riesgo_alto, riesgo_medio, riesgo_bajo.
+    Usado por las tarjetas KPI clickeables en Resumen de Datos."""
+    from sqlalchemy import or_
+
+    semconfig = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
+
+    # Detectar include_null (periodo activo)
+    _include_null = False
+    if periodo and periodo not in ("actual", "todos"):
+        try:
+            if semconfig and semconfig.semestre:
+                a = semconfig.semestre.strip()
+                pn = periodo.strip()
+                _include_null = (a == pn or
+                                 (a.startswith("P") and a[1:] == pn) or
+                                 f"P{a}" == pn)
+        except Exception:
+            pass
+
+    _carrera_sids = None
+    if carrera:
+        _carrera_sids = set(s_id for (s_id,) in db.query(Student.id).filter(
+            func.lower(Student.carrera).contains(carrera.lower())).all())
+
+    # Obtener student_ids del periodo
+    union_sq, periodo_filter = _resumen_period_student_ids(db, periodo, _carrera_sids)
+    all_period_sids = set(r[0] for r in union_sq.all())
+
+    base_q = db.query(Student)
+    if carrera:
+        base_q = base_q.filter(func.lower(Student.carrera).contains(carrera.lower()))
+    if periodo_filter != "todos":
+        base_q = base_q.filter(Student.id.in_(all_period_sids))
+
+    if tipo in ("riesgo_alto", "riesgo_medio", "riesgo_bajo"):
+        nivel_map = {"riesgo_alto": "Alto", "riesgo_medio": "Medio", "riesgo_bajo": "Bajo"}
+        base_q = base_q.filter(Student.nivel_riesgo == nivel_map[tipo])
+        students = base_q.order_by(Student.nombre).all()
+    elif tipo == "repitentes":
+        # Repitentes: estudiantes con numero_repitencias > 1 en grades o enrollments
+        grades_q = db.query(Grade.student_id).filter(Grade.numero_repitencias > 1).distinct()
+        grades_q, _ = apply_periodo_filter(grades_q, periodo, include_null=_include_null)
+        enroll_q = db.query(Enrollment.student_id).filter(Enrollment.numero_repitencias > 1).distinct()
+        enroll_q, _ = apply_periodo_filter(enroll_q, periodo, column=Enrollment.periodo)
+
+        repitente_sids = set(r[0] for r in grades_q.union(enroll_q).all())
+        if carrera and _carrera_sids:
+            repitente_sids &= _carrera_sids
+        repitente_sids &= all_period_sids
+
+        students = db.query(Student).filter(Student.id.in_(repitente_sids)).order_by(Student.nombre).all()
+    else:
+        return {"tipo": tipo, "total": 0, "estudiantes": [], "error": "Tipo no válido"}
+
+    resultado = []
+    for s in students:
+        resultado.append({
+            "id": s.id,
+            "cedula": s.cedula,
+            "nombre": s.nombre,
+            "correo_institucional": s.correo_institucional,
+            "carrera": s.carrera,
+            "nivel_academico": s.nivel_academico,
+            "nivel_riesgo": s.nivel_riesgo,
+            "indice_compromiso": s.indice_compromiso,
+            "promedio_calificaciones": s.promedio_calificaciones,
+            "dias_sin_acceso": s.dias_sin_acceso,
+            "porcentaje_tareas": s.porcentaje_tareas,
+            "estado_matricula": s.estado_matricula,
+        })
+
+    return {"tipo": tipo, "total": len(resultado), "estudiantes": resultado}
+
+
 @router.get("/comparativa")
 def get_comparativa(
     carrera: Optional[str] = None,
