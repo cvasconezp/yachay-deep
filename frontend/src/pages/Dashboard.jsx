@@ -5,6 +5,7 @@ import { RiskBadge, CompromisoBar, PredictionBadge } from "../components/RiskBad
 import { PeriodSelector } from "../components/PeriodSelector";
 import ExportExcelButton from "../components/ExportExcelButton";
 import BulkInterventionModal from "../components/BulkInterventionModal";
+import { useStudentListModal } from "../components/StudentListModal";
 
 const RISK_ORDER = { Alto: 0, Medio: 1, Bajo: 2 };
 
@@ -87,6 +88,10 @@ export default function Dashboard() {
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
   const navigate = useNavigate();
+  const { openStudentList, StudentListModalEl } = useStudentListModal({
+    periodo: filtros.periodo,
+    carrera: filtros.carrera,
+  });
 
   // Load asignaturas when carrera changes
   useEffect(() => {
@@ -182,6 +187,7 @@ export default function Dashboard() {
     { key: null, label: "Total monitoreados", value: stats?.total_estudiantes ?? "—", color: "text-blue-700", bg: "bg-blue-50 border-blue-200" },
     { key: "alto", label: "Riesgo Alto", value: riskCounts["Alto"] ?? 0, color: "text-red-700", bg: "bg-red-50 border-red-200" },
     { key: "medio", label: "Riesgo Medio", value: riskCounts["Medio"] ?? 0, color: "text-yellow-700", bg: "bg-yellow-50 border-yellow-200" },
+    { key: "repitentes", label: "Repitentes", value: stats?.total_repitentes ?? 0, color: "text-orange-700", bg: "bg-orange-50 border-orange-200", modal: true },
     { key: "intervenciones", label: "Intervenciones", value: stats?.total_intervenciones ?? 0, color: "text-green-700", bg: "bg-green-50 border-green-200" },
   ];
 
@@ -219,19 +225,29 @@ export default function Dashboard() {
       )}
 
       {/* Tarjetas interactivas */}
-      {stats?.tiene_datos_periodo !== false && <div className="grid grid-cols-2 md:grid-cols-4 gap-3 my-5">
+      {stats?.tiene_datos_periodo !== false && <div className="grid grid-cols-2 md:grid-cols-5 gap-3 my-5">
         {cards.map(card => {
           const isActive = cardFilter === card.key;
+          const isModal = card.modal;
           return (
             <div
               key={card.key ?? "total"}
-              onClick={() => setCardFilter(isActive ? null : card.key)}
+              onClick={() => {
+                if (isModal) {
+                  openStudentList("repitentes");
+                } else {
+                  setCardFilter(isActive ? null : card.key);
+                }
+              }}
               className={`rounded-xl border px-4 py-3 cursor-pointer transition-all duration-200
                 ${isActive ? "ring-2 ring-blue-500 shadow-md scale-[1.02]" : "hover:shadow-sm"}
                 ${card.bg}`}
-              title={isActive ? "Click para quitar filtro" : card.key ? `Click para filtrar por ${card.label}` : ""}
+              title={isModal ? "Click para ver listado de repitentes" : isActive ? "Click para quitar filtro" : card.key ? `Click para filtrar por ${card.label}` : ""}
             >
-              <div className={`text-2xl font-bold ${card.color}`}>{card.value}</div>
+              <div className="flex items-center justify-between">
+                <div className={`text-2xl font-bold ${card.color}`}>{card.value}</div>
+                {isModal && <span className="text-[10px] text-orange-400">▸ ver lista</span>}
+              </div>
               <div className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mt-0.5">{card.label}</div>
               {isActive && <div className="text-[9px] text-blue-600 font-medium mt-1">✓ Filtro activo</div>}
             </div>
@@ -444,6 +460,9 @@ export default function Dashboard() {
           onSaved={handleBulkSaved}
         />
       )}
+
+      {/* Student list modal (repitentes) */}
+      {StudentListModalEl}
     </div>
   );
 }

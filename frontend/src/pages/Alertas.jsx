@@ -4,6 +4,7 @@ import { useAuth } from "../hooks/useAuth";
 import { api } from "../services/api";
 import { PeriodSelector } from "../components/PeriodSelector";
 import BulkInterventionModal from "../components/BulkInterventionModal";
+import { useStudentListModal } from "../components/StudentListModal";
 
 const TIPO_LABELS = {
   inactividad: "Inactividad AVAC",
@@ -72,6 +73,10 @@ export default function Alertas() {
   const [asignaturas, setAsignaturas] = useState([]);
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { openStudentList, StudentListModalEl } = useStudentListModal({
+    periodo: filterPeriodo,
+    carrera: filterCarrera,
+  });
 
   // Load carreras on mount
   useEffect(() => {
@@ -260,22 +265,33 @@ export default function Alertas() {
 
       {/* Summary Cards */}
       {!loading && alerts.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-5">
           <div className="bg-white rounded-xl border border-gray-200 p-4">
             <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Total Pendientes</div>
             <div className="text-2xl font-bold text-gray-900 mt-1">{alerts.length}</div>
           </div>
           <div className="bg-white rounded-xl border border-red-200 p-4">
-            <div className="text-xs font-medium text-red-600 uppercase tracking-wide">🔴 Críticas</div>
+            <div className="text-xs font-medium text-red-600 uppercase tracking-wide">Críticas</div>
             <div className="text-2xl font-bold text-red-700 mt-1">{counts.critico}</div>
           </div>
           <div className="bg-white rounded-xl border border-orange-200 p-4">
-            <div className="text-xs font-medium text-orange-600 uppercase tracking-wide">🟠 Altas</div>
+            <div className="text-xs font-medium text-orange-600 uppercase tracking-wide">Altas</div>
             <div className="text-2xl font-bold text-orange-600 mt-1">{counts.alto}</div>
           </div>
           <div className="bg-white rounded-xl border border-yellow-200 p-4">
-            <div className="text-xs font-medium text-yellow-600 uppercase tracking-wide">🟡 Medias</div>
+            <div className="text-xs font-medium text-yellow-600 uppercase tracking-wide">Medias</div>
             <div className="text-2xl font-bold text-yellow-600 mt-1">{counts.medio}</div>
+          </div>
+          <div
+            className="bg-orange-50 rounded-xl border border-orange-200 p-4 cursor-pointer hover:ring-2 hover:ring-orange-300 hover:shadow-md transition-all"
+            onClick={() => openStudentList("repitentes")}
+            title="Clic para ver listado de repitentes"
+          >
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-medium text-orange-700 uppercase tracking-wide">Repitentes</div>
+              <span className="text-[10px] text-orange-400">▸ ver lista</span>
+            </div>
+            <div className="text-2xl font-bold text-orange-700 mt-1">{"📋"}</div>
           </div>
         </div>
       )}
@@ -507,6 +523,9 @@ export default function Alertas() {
           onSaved={handleBulkSaved}
         />
       )}
+
+      {/* Student list modal (repitentes) */}
+      {StudentListModalEl}
     </div>
   );
 }
