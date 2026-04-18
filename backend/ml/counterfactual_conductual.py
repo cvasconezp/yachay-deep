@@ -67,13 +67,15 @@ def generate_behavioral_counterfactual(
         return None
 
     # Obtener contexto del semestre para validar qué escenarios aplican
-    from .recommendations import _get_semester_context
+    from .recommendations import _get_semester_context, get_dias_sin_acceso_bloque
     sem_ctx = _get_semester_context(db)
     dias_desde_inicio = sem_ctx.get("dias_desde_inicio", 0)
     primera_entrega = sem_ctx.get("primera_entrega_pasada", False)
     tiene_notas = sem_ctx.get("tiene_notas_actuales", False)
 
-    dias = student.dias_sin_acceso
+    # Usar dias_sin_acceso filtrado por bloque actual (excluye cursos de bloque 2)
+    dias_bloque = get_dias_sin_acceso_bloque(db, student_id)
+    dias = dias_bloque if dias_bloque is not None else student.dias_sin_acceso
     tareas = student.porcentaje_tareas
     promedio = student.promedio_calificaciones
     matricula = student.estado_matricula

@@ -89,6 +89,59 @@ def _get_semester_context(db: Session) -> dict:
     return ctx
 
 
+def get_dias_sin_acceso_bloque(db: Session, student_id: int) -> Optional[float]:
+    """
+    Calcula dias_sin_acceso considerando SOLO cursos del bloque actual.
+
+    El campo student.dias_sin_acceso incluye todos los cursos (bloque 1 y 2).
+    Al inicio del semestre (bloque 1), cursos de bloque 2 aún no empezaron,
+    por lo que su inactividad es esperada y no debería generar alertas.
+
+    Returns:
+        dias_sin_acceso filtrado por bloque, o None si no hay datos.
+        Usa el MÍNIMO entre cursos del bloque (mejor caso = más reciente acceso).
+    """
+    try:
+        from ..models.course_config import SemesterConfig, CourseConfig
+        from ..models.avac_access import AvacAccess
+
+        sc = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
+        if not sc:
+            return None  # sin config, no podemos filtrar
+
+        bloque_actual = sc.bloque_actual or "1"
+
+        # Obtener códigos de cursos del bloque actual (o "ambos")
+        cursos_bloque = (
+            db.query(CourseConfig.codigo_avac)
+            .filter(
+                CourseConfig.activo == True,
+                CourseConfig.bloque.in_([bloque_actual, "ambos"]),
+            )
+            .all()
+        )
+        codigos = {c[0] for c in cursos_bloque if c[0]}
+
+        if not codigos:
+            return None  # sin cursos configurados para este bloque
+
+        # Buscar el acceso más reciente del estudiante en esos cursos
+        from sqlalchemy import func as sqlfunc
+        result = db.query(
+            sqlfunc.min(AvacAccess.dias_sin_acceso)
+        ).filter(
+            AvacAccess.student_id == student_id,
+            AvacAccess.codigo_curso.in_(codigos),
+            AvacAccess.dias_sin_acceso.isnot(None),
+        ).scalar()
+
+        return result
+
+    except Exception as e:
+        logger.warning("get_dias_sin_acceso_bloque error for student %s: %s", student_id, e)
+        return None
+
+
 def _prioridad(nivel: str) -> int:
     return {"urgente": 0, "importante": 1, "sugerida": 2}.get(nivel, 3)
 
@@ -119,7 +172,9 @@ def generate_recommendations(
 
     prob_des = student.prob_desercion or 0
     prob_rep = student.prob_reprobacion or 0
-    dias = student.dias_sin_acceso
+    # Usar dias_sin_acceso filtrado por bloque actual (excluye cursos de bloque 2 durante bloque 1)
+    dias_bloque = get_dias_sin_acceso_bloque(db, student_id)
+    dias = dias_bloque if dias_bloque is not None else student.dias_sin_acceso
     compromiso = student.indice_compromiso
     tareas = student.porcentaje_tareas
 

@@ -49,6 +49,7 @@ async def lifespan(app: FastAPI):
     _create_default_admin()
     _cleanup_stuck_etl_runs()
     _load_persistent_settings()
+    _ensure_semester_calendar()
     logger.info("✅ Base de datos lista")
     yield
     logger.info("Apagando Yachay Deep API")
@@ -98,6 +99,72 @@ def _load_persistent_settings():
             logger.info("🍪 No hay cookie AVAC guardada en BD")
     except Exception as e:
         logger.warning(f"⚠️ Error cargando settings persistentes: {e}")
+    finally:
+        db.close()
+
+
+def _ensure_semester_calendar():
+    """
+    Asegura que el SemesterConfig activo tenga el calendario académico cargado.
+    Si no tiene calendario, carga el de P68 (abril-julio 2026).
+    """
+    import json
+    from .database import SessionLocal
+    from .models.course_config import SemesterConfig
+
+    CALENDARIO_P68 = [
+        # Primer bimestre
+        {"fecha": "2026-04-06", "tipo": "inicio_bloque", "label": "Inicio primer bimestre"},
+        {"fecha": "2026-04-19", "tipo": "entrega", "label": "Entrega actividades 1"},
+        {"fecha": "2026-05-03", "tipo": "entrega", "label": "Entrega actividades 2"},
+        {"fecha": "2026-05-17", "tipo": "entrega", "label": "Entrega actividades 3"},
+        {"fecha": "2026-05-29", "tipo": "entrega", "label": "Paso de notas primer bimestre"},
+        # Segundo bimestre
+        {"fecha": "2026-06-08", "tipo": "inicio_bloque", "label": "Inicio segundo bimestre"},
+        {"fecha": "2026-06-21", "tipo": "entrega", "label": "Entrega actividades 4"},
+        {"fecha": "2026-07-05", "tipo": "entrega", "label": "Entrega actividades 5"},
+        {"fecha": "2026-07-19", "tipo": "entrega", "label": "Entrega actividades 6"},
+        {"fecha": "2026-07-31", "tipo": "entrega", "label": "Paso de notas segundo bimestre"},
+    ]
+
+    db = SessionLocal()
+    try:
+        sc = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
+        if not sc:
+            return
+
+        updated = False
+
+        # Cargar calendario si no existe
+        if not sc.calendario_academico:
+            sc.calendario_academico = json.dumps(CALENDARIO_P68)
+            updated = True
+            logger.info("📅 Calendario académico P68 cargado en SemesterConfig")
+
+        # Asegurar fechas de bloque si no están configuradas
+        from datetime import datetime, timezone
+        if not sc.bloque1_inicio:
+            sc.bloque1_inicio = datetime(2026, 4, 6, tzinfo=timezone.utc)
+            updated = True
+        if not sc.bloque1_fin:
+            sc.bloque1_fin = datetime(2026, 5, 29, tzinfo=timezone.utc)
+            updated = True
+        if not sc.bloque2_inicio:
+            sc.bloque2_inicio = datetime(2026, 6, 8, tzinfo=timezone.utc)
+            updated = True
+        if not sc.bloque2_fin:
+            sc.bloque2_fin = datetime(2026, 7, 31, tzinfo=timezone.utc)
+            updated = True
+
+        if updated:
+            db.commit()
+            logger.info("📅 SemesterConfig actualizado con calendario y fechas de bloque")
+    except Exception as e:
+        logger.warning(f"⚠️ Error cargando calendario académico: {e}")
+        try:
+            db.rollback()
+        except Exception:
+            pass
     finally:
         db.close()
 
