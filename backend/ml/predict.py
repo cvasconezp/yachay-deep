@@ -71,7 +71,11 @@ class Predictor:
         # 1) Intentar cargar desde disco
         for joblib_file in MODELS_DIR.glob("*.joblib"):
             name = joblib_file.stem
-            model = joblib.load(joblib_file)
+            try:
+                model = joblib.load(joblib_file)
+            except (EOFError, Exception) as e:
+                logger.warning(f"Archivo de modelo corrupto, ignorando {joblib_file.name}: {e}")
+                continue
             if name.endswith("_desercion"):
                 key = name[:-len("_desercion")]
                 self.models.setdefault(key, {})["desercion"] = model
@@ -83,12 +87,17 @@ class Predictor:
 
         for stats_file in MODELS_DIR.glob("*_stats.json"):
             name = stats_file.stem[:-len("_stats")]
+            try:
+                stats_data = json.loads(stats_file.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, Exception) as e:
+                logger.warning(f"Stats corrupto, ignorando {stats_file.name}: {e}")
+                continue
             if name.endswith("_desercion"):
                 key = name[:-len("_desercion")]
-                self.stats.setdefault(key, {})["desercion"] = json.loads(stats_file.read_text(encoding="utf-8"))
+                self.stats.setdefault(key, {})["desercion"] = stats_data
             elif name.endswith("_reprobacion"):
                 key = name[:-len("_reprobacion")]
-                self.stats.setdefault(key, {})["reprobacion"] = json.loads(stats_file.read_text(encoding="utf-8"))
+                self.stats.setdefault(key, {})["reprobacion"] = stats_data
 
         # 2) [GAP-F2-02] Si no hay modelos en disco, restaurar desde PostgreSQL
         if not loaded_any:
