@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../services/api";
 import { PeriodSelector } from "../components/PeriodSelector";
 import { TrendCharts } from "../components/TrendCharts";
@@ -38,8 +39,10 @@ function KPICard({ label, value, sub, icon, color = "text-gray-900", bg = "bg-wh
 }
 
 /* ── Student List Modal ───────────────── */
-function StudentListModal({ open, onClose, tipo, estudiantes, total, loading }) {
+function StudentListModal({ open, onClose, tipo, estudiantes, total, loading, onNavigate }) {
   if (!open) return null;
+
+  const isRepitentes = tipo === "repitentes";
 
   const TIPO_LABELS = {
     repitentes: "Estudiantes Repitentes",
@@ -57,12 +60,17 @@ function StudentListModal({ open, onClose, tipo, estudiantes, total, loading }) 
   const exportCSV = () => {
     if (!estudiantes || estudiantes.length === 0) return;
     const headers = ["Cédula", "Nombre", "Correo", "Carrera", "Nivel", "Riesgo", "Promedio", "Días sin acceso", "% Tareas", "Estado matrícula"];
-    const rows = estudiantes.map(e => [
-      e.cedula || "", e.nombre || "", e.correo_institucional || "", e.carrera || "",
-      e.nivel_academico ?? "", e.nivel_riesgo || "", e.promedio_calificaciones ?? "",
-      e.dias_sin_acceso ?? "", e.porcentaje_tareas != null ? `${Math.round(e.porcentaje_tareas)}%` : "",
-      e.estado_matricula || "",
-    ]);
+    if (isRepitentes) headers.push("Asignaturas con repitencia");
+    const rows = estudiantes.map(e => {
+      const row = [
+        e.cedula || "", e.nombre || "", e.correo_institucional || "", e.carrera || "",
+        e.nivel_academico ?? "", e.nivel_riesgo || "", e.promedio_calificaciones ?? "",
+        e.dias_sin_acceso ?? "", e.porcentaje_tareas != null ? `${Math.round(e.porcentaje_tareas)}%` : "",
+        e.estado_matricula || "",
+      ];
+      if (isRepitentes) row.push((e.asignaturas_repitencia || []).join(" | "));
+      return row;
+    });
     const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -75,7 +83,7 @@ function StudentListModal({ open, onClose, tipo, estudiantes, total, loading }) 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-[95vw] max-w-4xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+      <div className="bg-white rounded-2xl shadow-2xl w-[95vw] max-w-5xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
           <div>
@@ -106,6 +114,7 @@ function StudentListModal({ open, onClose, tipo, estudiantes, total, loading }) 
                   <th className="py-2 pr-2">Nombre</th>
                   <th className="py-2 pr-2">Cédula</th>
                   <th className="py-2 pr-2">Carrera</th>
+                  {isRepitentes && <th className="py-2 pr-2">Asignatura(s) repitencia</th>}
                   <th className="py-2 pr-2 text-center">Nivel</th>
                   <th className="py-2 pr-2 text-center">Riesgo</th>
                   <th className="py-2 pr-2 text-center">Prom.</th>
@@ -116,9 +125,24 @@ function StudentListModal({ open, onClose, tipo, estudiantes, total, loading }) 
               <tbody>
                 {estudiantes.map((e, i) => (
                   <tr key={e.id || i} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="py-2 pr-2 font-medium text-gray-800 max-w-[200px] truncate" title={e.nombre}>{e.nombre}</td>
+                    <td className="py-2 pr-2 max-w-[200px]">
+                      <button
+                        className="font-medium text-blue-700 hover:text-blue-900 hover:underline truncate block text-left max-w-full"
+                        title={`${e.nombre} — abrir ficha`}
+                        onClick={() => { onClose(); onNavigate(e.id); }}
+                      >{e.nombre}</button>
+                    </td>
                     <td className="py-2 pr-2 text-gray-500 text-xs">{e.cedula}</td>
-                    <td className="py-2 pr-2 text-gray-600 text-xs max-w-[160px] truncate" title={e.carrera}>{e.carrera}</td>
+                    <td className="py-2 pr-2 text-gray-600 text-xs max-w-[140px] truncate" title={e.carrera}>{e.carrera}</td>
+                    {isRepitentes && (
+                      <td className="py-2 pr-2 text-xs text-orange-700 max-w-[200px]">
+                        <div className="flex flex-wrap gap-1">
+                          {(e.asignaturas_repitencia || []).map((a, j) => (
+                            <span key={j} className="bg-orange-50 border border-orange-200 rounded px-1.5 py-0.5 text-[10px] truncate max-w-[180px]" title={a}>{a}</span>
+                          ))}
+                        </div>
+                      </td>
+                    )}
                     <td className="py-2 pr-2 text-center text-gray-600">{e.nivel_academico ?? "—"}</td>
                     <td className="py-2 pr-2 text-center">
                       <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${
@@ -222,6 +246,7 @@ const DEFAULT_EXPORT_COLS = [
    MAIN COMPONENT
    ══════════════════════════════════════════ */
 export default function ResumenDatos() {
+  const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -811,6 +836,7 @@ export default function ResumenDatos() {
         estudiantes={modalEstudiantes}
         total={modalTotal}
         loading={modalLoading}
+        onNavigate={(id) => navigate(`/ficha/${id}`)}
       />
     </div>
   );

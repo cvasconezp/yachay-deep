@@ -485,12 +485,19 @@ def get_estudiantes_listado(
         students = base_q.order_by(Student.nombre).all()
     elif tipo == "repitentes":
         # Repitentes: estudiantes con numero_repitencias > 1 en grades o enrollments
-        grades_q = db.query(Grade.student_id).filter(Grade.numero_repitencias > 1).distinct()
-        grades_q, _ = apply_periodo_filter(grades_q, periodo, include_null=_include_null)
-        enroll_q = db.query(Enrollment.student_id).filter(Enrollment.numero_repitencias > 1).distinct()
-        enroll_q, _ = apply_periodo_filter(enroll_q, periodo, column=Enrollment.periodo)
+        grades_rep_q = db.query(Grade.student_id, Grade.asignatura).filter(Grade.numero_repitencias > 1)
+        grades_rep_q, _ = apply_periodo_filter(grades_rep_q, periodo, include_null=_include_null)
+        enroll_rep_q = db.query(Enrollment.student_id, Enrollment.asignatura).filter(Enrollment.numero_repitencias > 1)
+        enroll_rep_q, _ = apply_periodo_filter(enroll_rep_q, periodo, column=Enrollment.periodo)
 
-        repitente_sids = set(r[0] for r in grades_q.union(enroll_q).all())
+        # Build lookup: student_id → set of asignaturas con repitencia
+        asig_repitencia = {}
+        for sid, asig in grades_rep_q.all():
+            asig_repitencia.setdefault(sid, set()).add(asig or "Sin asignatura")
+        for sid, asig in enroll_rep_q.all():
+            asig_repitencia.setdefault(sid, set()).add(asig or "Sin asignatura")
+
+        repitente_sids = set(asig_repitencia.keys())
         if carrera and _carrera_sids:
             repitente_sids &= _carrera_sids
         repitente_sids &= all_period_sids
@@ -501,7 +508,7 @@ def get_estudiantes_listado(
 
     resultado = []
     for s in students:
-        resultado.append({
+        item = {
             "id": s.id,
             "cedula": s.cedula,
             "nombre": s.nombre,
@@ -514,7 +521,10 @@ def get_estudiantes_listado(
             "dias_sin_acceso": s.dias_sin_acceso,
             "porcentaje_tareas": s.porcentaje_tareas,
             "estado_matricula": s.estado_matricula,
-        })
+        }
+        if tipo == "repitentes":
+            item["asignaturas_repitencia"] = sorted(asig_repitencia.get(s.id, []))
+        resultado.append(item)
 
     return {"tipo": tipo, "total": len(resultado), "estudiantes": resultado}
 
