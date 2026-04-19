@@ -17,7 +17,7 @@ from ...models.course_config import CourseConfig, SemesterConfig
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["entregas"])
+router = APIRouter(prefix="/analytics", tags=["entregas"])
 
 
 def _get_active_periodo_variants(db: Session):
