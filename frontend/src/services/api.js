@@ -255,6 +255,16 @@ class ApiClient {
   getDocenteTrackingDetalle(docente) { return this.get(`/analytics/docente-tracking/${encodeURIComponent(docente)}`); }
   getDocenteTrackingResumen() { return this.get("/analytics/docente-tracking/resumen"); }
 
+  // ── Entregas ──
+  getEntregasPendientes(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.get(`/analytics/entregas-pendientes${qs ? "?" + qs : ""}`);
+  }
+  getEntregasResumen(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.get(`/analytics/entregas-resumen${qs ? "?" + qs : ""}`);
+  }
+
   // ── Alerts ──
   getAlertCount() { return this.get("/alerts/count"); }
   getAlertsPending(params = {}) {

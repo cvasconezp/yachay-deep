@@ -17,6 +17,7 @@ import Alertas from "./pages/Alertas";
 import ResumenDatos from "./pages/ResumenDatos";
 import Admin from "./pages/Admin";
 import About from "./pages/About";
+import EntregasPendientes from "./pages/EntregasPendientes";
 
 function PrivateRoute({ children, adminOnly = false }) {
   const { user, loading } = useAuth();
@@ -122,6 +123,14 @@ export default function App() {
               element={
                 <PrivateRoute>
                   <ResumenDatos />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/entregas"
+              element={
+                <PrivateRoute>
+                  <EntregasPendientes />
                 </PrivateRoute>
               }
             />
