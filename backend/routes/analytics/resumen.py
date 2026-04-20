@@ -362,26 +362,25 @@ def get_resumen_datos(
     global_stats["total_carreras"] = len(carreras_set)
     global_stats["total_asignaturas"] = len(asignaturas_set)
     # Secciones = combinaciones únicas asignatura × docente
-    # Query directa replicando la lógica de Analítica de Asignaturas (sin include_null)
-    secc_q = db.query(Grade.asignatura, Grade.docente).filter(
-        Grade.asignatura.isnot(None), Grade.docente.isnot(None),
-        Grade.docente != "",
-    ).distinct()
+    # Replica exactamente la lógica de Analítica de Asignaturas:
+    # 1) Intenta grades GROUP BY (asignatura, docente)
+    # 2) Si no hay grades, fallback a enrollment GROUP BY (asignatura, docente)
+    from sqlalchemy import literal_column
+    secc_q = db.query(Grade.asignatura, Grade.docente)
     secc_q, _ = apply_periodo_filter(secc_q, periodo)
     if carrera and _carrera_sids:
         secc_q = secc_q.filter(Grade.student_id.in_(_carrera_sids))
-    secciones_grades = secc_q.count()
-    # Fallback a enrollment si no hay grades
-    if secciones_grades == 0:
-        secc_e = db.query(Enrollment.asignatura, Enrollment.docente).filter(
-            Enrollment.asignatura.isnot(None), Enrollment.docente.isnot(None),
-            Enrollment.docente != "",
-        ).distinct()
+    secc_q = secc_q.group_by(Grade.asignatura, Grade.docente)
+    secciones_count = secc_q.count()
+    # Fallback a enrollment (misma lógica que _get_enrollment_results)
+    if secciones_count == 0:
+        secc_e = db.query(Enrollment.asignatura, Enrollment.docente)
         secc_e, _ = apply_periodo_filter(secc_e, periodo, column=Enrollment.periodo)
         if carrera and _carrera_sids:
             secc_e = secc_e.filter(Enrollment.student_id.in_(_carrera_sids))
-        secciones_grades = secc_e.count()
-    global_stats["total_secciones"] = secciones_grades
+        secc_e = secc_e.group_by(Enrollment.asignatura, Enrollment.docente)
+        secciones_count = secc_e.count()
+    global_stats["total_secciones"] = secciones_count
     global_stats["total_docentes_enrollment"] = len(docentes_enroll_set)
     global_stats["total_matriculas"] = len(enrollments)
     global_stats["por_tipo_asignatura"] = dict(sorted(enroll_por_tipo.items(), key=lambda x: -x[1]))
