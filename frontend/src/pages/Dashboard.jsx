@@ -198,7 +198,15 @@ export default function Dashboard() {
           <h1 className="text-2xl font-bold text-gray-900">Dashboard de Riesgo</h1>
           <p className="text-gray-500 text-sm">Estudiantes identificados con indicadores de riesgo académico</p>
         </div>
-        <ExportExcelButton data={filteredStudents} columns={EXPORT_COLUMNS} filename="dashboard_riesgo" />
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate("/entregas")}
+            className="text-sm text-blue-600 hover:text-blue-800 font-medium px-3 py-1.5 rounded-lg hover:bg-blue-50 border border-blue-200 transition-colors"
+          >
+            Entregas pendientes
+          </button>
+          <ExportExcelButton data={filteredStudents} columns={EXPORT_COLUMNS} filename="dashboard_riesgo" />
+        </div>
       </div>
 
       {error && (

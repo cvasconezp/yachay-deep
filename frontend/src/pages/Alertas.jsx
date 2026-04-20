@@ -236,7 +236,14 @@ export default function Alertas() {
           <p className="text-gray-500 text-sm">Alertas automáticas basadas en indicadores de riesgo estudiantil</p>
           <p className="text-amber-600 text-xs mt-0.5">Las alertas se basan en el último scraping de AVAC disponible</p>
         </div>
-        {user?.role === "admin" && (
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate("/entregas")}
+            className="text-sm text-blue-600 hover:text-blue-800 font-medium px-3 py-1.5 rounded-lg hover:bg-blue-50 border border-blue-200 transition-colors"
+          >
+            Entregas pendientes
+          </button>
+          {user?.role === "admin" && (
           <button
             onClick={handleGenerateAlerts}
             disabled={generatingAlerts}
@@ -248,7 +255,8 @@ export default function Alertas() {
               <><span>⚡</span> Generar alertas</>
             )}
           </button>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Messages */}

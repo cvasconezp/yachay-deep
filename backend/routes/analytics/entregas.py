@@ -153,6 +153,7 @@ def entregas_pendientes(
     unidad: str = Query("", description="Filtrar por unidad: 1, 2, 3, 4"),
     bloque: str = Query("", description="Filtrar por bloque: 1, 2, o vacío para todos"),
     codigo_curso: str = Query("", description="Filtrar por código AVAC del curso"),
+    grupos_excluir: str = Query("", description="Grupos a excluir (comma-sep): 6 excluye Wasakentsa"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -170,6 +171,15 @@ def entregas_pendientes(
         codigos_excluir = _get_codigos_excluir_bloque(db, bloque.strip())
     else:
         codigos_excluir = _get_codigos_excluir(db)
+
+    # Filtro de grupo: excluir cursos de grupos específicos (ej: grupo 6 Wasakentsa)
+    if grupos_excluir:
+        grupos_list = [g.strip() for g in grupos_excluir.split(",") if g.strip()]
+        if grupos_list:
+            excl_by_grupo = db.query(CourseConfig.codigo_avac).filter(
+                CourseConfig.grupo.in_(grupos_list)
+            ).all()
+            codigos_excluir = codigos_excluir | {r[0] for r in excl_by_grupo if r[0]}
 
     # Encontrar el snapshot más reciente
     latest_date = _get_latest_snapshot_date(db, periodo_filter, codigos_excluir)
@@ -295,6 +305,21 @@ def entregas_pendientes(
     # Ordenar: primero las actividades con más pendientes
     resultado.sort(key=lambda x: x["no_entregaron"], reverse=True)
 
+    # Grupos disponibles para la carrera seleccionada (para filtro en frontend)
+    grupos_disponibles = []
+    if carrera:
+        carrera_lower = carrera.strip().lower()
+        grupos_q = (
+            db.query(CourseConfig.grupo)
+            .filter(
+                CourseConfig.carrera.ilike(f"%{carrera_lower}%"),
+                CourseConfig.grupo.isnot(None),
+            )
+            .distinct()
+            .all()
+        )
+        grupos_disponibles = sorted({r[0] for r in grupos_q if r[0]}, key=lambda x: int(x) if x.isdigit() else x)
+
     return {
         "actividades": resultado,
         "resumen": {
@@ -305,6 +330,7 @@ def entregas_pendientes(
             "bloque_actual": _get_bloque_actual(db),
             "unidad_actual": _get_unidad_actual(db),
         },
+        "grupos_disponibles": grupos_disponibles,
     }
 
 
@@ -312,6 +338,7 @@ def entregas_pendientes(
 def entregas_resumen(
     carrera: str = Query("", description="Filtrar por carrera"),
     bloque: str = Query("", description="Filtrar por bloque: 1, 2, o vacío para todos"),
+    grupos_excluir: str = Query("", description="Grupos a excluir (comma-sep): 6 excluye Wasakentsa"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -326,6 +353,15 @@ def entregas_resumen(
         codigos_excluir = _get_codigos_excluir_bloque(db, bloque.strip())
     else:
         codigos_excluir = _get_codigos_excluir(db)
+
+    # Filtro de grupo
+    if grupos_excluir:
+        grupos_list = [g.strip() for g in grupos_excluir.split(",") if g.strip()]
+        if grupos_list:
+            excl_by_grupo = db.query(CourseConfig.codigo_avac).filter(
+                CourseConfig.grupo.in_(grupos_list)
+            ).all()
+            codigos_excluir = codigos_excluir | {r[0] for r in excl_by_grupo if r[0]}
 
     latest_date = _get_latest_snapshot_date(db, periodo_filter, codigos_excluir)
     if not latest_date:

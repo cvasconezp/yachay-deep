@@ -1691,6 +1691,14 @@ function FichaEstudianteInner() {
                 <span className="font-normal text-[9px] text-white/60 normal-case tracking-normal">
                   Nivel: <strong className="text-white font-semibold">{formatNivel(ficha.nivel_academico, ficha.calificaciones, ficha.calificaciones_historicas) || "—"}</strong>
                 </span>
+                <span className="ml-auto">
+                  <button
+                    onClick={() => navigate("/entregas")}
+                    className="text-[9px] text-white/70 hover:text-white normal-case tracking-normal font-normal underline"
+                  >
+                    Ver entregas pendientes
+                  </button>
+                </span>
               </div>
 
               {/* ═══ TABLA DE DATOS ACADÉMICOS — basada en enrollments del reporte ═══ */}

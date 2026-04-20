@@ -20,6 +20,10 @@ export default function EntregasPendientes() {
   const [search, setSearch] = useState("");
   const [defaultsLoaded, setDefaultsLoaded] = useState(false);
 
+  // Filtro de grupos (multi-select, para excluir ej: grupo 6 Wasakentsa)
+  const [gruposDisponibles, setGruposDisponibles] = useState([]);
+  const [gruposExcluidos, setGruposExcluidos] = useState(new Set());
+
   // Control de filas expandidas (vista asignatura)
   const [expanded, setExpanded] = useState({});
 
@@ -44,9 +48,17 @@ export default function EntregasPendientes() {
     })();
   }, []);
 
+  // Serializar gruposExcluidos para usar como dependencia
+  const gruposExclStr = [...gruposExcluidos].sort().join(",");
+
   useEffect(() => {
     if (defaultsLoaded) loadData();
-  }, [carrera, unidad, bloque, defaultsLoaded]);
+  }, [carrera, unidad, bloque, gruposExclStr, defaultsLoaded]);
+
+  // Resetear grupos excluidos cuando cambia la carrera
+  useEffect(() => {
+    setGruposExcluidos(new Set());
+  }, [carrera]);
 
   const loadData = async () => {
     setLoading(true);
@@ -56,8 +68,10 @@ export default function EntregasPendientes() {
       if (carrera) params.carrera = carrera;
       if (unidad) params.unidad = unidad;
       if (bloque) params.bloque = bloque;
+      if (gruposExcluidos.size > 0) params.grupos_excluir = [...gruposExcluidos].join(",");
       const result = await api.getEntregasPendientes(params);
       setData(result);
+      setGruposDisponibles(result.grupos_disponibles || []);
       setSelectedIds(new Set());
     } catch (e) {
       setError(e.message || "Error cargando datos");
@@ -181,6 +195,10 @@ export default function EntregasPendientes() {
             <p className="text-sm text-gray-500 mt-1">
               Identifica estudiantes que no entregaron actividades para hacer acompañamiento
             </p>
+            <div className="flex gap-3 mt-1">
+              <button onClick={() => navigate("/dashboard")} className="text-xs text-blue-600 hover:text-blue-800 hover:underline">Dashboard de Riesgo</button>
+              <button onClick={() => navigate("/alertas")} className="text-xs text-blue-600 hover:text-blue-800 hover:underline">Alertas Académicas</button>
+            </div>
           </div>
           {data?.resumen && (
             <div className="flex gap-4 text-sm">
@@ -269,6 +287,41 @@ export default function EntregasPendientes() {
               <option value="4">4</option>
             </select>
           </div>
+          {/* Filtro de grupos (aparece cuando hay grupos disponibles y hay carrera seleccionada) */}
+          {carrera && gruposDisponibles.length > 1 && (
+            <div className="min-w-[140px]">
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">
+                Grupos
+                {gruposExcluidos.size > 0 && <span className="ml-1 text-orange-500">(-{gruposExcluidos.size})</span>}
+              </label>
+              <div className="flex flex-wrap gap-1 bg-gray-50 border rounded-lg px-2 py-1.5">
+                {gruposDisponibles.map(g => {
+                  const excluded = gruposExcluidos.has(g);
+                  return (
+                    <button
+                      key={g}
+                      onClick={() => {
+                        setGruposExcluidos(prev => {
+                          const next = new Set(prev);
+                          if (next.has(g)) next.delete(g);
+                          else next.add(g);
+                          return next;
+                        });
+                      }}
+                      className={`px-2 py-0.5 rounded text-xs font-semibold transition-colors ${
+                        excluded
+                          ? "bg-red-100 text-red-500 line-through"
+                          : "bg-blue-100 text-blue-700 hover:bg-blue-200"
+                      }`}
+                      title={excluded ? `Grupo ${g} excluido (click para incluir)` : `Click para excluir grupo ${g}`}
+                    >
+                      G{g}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <div className="flex-1 min-w-[200px]">
             <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">Buscar</label>
             <input
