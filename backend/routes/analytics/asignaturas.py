@@ -67,17 +67,18 @@ def _enrollment_periodo_filter(query, periodo: Optional[str]):
 
 
 def _get_enrollment_results(db: Session, periodo: Optional[str], carrera: Optional[str], nivel: Optional[int]):
-    """Genera resultados de asignaturas desde Enrollment (sin calificaciones)."""
+    """Genera resultados de asignaturas desde Enrollment (sin calificaciones).
+    Agrupa por (asignatura, carrera, docente, nivel) — sin grupo, para evitar duplicados."""
     query = db.query(
         Enrollment.asignatura, Enrollment.carrera, Enrollment.docente,
-        Enrollment.nivel, Enrollment.nombre_grupo.label("grupo"),
+        Enrollment.nivel,
         func.count(Enrollment.id).label("total_estudiantes"),
         func.sum(case((Enrollment.numero_repitencias > 1, 1), else_=0)).label("total_repitentes"),
     )
     query, _ = _enrollment_periodo_filter(query, periodo)
     query = query.group_by(
         Enrollment.asignatura, Enrollment.carrera, Enrollment.docente,
-        Enrollment.nivel, Enrollment.nombre_grupo,
+        Enrollment.nivel,
     )
     if carrera:
         query = query.filter(func.lower(Enrollment.carrera).contains(carrera.lower()))
@@ -99,10 +100,9 @@ def _get_enrollment_results(db: Session, periodo: Optional[str], carrera: Option
         key = (rb.asignatura, rb.docente)
         risk_lookup.setdefault(key, {})[rb.nivel_riesgo] = rb.cnt
 
-    # Lookup codigo_avac from Enrollment.codigo_grupo
+    # Lookup codigo_avac from Enrollment.codigo_grupo (first match per asignatura+docente)
     enr_avac = {}
     for r in results:
-        # codigo_grupo from Enrollment acts as codigo_avac
         enr_code_q = db.query(Enrollment.codigo_grupo).filter(
             Enrollment.asignatura == r.asignatura,
             Enrollment.docente == r.docente,
@@ -117,7 +117,7 @@ def _get_enrollment_results(db: Session, periodo: Optional[str], carrera: Option
         risk_map = risk_lookup.get(key, {})
         output.append(AsignaturaAnalytics(
             asignatura=r.asignatura, carrera=r.carrera, docente=r.docente,
-            nivel=r.nivel, grupo=r.grupo,
+            nivel=r.nivel,
             codigo_avac=enr_avac.get(key),
             total_estudiantes=r.total_estudiantes,
             promedio_general=None, nota_maxima=None, nota_minima=None,
@@ -144,7 +144,7 @@ def get_asignaturas_analytics(
     """Vista agregada por asignatura. Framework §8.2.
     Si no hay grades para el periodo, usa Enrollment como fallback."""
     query = db.query(
-        Grade.asignatura, Grade.carrera, Grade.docente, Grade.nivel, Grade.grupo,
+        Grade.asignatura, Grade.carrera, Grade.docente, Grade.nivel,
         func.count(Grade.id).label("total_estudiantes"),
         func.avg(Grade.nota_final).label("promedio_general"),
         func.max(Grade.nota_final).label("nota_maxima"),
@@ -154,7 +154,7 @@ def get_asignaturas_analytics(
         func.sum(case((Grade.numero_repitencias > 1, 1), else_=0)).label("total_repitentes"),
     )
     query, _ = apply_periodo_filter(query, periodo)
-    query = query.group_by(Grade.asignatura, Grade.carrera, Grade.docente, Grade.nivel, Grade.grupo)
+    query = query.group_by(Grade.asignatura, Grade.carrera, Grade.docente, Grade.nivel)
 
     if carrera:
         carrera_student_ids = [s_id for (s_id,) in db.query(Student.id).filter(
@@ -223,7 +223,7 @@ def get_asignaturas_analytics(
 
         item = AsignaturaAnalytics(
             asignatura=r.asignatura, carrera=r.carrera, docente=r.docente,
-            nivel=r.nivel, grupo=r.grupo,
+            nivel=r.nivel,
             codigo_avac=cc_avac_lookup.get(key),
             total_estudiantes=r.total_estudiantes,
             promedio_general=round(r.promedio_general, 1) if r.promedio_general else None,
