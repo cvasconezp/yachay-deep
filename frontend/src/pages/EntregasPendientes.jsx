@@ -12,6 +12,7 @@ export default function EntregasPendientes() {
   const [carrera, setCarrera] = useState("");
   const [asignatura, setAsignatura] = useState("");
   const [unidad, setUnidad] = useState("");
+  const [bloque, setBloque] = useState("1"); // B1 por defecto (bimestre actual)
   const [search, setSearch] = useState("");
 
   // Control de filas expandidas
@@ -19,7 +20,7 @@ export default function EntregasPendientes() {
 
   useEffect(() => {
     loadData();
-  }, [carrera, unidad]);
+  }, [carrera, unidad, bloque]);
 
   const loadData = async () => {
     setLoading(true);
@@ -28,6 +29,7 @@ export default function EntregasPendientes() {
       const params = {};
       if (carrera) params.carrera = carrera;
       if (unidad) params.unidad = unidad;
+      if (bloque) params.bloque = bloque;
       const result = await api.getEntregasPendientes(params);
       setData(result);
     } catch (e) {
@@ -123,6 +125,18 @@ export default function EntregasPendientes() {
             >
               <option value="">Todas las asignaturas</option>
               {asignaturas.map(a => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </div>
+          <div className="w-24">
+            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">Bloque</label>
+            <select
+              value={bloque}
+              onChange={e => setBloque(e.target.value)}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            >
+              <option value="">Todos</option>
+              <option value="1">B1</option>
+              <option value="2">B2</option>
             </select>
           </div>
           <div className="w-24">

@@ -56,6 +56,22 @@ def _get_codigos_excluir(db: Session) -> set:
     return {r[0] for r in excl if r[0]}
 
 
+def _get_codigos_bloque(db: Session, bloque: str) -> set:
+    """Devuelve códigos de cursos que pertenecen a un bloque específico.
+    Incluye cursos con bloque=NULL (no clasificados) cuando se filtra."""
+    if bloque == "1":
+        rows = db.query(CourseConfig.codigo_avac).filter(
+            or_(CourseConfig.bloque == "1", CourseConfig.bloque == "ambos", CourseConfig.bloque.is_(None))
+        ).all()
+    elif bloque == "2":
+        rows = db.query(CourseConfig.codigo_avac).filter(
+            or_(CourseConfig.bloque == "2", CourseConfig.bloque == "ambos")
+        ).all()
+    else:
+        return set()  # vacío = no filtrar
+    return {r[0] for r in rows if r[0]}
+
+
 def _get_latest_snapshot_date(db: Session, periodo_filter, codigos_excluir: set):
     """Encuentra la fecha del snapshot más reciente."""
     q = db.query(func.max(TaskSubmission.snapshot_date)).filter(periodo_filter)
@@ -69,6 +85,7 @@ def entregas_pendientes(
     carrera: str = Query("", description="Filtrar por carrera"),
     asignatura: str = Query("", description="Filtrar por asignatura (nombre parcial)"),
     unidad: str = Query("", description="Filtrar por unidad: 1, 2, 3, 4"),
+    bloque: str = Query("", description="Filtrar por bloque: 1, 2, o vacío para todos"),
     codigo_curso: str = Query("", description="Filtrar por código AVAC del curso"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -81,14 +98,21 @@ def entregas_pendientes(
     """
     periodo_p, periodo_num = _get_active_periodo_variants(db)
     periodo_filter = _build_periodo_filter(periodo_p, periodo_num)
-    codigos_excluir = _get_codigos_excluir(db)
+
+    # Si el usuario filtra por bloque, usamos ese; si no, excluimos bloque opuesto
+    if bloque:
+        codigos_bloque = _get_codigos_bloque(db, bloque.strip())
+        codigos_excluir = set()  # no excluir, solo incluir
+    else:
+        codigos_bloque = set()
+        codigos_excluir = _get_codigos_excluir(db)
 
     # Encontrar el snapshot más reciente
     latest_date = _get_latest_snapshot_date(db, periodo_filter, codigos_excluir)
     if not latest_date:
         return {"actividades": [], "resumen": {"total_actividades": 0, "total_pendientes": 0}}
 
-    # Filtro base: periodo + snapshot más reciente + excluir bloque opuesto
+    # Filtro base: periodo + snapshot más reciente + filtro de bloque
     base_filters = [
         periodo_filter,
         TaskSubmission.student_id.isnot(None),
@@ -96,6 +120,8 @@ def entregas_pendientes(
     ]
     if codigos_excluir:
         base_filters.append(~TaskSubmission.codigo_curso.in_(codigos_excluir))
+    if codigos_bloque:
+        base_filters.append(TaskSubmission.codigo_curso.in_(codigos_bloque))
 
     # Todos los cursos+unidades del snapshot más reciente
     base_q = db.query(
@@ -219,6 +245,7 @@ def entregas_pendientes(
 @router.get("/entregas-resumen")
 def entregas_resumen(
     carrera: str = Query("", description="Filtrar por carrera"),
+    bloque: str = Query("", description="Filtrar por bloque: 1, 2, o vacío para todos"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -228,7 +255,13 @@ def entregas_resumen(
     """
     periodo_p, periodo_num = _get_active_periodo_variants(db)
     periodo_filter = _build_periodo_filter(periodo_p, periodo_num)
-    codigos_excluir = _get_codigos_excluir(db)
+
+    if bloque:
+        codigos_bloque = _get_codigos_bloque(db, bloque.strip())
+        codigos_excluir = set()
+    else:
+        codigos_bloque = set()
+        codigos_excluir = _get_codigos_excluir(db)
 
     latest_date = _get_latest_snapshot_date(db, periodo_filter, codigos_excluir)
     if not latest_date:
@@ -247,6 +280,8 @@ def entregas_resumen(
 
     if codigos_excluir:
         q = q.filter(~TaskSubmission.codigo_curso.in_(codigos_excluir))
+    if codigos_bloque:
+        q = q.filter(TaskSubmission.codigo_curso.in_(codigos_bloque))
 
     rows = q.group_by(TaskSubmission.codigo_curso, TaskSubmission.unidad).all()
 
