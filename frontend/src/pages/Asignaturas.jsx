@@ -290,14 +290,43 @@ export default function Asignaturas() {
             <div className="p-6 border-b border-gray-200">
               <div className="flex justify-between items-start">
                 <div>
-                  <h2 className="text-xl font-bold text-gray-900">{detalle.asignatura}</h2>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <h2 className="text-xl font-bold text-gray-900">{detalle.asignatura}</h2>
+                    {detalle.codigo_avac && (
+                      <a
+                        href={avacCourseUrl(detalle.codigo_avac)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-blue-500 hover:text-blue-700 underline"
+                      >
+                        Abrir AVAC
+                      </a>
+                    )}
+                  </div>
                   <p className="text-sm text-gray-500 mt-1">
                     {detalle.docente && `Docente: ${detalle.docente}`}
                     {detalle.carrera && ` | ${detalle.carrera}`}
                     {detalle.nivel && ` | Nivel ${detalle.nivel}`}
                   </p>
                 </div>
-                <button onClick={() => setDetalle(null)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+                <div className="flex items-center gap-2">
+                  <ExportExcelButton
+                    data={detalle.estudiantes || []}
+                    columns={[
+                      { key: "nombre", label: "Estudiante" },
+                      { key: "correo_institucional", label: "Correo" },
+                      { key: "nota_final", label: "Nota Final" },
+                      { key: "nivel_riesgo", label: "Nivel Riesgo" },
+                      { key: "indice_compromiso", label: "Compromiso" },
+                      { key: "dias_sin_acceso", label: "Días sin acceso" },
+                      { key: "numero_repitencias", label: "Repitencias" },
+                    ]}
+                    filename={`${detalle.asignatura}_${detalle.docente || ""}`.replace(/\s+/g, "_")}
+                    label="Excel"
+                    small
+                  />
+                  <button onClick={() => setDetalle(null)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-4">

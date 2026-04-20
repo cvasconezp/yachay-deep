@@ -293,9 +293,12 @@ def get_asignatura_detalle(
                 "intervenciones_asignatura": 0,
             })
         estudiantes_out.sort(key=lambda x: (x["nombre"] or ""))
+        # codigo_avac from enrollment
+        enr_avac = first_e.codigo_grupo if first_e.codigo_grupo else None
         return {
             "asignatura": asignatura, "carrera": first_e.carrera,
             "docente": first_e.docente or docente, "nivel": first_e.nivel,
+            "codigo_avac": enr_avac,
             "total_estudiantes": len(estudiantes_out),
             "promedio_general": None,
             "aprobados": 0, "reprobados": 0,
@@ -335,9 +338,18 @@ def get_asignatura_detalle(
     total = len(estudiantes_out)
     aprobados = sum(1 for e in estudiantes_out if e["nota_final"] and e["nota_final"] >= 70)
 
+    # Lookup codigo_avac from CourseConfig
+    cc_avac = db.query(CourseConfig.codigo_avac).filter(
+        CourseConfig.asignatura == asignatura,
+        CourseConfig.docente == (docente or first_grade.docente),
+        CourseConfig.codigo_avac.isnot(None),
+    ).first()
+    codigo_avac = cc_avac[0] if cc_avac else None
+
     return {
         "asignatura": asignatura, "carrera": first_grade.carrera,
         "docente": first_grade.docente or docente, "nivel": first_grade.nivel,
+        "codigo_avac": codigo_avac,
         "total_estudiantes": total,
         "promedio_general": round(sum(e["nota_final"] or 0 for e in estudiantes_out) / max(total, 1), 1),
         "aprobados": aprobados, "reprobados": total - aprobados,
