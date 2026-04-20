@@ -361,6 +361,12 @@ def get_resumen_datos(
     # Métricas de enrollment (carreras, asignaturas, etc.)
     global_stats["total_carreras"] = len(carreras_set)
     global_stats["total_asignaturas"] = len(asignaturas_set)
+    # Secciones = combinaciones únicas asignatura × docente (lo que muestra Analítica)
+    secciones_set = set()
+    for e in enrollments:
+        if e.asignatura and e.docente:
+            secciones_set.add((e.asignatura, e.docente))
+    global_stats["total_secciones"] = len(secciones_set)
     global_stats["total_docentes_enrollment"] = len(docentes_enroll_set)
     global_stats["total_matriculas"] = len(enrollments)
     global_stats["por_tipo_asignatura"] = dict(sorted(enroll_por_tipo.items(), key=lambda x: -x[1]))
