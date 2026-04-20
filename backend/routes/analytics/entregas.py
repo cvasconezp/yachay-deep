@@ -1,6 +1,10 @@
 """
 Reporte de entregas pendientes por actividad.
 Muestra qué estudiantes NO entregaron cada actividad (unidad) de cada asignatura.
+
+[BUG-FIX] Usa solo el snapshot más reciente para evitar duplicados históricos
+que generaban falsos positivos (estudiantes que entregaron aparecían como pendientes
+porque tenían un registro viejo con entregada=False).
 """
 import logging
 from typing import Optional
@@ -31,6 +35,35 @@ def _get_active_periodo_variants(db: Session):
     return f"P{p}", p
 
 
+def _build_periodo_filter(periodo_p, periodo_num):
+    """Construye filtro SQLAlchemy para periodo activo."""
+    if periodo_p:
+        return or_(
+            TaskSubmission.periodo == periodo_p,
+            TaskSubmission.periodo == periodo_num,
+            TaskSubmission.periodo.is_(None),
+        )
+    return TaskSubmission.periodo.is_(None)
+
+
+def _get_codigos_excluir(db: Session) -> set:
+    """Devuelve códigos de cursos del bloque opuesto a excluir."""
+    sc = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
+    if not sc:
+        return set()
+    otro_bloque = "2" if (sc.bloque_actual or "1") == "1" else "1"
+    excl = db.query(CourseConfig.codigo_avac).filter(CourseConfig.bloque == otro_bloque).all()
+    return {r[0] for r in excl if r[0]}
+
+
+def _get_latest_snapshot_date(db: Session, periodo_filter, codigos_excluir: set):
+    """Encuentra la fecha del snapshot más reciente."""
+    q = db.query(func.max(TaskSubmission.snapshot_date)).filter(periodo_filter)
+    if codigos_excluir:
+        q = q.filter(~TaskSubmission.codigo_curso.in_(codigos_excluir))
+    return q.scalar()
+
+
 @router.get("/entregas-pendientes")
 def entregas_pendientes(
     carrera: str = Query("", description="Filtrar por carrera"),
@@ -44,56 +77,31 @@ def entregas_pendientes(
     Reporte de entregas pendientes: por cada actividad (curso + unidad),
     lista los estudiantes que NO entregaron.
 
-    Retorna:
-    {
-        "actividades": [
-            {
-                "codigo_curso": "395484",
-                "asignatura": "Didáctica General",
-                "docente": "PÉREZ JUAN",
-                "carrera": "EIB",
-                "unidad": "1",
-                "total_estudiantes": 30,
-                "entregaron": 25,
-                "no_entregaron": 5,
-                "pct_entrega": 83.3,
-                "pendientes": [
-                    {"student_id": 1, "nombre": "GARCÍA ANA", "correo": "agarcia@...", "estado": "Sin entregar"}
-                ]
-            }
-        ],
-        "resumen": {"total_actividades": 12, "total_pendientes": 45}
-    }
+    Usa SOLO el snapshot más reciente para evitar duplicados históricos.
     """
     periodo_p, periodo_num = _get_active_periodo_variants(db)
+    periodo_filter = _build_periodo_filter(periodo_p, periodo_num)
+    codigos_excluir = _get_codigos_excluir(db)
 
-    # Filtro de periodo
-    if periodo_p:
-        periodo_filter = or_(
-            TaskSubmission.periodo == periodo_p,
-            TaskSubmission.periodo == periodo_num,
-            TaskSubmission.periodo.is_(None),
-        )
-    else:
-        periodo_filter = TaskSubmission.periodo.is_(None)
+    # Encontrar el snapshot más reciente
+    latest_date = _get_latest_snapshot_date(db, periodo_filter, codigos_excluir)
+    if not latest_date:
+        return {"actividades": [], "resumen": {"total_actividades": 0, "total_pendientes": 0}}
 
-    # Filtro de bloque activo: excluir cursos del bloque opuesto
-    sc = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
-    codigos_excluir = set()
-    if sc:
-        otro_bloque = "2" if (sc.bloque_actual or "1") == "1" else "1"
-        excl = db.query(CourseConfig.codigo_avac).filter(CourseConfig.bloque == otro_bloque).all()
-        codigos_excluir = {r[0] for r in excl if r[0]}
+    # Filtro base: periodo + snapshot más reciente + excluir bloque opuesto
+    base_filters = [
+        periodo_filter,
+        TaskSubmission.student_id.isnot(None),
+        TaskSubmission.snapshot_date == latest_date,
+    ]
+    if codigos_excluir:
+        base_filters.append(~TaskSubmission.codigo_curso.in_(codigos_excluir))
 
-    # Obtener todas las task_submissions del periodo agrupadas por (codigo_curso, unidad)
-    # Primero: todos los cursos+unidades que existen
+    # Todos los cursos+unidades del snapshot más reciente
     base_q = db.query(
         TaskSubmission.codigo_curso,
         TaskSubmission.unidad,
-    ).filter(periodo_filter)
-
-    if codigos_excluir:
-        base_q = base_q.filter(~TaskSubmission.codigo_curso.in_(codigos_excluir))
+    ).filter(*base_filters)
 
     if codigo_curso:
         base_q = base_q.filter(TaskSubmission.codigo_curso == codigo_curso.strip())
@@ -107,7 +115,7 @@ def entregas_pendientes(
         for cc in db.query(CourseConfig).filter(CourseConfig.codigo_avac.in_(all_codigos)).all():
             cc_map[cc.codigo_avac] = cc
 
-    # Filtros de carrera y asignatura (aplicados sobre CourseConfig)
+    # Filtros de carrera y asignatura
     if carrera:
         carrera_lower = carrera.strip().lower()
         filtered_codigos = {
@@ -133,7 +141,7 @@ def entregas_pendientes(
     for cod_curso, uni in sorted(actividades_unicas, key=lambda x: (x[0], x[1] or "")):
         cc = cc_map.get(cod_curso)
 
-        # Todos los registros de esta actividad
+        # Solo registros del snapshot más reciente
         subs = (
             db.query(
                 TaskSubmission.student_id,
@@ -143,6 +151,7 @@ def entregas_pendientes(
             .filter(
                 TaskSubmission.codigo_curso == cod_curso,
                 TaskSubmission.unidad == uni,
+                TaskSubmission.snapshot_date == latest_date,
                 periodo_filter,
                 TaskSubmission.student_id.isnot(None),
             )
@@ -152,10 +161,17 @@ def entregas_pendientes(
         if not subs:
             continue
 
-        total = len(subs)
-        entregaron = sum(1 for s in subs if s.entregada)
-        no_entregaron_ids = [s.student_id for s in subs if not s.entregada]
-        estados_por_id = {s.student_id: s.estado for s in subs if not s.entregada}
+        # Deduplicar por student_id: si hay varios registros, priorizar entregada=True
+        by_student = {}
+        for s in subs:
+            if s.student_id not in by_student or (s.entregada and not by_student[s.student_id].entregada):
+                by_student[s.student_id] = s
+
+        unique_subs = list(by_student.values())
+        total = len(unique_subs)
+        entregaron = sum(1 for s in unique_subs if s.entregada)
+        no_entregaron_ids = [s.student_id for s in unique_subs if not s.entregada]
+        estados_por_id = {s.student_id: s.estado for s in unique_subs if not s.entregada}
 
         pendientes = []
         if no_entregaron_ids:
@@ -208,26 +224,15 @@ def entregas_resumen(
 ):
     """
     Resumen compacto de entregas: por cada curso, % de entrega por unidad.
-    Útil para vista de dashboard rápida.
+    Usa SOLO el snapshot más reciente.
     """
     periodo_p, periodo_num = _get_active_periodo_variants(db)
+    periodo_filter = _build_periodo_filter(periodo_p, periodo_num)
+    codigos_excluir = _get_codigos_excluir(db)
 
-    if periodo_p:
-        periodo_filter = or_(
-            TaskSubmission.periodo == periodo_p,
-            TaskSubmission.periodo == periodo_num,
-            TaskSubmission.periodo.is_(None),
-        )
-    else:
-        periodo_filter = TaskSubmission.periodo.is_(None)
-
-    # Excluir cursos del bloque opuesto
-    sc = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
-    codigos_excluir = set()
-    if sc:
-        otro_bloque = "2" if (sc.bloque_actual or "1") == "1" else "1"
-        excl = db.query(CourseConfig.codigo_avac).filter(CourseConfig.bloque == otro_bloque).all()
-        codigos_excluir = {r[0] for r in excl if r[0]}
+    latest_date = _get_latest_snapshot_date(db, periodo_filter, codigos_excluir)
+    if not latest_date:
+        return {"cursos": []}
 
     q = db.query(
         TaskSubmission.codigo_curso,
@@ -237,6 +242,7 @@ def entregas_resumen(
     ).filter(
         periodo_filter,
         TaskSubmission.student_id.isnot(None),
+        TaskSubmission.snapshot_date == latest_date,
     )
 
     if codigos_excluir:
