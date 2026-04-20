@@ -6,7 +6,9 @@ Muestra qué estudiantes NO entregaron cada actividad (unidad) de cada asignatur
 que generaban falsos positivos (estudiantes que entregaron aparecían como pendientes
 porque tenían un registro viejo con entregada=False).
 """
+import json
 import logging
+from datetime import date
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -35,6 +37,55 @@ def _get_active_periodo_variants(db: Session):
     return f"P{p}", p
 
 
+def _get_unidad_actual(db: Session) -> Optional[str]:
+    """Calcula qué unidad debería estar entregada según el calendario académico.
+
+    Calendario P68:
+      Entrega actividades 1: 2026-04-19
+      Entrega actividades 2: 2026-05-03
+      Entrega actividades 3: 2026-05-17
+      Entrega actividades 4: 2026-06-21 (bloque 2)
+      Entrega actividades 5: 2026-07-05
+      Entrega actividades 6: 2026-07-19
+
+    Retorna la unidad más reciente cuya fecha ya pasó.
+    """
+    sc = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
+    if not sc or not sc.calendario_academico:
+        return None
+
+    try:
+        cal = json.loads(sc.calendario_academico) if isinstance(sc.calendario_academico, str) else sc.calendario_academico
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+    today = date.today()
+    # Buscar entregas cuya fecha ya pasó, extraer el número de actividad
+    entregas_pasadas = []
+    for item in cal:
+        if item.get("tipo") != "entrega":
+            continue
+        try:
+            fecha = date.fromisoformat(item["fecha"])
+        except (KeyError, ValueError):
+            continue
+        if fecha <= today:
+            # Extraer número de "Entrega actividades N"
+            label = item.get("label", "")
+            for word in label.split():
+                if word.isdigit():
+                    entregas_pasadas.append(word)
+                    break
+
+    return entregas_pasadas[-1] if entregas_pasadas else None
+
+
+def _get_bloque_actual(db: Session) -> str:
+    """Retorna el bloque actual del semestre activo."""
+    sc = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
+    return (sc.bloque_actual or "1") if sc else "1"
+
+
 def _build_periodo_filter(periodo_p, periodo_num):
     """Construye filtro SQLAlchemy para periodo activo."""
     if periodo_p:
@@ -56,20 +107,18 @@ def _get_codigos_excluir(db: Session) -> set:
     return {r[0] for r in excl if r[0]}
 
 
-def _get_codigos_bloque(db: Session, bloque: str) -> set:
-    """Devuelve códigos de cursos que pertenecen a un bloque específico.
-    Incluye cursos con bloque=NULL (no clasificados) cuando se filtra."""
+def _get_codigos_excluir_bloque(db: Session, bloque: str) -> set:
+    """Devuelve códigos a EXCLUIR cuando se filtra por un bloque específico.
+    Para B1: excluir cursos explícitamente marcados como bloque 2.
+    Para B2: excluir cursos explícitamente marcados como bloque 1.
+    Cursos con bloque=NULL o 'ambos' nunca se excluyen."""
     if bloque == "1":
-        rows = db.query(CourseConfig.codigo_avac).filter(
-            or_(CourseConfig.bloque == "1", CourseConfig.bloque == "ambos", CourseConfig.bloque.is_(None))
-        ).all()
+        excl = db.query(CourseConfig.codigo_avac).filter(CourseConfig.bloque == "2").all()
     elif bloque == "2":
-        rows = db.query(CourseConfig.codigo_avac).filter(
-            or_(CourseConfig.bloque == "2", CourseConfig.bloque == "ambos")
-        ).all()
+        excl = db.query(CourseConfig.codigo_avac).filter(CourseConfig.bloque == "1").all()
     else:
-        return set()  # vacío = no filtrar
-    return {r[0] for r in rows if r[0]}
+        return set()
+    return {r[0] for r in excl if r[0]}
 
 
 def _get_latest_snapshot_date(db: Session, periodo_filter, codigos_excluir: set):
@@ -99,12 +148,10 @@ def entregas_pendientes(
     periodo_p, periodo_num = _get_active_periodo_variants(db)
     periodo_filter = _build_periodo_filter(periodo_p, periodo_num)
 
-    # Si el usuario filtra por bloque, usamos ese; si no, excluimos bloque opuesto
+    # Filtro de bloque: excluir cursos del bloque opuesto al seleccionado
     if bloque:
-        codigos_bloque = _get_codigos_bloque(db, bloque.strip())
-        codigos_excluir = set()  # no excluir, solo incluir
+        codigos_excluir = _get_codigos_excluir_bloque(db, bloque.strip())
     else:
-        codigos_bloque = set()
         codigos_excluir = _get_codigos_excluir(db)
 
     # Encontrar el snapshot más reciente
@@ -112,7 +159,7 @@ def entregas_pendientes(
     if not latest_date:
         return {"actividades": [], "resumen": {"total_actividades": 0, "total_pendientes": 0}}
 
-    # Filtro base: periodo + snapshot más reciente + filtro de bloque
+    # Filtro base: periodo + snapshot más reciente + excluir bloque opuesto
     base_filters = [
         periodo_filter,
         TaskSubmission.student_id.isnot(None),
@@ -120,8 +167,6 @@ def entregas_pendientes(
     ]
     if codigos_excluir:
         base_filters.append(~TaskSubmission.codigo_curso.in_(codigos_excluir))
-    if codigos_bloque:
-        base_filters.append(TaskSubmission.codigo_curso.in_(codigos_bloque))
 
     # Todos los cursos+unidades del snapshot más reciente
     base_q = db.query(
@@ -239,6 +284,10 @@ def entregas_pendientes(
             "total_actividades": len(resultado),
             "total_pendientes": total_pendientes,
         },
+        "defaults": {
+            "bloque_actual": _get_bloque_actual(db),
+            "unidad_actual": _get_unidad_actual(db),
+        },
     }
 
 
@@ -257,10 +306,8 @@ def entregas_resumen(
     periodo_filter = _build_periodo_filter(periodo_p, periodo_num)
 
     if bloque:
-        codigos_bloque = _get_codigos_bloque(db, bloque.strip())
-        codigos_excluir = set()
+        codigos_excluir = _get_codigos_excluir_bloque(db, bloque.strip())
     else:
-        codigos_bloque = set()
         codigos_excluir = _get_codigos_excluir(db)
 
     latest_date = _get_latest_snapshot_date(db, periodo_filter, codigos_excluir)
@@ -280,8 +327,6 @@ def entregas_resumen(
 
     if codigos_excluir:
         q = q.filter(~TaskSubmission.codigo_curso.in_(codigos_excluir))
-    if codigos_bloque:
-        q = q.filter(TaskSubmission.codigo_curso.in_(codigos_bloque))
 
     rows = q.group_by(TaskSubmission.codigo_curso, TaskSubmission.unidad).all()
 

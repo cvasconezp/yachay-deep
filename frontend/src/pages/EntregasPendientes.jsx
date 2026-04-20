@@ -12,12 +12,13 @@ export default function EntregasPendientes() {
   // Pestañas
   const [tab, setTab] = useState("asignatura"); // "asignatura" | "estudiante"
 
-  // Filtros
+  // Filtros — null = pendiente de defaults del backend
   const [carrera, setCarrera] = useState("");
   const [asignatura, setAsignatura] = useState("");
-  const [unidad, setUnidad] = useState("");
-  const [bloque, setBloque] = useState("1");
+  const [unidad, setUnidad] = useState(null);
+  const [bloque, setBloque] = useState(null);
   const [search, setSearch] = useState("");
+  const [defaultsLoaded, setDefaultsLoaded] = useState(false);
 
   // Control de filas expandidas (vista asignatura)
   const [expanded, setExpanded] = useState({});
@@ -26,9 +27,26 @@ export default function EntregasPendientes() {
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [showBulkModal, setShowBulkModal] = useState(false);
 
+  // Primera carga: obtener defaults del backend (bloque y unidad actual)
   useEffect(() => {
-    loadData();
-  }, [carrera, unidad, bloque]);
+    (async () => {
+      try {
+        const result = await api.getEntregasPendientes({});
+        const defaults = result?.defaults || {};
+        setBloque(defaults.bloque_actual || "1");
+        setUnidad(defaults.unidad_actual || "");
+        setDefaultsLoaded(true);
+      } catch {
+        setBloque("1");
+        setUnidad("");
+        setDefaultsLoaded(true);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (defaultsLoaded) loadData();
+  }, [carrera, unidad, bloque, defaultsLoaded]);
 
   const loadData = async () => {
     setLoading(true);
@@ -228,7 +246,7 @@ export default function EntregasPendientes() {
           <div className="w-24">
             <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">Bloque</label>
             <select
-              value={bloque}
+              value={bloque || ""}
               onChange={e => setBloque(e.target.value)}
               className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
             >
@@ -240,7 +258,7 @@ export default function EntregasPendientes() {
           <div className="w-24">
             <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">Unidad</label>
             <select
-              value={unidad}
+              value={unidad || ""}
               onChange={e => setUnidad(e.target.value)}
               className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
             >
@@ -474,7 +492,12 @@ export default function EntregasPendientes() {
                         <span className={`inline-block transition-transform ${isExpanded ? "rotate-90" : ""}`}>▶</span>
                       </td>
                       <td className="px-4 py-2.5">
-                        <div className="font-medium text-gray-800">{stu.nombre}</div>
+                        <button
+                          className="font-medium text-blue-700 hover:text-blue-900 hover:underline text-left"
+                          onClick={(e) => { e.stopPropagation(); navigate(`/ficha/${stu.student_id}`); }}
+                        >
+                          {stu.nombre}
+                        </button>
                       </td>
                       <td className="px-3 py-2.5 text-gray-500 text-xs">{stu.correo}</td>
                       <td className="px-3 py-2.5 text-center">
