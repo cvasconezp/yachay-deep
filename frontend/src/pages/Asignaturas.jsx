@@ -22,15 +22,30 @@ const ASIG_EXPORT_COLS = [
   { key: "total_intervenciones", label: "Intervenciones" },
 ];
 
+const AVAC_BASE = "https://avac.ups.edu.ec/grado68";
+const avacCourseUrl = (codigo) =>
+  `${AVAC_BASE}/course/search.php?areaids=core_course-course&q=${encodeURIComponent(codigo)}`;
+
 export default function Asignaturas() {
   const [asignaturas, setAsignaturas] = useState([]);
   const [carreras, setCarreras] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [filtros, setFiltros] = useState({ carrera: "", nivel: "", solo_criticas: false, periodo: "" });
+  const [search, setSearch] = useState("");
   const [detalle, setDetalle] = useState(null);
   const [loadingDetalle, setLoadingDetalle] = useState(false);
   const navigate = useNavigate();
+
+  const filteredAsignaturas = useMemo(() => {
+    if (!search.trim()) return asignaturas;
+    const q = search.toLowerCase();
+    return asignaturas.filter(a =>
+      (a.asignatura && a.asignatura.toLowerCase().includes(q)) ||
+      (a.docente && a.docente.toLowerCase().includes(q)) ||
+      (a.codigo_avac && a.codigo_avac.toLowerCase().includes(q))
+    );
+  }, [asignaturas, search]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -76,7 +91,7 @@ export default function Asignaturas() {
           <h1 className="text-2xl font-bold text-gray-900">Analítica de Asignaturas</h1>
           <p className="text-gray-500 text-sm">Vista agregada por materia: promedios, aprobación, reprobación, repitencia y materias críticas</p>
         </div>
-        <ExportExcelButton data={asignaturas} columns={ASIG_EXPORT_COLS} filename="analitica_asignaturas" />
+        <ExportExcelButton data={filteredAsignaturas} columns={ASIG_EXPORT_COLS} filename="analitica_asignaturas" />
       </div>
 
       {error && (
@@ -160,8 +175,17 @@ export default function Asignaturas() {
           Solo materias críticas
         </label>
 
-        <div className="ml-auto text-sm text-gray-500">
-          {asignaturas.length} asignaturas
+        <div className="ml-auto flex items-center gap-3">
+          <input
+            type="text"
+            placeholder="Buscar asignatura, docente o código..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <span className="text-sm text-gray-500">
+            {filteredAsignaturas.length} asignaturas
+          </span>
         </div>
       </div>
 
@@ -169,7 +193,7 @@ export default function Asignaturas() {
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-20 text-gray-400">Cargando...</div>
-        ) : asignaturas.length === 0 ? (
+        ) : filteredAsignaturas.length === 0 ? (
           <div className="text-center py-16">
             <div className="text-3xl mb-2 text-gray-300">📋</div>
             <div className="text-sm text-gray-400">No hay datos de asignaturas para el período seleccionado</div>
@@ -188,10 +212,11 @@ export default function Asignaturas() {
                 <th className="text-center px-4 py-3 font-semibold text-gray-700 cursor-help" title="Porcentaje de estudiantes con nota final < 70">Reprobación</th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-700 cursor-help" title="Estudiantes que estan cursando la asignatura por segunda vez o mas">Repitentes</th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-700 cursor-help" title="Estudiantes en riesgo alto: nota < 60, materias reprobadas o inactividad en AVAC">Riesgo Alto</th>
+                <th className="text-center px-4 py-3 font-semibold text-gray-700" title="Enlace al Aula Virtual (AVAC)">AVAC</th>
               </tr>
             </thead>
             <tbody>
-              {asignaturas.map((a, i) => {
+              {filteredAsignaturas.map((a, i) => {
                 const esCritica = (a.porcentaje_reprobacion && a.porcentaje_reprobacion > 50) ||
                                   (a.promedio_general && a.promedio_general < 60);
                 return (
@@ -236,6 +261,19 @@ export default function Asignaturas() {
                       {a.estudiantes_riesgo_alto > 0 ? (
                         <span className="bg-red-100 text-red-700 text-xs px-2 py-0.5 rounded-full font-bold">{a.estudiantes_riesgo_alto}</span>
                       ) : <span className="text-green-500 text-xs">0</span>}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      {a.codigo_avac ? (
+                        <a
+                          href={avacCourseUrl(a.codigo_avac)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={e => e.stopPropagation()}
+                          className="text-blue-600 hover:text-blue-800 hover:underline text-xs font-medium"
+                        >
+                          Abrir
+                        </a>
+                      ) : <span className="text-gray-300 text-xs">—</span>}
                     </td>
                   </tr>
                 );

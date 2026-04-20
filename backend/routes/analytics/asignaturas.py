@@ -14,6 +14,7 @@ from pydantic import BaseModel
 
 from ...database import get_db
 from ...models import Student, Grade, Intervention, Enrollment
+from ...models.course_config import CourseConfig
 from ...auth.jwt import get_current_user
 from ...models.user import User
 from ._helpers import apply_periodo_filter
@@ -27,6 +28,7 @@ class AsignaturaAnalytics(BaseModel):
     docente: Optional[str] = None
     nivel: Optional[int] = None
     grupo: Optional[str] = None
+    codigo_avac: Optional[str] = None
     total_estudiantes: int = 0
     promedio_general: Optional[float] = None
     nota_maxima: Optional[float] = None
@@ -97,13 +99,27 @@ def _get_enrollment_results(db: Session, periodo: Optional[str], carrera: Option
         key = (rb.asignatura, rb.docente)
         risk_lookup.setdefault(key, {})[rb.nivel_riesgo] = rb.cnt
 
+    # Lookup codigo_avac from Enrollment.codigo_grupo
+    enr_avac = {}
+    for r in results:
+        # codigo_grupo from Enrollment acts as codigo_avac
+        enr_code_q = db.query(Enrollment.codigo_grupo).filter(
+            Enrollment.asignatura == r.asignatura,
+            Enrollment.docente == r.docente,
+            Enrollment.codigo_grupo.isnot(None),
+        ).first()
+        if enr_code_q and enr_code_q[0]:
+            enr_avac[(r.asignatura, r.docente)] = enr_code_q[0]
+
     output = []
     for r in results:
         key = (r.asignatura, r.docente)
         risk_map = risk_lookup.get(key, {})
         output.append(AsignaturaAnalytics(
             asignatura=r.asignatura, carrera=r.carrera, docente=r.docente,
-            nivel=r.nivel, grupo=r.grupo, total_estudiantes=r.total_estudiantes,
+            nivel=r.nivel, grupo=r.grupo,
+            codigo_avac=enr_avac.get(key),
+            total_estudiantes=r.total_estudiantes,
             promedio_general=None, nota_maxima=None, nota_minima=None,
             aprobados=0, reprobados=0,
             porcentaje_aprobacion=None, porcentaje_reprobacion=None,
@@ -187,6 +203,15 @@ def get_asignaturas_analytics(
     )
     interv_lookup = {ib.asignatura: ib.total for ib in interv_batch}
 
+    # Batch: codigo_avac from CourseConfig
+    cc_avac_rows = db.query(
+        CourseConfig.asignatura, CourseConfig.docente, CourseConfig.codigo_avac
+    ).filter(CourseConfig.codigo_avac.isnot(None)).all()
+    cc_avac_lookup = {}
+    for cc in cc_avac_rows:
+        if cc.asignatura:
+            cc_avac_lookup[(cc.asignatura, cc.docente)] = cc.codigo_avac
+
     output = []
     for r in results:
         total = r.total_estudiantes or 1
@@ -198,7 +223,9 @@ def get_asignaturas_analytics(
 
         item = AsignaturaAnalytics(
             asignatura=r.asignatura, carrera=r.carrera, docente=r.docente,
-            nivel=r.nivel, grupo=r.grupo, total_estudiantes=r.total_estudiantes,
+            nivel=r.nivel, grupo=r.grupo,
+            codigo_avac=cc_avac_lookup.get(key),
+            total_estudiantes=r.total_estudiantes,
             promedio_general=round(r.promedio_general, 1) if r.promedio_general else None,
             nota_maxima=r.nota_maxima, nota_minima=r.nota_minima,
             aprobados=r.aprobados or 0, reprobados=r.reprobados or 0,
