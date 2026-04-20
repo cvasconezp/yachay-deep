@@ -53,9 +53,6 @@ def _enrollment_periodo_filter(query, periodo: Optional[str]):
     col = Enrollment.periodo
     pf = periodo if periodo else "actual"
     if pf == "actual":
-        # Para enrollment, 'actual' usa semestre activo
-        from ...models.semester_config import SemesterConfig
-        from sqlalchemy.orm import Session as _S
         return query, pf
     elif pf != "todos":
         if pf.startswith("P"):
