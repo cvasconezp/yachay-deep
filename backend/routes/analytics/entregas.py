@@ -20,6 +20,7 @@ from ...models.user import User
 from ...models.student import Student
 from ...models.task_submission import TaskSubmission
 from ...models.course_config import CourseConfig, SemesterConfig
+from ...models.enrollment import Enrollment
 
 logger = logging.getLogger(__name__)
 
@@ -109,16 +110,32 @@ def _get_codigos_excluir(db: Session) -> set:
 
 def _get_codigos_excluir_bloque(db: Session, bloque: str) -> set:
     """Devuelve códigos a EXCLUIR cuando se filtra por un bloque específico.
-    Para B1: excluir cursos explícitamente marcados como bloque 2.
-    Para B2: excluir cursos explícitamente marcados como bloque 1.
-    Cursos con bloque=NULL o 'ambos' nunca se excluyen."""
-    if bloque == "1":
-        excl = db.query(CourseConfig.codigo_avac).filter(CourseConfig.bloque == "2").all()
-    elif bloque == "2":
-        excl = db.query(CourseConfig.codigo_avac).filter(CourseConfig.bloque == "1").all()
-    else:
+
+    Usa DOS fuentes para máxima cobertura:
+    1. CourseConfig.bloque (seteado por ETL, puede ser NULL en muchos cursos)
+    2. Enrollment.bloque (viene del reporte institucional, más confiable)
+
+    Para B1: excluir cursos que son de bloque 2 según cualquiera de las dos fuentes.
+    Para B2: excluir cursos que son de bloque 1 según cualquiera de las dos fuentes.
+    """
+    if bloque not in ("1", "2"):
         return set()
-    return {r[0] for r in excl if r[0]}
+
+    otro_bloque = "2" if bloque == "1" else "1"
+
+    # Fuente 1: CourseConfig.bloque
+    cc_excl = db.query(CourseConfig.codigo_avac).filter(
+        CourseConfig.bloque == otro_bloque
+    ).all()
+    codigos = {r[0] for r in cc_excl if r[0]}
+
+    # Fuente 2: Enrollment.bloque (codigo_grupo == codigo_avac)
+    enr_excl = db.query(Enrollment.codigo_grupo).filter(
+        Enrollment.bloque == int(otro_bloque)
+    ).distinct().all()
+    codigos.update(r[0] for r in enr_excl if r[0])
+
+    return codigos
 
 
 def _get_latest_snapshot_date(db: Session, periodo_filter, codigos_excluir: set):
