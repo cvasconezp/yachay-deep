@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../services/api";
+import BulkInterventionModal from "../components/BulkInterventionModal";
 
 export default function EntregasPendientes() {
   const navigate = useNavigate();
@@ -8,15 +9,22 @@ export default function EntregasPendientes() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Pestañas
+  const [tab, setTab] = useState("asignatura"); // "asignatura" | "estudiante"
+
   // Filtros
   const [carrera, setCarrera] = useState("");
   const [asignatura, setAsignatura] = useState("");
   const [unidad, setUnidad] = useState("");
-  const [bloque, setBloque] = useState("1"); // B1 por defecto (bimestre actual)
+  const [bloque, setBloque] = useState("1");
   const [search, setSearch] = useState("");
 
-  // Control de filas expandidas
+  // Control de filas expandidas (vista asignatura)
   const [expanded, setExpanded] = useState({});
+
+  // Selección de estudiantes (vista estudiante)
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [showBulkModal, setShowBulkModal] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -32,6 +40,7 @@ export default function EntregasPendientes() {
       if (bloque) params.bloque = bloque;
       const result = await api.getEntregasPendientes(params);
       setData(result);
+      setSelectedIds(new Set());
     } catch (e) {
       setError(e.message || "Error cargando datos");
     } finally {
@@ -39,7 +48,7 @@ export default function EntregasPendientes() {
     }
   };
 
-  // Extraer carreras y asignaturas únicas de los datos
+  // Extraer carreras y asignaturas únicas
   const { carreras, asignaturas } = useMemo(() => {
     if (!data?.actividades) return { carreras: [], asignaturas: [] };
     const cs = [...new Set(data.actividades.map(a => a.carrera).filter(Boolean))].sort();
@@ -47,14 +56,13 @@ export default function EntregasPendientes() {
     return { carreras: cs, asignaturas: as_ };
   }, [data]);
 
-  // Filtrar actividades en el frontend (asignatura y búsqueda de nombre)
+  // Filtrar actividades (asignatura y búsqueda)
   const filtered = useMemo(() => {
     if (!data?.actividades) return [];
     return data.actividades.filter(a => {
       if (asignatura && a.asignatura !== asignatura) return false;
       if (search) {
         const q = search.toLowerCase();
-        // Buscar en nombre de estudiantes pendientes
         const matchStudent = a.pendientes?.some(p =>
           p.nombre.toLowerCase().includes(q) || p.correo.toLowerCase().includes(q)
         );
@@ -66,17 +74,84 @@ export default function EntregasPendientes() {
     });
   }, [data, asignatura, search]);
 
+  // ── Vista por estudiante: consolidar pendientes por estudiante ──
+  const studentView = useMemo(() => {
+    if (!filtered.length) return [];
+
+    const map = {}; // student_id -> { ...student, pendientes: [{asignatura, unidad, docente}] }
+    for (const act of filtered) {
+      if (!act.pendientes) continue;
+      for (const p of act.pendientes) {
+        if (!map[p.student_id]) {
+          map[p.student_id] = {
+            student_id: p.student_id,
+            nombre: p.nombre,
+            correo: p.correo,
+            pendientes: [],
+          };
+        }
+        map[p.student_id].pendientes.push({
+          asignatura: act.asignatura,
+          unidad: act.unidad,
+          docente: act.docente,
+          codigo_curso: act.codigo_curso,
+        });
+      }
+    }
+
+    return Object.values(map).sort((a, b) => b.pendientes.length - a.pendientes.length);
+  }, [filtered]);
+
+  // Filtrar vista estudiante por búsqueda
+  const filteredStudents = useMemo(() => {
+    if (!search) return studentView;
+    const q = search.toLowerCase();
+    return studentView.filter(s =>
+      s.nombre.toLowerCase().includes(q) ||
+      s.correo.toLowerCase().includes(q) ||
+      s.pendientes.some(p => p.asignatura?.toLowerCase().includes(q) || p.docente?.toLowerCase().includes(q))
+    );
+  }, [studentView, search]);
+
   const toggleExpanded = (key) => {
     setExpanded(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
   const expandAll = () => {
-    const newExp = {};
-    filtered.forEach(a => { newExp[`${a.codigo_curso}-${a.unidad}`] = true; });
-    setExpanded(newExp);
+    if (tab === "asignatura") {
+      const newExp = {};
+      filtered.forEach(a => { newExp[`${a.codigo_curso}-${a.unidad}`] = true; });
+      setExpanded(newExp);
+    } else {
+      const newExp = {};
+      filteredStudents.forEach(s => { newExp[`stu-${s.student_id}`] = true; });
+      setExpanded(newExp);
+    }
   };
 
   const collapseAll = () => setExpanded({});
+
+  // ── Selección de estudiantes ──
+  const toggleSelect = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    setSelectedIds(new Set(filteredStudents.map(s => s.student_id)));
+  };
+
+  const selectNone = () => setSelectedIds(new Set());
+
+  const selectedStudentsForModal = useMemo(() => {
+    return filteredStudents
+      .filter(s => selectedIds.has(s.student_id))
+      .map(s => ({ id: s.student_id, nombre: s.nombre }));
+  }, [filteredStudents, selectedIds]);
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-6">
@@ -86,7 +161,7 @@ export default function EntregasPendientes() {
           <div>
             <h1 className="text-2xl font-bold text-gray-800">Entregas Pendientes</h1>
             <p className="text-sm text-gray-500 mt-1">
-              Reporte de estudiantes que no han entregado actividades por asignatura y unidad
+              Identifica estudiantes que no entregaron actividades para hacer acompañamiento
             </p>
           </div>
           {data?.resumen && (
@@ -96,11 +171,32 @@ export default function EntregasPendientes() {
                 <div className="text-gray-500 text-xs">Actividades</div>
               </div>
               <div className="bg-white rounded-lg shadow-sm border px-4 py-2 text-center">
+                <div className="text-2xl font-bold text-orange-600">{studentView.length}</div>
+                <div className="text-gray-500 text-xs">Estudiantes</div>
+              </div>
+              <div className="bg-white rounded-lg shadow-sm border px-4 py-2 text-center">
                 <div className="text-2xl font-bold text-red-600">{data.resumen.total_pendientes}</div>
                 <div className="text-gray-500 text-xs">Entregas pendientes</div>
               </div>
             </div>
           )}
+        </div>
+
+        {/* Pestañas */}
+        <div className="flex gap-1 mb-4">
+          <button
+            onClick={() => setTab("asignatura")}
+            className={`px-4 py-2 rounded-t-lg text-sm font-semibold transition-colors ${tab === "asignatura" ? "bg-white text-blue-700 border border-b-white shadow-sm -mb-px relative z-10" : "bg-gray-100 text-gray-500 hover:text-gray-700 border border-transparent"}`}
+          >
+            Por asignatura
+          </button>
+          <button
+            onClick={() => setTab("estudiante")}
+            className={`px-4 py-2 rounded-t-lg text-sm font-semibold transition-colors ${tab === "estudiante" ? "bg-white text-blue-700 border border-b-white shadow-sm -mb-px relative z-10" : "bg-gray-100 text-gray-500 hover:text-gray-700 border border-transparent"}`}
+          >
+            Por estudiante
+            {studentView.length > 0 && <span className="ml-1.5 bg-red-100 text-red-700 text-xs font-bold px-1.5 py-0.5 rounded-full">{studentView.length}</span>}
+          </button>
         </div>
 
         {/* Filtros */}
@@ -116,17 +212,19 @@ export default function EntregasPendientes() {
               {carreras.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
-          <div className="flex-1 min-w-[180px]">
-            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">Asignatura</label>
-            <select
-              value={asignatura}
-              onChange={e => setAsignatura(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
-            >
-              <option value="">Todas las asignaturas</option>
-              {asignaturas.map(a => <option key={a} value={a}>{a}</option>)}
-            </select>
-          </div>
+          {tab === "asignatura" && (
+            <div className="flex-1 min-w-[180px]">
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">Asignatura</label>
+              <select
+                value={asignatura}
+                onChange={e => setAsignatura(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              >
+                <option value="">Todas las asignaturas</option>
+                {asignaturas.map(a => <option key={a} value={a}>{a}</option>)}
+              </select>
+            </div>
+          )}
           <div className="w-24">
             <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">Bloque</label>
             <select
@@ -159,7 +257,7 @@ export default function EntregasPendientes() {
               type="text"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Nombre, correo o docente..."
+              placeholder="Nombre, correo, asignatura o docente..."
               className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
             />
           </div>
@@ -172,6 +270,42 @@ export default function EntregasPendientes() {
             </button>
           </div>
         </div>
+
+        {/* Barra de selección (vista estudiante) */}
+        {tab === "estudiante" && filteredStudents.length > 0 && (
+          <div className="bg-white rounded-xl shadow-sm border p-3 mb-4 flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={selectedIds.size === filteredStudents.length && filteredStudents.length > 0}
+                onChange={e => e.target.checked ? selectAll() : selectNone()}
+                className="rounded"
+              />
+              <span className="text-sm text-gray-600">
+                {selectedIds.size > 0
+                  ? <><strong>{selectedIds.size}</strong> seleccionado{selectedIds.size !== 1 ? "s" : ""}</>
+                  : "Seleccionar todos"
+                }
+              </span>
+            </div>
+            {selectedIds.size > 0 && (
+              <>
+                <button
+                  onClick={() => setShowBulkModal(true)}
+                  className="bg-blue-600 text-white text-sm font-semibold px-4 py-1.5 rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Registrar intervención ({selectedIds.size})
+                </button>
+                <button
+                  onClick={selectNone}
+                  className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-50"
+                >
+                  Limpiar selección
+                </button>
+              </>
+            )}
+          </div>
+        )}
 
         {/* Error */}
         {error && (
@@ -196,8 +330,8 @@ export default function EntregasPendientes() {
           </div>
         )}
 
-        {/* Tabla de actividades */}
-        {!loading && filtered.length > 0 && (
+        {/* ═══ PESTAÑA: POR ASIGNATURA ═══ */}
+        {!loading && filtered.length > 0 && tab === "asignatura" && (
           <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
             <table className="w-full text-sm">
               <thead>
@@ -260,7 +394,6 @@ export default function EntregasPendientes() {
                         </div>
                       </td>
                     </tr>,
-                    // Fila expandida: lista de pendientes
                     isExpanded && act.pendientes?.length > 0 && (
                       <tr key={`${key}-detail`}>
                         <td colSpan={7} className="bg-red-50/30 px-4 py-0">
@@ -294,7 +427,129 @@ export default function EntregasPendientes() {
             </table>
           </div>
         )}
+
+        {/* ═══ PESTAÑA: POR ESTUDIANTE ═══ */}
+        {!loading && tab === "estudiante" && filteredStudents.length > 0 && (
+          <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200">
+                  <th className="w-10 px-3 py-3"></th>
+                  <th className="text-left px-4 py-3 font-semibold text-gray-600 w-8"></th>
+                  <th className="text-left px-4 py-3 font-semibold text-gray-600">Estudiante</th>
+                  <th className="text-left px-3 py-3 font-semibold text-gray-600">Correo</th>
+                  <th className="text-center px-3 py-3 font-semibold text-gray-600 w-28">Pendientes</th>
+                  <th className="text-left px-3 py-3 font-semibold text-gray-600">Asignaturas</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredStudents.map((stu) => {
+                  const key = `stu-${stu.student_id}`;
+                  const isExpanded = expanded[key];
+                  const isSelected = selectedIds.has(stu.student_id);
+                  const severity = stu.pendientes.length >= 3 ? "bg-red-50/50" : stu.pendientes.length >= 2 ? "bg-orange-50/50" : "";
+
+                  // Agrupar pendientes por asignatura para mostrar resumen
+                  const asigResumen = {};
+                  for (const p of stu.pendientes) {
+                    if (!asigResumen[p.asignatura]) asigResumen[p.asignatura] = [];
+                    asigResumen[p.asignatura].push(p.unidad);
+                  }
+
+                  return [
+                    <tr
+                      key={key}
+                      className={`border-b border-gray-100 hover:bg-blue-50/30 cursor-pointer transition-colors ${severity}`}
+                      onClick={() => toggleExpanded(key)}
+                    >
+                      <td className="px-3 py-2.5 text-center" onClick={e => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSelect(stu.student_id)}
+                          className="rounded"
+                        />
+                      </td>
+                      <td className="px-4 py-2.5 text-gray-400">
+                        <span className={`inline-block transition-transform ${isExpanded ? "rotate-90" : ""}`}>▶</span>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <div className="font-medium text-gray-800">{stu.nombre}</div>
+                      </td>
+                      <td className="px-3 py-2.5 text-gray-500 text-xs">{stu.correo}</td>
+                      <td className="px-3 py-2.5 text-center">
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${stu.pendientes.length >= 3 ? "bg-red-100 text-red-700" : stu.pendientes.length >= 2 ? "bg-orange-100 text-orange-700" : "bg-yellow-100 text-yellow-700"}`}>
+                          {stu.pendientes.length} actividad{stu.pendientes.length !== 1 ? "es" : ""}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <div className="flex flex-wrap gap-1">
+                          {Object.entries(asigResumen).map(([asig, units]) => (
+                            <span key={asig} className="inline-flex items-center bg-gray-100 text-gray-700 text-[10px] px-1.5 py-0.5 rounded" title={`${asig}: Unidad ${units.join(", ")}`}>
+                              {asig.length > 25 ? asig.slice(0, 25) + "…" : asig}
+                              <span className="ml-1 text-blue-600 font-bold">U{units.join(",")}</span>
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>,
+                    isExpanded && (
+                      <tr key={`${key}-detail`}>
+                        <td colSpan={6} className="bg-orange-50/30 px-4 py-0">
+                          <div className="py-3 pl-14">
+                            <div className="text-xs font-semibold text-orange-700 mb-2 uppercase tracking-wide">
+                              Actividades pendientes de {stu.nombre}
+                            </div>
+                            <div className="space-y-1.5">
+                              {stu.pendientes.map((p, i) => (
+                                <div key={i} className="flex items-center gap-3 bg-white rounded-lg border border-orange-100 px-4 py-2">
+                                  <span className="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-0.5 rounded-full shrink-0">
+                                    U{p.unidad}
+                                  </span>
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-sm font-medium text-gray-800">{p.asignatura}</div>
+                                    {p.docente && <div className="text-xs text-gray-400">{p.docente}</div>}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                            <button
+                              className="mt-2 text-xs text-blue-600 hover:text-blue-800 font-semibold"
+                              onClick={(e) => { e.stopPropagation(); navigate(`/ficha/${stu.student_id}`); }}
+                            >
+                              Ver ficha completa →
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ),
+                  ];
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {!loading && tab === "estudiante" && filteredStudents.length === 0 && filtered.length > 0 && (
+          <div className="text-center py-12 text-gray-400">
+            <div className="text-3xl mb-2">✅</div>
+            Todos los estudiantes entregaron sus actividades
+          </div>
+        )}
       </div>
+
+      {/* Modal de intervención masiva */}
+      {showBulkModal && (
+        <BulkInterventionModal
+          selectedStudents={selectedStudentsForModal}
+          periodo=""
+          onClose={() => setShowBulkModal(false)}
+          onSaved={() => {
+            setShowBulkModal(false);
+            setSelectedIds(new Set());
+          }}
+        />
+      )}
     </div>
   );
 }
