@@ -68,18 +68,18 @@ def _enrollment_periodo_filter(query, periodo: Optional[str]):
 
 def _get_enrollment_results(db: Session, periodo: Optional[str], carrera: Optional[str], nivel: Optional[int]):
     """Genera resultados de asignaturas desde Enrollment (sin calificaciones).
-    Agrupa por (asignatura, carrera, docente, nivel) — sin grupo, para evitar duplicados."""
+    Agrupa SOLO por (asignatura, docente) para evitar duplicados por variaciones
+    en carrera/nivel/grupo. Usa distinct student_id para conteo correcto."""
     query = db.query(
-        Enrollment.asignatura, Enrollment.carrera, Enrollment.docente,
-        Enrollment.nivel,
-        func.count(Enrollment.id).label("total_estudiantes"),
+        Enrollment.asignatura, Enrollment.docente,
+        func.min(Enrollment.carrera).label("carrera"),
+        func.min(Enrollment.nivel).label("nivel"),
+        func.count(distinct(Enrollment.student_id)).label("total_estudiantes"),
         func.sum(case((Enrollment.numero_repitencias > 1, 1), else_=0)).label("total_repitentes"),
     )
     query, _ = _enrollment_periodo_filter(query, periodo)
-    query = query.group_by(
-        Enrollment.asignatura, Enrollment.carrera, Enrollment.docente,
-        Enrollment.nivel,
-    )
+    query = query.group_by(Enrollment.asignatura, Enrollment.docente)
+
     if carrera:
         query = query.filter(func.lower(Enrollment.carrera).contains(carrera.lower()))
     if nivel:
@@ -144,8 +144,10 @@ def get_asignaturas_analytics(
     """Vista agregada por asignatura. Framework §8.2.
     Si no hay grades para el periodo, usa Enrollment como fallback."""
     query = db.query(
-        Grade.asignatura, Grade.carrera, Grade.docente, Grade.nivel,
-        func.count(Grade.id).label("total_estudiantes"),
+        Grade.asignatura, Grade.docente,
+        func.min(Grade.carrera).label("carrera"),
+        func.min(Grade.nivel).label("nivel"),
+        func.count(distinct(Grade.student_id)).label("total_estudiantes"),
         func.avg(Grade.nota_final).label("promedio_general"),
         func.max(Grade.nota_final).label("nota_maxima"),
         func.min(Grade.nota_final).label("nota_minima"),
@@ -154,7 +156,7 @@ def get_asignaturas_analytics(
         func.sum(case((Grade.numero_repitencias > 1, 1), else_=0)).label("total_repitentes"),
     )
     query, _ = apply_periodo_filter(query, periodo)
-    query = query.group_by(Grade.asignatura, Grade.carrera, Grade.docente, Grade.nivel)
+    query = query.group_by(Grade.asignatura, Grade.docente)
 
     if carrera:
         carrera_student_ids = [s_id for (s_id,) in db.query(Student.id).filter(
