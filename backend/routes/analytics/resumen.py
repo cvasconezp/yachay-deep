@@ -365,7 +365,6 @@ def get_resumen_datos(
     # Replica exactamente la lógica de Analítica de Asignaturas:
     # 1) Intenta grades GROUP BY (asignatura, docente)
     # 2) Si no hay grades, fallback a enrollment GROUP BY (asignatura, docente)
-    from sqlalchemy import literal_column
     secc_q = db.query(Grade.asignatura, Grade.docente)
     secc_q, _ = apply_periodo_filter(secc_q, periodo)
     if carrera and _carrera_sids:
