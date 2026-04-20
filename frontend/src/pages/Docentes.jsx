@@ -268,11 +268,22 @@ export default function Docentes() {
             </div>
 
             <div className="p-6 space-y-6">
-              {(detalle.asignaturas_detalle || []).map((asig, idx) => (
+              {(detalle.asignaturas_detalle || []).map((asig, idx) => {
+                const exportCols = [
+                  { key: "nombre", label: "Estudiante" },
+                  { key: "nota_final", label: "Nota Final" },
+                  { key: "nivel_riesgo", label: "Nivel Riesgo" },
+                  { key: "indice_compromiso", label: "Compromiso" },
+                  { key: "dias_sin_acceso", label: "Días sin acceso" },
+                ];
+                const grupoLabel = asig.grupo ? ` - Grupo ${asig.grupo}` : "";
+                const exportFilename = `${detalle.docente}_${asig.asignatura}${grupoLabel}`.replace(/\s+/g, "_");
+                return (
                 <div key={idx} className="border border-gray-200 rounded-xl overflow-hidden">
-                  <div className="bg-gray-50 px-4 py-3 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
+                  <div className="bg-gray-50 px-4 py-3 flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold text-gray-800">{asig.asignatura}</span>
+                      {asig.grupo && <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">Grupo {asig.grupo}</span>}
                       {asig.nivel && <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">Nivel {asig.nivel}</span>}
                       {asig.codigo_avac && (
                         <a
@@ -286,11 +297,18 @@ export default function Docentes() {
                         </a>
                       )}
                     </div>
-                    <div className="flex gap-4 text-xs text-gray-500">
-                      <span>Promedio: <b className={asig.promedio < 70 ? "text-red-600" : "text-green-600"}>{asig.promedio}</b></span>
+                    <div className="flex items-center gap-4 text-xs text-gray-500">
+                      <span>Promedio: <b className={asig.promedio < 70 ? "text-red-600" : "text-green-600"}>{asig.promedio ?? "—"}</b></span>
                       <span>Aprobados: <b className="text-green-600">{asig.aprobados}</b></span>
                       <span>Reprobados: <b className="text-red-600">{asig.reprobados}</b></span>
                       {asig.riesgo_alto > 0 && <span>Riesgo alto: <b className="text-red-600">{asig.riesgo_alto}</b></span>}
+                      <ExportExcelButton
+                        data={asig.estudiantes || []}
+                        columns={exportCols}
+                        filename={exportFilename}
+                        label="Excel"
+                        small
+                      />
                     </div>
                   </div>
                   <table className="w-full text-sm">
@@ -326,7 +344,8 @@ export default function Docentes() {
                     </tbody>
                   </table>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>

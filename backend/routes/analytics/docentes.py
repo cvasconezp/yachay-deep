@@ -206,13 +206,29 @@ def get_docente_detalle(
         students = db.query(Student).filter(Student.id.in_(all_sids)).all()
         student_map = {s.id: s for s in students}
 
+        # Extraer número de grupo desde nombre_grupo: "GRUPO - 3 (...)" → "3"
+        def _extract_grupo(nombre_grupo):
+            if not nombre_grupo:
+                return None
+            for part in nombre_grupo.replace("-", " ").split():
+                if part.strip().isdigit():
+                    return part.strip()
+            return None
+
         asig_map = {}
         for e in enrolls:
-            asig_map.setdefault(e.asignatura, {"asignatura": e.asignatura, "carrera": e.carrera, "nivel": e.nivel, "codigo_avac": e.codigo_grupo, "enrolls": []})
-            asig_map[e.asignatura]["enrolls"].append(e)
+            grupo = _extract_grupo(e.nombre_grupo)
+            group_key = (e.asignatura, e.codigo_grupo)
+            if group_key not in asig_map:
+                asig_map[group_key] = {
+                    "asignatura": e.asignatura, "carrera": e.carrera,
+                    "nivel": e.nivel, "grupo": grupo,
+                    "codigo_avac": e.codigo_grupo, "enrolls": [],
+                }
+            asig_map[group_key]["enrolls"].append(e)
 
         asignaturas_detalle = []
-        for key, data in sorted(asig_map.items()):
+        for key, data in sorted(asig_map.items(), key=lambda x: (x[0][0], x[0][1] or "")):
             es = data["enrolls"]
             est_list = []
             for e in es:
@@ -225,6 +241,7 @@ def get_docente_detalle(
                     })
             asignaturas_detalle.append({
                 "asignatura": data["asignatura"], "carrera": data["carrera"], "nivel": data["nivel"],
+                "grupo": data.get("grupo"),
                 "codigo_avac": data.get("codigo_avac"),
                 "total_estudiantes": len(es),
                 "promedio": None, "aprobados": 0, "reprobados": 0,
@@ -242,27 +259,40 @@ def get_docente_detalle(
             "fuente": "enrollment",
         }
 
-    # Lookup CourseConfig para obtener codigo_avac por asignatura+docente
+    # Lookup CourseConfig para obtener codigo_avac por (asignatura, grupo)
     cc_lookup = {}
-    cc_rows = db.query(CourseConfig.asignatura, CourseConfig.codigo_avac).filter(
+    cc_rows = db.query(
+        CourseConfig.asignatura, CourseConfig.grupo, CourseConfig.codigo_avac
+    ).filter(
         CourseConfig.docente == docente_nombre,
         CourseConfig.codigo_avac.isnot(None),
     ).all()
     for cc in cc_rows:
         if cc.asignatura:
-            cc_lookup[cc.asignatura] = cc.codigo_avac
+            cc_lookup[(cc.asignatura, cc.grupo)] = cc.codigo_avac
+            # Fallback: asignatura sin grupo por si el grade no tiene grupo
+            if cc.asignatura not in cc_lookup:
+                cc_lookup[(cc.asignatura, None)] = cc.codigo_avac
 
+    # Agrupar por (asignatura, grupo) para separar secciones
     asig_map = {}
     for g in grades:
-        asig_map.setdefault(g.asignatura, {"asignatura": g.asignatura, "carrera": g.carrera, "nivel": g.nivel, "codigo_avac": cc_lookup.get(g.asignatura), "grades": []})
-        asig_map[g.asignatura]["grades"].append(g)
+        group_key = (g.asignatura, g.grupo)
+        if group_key not in asig_map:
+            avac = cc_lookup.get((g.asignatura, g.grupo)) or cc_lookup.get((g.asignatura, None))
+            asig_map[group_key] = {
+                "asignatura": g.asignatura, "carrera": g.carrera,
+                "nivel": g.nivel, "grupo": g.grupo,
+                "codigo_avac": avac, "grades": [],
+            }
+        asig_map[group_key]["grades"].append(g)
 
     all_student_ids = list(set(g.student_id for g in grades))
     students = db.query(Student).filter(Student.id.in_(all_student_ids)).all()
     student_map = {s.id: s for s in students}
 
     asignaturas_detalle = []
-    for key, data in sorted(asig_map.items()):
+    for key, data in sorted(asig_map.items(), key=lambda x: (x[0][0], x[0][1] or "")):
         gs = data["grades"]
         notas = [g.nota_final for g in gs if g.nota_final is not None]
         est_list = []
@@ -278,6 +308,7 @@ def get_docente_detalle(
         total = len(notas) if notas else 1
         asignaturas_detalle.append({
             "asignatura": data["asignatura"], "carrera": data["carrera"], "nivel": data["nivel"],
+            "grupo": data.get("grupo"),
             "codigo_avac": data.get("codigo_avac"),
             "total_estudiantes": len(gs),
             "promedio": round(sum(notas) / max(total, 1), 1) if notas else None,

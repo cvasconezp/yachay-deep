@@ -9,7 +9,7 @@
  */
 import { useState } from "react";
 
-export default function ExportExcelButton({ data = [], columns = [], filename = "export", defaultSelected = null }) {
+export default function ExportExcelButton({ data = [], columns = [], filename = "export", defaultSelected = null, label = "Exportar Excel", small = false }) {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState(
     new Set(defaultSelected || columns.map(c => c.key))
@@ -59,9 +59,11 @@ export default function ExportExcelButton({ data = [], columns = [], filename = 
     <div>
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm"
+        className={`flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors shadow-sm ${
+          small ? "px-2.5 py-1 text-xs" : "px-4 py-2 text-sm gap-2"
+        }`}
       >
-        <span>📥</span> Exportar Excel
+        <span className={small ? "text-xs" : ""}>📥</span> {label}
       </button>
 
       {open && (
