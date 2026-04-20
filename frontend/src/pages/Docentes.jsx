@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../services/api";
 import { RiskBadge, CompromisoBar } from "../components/RiskBadge";
@@ -6,6 +6,9 @@ import { SummaryCard } from "../components/StatCard";
 import { PeriodSelector } from "../components/PeriodSelector";
 import ExportExcelButton from "../components/ExportExcelButton";
 import SeguimientoDocente from "./SeguimientoDocente";
+
+const AVAC_BASE = "https://avac.ups.edu.ec/grado68";
+const avacCourseUrl = (codigo) => `${AVAC_BASE}/course/search.php?areaids=core_course-course&q=${encodeURIComponent(codigo)}`;
 
 const DOC_EXPORT_COLS = [
   { key: "docente", label: "Docente" },
@@ -33,9 +36,19 @@ export default function Docentes() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [filtros, setFiltros] = useState({ carrera: "", periodo: "" });
+  const [search, setSearch] = useState("");
   const [detalle, setDetalle] = useState(null);
   const [loadingDetalle, setLoadingDetalle] = useState(false);
   const navigate = useNavigate();
+
+  const filteredDocentes = useMemo(() => {
+    if (!search) return docentes;
+    const q = search.toLowerCase();
+    return docentes.filter(d =>
+      d.docente?.toLowerCase().includes(q) ||
+      d.asignaturas?.some(a => a.toLowerCase().includes(q))
+    );
+  }, [docentes, search]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -82,7 +95,7 @@ export default function Docentes() {
           <p className="text-gray-500 text-sm">Analítica, rendimiento y seguimiento de calificaciones docentes</p>
         </div>
         {activeTab === "analitica" && (
-          <ExportExcelButton data={docentes} columns={DOC_EXPORT_COLS} filename="analitica_docentes" />
+          <ExportExcelButton data={filteredDocentes} columns={DOC_EXPORT_COLS} filename="analitica_docentes" />
         )}
       </div>
 
@@ -153,14 +166,24 @@ export default function Docentes() {
             {carreras.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
-        <div className="ml-auto text-sm text-gray-500">{docentes.length} docentes</div>
+        <div className="flex-1 min-w-[200px]">
+          <label className="text-xs font-medium text-gray-600 block mb-1">Buscar docente</label>
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Nombre del docente o asignatura..."
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        <div className="ml-auto text-sm text-gray-500">{filteredDocentes.length} docentes</div>
       </div>
 
       {/* Tabla */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-20 text-gray-400">Cargando...</div>
-        ) : docentes.length === 0 ? (
+        ) : filteredDocentes.length === 0 ? (
           <div className="text-center py-20 text-gray-400">No hay docentes registrados</div>
         ) : (
           <table className="w-full text-sm">
@@ -178,7 +201,7 @@ export default function Docentes() {
               </tr>
             </thead>
             <tbody>
-              {docentes.map((d, i) => (
+              {filteredDocentes.map((d, i) => (
                 <tr
                   key={`${d.docente}-${i}`}
                   onClick={() => openDetalle(d)}
@@ -248,9 +271,20 @@ export default function Docentes() {
               {(detalle.asignaturas_detalle || []).map((asig, idx) => (
                 <div key={idx} className="border border-gray-200 rounded-xl overflow-hidden">
                   <div className="bg-gray-50 px-4 py-3 flex items-center justify-between">
-                    <div>
+                    <div className="flex items-center gap-2">
                       <span className="font-semibold text-gray-800">{asig.asignatura}</span>
-                      {asig.nivel && <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">Nivel {asig.nivel}</span>}
+                      {asig.nivel && <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">Nivel {asig.nivel}</span>}
+                      {asig.codigo_avac && (
+                        <a
+                          href={avacCourseUrl(asig.codigo_avac)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-blue-500 hover:text-blue-700 underline"
+                          onClick={e => e.stopPropagation()}
+                        >
+                          Abrir AVAC
+                        </a>
+                      )}
                     </div>
                     <div className="flex gap-4 text-xs text-gray-500">
                       <span>Promedio: <b className={asig.promedio < 70 ? "text-red-600" : "text-green-600"}>{asig.promedio}</b></span>

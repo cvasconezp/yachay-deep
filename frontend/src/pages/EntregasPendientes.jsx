@@ -3,6 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../services/api";
 import BulkInterventionModal from "../components/BulkInterventionModal";
 
+const AVAC_BASE = "https://avac.ups.edu.ec/grado68";
+const avacCourseUrl = (codigo) => `${AVAC_BASE}/course/search.php?areaids=core_course-course&q=${encodeURIComponent(codigo)}`;
+
 export default function EntregasPendientes() {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
@@ -414,6 +417,7 @@ export default function EntregasPendientes() {
                   <th className="text-center px-3 py-3 font-semibold text-gray-600 w-20">Entregaron</th>
                   <th className="text-center px-3 py-3 font-semibold text-gray-600 w-20">Pendientes</th>
                   <th className="px-3 py-3 font-semibold text-gray-600 w-32">% Entrega</th>
+                  <th className="text-center px-3 py-3 font-semibold text-gray-600 w-14">AVAC</th>
                 </tr>
               </thead>
               <tbody>
@@ -464,10 +468,22 @@ export default function EntregasPendientes() {
                           <span className="text-xs font-mono text-gray-500 w-10 text-right">{act.pct_entrega}%</span>
                         </div>
                       </td>
+                      <td className="px-3 py-2.5 text-center">
+                        <a
+                          href={avacCourseUrl(act.codigo_curso)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={e => e.stopPropagation()}
+                          className="text-blue-500 hover:text-blue-700 text-xs"
+                          title="Abrir aula virtual en AVAC"
+                        >
+                          Abrir
+                        </a>
+                      </td>
                     </tr>,
                     isExpanded && act.pendientes?.length > 0 && (
                       <tr key={`${key}-detail`}>
-                        <td colSpan={7} className="bg-red-50/30 px-4 py-0">
+                        <td colSpan={8} className="bg-red-50/30 px-4 py-0">
                           <div className="py-2 pl-8">
                             <div className="text-xs font-semibold text-red-700 mb-2 uppercase tracking-wide">
                               Estudiantes sin entregar — {act.asignatura} · Unidad {act.unidad}

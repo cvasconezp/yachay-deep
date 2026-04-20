@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from ...database import get_db
 from ...models import Student, Grade, Intervention, Enrollment
+from ...models.course_config import CourseConfig
 from ...auth.jwt import get_current_user
 from ...models.user import User
 from ._helpers import apply_periodo_filter
@@ -207,7 +208,7 @@ def get_docente_detalle(
 
         asig_map = {}
         for e in enrolls:
-            asig_map.setdefault(e.asignatura, {"asignatura": e.asignatura, "carrera": e.carrera, "nivel": e.nivel, "enrolls": []})
+            asig_map.setdefault(e.asignatura, {"asignatura": e.asignatura, "carrera": e.carrera, "nivel": e.nivel, "codigo_avac": e.codigo_grupo, "enrolls": []})
             asig_map[e.asignatura]["enrolls"].append(e)
 
         asignaturas_detalle = []
@@ -224,6 +225,7 @@ def get_docente_detalle(
                     })
             asignaturas_detalle.append({
                 "asignatura": data["asignatura"], "carrera": data["carrera"], "nivel": data["nivel"],
+                "codigo_avac": data.get("codigo_avac"),
                 "total_estudiantes": len(es),
                 "promedio": None, "aprobados": 0, "reprobados": 0,
                 "porcentaje_aprobacion": None,
@@ -240,9 +242,19 @@ def get_docente_detalle(
             "fuente": "enrollment",
         }
 
+    # Lookup CourseConfig para obtener codigo_avac por asignatura+docente
+    cc_lookup = {}
+    cc_rows = db.query(CourseConfig.asignatura, CourseConfig.codigo_avac).filter(
+        CourseConfig.docente == docente_nombre,
+        CourseConfig.codigo_avac.isnot(None),
+    ).all()
+    for cc in cc_rows:
+        if cc.asignatura:
+            cc_lookup[cc.asignatura] = cc.codigo_avac
+
     asig_map = {}
     for g in grades:
-        asig_map.setdefault(g.asignatura, {"asignatura": g.asignatura, "carrera": g.carrera, "nivel": g.nivel, "grades": []})
+        asig_map.setdefault(g.asignatura, {"asignatura": g.asignatura, "carrera": g.carrera, "nivel": g.nivel, "codigo_avac": cc_lookup.get(g.asignatura), "grades": []})
         asig_map[g.asignatura]["grades"].append(g)
 
     all_student_ids = list(set(g.student_id for g in grades))
@@ -266,6 +278,7 @@ def get_docente_detalle(
         total = len(notas) if notas else 1
         asignaturas_detalle.append({
             "asignatura": data["asignatura"], "carrera": data["carrera"], "nivel": data["nivel"],
+            "codigo_avac": data.get("codigo_avac"),
             "total_estudiantes": len(gs),
             "promedio": round(sum(notas) / max(total, 1), 1) if notas else None,
             "aprobados": aprobados, "reprobados": len(notas) - aprobados,
