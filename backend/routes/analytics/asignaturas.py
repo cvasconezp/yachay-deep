@@ -27,7 +27,7 @@ class AsignaturaAnalytics(BaseModel):
     carrera: Optional[str] = None
     docente: Optional[str] = None
     nivel: Optional[int] = None
-    grupo: Optional[str] = None
+    grupos: list[str] = []
     codigo_avac: Optional[str] = None
     total_estudiantes: int = 0
     promedio_general: Optional[float] = None
@@ -100,16 +100,28 @@ def _get_enrollment_results(db: Session, periodo: Optional[str], carrera: Option
         key = (rb.asignatura, rb.docente)
         risk_lookup.setdefault(key, {})[rb.nivel_riesgo] = rb.cnt
 
-    # Lookup codigo_avac from Enrollment.codigo_grupo (first match per asignatura+docente)
+    # Lookup codigo_avac + grupos from Enrollment per (asignatura, docente)
     enr_avac = {}
+    enr_grupos = {}
     for r in results:
-        enr_code_q = db.query(Enrollment.codigo_grupo).filter(
+        key = (r.asignatura, r.docente)
+        # Get all distinct codigo_grupo values
+        codes = db.query(Enrollment.codigo_grupo, Enrollment.nombre_grupo).filter(
             Enrollment.asignatura == r.asignatura,
             Enrollment.docente == r.docente,
             Enrollment.codigo_grupo.isnot(None),
-        ).first()
-        if enr_code_q and enr_code_q[0]:
-            enr_avac[(r.asignatura, r.docente)] = enr_code_q[0]
+        ).distinct().all()
+        if codes:
+            enr_avac[key] = codes[0][0]  # first codigo_avac
+            # Extract grupo numbers from nombre_grupo
+            grupos = set()
+            for _, ng in codes:
+                if ng:
+                    for part in ng.replace("-", " ").split():
+                        if part.strip().isdigit():
+                            grupos.add(part.strip())
+                            break
+            enr_grupos[key] = sorted(grupos)
 
     output = []
     for r in results:
@@ -118,6 +130,7 @@ def _get_enrollment_results(db: Session, periodo: Optional[str], carrera: Option
         output.append(AsignaturaAnalytics(
             asignatura=r.asignatura, carrera=r.carrera, docente=r.docente,
             nivel=r.nivel,
+            grupos=enr_grupos.get(key, []),
             codigo_avac=enr_avac.get(key),
             total_estudiantes=r.total_estudiantes,
             promedio_general=None, nota_maxima=None, nota_minima=None,
@@ -205,14 +218,20 @@ def get_asignaturas_analytics(
     )
     interv_lookup = {ib.asignatura: ib.total for ib in interv_batch}
 
-    # Batch: codigo_avac from CourseConfig
+    # Batch: codigo_avac + grupos from CourseConfig
     cc_avac_rows = db.query(
-        CourseConfig.asignatura, CourseConfig.docente, CourseConfig.codigo_avac
+        CourseConfig.asignatura, CourseConfig.docente, CourseConfig.codigo_avac, CourseConfig.grupo
     ).filter(CourseConfig.codigo_avac.isnot(None)).all()
     cc_avac_lookup = {}
+    cc_grupos_lookup = {}
     for cc in cc_avac_rows:
         if cc.asignatura:
-            cc_avac_lookup[(cc.asignatura, cc.docente)] = cc.codigo_avac
+            key = (cc.asignatura, cc.docente)
+            if key not in cc_avac_lookup:
+                cc_avac_lookup[key] = cc.codigo_avac
+            cc_grupos_lookup.setdefault(key, set())
+            if cc.grupo:
+                cc_grupos_lookup[key].add(cc.grupo)
 
     output = []
     for r in results:
@@ -226,6 +245,7 @@ def get_asignaturas_analytics(
         item = AsignaturaAnalytics(
             asignatura=r.asignatura, carrera=r.carrera, docente=r.docente,
             nivel=r.nivel,
+            grupos=sorted(cc_grupos_lookup.get(key, set())),
             codigo_avac=cc_avac_lookup.get(key),
             total_estudiantes=r.total_estudiantes,
             promedio_general=round(r.promedio_general, 1) if r.promedio_general else None,
@@ -266,6 +286,14 @@ def get_asignatura_detalle(
 
     grades = query.all()
 
+    def _extract_grupo(nombre_grupo):
+        if not nombre_grupo:
+            return None
+        for part in nombre_grupo.replace("-", " ").split():
+            if part.strip().isdigit():
+                return part.strip()
+        return None
+
     if not grades:
         # Fallback: enrollment data
         eq = db.query(Enrollment).filter(Enrollment.asignatura == asignatura)
@@ -274,88 +302,159 @@ def get_asignatura_detalle(
             eq = eq.filter(Enrollment.docente == docente)
         enrolls = eq.all()
         if not enrolls:
-            return {"asignatura": asignatura, "estudiantes": [], "total_estudiantes": 0}
+            return {"asignatura": asignatura, "grupos_detalle": [], "total_estudiantes": 0}
 
-        student_ids = list(set(e.student_id for e in enrolls))
-        students = db.query(Student).filter(Student.id.in_(student_ids)).all()
+        all_sids = list(set(e.student_id for e in enrolls))
+        students = db.query(Student).filter(Student.id.in_(all_sids)).all()
         student_map = {s.id: s for s in students}
         first_e = enrolls[0]
-        estudiantes_out = []
+
+        # Group by (codigo_grupo) to separate sections
+        grupo_map = {}
         for e in enrolls:
-            s = student_map.get(e.student_id)
-            if not s:
-                continue
-            estudiantes_out.append({
-                "student_id": s.id, "nombre": s.nombre,
-                "correo_institucional": s.correo_institucional, "cedula": s.cedula,
-                "nota_final": None, "numero_repitencias": e.numero_repitencias,
-                "nivel_riesgo": s.nivel_riesgo, "indice_compromiso": s.indice_compromiso,
-                "dias_sin_acceso": s.dias_sin_acceso, "porcentaje_tareas": s.porcentaje_tareas,
-                "estado_matricula": s.estado_matricula or e.estado_matriculado,
-                "intervenciones_asignatura": 0,
+            gkey = e.codigo_grupo or "sin_grupo"
+            if gkey not in grupo_map:
+                grupo_map[gkey] = {
+                    "grupo": _extract_grupo(e.nombre_grupo),
+                    "codigo_avac": e.codigo_grupo, "enrolls": [],
+                }
+            grupo_map[gkey]["enrolls"].append(e)
+
+        grupos_detalle = []
+        total_all = 0
+        for gkey, data in sorted(grupo_map.items(), key=lambda x: x[1]["grupo"] or ""):
+            est_list = []
+            seen_sids = set()
+            for e in data["enrolls"]:
+                if e.student_id in seen_sids:
+                    continue
+                seen_sids.add(e.student_id)
+                s = student_map.get(e.student_id)
+                if not s:
+                    continue
+                est_list.append({
+                    "student_id": s.id, "nombre": s.nombre,
+                    "correo_institucional": s.correo_institucional, "cedula": s.cedula,
+                    "nota_final": None, "numero_repitencias": e.numero_repitencias,
+                    "nivel_riesgo": s.nivel_riesgo, "indice_compromiso": s.indice_compromiso,
+                    "dias_sin_acceso": s.dias_sin_acceso, "porcentaje_tareas": s.porcentaje_tareas,
+                    "estado_matricula": s.estado_matricula or e.estado_matriculado,
+                    "intervenciones_asignatura": 0,
+                })
+            est_list.sort(key=lambda x: (x["nombre"] or ""))
+            total_all += len(est_list)
+            grupos_detalle.append({
+                "grupo": data["grupo"], "codigo_avac": data["codigo_avac"],
+                "total_estudiantes": len(est_list),
+                "promedio": None, "aprobados": 0, "reprobados": 0,
+                "porcentaje_aprobacion": None,
+                "riesgo_alto": sum(1 for e in est_list if e["nivel_riesgo"] == "Alto"),
+                "estudiantes": est_list,
             })
-        estudiantes_out.sort(key=lambda x: (x["nombre"] or ""))
-        # codigo_avac from enrollment
-        enr_avac = first_e.codigo_grupo if first_e.codigo_grupo else None
+
         return {
             "asignatura": asignatura, "carrera": first_e.carrera,
             "docente": first_e.docente or docente, "nivel": first_e.nivel,
-            "codigo_avac": enr_avac,
-            "total_estudiantes": len(estudiantes_out),
+            "total_estudiantes": total_all,
             "promedio_general": None,
             "aprobados": 0, "reprobados": 0,
             "porcentaje_aprobacion": None,
-            "total_repitentes": sum(1 for e in estudiantes_out if e["numero_repitencias"] and e["numero_repitencias"] > 1),
-            "estudiantes": estudiantes_out,
+            "total_repitentes": sum(
+                sum(1 for e in g["estudiantes"] if e["numero_repitencias"] and e["numero_repitencias"] > 1)
+                for g in grupos_detalle),
+            "grupos_detalle": grupos_detalle,
             "fuente": "enrollment",
         }
 
-    student_ids = [g.student_id for g in grades]
-    students = db.query(Student).filter(Student.id.in_(student_ids)).all()
+    # --- Grades path ---
+    # Lookup CourseConfig for codigo_avac + grupo mapping
+    cc_rows = db.query(CourseConfig).filter(
+        CourseConfig.asignatura == asignatura,
+        CourseConfig.docente == (docente or grades[0].docente),
+        CourseConfig.codigo_avac.isnot(None),
+    ).all()
+    cc_by_grupo = {}
+    for cc in cc_rows:
+        cc_by_grupo[cc.grupo] = cc.codigo_avac
+
+    all_student_ids = list(set(g.student_id for g in grades))
+    students = db.query(Student).filter(Student.id.in_(all_student_ids)).all()
     student_map = {s.id: s for s in students}
 
     interv_counts = dict(
         db.query(Intervention.student_id, func.count(Intervention.id))
-        .filter(Intervention.student_id.in_(student_ids), Intervention.asignatura == asignatura)
+        .filter(Intervention.student_id.in_(all_student_ids), Intervention.asignatura == asignatura)
         .group_by(Intervention.student_id).all()
     )
 
-    estudiantes_out = []
+    # Group grades by grupo
+    grupo_map = {}
     for g in grades:
-        s = student_map.get(g.student_id)
-        if not s:
-            continue
-        estudiantes_out.append({
-            "student_id": s.id, "nombre": s.nombre,
-            "correo_institucional": s.correo_institucional, "cedula": s.cedula,
-            "nota_final": g.nota_final, "numero_repitencias": g.numero_repitencias,
-            "nivel_riesgo": s.nivel_riesgo, "indice_compromiso": s.indice_compromiso,
-            "dias_sin_acceso": s.dias_sin_acceso, "porcentaje_tareas": s.porcentaje_tareas,
-            "estado_matricula": s.estado_matricula,
-            "intervenciones_asignatura": interv_counts.get(s.id, 0),
+        gkey = g.grupo or "sin_grupo"
+        if gkey not in grupo_map:
+            grupo_map[gkey] = {
+                "grupo": g.grupo,
+                "codigo_avac": cc_by_grupo.get(g.grupo),
+                "grades": [],
+            }
+        grupo_map[gkey]["grades"].append(g)
+
+    grupos_detalle = []
+    total_all = 0
+    total_aprobados_all = 0
+    sum_notas_all = 0
+    count_notas_all = 0
+
+    for gkey, data in sorted(grupo_map.items(), key=lambda x: x[1]["grupo"] or ""):
+        gs = data["grades"]
+        notas = [g.nota_final for g in gs if g.nota_final is not None]
+        est_list = []
+        seen_sids = set()
+        for g in gs:
+            if g.student_id in seen_sids:
+                continue
+            seen_sids.add(g.student_id)
+            s = student_map.get(g.student_id)
+            if not s:
+                continue
+            est_list.append({
+                "student_id": s.id, "nombre": s.nombre,
+                "correo_institucional": s.correo_institucional, "cedula": s.cedula,
+                "nota_final": g.nota_final, "numero_repitencias": g.numero_repitencias,
+                "nivel_riesgo": s.nivel_riesgo, "indice_compromiso": s.indice_compromiso,
+                "dias_sin_acceso": s.dias_sin_acceso, "porcentaje_tareas": s.porcentaje_tareas,
+                "estado_matricula": s.estado_matricula,
+                "intervenciones_asignatura": interv_counts.get(s.id, 0),
+            })
+        est_list.sort(key=lambda x: (x["nota_final"] or 0))
+        aprobados = sum(1 for n in notas if n >= 70)
+        total = len(notas) if notas else 1
+        total_all += len(est_list)
+        total_aprobados_all += aprobados
+        sum_notas_all += sum(notas)
+        count_notas_all += len(notas)
+
+        grupos_detalle.append({
+            "grupo": data["grupo"], "codigo_avac": data.get("codigo_avac"),
+            "total_estudiantes": len(est_list),
+            "promedio": round(sum(notas) / max(total, 1), 1) if notas else None,
+            "aprobados": aprobados, "reprobados": len(notas) - aprobados,
+            "porcentaje_aprobacion": round((aprobados / max(total, 1)) * 100, 1),
+            "riesgo_alto": sum(1 for e in est_list if e["nivel_riesgo"] == "Alto"),
+            "estudiantes": est_list,
         })
 
-    estudiantes_out.sort(key=lambda x: (x["nota_final"] or 0))
     first_grade = grades[0]
-    total = len(estudiantes_out)
-    aprobados = sum(1 for e in estudiantes_out if e["nota_final"] and e["nota_final"] >= 70)
-
-    # Lookup codigo_avac from CourseConfig
-    cc_avac = db.query(CourseConfig.codigo_avac).filter(
-        CourseConfig.asignatura == asignatura,
-        CourseConfig.docente == (docente or first_grade.docente),
-        CourseConfig.codigo_avac.isnot(None),
-    ).first()
-    codigo_avac = cc_avac[0] if cc_avac else None
-
     return {
         "asignatura": asignatura, "carrera": first_grade.carrera,
         "docente": first_grade.docente or docente, "nivel": first_grade.nivel,
-        "codigo_avac": codigo_avac,
-        "total_estudiantes": total,
-        "promedio_general": round(sum(e["nota_final"] or 0 for e in estudiantes_out) / max(total, 1), 1),
-        "aprobados": aprobados, "reprobados": total - aprobados,
-        "porcentaje_aprobacion": round((aprobados / max(total, 1)) * 100, 1),
-        "total_repitentes": sum(1 for e in estudiantes_out if e["numero_repitencias"] and e["numero_repitencias"] > 1),
-        "estudiantes": estudiantes_out,
+        "total_estudiantes": total_all,
+        "promedio_general": round(sum_notas_all / max(count_notas_all, 1), 1) if count_notas_all else None,
+        "aprobados": total_aprobados_all,
+        "reprobados": count_notas_all - total_aprobados_all,
+        "porcentaje_aprobacion": round((total_aprobados_all / max(count_notas_all, 1)) * 100, 1) if count_notas_all else None,
+        "total_repitentes": sum(
+            sum(1 for e in g["estudiantes"] if e["numero_repitencias"] and e["numero_repitencias"] > 1)
+            for g in grupos_detalle),
+        "grupos_detalle": grupos_detalle,
     }

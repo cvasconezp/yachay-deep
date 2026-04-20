@@ -228,7 +228,14 @@ export default function Asignaturas() {
                   >
                     <td className="px-4 py-3">
                       <div className="font-medium text-gray-900">{a.asignatura}</div>
-                      {a.carrera && <div className="text-xs text-gray-400">{a.carrera}</div>}
+                      <div className="flex items-center gap-1 mt-0.5">
+                        {a.carrera && <span className="text-xs text-gray-400">{a.carrera}</span>}
+                        {a.grupos?.length > 0 && (
+                          <span className="text-xs text-purple-600 font-medium ml-1">
+                            G{a.grupos.join(", G")}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-gray-600 max-w-[180px] truncate">{a.docente || "—"}</td>
                     <td className="px-4 py-3 text-center">
@@ -283,50 +290,21 @@ export default function Asignaturas() {
         )}
       </div>
 
-      {/* Modal detalle de asignatura */}
+      {/* Modal detalle de asignatura — agrupado por grupo */}
       {detalle && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setDetalle(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[85vh] overflow-auto" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[85vh] overflow-auto" onClick={e => e.stopPropagation()}>
             <div className="p-6 border-b border-gray-200">
               <div className="flex justify-between items-start">
                 <div>
-                  <div className="flex items-center gap-3 flex-wrap">
-                    <h2 className="text-xl font-bold text-gray-900">{detalle.asignatura}</h2>
-                    {detalle.codigo_avac && (
-                      <a
-                        href={avacCourseUrl(detalle.codigo_avac)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm text-blue-500 hover:text-blue-700 underline"
-                      >
-                        Abrir AVAC
-                      </a>
-                    )}
-                  </div>
+                  <h2 className="text-xl font-bold text-gray-900">{detalle.asignatura}</h2>
                   <p className="text-sm text-gray-500 mt-1">
                     {detalle.docente && `Docente: ${detalle.docente}`}
                     {detalle.carrera && ` | ${detalle.carrera}`}
                     {detalle.nivel && ` | Nivel ${detalle.nivel}`}
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <ExportExcelButton
-                    data={detalle.estudiantes || []}
-                    columns={[
-                      { key: "nombre", label: "Estudiante" },
-                      { key: "correo_institucional", label: "Correo" },
-                      { key: "nota_final", label: "Nota Final" },
-                      { key: "nivel_riesgo", label: "Nivel Riesgo" },
-                      { key: "indice_compromiso", label: "Compromiso" },
-                      { key: "dias_sin_acceso", label: "Días sin acceso" },
-                      { key: "numero_repitencias", label: "Repitencias" },
-                    ]}
-                    filename={`${detalle.asignatura}_${detalle.docente || ""}`.replace(/\s+/g, "_")}
-                    label="Excel"
-                    small
-                  />
-                  <button onClick={() => setDetalle(null)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
-                </div>
+                <button onClick={() => setDetalle(null)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-4">
@@ -338,55 +316,97 @@ export default function Asignaturas() {
               </div>
             </div>
 
-            <div className="p-6">
-              <h3 className="font-semibold text-gray-700 mb-3">Estudiantes ({detalle.estudiantes?.length || 0})</h3>
+            <div className="p-6 space-y-6">
               {loadingDetalle ? (
                 <div className="text-center py-10 text-gray-400">Cargando...</div>
-              ) : (
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 border-b">
-                    <tr>
-                      <th className="text-left px-3 py-2 font-medium text-gray-600">Estudiante</th>
-                      <th className="text-center px-3 py-2 font-medium text-gray-600">Nota</th>
-                      <th className="text-center px-3 py-2 font-medium text-gray-600">Riesgo</th>
-                      <th className="px-3 py-2 font-medium text-gray-600 w-28 cursor-help" title="Índice de compromiso: acceso AVAC (30%), tareas (30%), rendimiento (25%), matrícula (15%)">Compromiso</th>
-                      <th className="text-center px-3 py-2 font-medium text-gray-600 cursor-help" title="Días desde el último acceso al Aula Virtual (AVAC)">Días AVAC</th>
-                      <th className="text-center px-3 py-2 font-medium text-gray-600 cursor-help" title="Número de veces que el estudiante ha cursado esta asignatura previamente">Repitencias</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(detalle.estudiantes || []).map((e, i) => (
-                      <tr
-                        key={e.student_id}
-                        onClick={() => navigate(`/ficha/${e.student_id}`)}
-                        className="border-b border-gray-100 cursor-pointer hover:bg-blue-50"
-                      >
-                        <td className="px-3 py-2">
-                          <div className="font-medium text-gray-900">{e.nombre}</div>
-                          <div className="text-xs text-gray-400">{e.correo_institucional}</div>
-                        </td>
-                        <td className="px-3 py-2 text-center">
-                          <span className={`font-mono font-bold ${
-                            e.nota_final != null && e.nota_final < 70 ? "text-red-600" : "text-green-600"
-                          }`}>
-                            {e.nota_final != null ? e.nota_final : "—"}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 text-center"><RiskBadge nivel={e.nivel_riesgo} /></td>
-                        <td className="px-3 py-2"><CompromisoBar valor={e.indice_compromiso} /></td>
-                        <td className="px-3 py-2 text-center font-mono text-gray-700">
-                          {e.dias_sin_acceso != null ? `${e.dias_sin_acceso}d` : "—"}
-                        </td>
-                        <td className="px-3 py-2 text-center">
-                          {e.numero_repitencias > 0 ? (
-                            <span className="bg-orange-100 text-orange-700 text-xs px-2 py-0.5 rounded-full">{e.numero_repitencias}</span>
-                          ) : "—"}
-                        </td>
+              ) : (detalle.grupos_detalle || []).map((grp, idx) => {
+                const grupoLabel = grp.grupo ? `Grupo ${grp.grupo}` : "Sin grupo";
+                const exportFilename = `${detalle.asignatura}_${grupoLabel}`.replace(/\s+/g, "_");
+                const exportCols = [
+                  { key: "nombre", label: "Estudiante" },
+                  { key: "correo_institucional", label: "Correo" },
+                  { key: "nota_final", label: "Nota Final" },
+                  { key: "nivel_riesgo", label: "Nivel Riesgo" },
+                  { key: "indice_compromiso", label: "Compromiso" },
+                  { key: "dias_sin_acceso", label: "Días sin acceso" },
+                  { key: "numero_repitencias", label: "Repitencias" },
+                ];
+                return (
+                <div key={idx} className="border border-gray-200 rounded-xl overflow-hidden">
+                  <div className="bg-gray-50 px-4 py-3 flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-gray-800">{grupoLabel}</span>
+                      <span className="text-xs text-gray-500">({grp.total_estudiantes} estudiantes)</span>
+                      {grp.codigo_avac && (
+                        <a
+                          href={avacCourseUrl(grp.codigo_avac)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-blue-500 hover:text-blue-700 underline"
+                          onClick={e => e.stopPropagation()}
+                        >
+                          Abrir AVAC
+                        </a>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-4 text-xs text-gray-500">
+                      <span>Promedio: <b className={(grp.promedio ?? 100) < 70 ? "text-red-600" : "text-green-600"}>{grp.promedio ?? "—"}</b></span>
+                      <span>Aprobados: <b className="text-green-600">{grp.aprobados}</b></span>
+                      <span>Reprobados: <b className="text-red-600">{grp.reprobados}</b></span>
+                      {grp.riesgo_alto > 0 && <span>Riesgo alto: <b className="text-red-600">{grp.riesgo_alto}</b></span>}
+                      <ExportExcelButton
+                        data={grp.estudiantes || []}
+                        columns={exportCols}
+                        filename={exportFilename}
+                        label="Excel"
+                        small
+                      />
+                    </div>
+                  </div>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-100">
+                        <th className="text-left px-3 py-2 text-xs font-medium text-gray-500">Estudiante</th>
+                        <th className="text-center px-3 py-2 text-xs font-medium text-gray-500">Nota</th>
+                        <th className="text-center px-3 py-2 text-xs font-medium text-gray-500">Riesgo</th>
+                        <th className="px-3 py-2 text-xs font-medium text-gray-500 w-24">Compromiso</th>
+                        <th className="text-center px-3 py-2 text-xs font-medium text-gray-500">Días AVAC</th>
+                        <th className="text-center px-3 py-2 text-xs font-medium text-gray-500">Repitencias</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
+                    </thead>
+                    <tbody>
+                      {(grp.estudiantes || []).map((e) => (
+                        <tr
+                          key={e.student_id}
+                          onClick={() => navigate(`/ficha/${e.student_id}`)}
+                          className="border-b border-gray-50 cursor-pointer hover:bg-blue-50"
+                        >
+                          <td className="px-3 py-1.5">
+                            <div className="font-medium text-gray-900">{e.nombre}</div>
+                            <div className="text-xs text-gray-400">{e.correo_institucional}</div>
+                          </td>
+                          <td className="px-3 py-1.5 text-center">
+                            <span className={`font-mono font-bold ${e.nota_final != null && e.nota_final < 70 ? "text-red-600" : "text-green-600"}`}>
+                              {e.nota_final ?? "—"}
+                            </span>
+                          </td>
+                          <td className="px-3 py-1.5 text-center"><RiskBadge nivel={e.nivel_riesgo} /></td>
+                          <td className="px-3 py-1.5"><CompromisoBar valor={e.indice_compromiso} /></td>
+                          <td className="px-3 py-1.5 text-center font-mono text-gray-600 text-xs">
+                            {e.dias_sin_acceso != null ? `${e.dias_sin_acceso}d` : "—"}
+                          </td>
+                          <td className="px-3 py-1.5 text-center">
+                            {e.numero_repitencias > 0 ? (
+                              <span className="bg-orange-100 text-orange-700 text-xs px-2 py-0.5 rounded-full">{e.numero_repitencias}</span>
+                            ) : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                );
+              })}
             </div>
           </div>
         </div>
