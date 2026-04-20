@@ -361,15 +361,27 @@ def get_resumen_datos(
     # Métricas de enrollment (carreras, asignaturas, etc.)
     global_stats["total_carreras"] = len(carreras_set)
     global_stats["total_asignaturas"] = len(asignaturas_set)
-    # Secciones = combinaciones únicas asignatura × docente (unión grades + enrollment)
-    secciones_set = set()
-    for g in grades:
-        if g.asignatura and g.docente:
-            secciones_set.add((g.asignatura, g.docente))
-    for e in enrollments:
-        if e.asignatura and e.docente:
-            secciones_set.add((e.asignatura, e.docente))
-    global_stats["total_secciones"] = len(secciones_set)
+    # Secciones = combinaciones únicas asignatura × docente
+    # Query directa replicando la lógica de Analítica de Asignaturas (sin include_null)
+    secc_q = db.query(Grade.asignatura, Grade.docente).filter(
+        Grade.asignatura.isnot(None), Grade.docente.isnot(None),
+        Grade.docente != "",
+    ).distinct()
+    secc_q, _ = apply_periodo_filter(secc_q, periodo)
+    if carrera and _carrera_sids:
+        secc_q = secc_q.filter(Grade.student_id.in_(_carrera_sids))
+    secciones_grades = secc_q.count()
+    # Fallback a enrollment si no hay grades
+    if secciones_grades == 0:
+        secc_e = db.query(Enrollment.asignatura, Enrollment.docente).filter(
+            Enrollment.asignatura.isnot(None), Enrollment.docente.isnot(None),
+            Enrollment.docente != "",
+        ).distinct()
+        secc_e, _ = apply_periodo_filter(secc_e, periodo, column=Enrollment.periodo)
+        if carrera and _carrera_sids:
+            secc_e = secc_e.filter(Enrollment.student_id.in_(_carrera_sids))
+        secciones_grades = secc_e.count()
+    global_stats["total_secciones"] = secciones_grades
     global_stats["total_docentes_enrollment"] = len(docentes_enroll_set)
     global_stats["total_matriculas"] = len(enrollments)
     global_stats["por_tipo_asignatura"] = dict(sorted(enroll_por_tipo.items(), key=lambda x: -x[1]))
