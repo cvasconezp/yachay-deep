@@ -345,16 +345,26 @@ export default function ResumenDatos() {
       {/* ── Main content (show if students exist) ─── */}
       {!loading && g.total_estudiantes > 0 && (
         <>
-          {/* ── KPI Row ─── */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 mb-5">
-            <KPICard icon="🎓" label="Estudiantes" value={g.total_estudiantes?.toLocaleString()} color="text-blue-700" bg="bg-blue-50/60" />
-            <KPICard icon="📚" label="Carreras" value={g.total_carreras} color="text-purple-700" bg="bg-purple-50/60" />
-            <KPICard icon="📖" label="Asignaturas" value={g.total_asignaturas} color="text-cyan-700" bg="bg-cyan-50/60" sub="únicas" />
-            <KPICard icon="📑" label="Secciones" value={g.total_secciones ?? "—"} color="text-orange-700" bg="bg-orange-50/60" sub="materia × docente" />
-            <KPICard icon="🖥️" label="Aulas Virtuales" value={g.total_aulas_virtuales ?? "—"} color="text-indigo-700" bg="bg-indigo-50/60" sub="cursos en AVAC" />
-            <KPICard icon="👨‍🏫" label="Docentes" value={g.total_docentes_enrollment || g.total_docentes || "—"} color="text-gray-700" />
-            <KPICard icon="📊" label="Prom. Calificaciones" value={g.promedio_calificaciones ?? "Sin datos"} color="text-gray-700" sub={g.promedio_calificaciones ? "sobre 100" : "Aún sin AVAC"} />
-            <KPICard icon="📋" label="Total Matrículas" value={g.total_matriculas?.toLocaleString()} color="text-teal-700" bg="bg-teal-50/60" sub="registros est×materia" />
+          {/* ── KPI Cards ─── */}
+          <div className="space-y-4 mb-6">
+            {/* Fila 1: Población y estructura */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+              <KPICard icon="🎓" label="Estudiantes" value={g.total_estudiantes?.toLocaleString()} color="text-blue-700" bg="bg-blue-50/60" />
+              <KPICard icon="👨‍🏫" label="Docentes" value={g.total_docentes_enrollment || g.total_docentes || "—"} color="text-emerald-700" bg="bg-emerald-50/60" />
+              <KPICard icon="📚" label="Carreras" value={g.total_carreras} color="text-purple-700" bg="bg-purple-50/60" />
+              <KPICard icon="📋" label="Matrículas" value={g.total_matriculas?.toLocaleString()} color="text-teal-700" bg="bg-teal-50/60" sub="registros est × materia" />
+              <KPICard icon="📊" label="Prom. Calificaciones" value={g.promedio_calificaciones ?? "—"} color="text-gray-700" bg="bg-gray-50/60" sub={g.promedio_calificaciones ? "sobre 100" : "Aún sin AVAC"} />
+            </div>
+
+            {/* Fila 2: Oferta académica */}
+            <div>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2 ml-1">Oferta académica</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <KPICard icon="📖" label="Asignaturas" value={g.total_asignaturas} color="text-cyan-700" bg="bg-cyan-50/60" sub="materias únicas" />
+                <KPICard icon="📑" label="Secciones" value={g.total_secciones ?? "—"} color="text-orange-700" bg="bg-orange-50/60" sub="materia × docente" />
+                <KPICard icon="🖥️" label="Aulas Virtuales" value={g.total_aulas_virtuales ?? "—"} color="text-indigo-700" bg="bg-indigo-50/60" sub="cursos en AVAC" />
+              </div>
+            </div>
           </div>
 
           {/* ── Tab Navigation ─── */}
