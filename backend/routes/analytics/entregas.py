@@ -98,51 +98,49 @@ def _build_periodo_filter(periodo_p, periodo_num):
     return TaskSubmission.periodo.is_(None)
 
 
-def _get_codigos_excluir(db: Session) -> set:
-    """Devuelve códigos de cursos del bloque opuesto a excluir."""
-    sc = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
-    if not sc:
-        return set()
-    otro_bloque = "2" if (sc.bloque_actual or "1") == "1" else "1"
-    excl = db.query(CourseConfig.codigo_avac).filter(CourseConfig.bloque == otro_bloque).all()
-    return {r[0] for r in excl if r[0]}
+def _get_codigos_incluir_bloque(db: Session, bloque: str) -> set:
+    """Devuelve códigos a INCLUIR cuando se filtra por un bloque específico.
 
+    Enfoque WHITELIST: solo incluir cursos confirmados en el bloque seleccionado.
+    Usa Enrollment.bloque (dato institucional, confiable) como fuente primaria,
+    complementado con CourseConfig.bloque para cobertura.
 
-def _get_codigos_excluir_bloque(db: Session, bloque: str) -> set:
-    """Devuelve códigos a EXCLUIR cuando se filtra por un bloque específico.
-
-    Usa DOS fuentes para máxima cobertura:
-    1. CourseConfig.bloque (seteado por ETL, puede ser NULL en muchos cursos)
-    2. Enrollment.bloque (viene del reporte institucional, más confiable)
-
-    Para B1: excluir cursos que son de bloque 2 según cualquiera de las dos fuentes.
-    Para B2: excluir cursos que son de bloque 1 según cualquiera de las dos fuentes.
+    Cursos con bloque=NULL en ambas tablas quedan EXCLUIDOS (no se asume nada).
     """
     if bloque not in ("1", "2"):
         return set()
 
-    otro_bloque = "2" if bloque == "1" else "1"
+    bloque_int = int(bloque)
 
-    # Fuente 1: CourseConfig.bloque
-    cc_excl = db.query(CourseConfig.codigo_avac).filter(
-        CourseConfig.bloque == otro_bloque
-    ).all()
-    codigos = {r[0] for r in cc_excl if r[0]}
-
-    # Fuente 2: Enrollment.bloque (codigo_grupo == codigo_avac)
-    enr_excl = db.query(Enrollment.codigo_grupo).filter(
-        Enrollment.bloque == int(otro_bloque)
+    # Fuente principal: Enrollment.bloque (reporte institucional)
+    enr_codes = db.query(Enrollment.codigo_grupo).filter(
+        Enrollment.bloque == bloque_int
     ).distinct().all()
-    codigos.update(r[0] for r in enr_excl if r[0])
+    codigos = {r[0] for r in enr_codes if r[0]}
+
+    # Fuente secundaria: CourseConfig.bloque
+    cc_codes = db.query(CourseConfig.codigo_avac).filter(
+        CourseConfig.bloque == bloque
+    ).all()
+    codigos.update(r[0] for r in cc_codes if r[0])
 
     return codigos
 
 
-def _get_latest_snapshot_date(db: Session, periodo_filter, codigos_excluir: set):
+def _get_codigos_incluir_bloque_default(db: Session) -> set:
+    """Devuelve códigos del bloque actual (para cuando no se especifica filtro)."""
+    sc = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
+    if not sc:
+        return set()
+    bloque_actual = sc.bloque_actual or "1"
+    return _get_codigos_incluir_bloque(db, bloque_actual)
+
+
+def _get_latest_snapshot_date(db: Session, periodo_filter, codigos_incluir: set):
     """Encuentra la fecha del snapshot más reciente."""
     q = db.query(func.max(TaskSubmission.snapshot_date)).filter(periodo_filter)
-    if codigos_excluir:
-        q = q.filter(~TaskSubmission.codigo_curso.in_(codigos_excluir))
+    if codigos_incluir:
+        q = q.filter(TaskSubmission.codigo_curso.in_(codigos_incluir))
     return q.scalar()
 
 
@@ -166,34 +164,34 @@ def entregas_pendientes(
     periodo_p, periodo_num = _get_active_periodo_variants(db)
     periodo_filter = _build_periodo_filter(periodo_p, periodo_num)
 
-    # Filtro de bloque: excluir cursos del bloque opuesto al seleccionado
+    # Filtro de bloque: WHITELIST — solo incluir cursos confirmados del bloque
     if bloque:
-        codigos_excluir = _get_codigos_excluir_bloque(db, bloque.strip())
+        codigos_incluir = _get_codigos_incluir_bloque(db, bloque.strip())
     else:
-        codigos_excluir = _get_codigos_excluir(db)
+        codigos_incluir = _get_codigos_incluir_bloque_default(db)
 
-    # Filtro de grupo: excluir cursos de grupos específicos (ej: grupo 6 Wasakentsa)
+    # Filtro de grupo: remover cursos de grupos excluidos (ej: grupo 6 Wasakentsa)
     if grupos_excluir:
         grupos_list = [g.strip() for g in grupos_excluir.split(",") if g.strip()]
         if grupos_list:
             excl_by_grupo = db.query(CourseConfig.codigo_avac).filter(
                 CourseConfig.grupo.in_(grupos_list)
             ).all()
-            codigos_excluir = codigos_excluir | {r[0] for r in excl_by_grupo if r[0]}
+            codigos_incluir = codigos_incluir - {r[0] for r in excl_by_grupo if r[0]}
 
     # Encontrar el snapshot más reciente
-    latest_date = _get_latest_snapshot_date(db, periodo_filter, codigos_excluir)
+    latest_date = _get_latest_snapshot_date(db, periodo_filter, codigos_incluir)
     if not latest_date:
         return {"actividades": [], "resumen": {"total_actividades": 0, "total_pendientes": 0}}
 
-    # Filtro base: periodo + snapshot más reciente + excluir bloque opuesto
+    # Filtro base: periodo + snapshot más reciente + solo cursos del bloque
     base_filters = [
         periodo_filter,
         TaskSubmission.student_id.isnot(None),
         TaskSubmission.snapshot_date == latest_date,
     ]
-    if codigos_excluir:
-        base_filters.append(~TaskSubmission.codigo_curso.in_(codigos_excluir))
+    if codigos_incluir:
+        base_filters.append(TaskSubmission.codigo_curso.in_(codigos_incluir))
 
     # Todos los cursos+unidades del snapshot más reciente
     base_q = db.query(
@@ -349,10 +347,11 @@ def entregas_resumen(
     periodo_p, periodo_num = _get_active_periodo_variants(db)
     periodo_filter = _build_periodo_filter(periodo_p, periodo_num)
 
+    # WHITELIST: solo cursos confirmados del bloque
     if bloque:
-        codigos_excluir = _get_codigos_excluir_bloque(db, bloque.strip())
+        codigos_incluir = _get_codigos_incluir_bloque(db, bloque.strip())
     else:
-        codigos_excluir = _get_codigos_excluir(db)
+        codigos_incluir = _get_codigos_incluir_bloque_default(db)
 
     # Filtro de grupo
     if grupos_excluir:
@@ -361,9 +360,9 @@ def entregas_resumen(
             excl_by_grupo = db.query(CourseConfig.codigo_avac).filter(
                 CourseConfig.grupo.in_(grupos_list)
             ).all()
-            codigos_excluir = codigos_excluir | {r[0] for r in excl_by_grupo if r[0]}
+            codigos_incluir = codigos_incluir - {r[0] for r in excl_by_grupo if r[0]}
 
-    latest_date = _get_latest_snapshot_date(db, periodo_filter, codigos_excluir)
+    latest_date = _get_latest_snapshot_date(db, periodo_filter, codigos_incluir)
     if not latest_date:
         return {"cursos": []}
 
@@ -378,8 +377,8 @@ def entregas_resumen(
         TaskSubmission.snapshot_date == latest_date,
     )
 
-    if codigos_excluir:
-        q = q.filter(~TaskSubmission.codigo_curso.in_(codigos_excluir))
+    if codigos_incluir:
+        q = q.filter(TaskSubmission.codigo_curso.in_(codigos_incluir))
 
     rows = q.group_by(TaskSubmission.codigo_curso, TaskSubmission.unidad).all()
 
