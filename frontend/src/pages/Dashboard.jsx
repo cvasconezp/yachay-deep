@@ -188,6 +188,7 @@ export default function Dashboard() {
     { key: "alto", label: "Riesgo Alto", value: riskCounts["Alto"] ?? 0, color: "text-red-700", bg: "bg-red-50 border-red-200" },
     { key: "medio", label: "Riesgo Medio", value: riskCounts["Medio"] ?? 0, color: "text-yellow-700", bg: "bg-yellow-50 border-yellow-200" },
     { key: "repitentes", label: "Repitentes", value: stats?.total_repitentes ?? 0, color: "text-orange-700", bg: "bg-orange-50 border-orange-200", modal: true },
+    { key: "condicionados", label: "Condicionados", value: stats?.total_terceras_matriculas ?? 0, color: "text-purple-700", bg: "bg-purple-50 border-purple-200", modal: true },
     { key: "intervenciones", label: "Intervenciones", value: stats?.total_intervenciones ?? 0, color: "text-green-700", bg: "bg-green-50 border-green-200" },
   ];
 
@@ -233,7 +234,7 @@ export default function Dashboard() {
       )}
 
       {/* Tarjetas interactivas */}
-      {stats?.tiene_datos_periodo !== false && <div className="grid grid-cols-2 md:grid-cols-5 gap-3 my-5">
+      {stats?.tiene_datos_periodo !== false && <div className="grid grid-cols-2 md:grid-cols-6 gap-3 my-5">
         {cards.map(card => {
           const isActive = cardFilter === card.key;
           const isModal = card.modal;
@@ -242,7 +243,7 @@ export default function Dashboard() {
               key={card.key ?? "total"}
               onClick={() => {
                 if (isModal) {
-                  openStudentList("repitentes");
+                  openStudentList(card.key);
                 } else {
                   setCardFilter(isActive ? null : card.key);
                 }
@@ -250,7 +251,7 @@ export default function Dashboard() {
               className={`rounded-xl border px-4 py-3 cursor-pointer transition-all duration-200
                 ${isActive ? "ring-2 ring-blue-500 shadow-md scale-[1.02]" : "hover:shadow-sm"}
                 ${card.bg}`}
-              title={isModal ? "Click para ver listado de repitentes" : isActive ? "Click para quitar filtro" : card.key ? `Click para filtrar por ${card.label}` : ""}
+              title={isModal ? `Click para ver listado de ${card.label.toLowerCase()}` : isActive ? "Click para quitar filtro" : card.key ? `Click para filtrar por ${card.label}` : ""}
             >
               <div className="flex items-center justify-between">
                 <div className={`text-2xl font-bold ${card.color}`}>{card.value}</div>

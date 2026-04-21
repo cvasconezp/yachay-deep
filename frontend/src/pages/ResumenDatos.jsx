@@ -404,6 +404,11 @@ export default function ResumenDatos() {
                       <span className="text-sm text-gray-500">Repitentes</span>
                       <span className="text-lg font-bold text-orange-600 flex items-center gap-1">{g.repitentes ?? 0} <span className="text-[10px] text-orange-300">▸</span></span>
                     </div>
+                    <div className="flex justify-between items-center cursor-pointer hover:bg-purple-50 rounded-lg px-2 py-1 -mx-2 transition-colors"
+                         onClick={() => openStudentList("condicionados")} title="Clic para ver listado de condicionados (3ra matrícula)">
+                      <span className="text-sm text-gray-500">Condicionados</span>
+                      <span className="text-lg font-bold text-purple-600 flex items-center gap-1">{g.condicionados ?? 0} <span className="text-[10px] text-purple-300">▸</span></span>
+                    </div>
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-gray-500">Prob. deserción alta</span>
                       <span className="text-lg font-bold text-red-700">{g.desertores_prob ?? 0}</span>

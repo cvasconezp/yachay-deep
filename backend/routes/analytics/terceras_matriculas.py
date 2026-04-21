@@ -76,6 +76,7 @@ def get_terceras_matriculas(
             asignaturas.append({
                 "asignatura": e.asignatura,
                 "codigo_asignatura": e.codigo_asignatura,
+                "codigo_grupo": e.codigo_grupo,
                 "nivel": e.nivel,
                 "docente": e.docente,
                 "correo_docente": e.correo_docente,

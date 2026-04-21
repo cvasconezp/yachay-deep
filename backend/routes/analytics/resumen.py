@@ -336,6 +336,7 @@ def get_resumen_datos(
 
         reprob = len(reprobados_ids & sid_set)
         repit = len(repitentes_ids & sid_set)
+        condicionados = sum(1 for s in student_list if s.es_tercera_matricula)
         desertores_prob = sum(1 for s in student_list if s.prob_desercion and s.prob_desercion > 0.5)
         compromisos = [s.indice_compromiso for s in student_list
                        if s.indice_compromiso is not None
@@ -347,7 +348,7 @@ def get_resumen_datos(
         return {
             "total_estudiantes": total, "con_riesgo_calculado": con_riesgo,
             "con_calificaciones": con_calif, "por_nivel": dict(sorted(niveles.items())),
-            "por_riesgo": riesgo, "reprobados": reprob, "repitentes": repit,
+            "por_riesgo": riesgo, "reprobados": reprob, "repitentes": repit, "condicionados": condicionados,
             "desertores_prob": desertores_prob, "promedio_calificaciones": promedio_calif,
             "promedio_edad": promedio_edad, "promedio_compromiso": promedio_comp,
             "por_ciudad": dict(sorted(ciudades.items(), key=lambda x: -x[1])),
@@ -466,7 +467,7 @@ def get_estudiantes_listado(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Lista de estudiantes filtrados por tipo: repitentes, riesgo_alto, riesgo_medio, riesgo_bajo.
+    """Lista de estudiantes filtrados por tipo: repitentes, condicionados, riesgo_alto, riesgo_medio, riesgo_bajo.
     Usado por las tarjetas KPI clickeables en Resumen de Datos."""
     from sqlalchemy import or_
 
@@ -524,6 +525,19 @@ def get_estudiantes_listado(
         repitente_sids &= all_period_sids
 
         students = db.query(Student).filter(Student.id.in_(repitente_sids)).order_by(Student.nombre).all()
+    elif tipo == "condicionados":
+        # Condicionados: estudiantes con es_tercera_matricula=True
+        cond_q = base_q.filter(Student.es_tercera_matricula == True)
+        students = cond_q.order_by(Student.nombre).all()
+
+        # Build lookup: student_id → asignaturas en tercera matrícula
+        asig_condicionados = {}
+        for s in students:
+            enr_tm = db.query(Enrollment).filter(
+                Enrollment.student_id == s.id,
+                Enrollment.es_tercera_matricula == True,
+            ).all()
+            asig_condicionados[s.id] = [e.asignatura or "Sin asignatura" for e in enr_tm]
     else:
         return {"tipo": tipo, "total": 0, "estudiantes": [], "error": "Tipo no válido"}
 
@@ -545,6 +559,8 @@ def get_estudiantes_listado(
         }
         if tipo == "repitentes":
             item["asignaturas_repitencia"] = sorted(asig_repitencia.get(s.id, []))
+        elif tipo == "condicionados":
+            item["asignaturas_condicionado"] = sorted(asig_condicionados.get(s.id, []))
         resultado.append(item)
 
     return {"tipo": tipo, "total": len(resultado), "estudiantes": resultado}

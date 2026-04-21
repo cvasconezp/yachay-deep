@@ -98,6 +98,10 @@ class TestTercerasMatriculasList:
         nombres = {a["asignatura"] for a in asigs}
         assert "MATEMATICAS" in nombres
         assert "ESTADISTICA" in nombres
+        # Verify codigo_grupo is included for AVAC links
+        codigos_grupo = {a["codigo_grupo"] for a in asigs}
+        assert "G001" in codigos_grupo
+        assert "G002" in codigos_grupo
 
     def test_pago_pendiente_flag(self, client, admin_token, tm_students, tm_enrollments):
         resp = client.get("/analytics/terceras-matriculas", headers=auth(admin_token))
@@ -198,6 +202,38 @@ class TestDashboardTMFilter:
         data = resp.json()
         assert "total_terceras_matriculas" in data
         assert data["total_terceras_matriculas"] >= 1
+
+
+# ── Resumen: condicionados listado ──────────────────────────────────────
+
+
+class TestCondicionadosListado:
+
+    def test_listado_condicionados(self, client, admin_token, tm_students, tm_enrollments):
+        resp = client.get(
+            "/analytics/resumen/estudiantes-listado?tipo=condicionados&periodo=todos",
+            headers=auth(admin_token),
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["tipo"] == "condicionados"
+        assert data["total"] >= 1
+        # Student 1 is condicionado, student 2 is not
+        ids = {e["id"] for e in data["estudiantes"]}
+        assert 1 in ids
+        assert 2 not in ids
+        # Check asignaturas_condicionado field
+        est1 = next(e for e in data["estudiantes"] if e["id"] == 1)
+        assert "asignaturas_condicionado" in est1
+        assert len(est1["asignaturas_condicionado"]) == 2
+
+    def test_resumen_includes_condicionados(self, client, admin_token, tm_students, tm_enrollments):
+        resp = client.get("/analytics/resumen?periodo=todos", headers=auth(admin_token))
+        assert resp.status_code == 200
+        data = resp.json()
+        g = data["global"]
+        assert "condicionados" in g
+        assert g["condicionados"] >= 1
 
 
 # ── Alert generation for tercera_matricula ───────────────────────────────

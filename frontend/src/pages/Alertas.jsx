@@ -273,7 +273,7 @@ export default function Alertas() {
 
       {/* Summary Cards */}
       {!loading && alerts.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-5">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-5">
           <div className="bg-white rounded-xl border border-gray-200 p-4">
             <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Total Pendientes</div>
             <div className="text-2xl font-bold text-gray-900 mt-1">{alerts.length}</div>
@@ -300,6 +300,17 @@ export default function Alertas() {
               <span className="text-[10px] text-orange-400">▸ ver lista</span>
             </div>
             <div className="text-2xl font-bold text-orange-700 mt-1">{"📋"}</div>
+          </div>
+          <div
+            className="bg-purple-50 rounded-xl border border-purple-200 p-4 cursor-pointer hover:ring-2 hover:ring-purple-300 hover:shadow-md transition-all"
+            onClick={() => openStudentList("condicionados")}
+            title="Clic para ver listado de condicionados (3ra matrícula)"
+          >
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-medium text-purple-700 uppercase tracking-wide">Condicionados</div>
+              <span className="text-[10px] text-purple-400">▸ ver lista</span>
+            </div>
+            <div className="text-2xl font-bold text-purple-700 mt-1">{"📋"}</div>
           </div>
         </div>
       )}

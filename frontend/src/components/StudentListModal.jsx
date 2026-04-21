@@ -4,12 +4,14 @@ import { api } from "../services/api";
 
 const TIPO_LABELS = {
   repitentes: "Estudiantes Repitentes",
+  condicionados: "Estudiantes Condicionados (3ra Matrícula)",
   riesgo_alto: "Estudiantes — Riesgo Alto",
   riesgo_medio: "Estudiantes — Riesgo Medio",
   riesgo_bajo: "Estudiantes — Riesgo Bajo",
 };
 const TIPO_COLORS = {
   repitentes: "text-orange-700",
+  condicionados: "text-purple-700",
   riesgo_alto: "text-red-700",
   riesgo_medio: "text-yellow-700",
   riesgo_bajo: "text-green-700",
@@ -17,11 +19,14 @@ const TIPO_COLORS = {
 
 function ModalContent({ tipo, estudiantes, total, loading, onClose, onNavigate }) {
   const isRepitentes = tipo === "repitentes";
+  const isCondicionados = tipo === "condicionados";
+  const showAsignaturas = isRepitentes || isCondicionados;
 
   const exportCSV = () => {
     if (!estudiantes || estudiantes.length === 0) return;
     const headers = ["Cédula", "Nombre", "Correo", "Carrera", "Nivel", "Riesgo", "Promedio", "Días sin acceso", "% Tareas", "Estado matrícula"];
     if (isRepitentes) headers.push("Asignaturas con repitencia");
+    if (isCondicionados) headers.push("Asignaturas condicionadas");
     const rows = estudiantes.map(e => {
       const row = [
         e.cedula || "", e.nombre || "", e.correo_institucional || "", e.carrera || "",
@@ -30,6 +35,7 @@ function ModalContent({ tipo, estudiantes, total, loading, onClose, onNavigate }
         e.estado_matricula || "",
       ];
       if (isRepitentes) row.push((e.asignaturas_repitencia || []).join(" | "));
+      if (isCondicionados) row.push((e.asignaturas_condicionado || []).join(" | "));
       return row;
     });
     const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
@@ -76,6 +82,7 @@ function ModalContent({ tipo, estudiantes, total, loading, onClose, onNavigate }
                   <th className="py-2 pr-2">Cédula</th>
                   <th className="py-2 pr-2">Carrera</th>
                   {isRepitentes && <th className="py-2 pr-2">Asignatura(s) repitencia</th>}
+                  {isCondicionados && <th className="py-2 pr-2">Asignatura(s) condicionada</th>}
                   <th className="py-2 pr-2 text-center">Nivel</th>
                   <th className="py-2 pr-2 text-center">Riesgo</th>
                   <th className="py-2 pr-2 text-center">Prom.</th>
@@ -100,6 +107,15 @@ function ModalContent({ tipo, estudiantes, total, loading, onClose, onNavigate }
                         <div className="flex flex-wrap gap-1">
                           {(e.asignaturas_repitencia || []).map((a, j) => (
                             <span key={j} className="bg-orange-50 border border-orange-200 rounded px-1.5 py-0.5 text-[10px] truncate max-w-[180px]" title={a}>{a}</span>
+                          ))}
+                        </div>
+                      </td>
+                    )}
+                    {isCondicionados && (
+                      <td className="py-2 pr-2 text-xs text-purple-700 max-w-[200px]">
+                        <div className="flex flex-wrap gap-1">
+                          {(e.asignaturas_condicionado || []).map((a, j) => (
+                            <span key={j} className="bg-purple-50 border border-purple-200 rounded px-1.5 py-0.5 text-[10px] truncate max-w-[180px]" title={a}>{a}</span>
                           ))}
                         </div>
                       </td>

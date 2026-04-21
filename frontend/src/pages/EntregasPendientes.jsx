@@ -2,12 +2,14 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../services/api";
 import BulkInterventionModal from "../components/BulkInterventionModal";
+import { useStudentListModal } from "../components/StudentListModal";
 
 const AVAC_BASE = "https://avac.ups.edu.ec/grado68";
 const avacCourseUrl = (codigo) => `${AVAC_BASE}/course/search.php?areaids=core_course-course&q=${encodeURIComponent(codigo)}`;
 
 export default function EntregasPendientes() {
   const navigate = useNavigate();
+  const { openStudentList, StudentListModalEl } = useStudentListModal();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -216,6 +218,14 @@ export default function EntregasPendientes() {
               <div className="bg-white rounded-lg shadow-sm border px-4 py-2 text-center">
                 <div className="text-2xl font-bold text-red-600">{data.resumen.total_pendientes}</div>
                 <div className="text-gray-500 text-xs">Entregas pendientes</div>
+              </div>
+              <div
+                className="bg-purple-50 rounded-lg shadow-sm border border-purple-200 px-4 py-2 text-center cursor-pointer hover:ring-2 hover:ring-purple-300 transition-all"
+                onClick={() => openStudentList("condicionados")}
+                title="Clic para ver listado de condicionados (3ra matrícula)"
+              >
+                <div className="text-2xl font-bold text-purple-700">{"📋"}</div>
+                <div className="text-purple-600 text-xs">Condicionados</div>
               </div>
             </div>
           )}
@@ -642,6 +652,7 @@ export default function EntregasPendientes() {
           }}
         />
       )}
+      {StudentListModalEl}
     </div>
   );
 }
