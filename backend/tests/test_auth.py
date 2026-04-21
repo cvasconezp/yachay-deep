@@ -90,20 +90,20 @@ class TestMe:
 class TestUserCRUD:
     def test_admin_creates_user(self, client, admin_token):
         r = client.post("/auth/users", headers=auth(admin_token), json={
-            "email": "new@test.com", "nombre": "New", "password": "pass123", "role": "monitor"
+            "email": "new@test.com", "nombre": "New", "password": "pass12345", "role": "monitor"
         })
         assert r.status_code == 200
         assert r.json()["email"] == "new@test.com"
 
     def test_monitor_cannot_create(self, client, monitor_token):
         r = client.post("/auth/users", headers=auth(monitor_token), json={
-            "email": "x@test.com", "nombre": "X", "password": "pass123"
+            "email": "x@test.com", "nombre": "X", "password": "pass12345"
         })
         assert r.status_code == 403
 
     def test_duplicate_email(self, client, admin_token, admin_user):
         r = client.post("/auth/users", headers=auth(admin_token), json={
-            "email": "admin@test.yachay.edu.ec", "nombre": "Dup", "password": "pass123"
+            "email": "admin@test.yachay.edu.ec", "nombre": "Dup", "password": "pass12345"
         })
         assert r.status_code == 400
 

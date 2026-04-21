@@ -389,7 +389,6 @@ def generate_alerts(
         avac_por_curso[sid].append((codigo, dias))
 
     # Pre-load asignatura names
-    from ..models.course_config import CourseConfig
     all_codes = {codigo for entries in avac_por_curso.values() for codigo, _ in entries}
     asignatura_map = {}
     if all_codes:
