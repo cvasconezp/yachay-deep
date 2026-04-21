@@ -147,9 +147,9 @@ const PLANS = [
   {
     name: "Básico",
     desc: "Visibilidad y alertas para empezar",
-    totalSem: "5,000",
-    totalAnn: "8,000",
-    perStudent: "$3/estudiante",
+    totalSem: "3,000",
+    totalAnn: "4,800",
+    perStudent: "$3/estudiante activo",
     periodLabel: "/semestre",
     periodLabelAnn: "/año",
     features: [
@@ -168,9 +168,9 @@ const PLANS = [
   {
     name: "Profesional",
     desc: "IA predictiva + gestión de intervenciones",
-    totalSem: "8,000",
-    totalAnn: "12,800",
-    perStudent: "$8/estudiante",
+    totalSem: "5,000",
+    totalAnn: "8,000",
+    perStudent: "$6/estudiante activo",
     periodLabel: "/semestre",
     periodLabelAnn: "/año",
     features: [
@@ -191,7 +191,7 @@ const PLANS = [
     desc: "Control total para universidades grandes",
     totalSem: "15,000",
     totalAnn: "24,000",
-    perStudent: "$14/estudiante",
+    perStudent: "$10/est (≤5K) · $5/est (>5K)",
     periodLabel: "/semestre",
     periodLabelAnn: "/año",
     features: [
@@ -216,6 +216,7 @@ const FAQS = [
   { q: "¿Puedo probar antes de comprar?", a: "Primero agendamos una demostración donde te mostramos la plataforma en acción. Si hay interés, activamos un piloto gratuito de 30 días con el plan Profesional usando tus propios datos, incluyendo onboarding completo y soporte prioritario. Si dentro de los primeros 60 días de suscripción paga no estás satisfecho, reembolsamos el 100%." },
   { q: "¿Mis datos están seguros?", a: "Absolutamente. Usamos cifrado TLS 1.3 en tránsito y AES-256 en reposo. Autenticación con cookies HttpOnly, control de acceso por roles (RBAC), y cumplimiento con la Ley Orgánica de Protección de Datos Personales de Ecuador." },
   { q: "¿Cuántos estudiantes se necesitan como mínimo?", a: "Nuestros planes están diseñados para instituciones con 500+ estudiantes activos. El modelo de ML requiere un mínimo de datos históricos para funcionar con precisión, pero podemos comenzar con el plan Básico desde el primer día." },
+  { q: "¿Cómo se calcula el precio de mi institución?", a: "El precio se calcula multiplicando la tarifa del plan por el número de estudiantes activos. Cada plan tiene un mínimo semestral que cubre los costos base de infraestructura y soporte: si el cálculo es menor al mínimo, se cobra el mínimo. Por ejemplo, un instituto con 500 estudiantes en el plan Profesional ($6/est): 500 × $6 = $3,000, pero el mínimo es $5,000, así que paga $5,000/semestre. Una universidad con 3,000 estudiantes en Profesional: 3,000 × $6 = $18,000/semestre. El plan Enterprise incluye tarifa degresiva: $10/est para los primeros 5,000 y $5/est a partir del 5,001. La contratación anual tiene un 20% de descuento." },
 ];
 
 export default function Landing() {
@@ -552,7 +553,7 @@ export default function Landing() {
                   <span className="text-4xl font-extrabold text-gray-900">${annual ? plan.totalAnn : plan.totalSem}</span>
                   <span className="text-gray-500 text-sm ml-1">{annual ? plan.periodLabelAnn : plan.periodLabel}</span>
                 </div>
-                <p className="text-xs text-gray-400 mb-6">{plan.perStudent} activo · descuento por volumen</p>
+                <p className="text-xs text-gray-400 mb-6">{plan.perStudent} · descuento anual 20%</p>
                 <ul className="space-y-3 mb-8">
                   {plan.features.map((f, j) => (
                     <li key={j} className="flex items-start gap-2.5 text-sm">
