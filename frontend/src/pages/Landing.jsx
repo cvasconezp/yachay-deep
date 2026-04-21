@@ -1,14 +1,51 @@
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { YachayLogo } from "../components/YachayLogo";
+
+/* ── Animated Counter Hook ───────────────────────────── */
+
+function useCountUp(end, duration = 2000, startOnView = true) {
+  const [count, setCount] = useState(0);
+  const ref = useRef(null);
+  const started = useRef(false);
+
+  const animate = useCallback(() => {
+    if (started.current) return;
+    started.current = true;
+    const startTime = performance.now();
+    const step = (now) => {
+      const elapsed = now - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      // ease-out cubic
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setCount(Math.round(eased * end));
+      if (progress < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }, [end, duration]);
+
+  useEffect(() => {
+    if (!startOnView) { animate(); return; }
+    const el = ref.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { animate(); obs.disconnect(); } },
+      { threshold: 0.3 }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [animate, startOnView]);
+
+  return { count, ref };
+}
 
 /* ── Data ─────────────────────────────────────────────── */
 
 const STATS = [
-  { value: "2,300+", label: "Estudiantes monitoreados" },
-  { value: "18", label: "Carreras virtuales" },
-  { value: "8", label: "Períodos académicos" },
-  { value: "5+1", label: "Fases (5 implementadas + 1 en desarrollo)" },
+  { target: 3040, suffix: "+", label: "Estudiantes monitoreados" },
+  { target: 18, suffix: "", label: "Carreras virtuales" },
+  { target: 9, suffix: "", label: "Períodos académicos" },
+  { target: 40, suffix: "+", label: "Asignaturas analizadas" },
 ];
 
 const CAPAS = [
@@ -109,49 +146,49 @@ const TECH = [
 const PLANS = [
   {
     name: "Básico",
-    desc: "Para instituciones que inician con analítica",
-    priceSem: "$5",
-    priceAnn: "$4",
+    desc: "Visibilidad y alertas para empezar",
+    priceSem: "$3",
+    priceAnn: "$2.40",
     minSem: "mín. $5,000/sem",
     minAnn: "mín. $8,000/año",
     features: [
       { text: "Dashboard de riesgo en tiempo real", ok: true },
       { text: "Alertas académicas configurables", ok: true },
-      { text: "Búsqueda y fichas estudiantiles", ok: true },
+      { text: "Búsqueda y fichas estudiantiles básicas", ok: true },
       { text: "2 usuarios administradores", ok: true },
       { text: "Soporte por email", ok: true },
-      { text: "Predicciones ML", ok: false },
-      { text: "Gestión de intervenciones", ok: false },
-      { text: "Exportaciones Excel/PDF", ok: false },
+      { text: "Predicciones ML e IA", ok: false },
+      { text: "Intervenciones y seguimiento", ok: false },
+      { text: "Exportaciones y reportes", ok: false },
     ],
     cta: "Comenzar",
     featured: false,
   },
   {
     name: "Profesional",
-    desc: "Analítica completa con IA predictiva",
-    priceSem: "$6",
-    priceAnn: "$4.80",
+    desc: "IA predictiva + gestión de intervenciones",
+    priceSem: "$8",
+    priceAnn: "$6.40",
     minSem: "mín. $8,000/sem",
     minAnn: "mín. $12,800/año",
     features: [
       { text: "Todo del plan Básico", ok: true },
       { text: "Predicciones ML con 87%+ precisión", ok: true },
-      { text: "Simulaciones What-If", ok: true },
+      { text: "Simulaciones What-If y contrafactuales", ok: true },
       { text: "Gestión de intervenciones + impacto", ok: true },
-      { text: "Exportaciones Excel/PDF completas", ok: true },
+      { text: "Fichas estudiantiles completas", ok: true },
+      { text: "Exportaciones Excel/PDF", ok: true },
       { text: "Analytics de docentes y asignaturas", ok: true },
-      { text: "10 usuarios", ok: true },
-      { text: "Soporte email + chat", ok: true },
+      { text: "10 usuarios · Soporte email + chat", ok: true },
     ],
     cta: "Solicitar Demo",
     featured: true,
   },
   {
     name: "Enterprise",
-    desc: "Para universidades grandes con necesidades avanzadas",
-    priceSem: "$10",
-    priceAnn: "$8",
+    desc: "Control total para universidades grandes",
+    priceSem: "$14",
+    priceAnn: "$11.20",
     minSem: "mín. $15,000/sem",
     minAnn: "mín. $24,000/año",
     features: [
@@ -242,13 +279,10 @@ export default function Landing() {
             </a>
           </div>
 
-          {/* Stats */}
+          {/* Stats — animated counters */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-3xl mx-auto">
             {STATS.map((s, i) => (
-              <div key={i} className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/10">
-                <div className="text-3xl font-bold text-brand-gold">{s.value}</div>
-                <div className="text-blue-200 text-xs mt-1">{s.label}</div>
-              </div>
+              <AnimatedStat key={i} target={s.target} suffix={s.suffix} label={s.label} delay={i * 150} />
             ))}
           </div>
         </div>
@@ -700,6 +734,51 @@ function SectionHeader({ title, subtitle }) {
     <div className="text-center">
       <h2 className="text-2xl md:text-3xl font-bold text-gray-900">{title}</h2>
       {subtitle && <p className="text-gray-500 mt-3 max-w-2xl mx-auto leading-relaxed">{subtitle}</p>}
+    </div>
+  );
+}
+
+function AnimatedStat({ target, suffix, label, delay = 0 }) {
+  const [count, setCount] = useState(0);
+  const ref = useRef(null);
+  const started = useRef(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !started.current) {
+          started.current = true;
+          obs.disconnect();
+          setTimeout(() => {
+            const duration = 2000;
+            const startTime = performance.now();
+            const step = (now) => {
+              const elapsed = now - startTime;
+              const progress = Math.min(elapsed / duration, 1);
+              const eased = 1 - Math.pow(1 - progress, 3);
+              setCount(Math.round(eased * target));
+              if (progress < 1) requestAnimationFrame(step);
+            };
+            requestAnimationFrame(step);
+          }, delay);
+        }
+      },
+      { threshold: 0.3 }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [target, delay]);
+
+  const formatted = count.toLocaleString("es-EC");
+
+  return (
+    <div ref={ref} className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/10">
+      <div className="text-3xl font-bold text-brand-gold">
+        {formatted}{suffix}
+      </div>
+      <div className="text-blue-200 text-xs mt-1">{label}</div>
     </div>
   );
 }
