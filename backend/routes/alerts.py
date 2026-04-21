@@ -371,14 +371,43 @@ def generate_alerts(
     else:
         students = db.query(Student).all()
 
-    # Excluir cursos del bloque contrario (ej: excluir bloque 2 si estamos en bloque 1)
+    # Filtrar cursos por bloque actual (whitelist) y excluir bloque contrario
     excluded_course_codes = set()
+    included_course_codes = set()
     if semconfig:
         other_bloque = "2" if semconfig.bloque_actual == "1" else "1"
         excluded_cc = db.query(CourseConfig.codigo_avac).filter(
             CourseConfig.bloque == other_bloque,
         ).all()
         excluded_course_codes = {r[0] for r in excluded_cc}
+        # Cursos del bloque actual (whitelist para filtrar tareas/notas)
+        included_cc = db.query(CourseConfig.codigo_avac).filter(
+            or_(CourseConfig.bloque == semconfig.bloque_actual,
+                CourseConfig.bloque == "ambos",
+                CourseConfig.bloque.is_(None)),
+        ).all()
+        included_course_codes = {r[0] for r in included_cc}
+    # Asignaturas del bloque actual (para filtrar grades que no tienen codigo_curso)
+    included_asignaturas = set()
+    if included_course_codes:
+        for cc in db.query(CourseConfig.asignatura).filter(
+            CourseConfig.codigo_avac.in_(included_course_codes),
+            CourseConfig.asignatura.isnot(None),
+        ).distinct().all():
+            included_asignaturas.add(cc[0])
+
+    # Estudiantes del bloque actual (con al menos un curso AVAC del bloque)
+    bloque_actual_sids = set()
+    if included_course_codes:
+        bloque_avac_sids = set(r[0] for r in db.query(AvacAccess.student_id).filter(
+            AvacAccess.codigo_curso.in_(included_course_codes),
+            AvacAccess.student_id.isnot(None),
+        ).distinct().all())
+        bloque_enroll_sids = set(r[0] for r in db.query(Enrollment.student_id).filter(
+            Enrollment.codigo_grupo.in_(included_course_codes),
+            or_(Enrollment.periodo == periodo_variants[0], Enrollment.periodo == periodo_variants[1]),
+        ).distinct().all())
+        bloque_actual_sids = bloque_avac_sids | bloque_enroll_sids
 
     # Pre-load per-period AvacAccess: dias_sin_acceso por estudiante POR CURSO
     # Incluir periodo NULL como fallback (datos cargados antes de configurar periodo)
@@ -432,21 +461,28 @@ def generate_alerts(
         Grade.periodo == periodo_variants[1],
     )
 
-    # 1) Nota cero: student_id → primera asignatura con nota 0
+    # 1) Nota cero: student_id → primera asignatura con nota 0 (solo bloque actual)
     nota_cero_map = {}
     if hay_notas_esperadas:
-        for g in db.query(Grade).filter(
+        nota_cero_q = db.query(Grade).filter(
             Grade.nota_final == 0,
             grade_periodo_cond,
-        ).all():
+        )
+        # Filtrar por asignaturas del bloque actual si hay whitelist
+        if included_asignaturas:
+            nota_cero_q = nota_cero_q.filter(Grade.asignatura.in_(included_asignaturas))
+        for g in nota_cero_q.all():
             if g.student_id not in nota_cero_map:
                 nota_cero_map[g.student_id] = g.asignatura
 
-    # 2) Tareas: set de student_ids que tienen tareas del periodo
-    task_sids = set(r[0] for r in db.query(TaskSubmission.student_id).filter(
+    # 2) Tareas: set de student_ids que tienen tareas del periodo (solo bloque actual)
+    task_q = db.query(TaskSubmission.student_id).filter(
         or_(TaskSubmission.periodo == periodo_variants[0],
             TaskSubmission.periodo == periodo_variants[1]),
-    ).distinct().all())
+    )
+    if included_course_codes:
+        task_q = task_q.filter(TaskSubmission.codigo_curso.in_(included_course_codes))
+    task_sids = set(r[0] for r in task_q.distinct().all())
 
     # 3) Segunda matrícula (enrollments): student_id → count de asignaturas con repitencias > 1
     rep_enroll_counts = defaultdict(int)
@@ -542,8 +578,9 @@ def generate_alerts(
                 _add_alert_fast(student.id, "inactividad", "alto",
                                 msg, codigo_curso=worst_codigo)
 
-        # ========== Compromiso Bajo ==========
-        if student.indice_compromiso is not None:
+        # ========== Compromiso Bajo (solo estudiantes del bloque actual) ==========
+        in_bloque = not bloque_actual_sids or student.id in bloque_actual_sids
+        if in_bloque and student.indice_compromiso is not None:
             if student.indice_compromiso < umbral_compromiso_critico:
                 _add_alert_fast(student.id, "compromiso_bajo", "critico",
                                 f"Índice de compromiso muy bajo: {student.indice_compromiso:.2f}")
@@ -551,13 +588,13 @@ def generate_alerts(
                 _add_alert_fast(student.id, "compromiso_bajo", "alto",
                                 f"Índice de compromiso bajo: {student.indice_compromiso:.2f}")
 
-        # ========== Nota Cero ==========
+        # ========== Nota Cero (ya filtrado por bloque en nota_cero_map) ==========
         if hay_notas_esperadas and student.id in nota_cero_map:
             _add_alert_fast(student.id, "nota_cero", "critico",
                             f"Calificación de 0 en {nota_cero_map[student.id]}")
 
-        # ========== Tareas Bajas ==========
-        if (student.porcentaje_tareas is not None
+        # ========== Tareas Bajas (solo estudiantes del bloque actual) ==========
+        if (in_bloque and student.porcentaje_tareas is not None
                 and student.porcentaje_tareas < umbral_tareas
                 and student.id in task_sids):
             _add_alert_fast(student.id, "tareas_bajas", "alto",
