@@ -183,7 +183,7 @@ const PLANS = [
       { text: "Analytics de docentes y asignaturas", ok: true },
       { text: "10 usuarios · Soporte email + chat", ok: true },
     ],
-    cta: "Solicitar Demo",
+    cta: "Agendar demostración",
     featured: true,
   },
   {
@@ -213,7 +213,7 @@ const FAQS = [
   { q: "¿Cuánto toma la implementación?", a: "El proceso completo toma entre 2 y 4 semanas, dependiendo de la disponibilidad de datos históricos y la complejidad de integración con tu LMS. Incluye configuración, calibración de modelos ML, capacitación del equipo y acompañamiento en go-live." },
   { q: "¿Funciona con mi Moodle actual?", a: "Sí. Yachay Deep se integra con cualquier instalación de Moodle mediante scraping automatizado de datos de actividad. No requiere plugins adicionales ni cambios en tu Moodle. También soportamos importación por Excel/CSV para otros sistemas." },
   { q: "¿Qué precisión tienen las predicciones?", a: "Nuestros modelos alcanzan un 87%+ de precisión en predicción de aprobación/deserción, entrenados con datos reales de tu institución. La precisión mejora conforme acumulamos más datos históricos." },
-  { q: "¿Puedo probar antes de comprar?", a: "Ofrecemos un piloto gratuito de 30 días con el plan Profesional, incluyendo onboarding completo y soporte prioritario. Si dentro de los primeros 60 días de suscripción paga no estás satisfecho, reembolsamos el 100%." },
+  { q: "¿Puedo probar antes de comprar?", a: "Primero agendamos una demostración donde te mostramos la plataforma en acción. Si hay interés, activamos un piloto gratuito de 30 días con el plan Profesional usando tus propios datos, incluyendo onboarding completo y soporte prioritario. Si dentro de los primeros 60 días de suscripción paga no estás satisfecho, reembolsamos el 100%." },
   { q: "¿Mis datos están seguros?", a: "Absolutamente. Usamos cifrado TLS 1.3 en tránsito y AES-256 en reposo. Autenticación con cookies HttpOnly, control de acceso por roles (RBAC), y cumplimiento con la Ley Orgánica de Protección de Datos Personales de Ecuador." },
   { q: "¿Cuántos estudiantes se necesitan como mínimo?", a: "Nuestros planes están diseñados para instituciones con 500+ estudiantes activos. El modelo de ML requiere un mínimo de datos históricos para funcionar con precisión, pero podemos comenzar con el plan Básico desde el primer día." },
 ];
@@ -589,7 +589,7 @@ export default function Landing() {
               <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
               </svg>
-              30 días de prueba gratis
+              Demostración sin compromiso
             </span>
             <span className="flex items-center gap-1.5">
               <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -645,8 +645,8 @@ export default function Landing() {
             Empieza a retener estudiantes hoy
           </h2>
           <p className="text-blue-200 mb-10 max-w-2xl mx-auto leading-relaxed">
-            Solicita una demo personalizada con datos de tu institución. 30 días de prueba gratuita, sin compromiso.
-            Yachay Deep es adaptable a cualquier IES con modalidad virtual o híbrida.
+            Agenda una demostración personalizada y conoce cómo Yachay Deep puede ayudar a tu institución.
+            Si decides avanzar, incluimos 30 días de prueba gratuita con tus propios datos.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
             <a
