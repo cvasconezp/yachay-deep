@@ -106,9 +106,83 @@ const TECH = [
 
 /* ── Component ────────────────────────────────────────── */
 
+const PLANS = [
+  {
+    name: "Básico",
+    desc: "Para instituciones que inician con analítica",
+    priceSem: "$5",
+    priceAnn: "$4",
+    minSem: "mín. $5,000/sem",
+    minAnn: "mín. $8,000/año",
+    features: [
+      { text: "Dashboard de riesgo en tiempo real", ok: true },
+      { text: "Alertas académicas configurables", ok: true },
+      { text: "Búsqueda y fichas estudiantiles", ok: true },
+      { text: "2 usuarios administradores", ok: true },
+      { text: "Soporte por email", ok: true },
+      { text: "Predicciones ML", ok: false },
+      { text: "Gestión de intervenciones", ok: false },
+      { text: "Exportaciones Excel/PDF", ok: false },
+    ],
+    cta: "Comenzar",
+    featured: false,
+  },
+  {
+    name: "Profesional",
+    desc: "Analítica completa con IA predictiva",
+    priceSem: "$6",
+    priceAnn: "$4.80",
+    minSem: "mín. $8,000/sem",
+    minAnn: "mín. $12,800/año",
+    features: [
+      { text: "Todo del plan Básico", ok: true },
+      { text: "Predicciones ML con 87%+ precisión", ok: true },
+      { text: "Simulaciones What-If", ok: true },
+      { text: "Gestión de intervenciones + impacto", ok: true },
+      { text: "Exportaciones Excel/PDF completas", ok: true },
+      { text: "Analytics de docentes y asignaturas", ok: true },
+      { text: "10 usuarios", ok: true },
+      { text: "Soporte email + chat", ok: true },
+    ],
+    cta: "Solicitar Demo",
+    featured: true,
+  },
+  {
+    name: "Enterprise",
+    desc: "Para universidades grandes con necesidades avanzadas",
+    priceSem: "$10",
+    priceAnn: "$8",
+    minSem: "mín. $15,000/sem",
+    minAnn: "mín. $24,000/año",
+    features: [
+      { text: "Todo del plan Profesional", ok: true },
+      { text: "Tracking avanzado de docentes", ok: true },
+      { text: "Comparativa multi-periodo", ok: true },
+      { text: "API de integración REST", ok: true },
+      { text: "Instancia dedicada opcional", ok: true },
+      { text: "Usuarios ilimitados", ok: true },
+      { text: "Soporte dedicado 24/7", ok: true },
+      { text: "SLA 99.9% disponibilidad", ok: true },
+    ],
+    cta: "Contactar Ventas",
+    featured: false,
+  },
+];
+
+const FAQS = [
+  { q: "¿Cuánto toma la implementación?", a: "El proceso completo toma entre 2 y 4 semanas, dependiendo de la disponibilidad de datos históricos y la complejidad de integración con tu LMS. Incluye configuración, calibración de modelos ML, capacitación del equipo y acompañamiento en go-live." },
+  { q: "¿Funciona con mi Moodle actual?", a: "Sí. Yachay Deep se integra con cualquier instalación de Moodle mediante scraping automatizado de datos de actividad. No requiere plugins adicionales ni cambios en tu Moodle. También soportamos importación por Excel/CSV para otros sistemas." },
+  { q: "¿Qué precisión tienen las predicciones?", a: "Nuestros modelos alcanzan un 87%+ de precisión en predicción de aprobación/deserción, entrenados con datos reales de tu institución. La precisión mejora conforme acumulamos más datos históricos." },
+  { q: "¿Puedo probar antes de comprar?", a: "Ofrecemos un piloto gratuito de 30 días con el plan Profesional, incluyendo onboarding completo y soporte prioritario. Si dentro de los primeros 60 días de suscripción paga no estás satisfecho, reembolsamos el 100%." },
+  { q: "¿Mis datos están seguros?", a: "Absolutamente. Usamos cifrado TLS 1.3 en tránsito y AES-256 en reposo. Autenticación con cookies HttpOnly, control de acceso por roles (RBAC), y cumplimiento con la Ley Orgánica de Protección de Datos Personales de Ecuador." },
+  { q: "¿Cuántos estudiantes se necesitan como mínimo?", a: "Nuestros planes están diseñados para instituciones con 500+ estudiantes activos. El modelo de ML requiere un mínimo de datos históricos para funcionar con precisión, pero podemos comenzar con el plan Básico desde el primer día." },
+];
+
 export default function Landing() {
   const navigate = useNavigate();
   const [playingIdx, setPlayingIdx] = useState(null);
+  const [annual, setAnnual] = useState(false);
+  const [openFaq, setOpenFaq] = useState(null);
 
   return (
     <div className="min-h-screen bg-white">
@@ -122,6 +196,7 @@ export default function Landing() {
           <div className="flex items-center gap-3">
             <a href="#features" className="hidden sm:inline text-sm text-gray-600 hover:text-brand transition-colors px-3 py-1">Funcionalidades</a>
             <a href="#evolution" className="hidden sm:inline text-sm text-gray-600 hover:text-brand transition-colors px-3 py-1">Evolución</a>
+            <a href="#pricing" className="hidden sm:inline text-sm text-gray-600 hover:text-brand transition-colors px-3 py-1">Planes</a>
             <a href="#podcasts" className="hidden sm:inline text-sm text-gray-600 hover:text-brand transition-colors px-3 py-1">Podcasts</a>
             <a href="#contact" className="hidden sm:inline text-sm text-gray-600 hover:text-brand transition-colors px-3 py-1">Contacto</a>
             <a href="https://pachatech.vercel.app/" target="_blank" rel="noopener noreferrer" className="hidden sm:inline text-sm text-gray-600 hover:text-brand transition-colors px-3 py-1">Pacha Tech</a>
@@ -387,15 +462,153 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* ── Pricing ── */}
+      <section id="pricing" className="py-20 bg-white">
+        <div className="max-w-6xl mx-auto px-4">
+          <div className="text-center mb-12">
+            <div className="inline-flex items-center gap-2 bg-brand/5 px-4 py-1.5 rounded-full mb-4">
+              <span className="text-xs font-semibold text-brand tracking-wider uppercase">Planes y precios</span>
+            </div>
+            <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-3">
+              Planes que se adaptan a tu institución
+            </h2>
+            <p className="text-gray-500 max-w-2xl mx-auto leading-relaxed">
+              Precio por estudiante activo. Sin costos ocultos. Cancela cuando quieras.
+            </p>
+
+            {/* Toggle */}
+            <div className="flex items-center justify-center gap-3 mt-6">
+              <span className={`text-sm font-medium ${!annual ? "text-gray-900" : "text-gray-400"}`}>Semestral</span>
+              <button
+                onClick={() => setAnnual(!annual)}
+                className={`relative w-12 h-6 rounded-full transition-colors ${annual ? "bg-brand" : "bg-gray-300"}`}
+              >
+                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${annual ? "translate-x-6" : ""}`} />
+              </button>
+              <span className={`text-sm font-medium ${annual ? "text-gray-900" : "text-gray-400"}`}>Anual</span>
+              <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-semibold">Ahorra 20%</span>
+            </div>
+          </div>
+
+          {/* Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {PLANS.map((plan, i) => (
+              <div
+                key={i}
+                className={`relative rounded-2xl p-8 transition-all duration-200 hover:-translate-y-1 ${
+                  plan.featured
+                    ? "bg-white border-2 border-brand shadow-xl shadow-brand/10 hover:shadow-2xl"
+                    : "bg-white border border-gray-200 hover:shadow-lg"
+                }`}
+              >
+                {plan.featured && (
+                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-brand-gold text-brand-dark text-xs font-bold px-4 py-1 rounded-full">
+                    Más Popular
+                  </div>
+                )}
+                <div className="mb-6">
+                  <h3 className="text-xl font-bold text-gray-900">{plan.name}</h3>
+                  <p className="text-sm text-gray-500 mt-1">{plan.desc}</p>
+                </div>
+                <div className="mb-1">
+                  <span className="text-4xl font-extrabold text-gray-900">{annual ? plan.priceAnn : plan.priceSem}</span>
+                  <span className="text-gray-500 text-sm ml-1">/estudiante</span>
+                </div>
+                <p className="text-xs text-gray-400 mb-6">{annual ? plan.minAnn : plan.minSem}</p>
+                <ul className="space-y-3 mb-8">
+                  {plan.features.map((f, j) => (
+                    <li key={j} className="flex items-start gap-2.5 text-sm">
+                      {f.ok ? (
+                        <svg className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                        </svg>
+                      ) : (
+                        <svg className="w-5 h-5 text-gray-300 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      )}
+                      <span className={f.ok ? "text-gray-700" : "text-gray-400"}>{f.text}</span>
+                    </li>
+                  ))}
+                </ul>
+                <a
+                  href="#contact"
+                  className={`block w-full text-center py-3 rounded-xl font-semibold transition-colors ${
+                    plan.featured
+                      ? "bg-brand-gold text-brand-dark hover:bg-brand-gold-light"
+                      : "bg-gray-100 text-gray-800 hover:bg-gray-200"
+                  }`}
+                >
+                  {plan.cta}
+                </a>
+              </div>
+            ))}
+          </div>
+
+          {/* Guarantees */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-6 mt-10 text-sm text-gray-500">
+            <span className="flex items-center gap-1.5">
+              <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+              </svg>
+              30 días de prueba gratis
+            </span>
+            <span className="flex items-center gap-1.5">
+              <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+              </svg>
+              Sin tarjeta de crédito
+            </span>
+            <span className="flex items-center gap-1.5">
+              <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+              </svg>
+              Garantía de satisfacción 60 días
+            </span>
+          </div>
+        </div>
+      </section>
+
+      {/* ── FAQ ── */}
+      <section className="py-20 bg-gray-50">
+        <div className="max-w-3xl mx-auto px-4">
+          <div className="text-center mb-12">
+            <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-3">Preguntas frecuentes</h2>
+            <p className="text-gray-500">Todo lo que necesitas saber sobre Yachay Deep</p>
+          </div>
+          <div className="space-y-0">
+            {FAQS.map((faq, i) => (
+              <div key={i} className="border-b border-gray-200">
+                <button
+                  onClick={() => setOpenFaq(openFaq === i ? null : i)}
+                  className="w-full flex items-center justify-between py-5 text-left"
+                >
+                  <span className="font-semibold text-gray-900 pr-4">{faq.q}</span>
+                  <svg
+                    className={`w-5 h-5 text-brand flex-shrink-0 transition-transform ${openFaq === i ? "rotate-45" : ""}`}
+                    fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                  </svg>
+                </button>
+                <div className={`overflow-hidden transition-all duration-300 ${openFaq === i ? "max-h-60 pb-5" : "max-h-0"}`}>
+                  <p className="text-gray-500 text-sm leading-relaxed">{faq.a}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* ── CTA / Contact ── */}
       <section id="contact" className="py-20 bg-gradient-to-br from-brand via-brand-dark to-brand">
         <div className="max-w-4xl mx-auto px-4 text-center">
           <h2 className="text-3xl font-bold text-white mb-4">
-            Lleva Yachay Deep a tu institución
+            Empieza a retener estudiantes hoy
           </h2>
           <p className="text-blue-200 mb-10 max-w-2xl mx-auto leading-relaxed">
-            Yachay Deep es adaptable a cualquier institución de educación superior con modalidad virtual o híbrida.
-            Contacta a Pacha Tech para explorar cómo implementarlo.
+            Solicita una demo personalizada con datos de tu institución. 30 días de prueba gratuita, sin compromiso.
+            Yachay Deep es adaptable a cualquier IES con modalidad virtual o híbrida.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
             <a
