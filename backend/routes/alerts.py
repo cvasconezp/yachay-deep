@@ -16,6 +16,7 @@ from ..models.alert_event import AlertEvent
 from ..models.course_config import SemesterConfig, CourseConfig
 from ..auth.jwt import get_current_user
 from ..models.user import User
+from .analytics._helpers import get_umbrales
 
 
 def _active_period_has_data(db: Session) -> bool:
@@ -328,6 +329,14 @@ def generate_alerts(
     if not pf:
         return {"created": 0, "timestamp": datetime.now(timezone.utc).isoformat(), "detail": "Semestre sin nombre"}
 
+    # Cargar umbrales configurables
+    umbrales = get_umbrales(db)
+    umbral_dias_inactividad = umbrales["dias_inactividad"]         # default: 14
+    umbral_dias_inactividad_critico = umbral_dias_inactividad + 7  # 14+7=21
+    umbral_tareas = umbrales["tareas_minimo"]                      # default: 50
+    umbral_compromiso = umbrales["compromiso_minimo"]              # default: 0.4
+    umbral_compromiso_critico = umbral_compromiso * 0.6            # 0.4*0.6=0.24
+
     # Determinar inicio del bloque actual para capear inactividad
     bloque_inicio = None
     if semconfig.bloque_actual == "2" and semconfig.bloque2_inicio:
@@ -511,15 +520,14 @@ def generate_alerts(
         for codigo_curso, dias in cursos:
             if max_dias_periodo is not None:
                 dias = min(dias, max_dias_periodo)
-            if dias > 14:
+            if dias > umbral_dias_inactividad:
                 asig = asignatura_map.get(codigo_curso, codigo_curso)
                 inactive_courses.append((asig, int(dias)))
                 if dias > worst_dias:
                     worst_dias = dias
                     worst_codigo = codigo_curso
 
-        if worst_dias > 14 and inactive_courses:
-            # Consolidar: una sola alerta con detalle de todas las materias inactivas
+        if worst_dias > umbral_dias_inactividad and inactive_courses:
             n_materias = len(inactive_courses)
             worst_asig = asignatura_map.get(worst_codigo, worst_codigo)
             if n_materias == 1:
@@ -527,7 +535,7 @@ def generate_alerts(
             else:
                 msg = f"Inactivo en {n_materias} materias (peor: {int(worst_dias)} días en {worst_asig})"
 
-            if worst_dias > 21:
+            if worst_dias > umbral_dias_inactividad_critico:
                 _add_alert_fast(student.id, "inactividad", "critico",
                                 msg + " (CRÍTICO)", codigo_curso=worst_codigo)
             else:
@@ -536,10 +544,10 @@ def generate_alerts(
 
         # ========== Compromiso Bajo ==========
         if student.indice_compromiso is not None:
-            if student.indice_compromiso < 0.3:
+            if student.indice_compromiso < umbral_compromiso_critico:
                 _add_alert_fast(student.id, "compromiso_bajo", "critico",
                                 f"Índice de compromiso muy bajo: {student.indice_compromiso:.2f}")
-            elif student.indice_compromiso < 0.55:
+            elif student.indice_compromiso < umbral_compromiso:
                 _add_alert_fast(student.id, "compromiso_bajo", "alto",
                                 f"Índice de compromiso bajo: {student.indice_compromiso:.2f}")
 
@@ -550,10 +558,10 @@ def generate_alerts(
 
         # ========== Tareas Bajas ==========
         if (student.porcentaje_tareas is not None
-                and student.porcentaje_tareas < 40
+                and student.porcentaje_tareas < umbral_tareas
                 and student.id in task_sids):
             _add_alert_fast(student.id, "tareas_bajas", "alto",
-                            f"Porcentaje de tareas entregadas muy bajo: {student.porcentaje_tareas:.1f}%")
+                            f"Porcentaje de tareas entregadas bajo: {student.porcentaje_tareas:.1f}% (umbral: {umbral_tareas}%)")
 
         # ========== Segunda Matrícula ==========
         if not student.es_tercera_matricula:
@@ -573,7 +581,10 @@ def generate_alerts(
 
     db.commit()
 
-    detail_parts = []
+    detail_parts = [
+        f"Umbrales: inactividad>{umbral_dias_inactividad}d, compromiso<{umbral_compromiso}, tareas<{umbral_tareas}%",
+        f"Estudiantes analizados: {len(all_students)}",
+    ]
     if excluded_course_codes:
         detail_parts.append(f"Bloque {semconfig.bloque_actual}: {len(excluded_course_codes)} cursos del otro bloque excluidos")
     if not hay_notas_esperadas:
