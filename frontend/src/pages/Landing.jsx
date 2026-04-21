@@ -43,9 +43,9 @@ function useCountUp(end, duration = 2000, startOnView = true) {
 
 const STATS = [
   { target: 3040, suffix: "+", label: "Estudiantes monitoreados" },
-  { target: 18, suffix: "", label: "Carreras virtuales" },
-  { target: 9, suffix: "", label: "Períodos académicos" },
-  { target: 40, suffix: "+", label: "Asignaturas analizadas" },
+  { target: 25, suffix: "", label: "Carreras virtuales" },
+  { target: 334, suffix: "", label: "Asignaturas analizadas" },
+  { target: 740, suffix: "+", label: "Aulas virtuales" },
 ];
 
 const CAPAS = [
@@ -147,10 +147,11 @@ const PLANS = [
   {
     name: "Básico",
     desc: "Visibilidad y alertas para empezar",
-    priceSem: "$3",
-    priceAnn: "$2.40",
-    minSem: "mín. $5,000/sem",
-    minAnn: "mín. $8,000/año",
+    totalSem: "5,000",
+    totalAnn: "8,000",
+    perStudent: "$3/estudiante",
+    periodLabel: "/semestre",
+    periodLabelAnn: "/año",
     features: [
       { text: "Dashboard de riesgo en tiempo real", ok: true },
       { text: "Alertas académicas configurables", ok: true },
@@ -167,10 +168,11 @@ const PLANS = [
   {
     name: "Profesional",
     desc: "IA predictiva + gestión de intervenciones",
-    priceSem: "$8",
-    priceAnn: "$6.40",
-    minSem: "mín. $8,000/sem",
-    minAnn: "mín. $12,800/año",
+    totalSem: "8,000",
+    totalAnn: "12,800",
+    perStudent: "$8/estudiante",
+    periodLabel: "/semestre",
+    periodLabelAnn: "/año",
     features: [
       { text: "Todo del plan Básico", ok: true },
       { text: "Predicciones ML con 87%+ precisión", ok: true },
@@ -187,10 +189,11 @@ const PLANS = [
   {
     name: "Enterprise",
     desc: "Control total para universidades grandes",
-    priceSem: "$14",
-    priceAnn: "$11.20",
-    minSem: "mín. $15,000/sem",
-    minAnn: "mín. $24,000/año",
+    totalSem: "15,000",
+    totalAnn: "24,000",
+    perStudent: "$14/estudiante",
+    periodLabel: "/semestre",
+    periodLabelAnn: "/año",
     features: [
       { text: "Todo del plan Profesional", ok: true },
       { text: "Tracking avanzado de docentes", ok: true },
@@ -507,7 +510,7 @@ export default function Landing() {
               Planes que se adaptan a tu institución
             </h2>
             <p className="text-gray-500 max-w-2xl mx-auto leading-relaxed">
-              Precio por estudiante activo. Sin costos ocultos. Cancela cuando quieras.
+              Inversión clara por semestre. Sin costos ocultos. Precio escala con tu matrícula.
             </p>
 
             {/* Toggle */}
@@ -545,10 +548,11 @@ export default function Landing() {
                   <p className="text-sm text-gray-500 mt-1">{plan.desc}</p>
                 </div>
                 <div className="mb-1">
-                  <span className="text-4xl font-extrabold text-gray-900">{annual ? plan.priceAnn : plan.priceSem}</span>
-                  <span className="text-gray-500 text-sm ml-1">/estudiante</span>
+                  <span className="text-sm text-gray-500">Desde </span>
+                  <span className="text-4xl font-extrabold text-gray-900">${annual ? plan.totalAnn : plan.totalSem}</span>
+                  <span className="text-gray-500 text-sm ml-1">{annual ? plan.periodLabelAnn : plan.periodLabel}</span>
                 </div>
-                <p className="text-xs text-gray-400 mb-6">{annual ? plan.minAnn : plan.minSem}</p>
+                <p className="text-xs text-gray-400 mb-6">{plan.perStudent} activo · descuento por volumen</p>
                 <ul className="space-y-3 mb-8">
                   {plan.features.map((f, j) => (
                     <li key={j} className="flex items-start gap-2.5 text-sm">
