@@ -464,13 +464,21 @@ def generate_alerts(
                 _add_alert(student.id, "tareas_bajas", "alto",
                            f"Porcentaje de tareas entregadas muy bajo: {student.porcentaje_tareas:.1f}%")
 
-        # ========== Segunda Matrícula (repitentes con 2 intentos) ==========
+        # ========== Segunda Matrícula (repitentes: numero_repitencias > 1, no 3ra matrícula) ==========
         if not student.es_tercera_matricula:
             n_asig_2m = db.query(Enrollment).filter(
                 Enrollment.student_id == student.id,
-                Enrollment.numero_repitencias == 2,
+                Enrollment.numero_repitencias > 1,
+                Enrollment.es_tercera_matricula == False,
                 or_(Enrollment.periodo == periodo_variants[0], Enrollment.periodo == periodo_variants[1]),
             ).count()
+            if n_asig_2m == 0:
+                # Fallback: check grades
+                n_asig_2m = db.query(Grade).filter(
+                    Grade.student_id == student.id,
+                    Grade.numero_repitencias > 1,
+                    or_(Grade.periodo == periodo_variants[0], Grade.periodo == periodo_variants[1]),
+                ).count()
             if n_asig_2m > 0:
                 _add_alert(student.id, "segunda_matricula", "alto",
                            f"Estudiante con {n_asig_2m} asignatura(s) en segunda matrícula")
@@ -484,6 +492,59 @@ def generate_alerts(
             if n_asig_tm > 0:
                 _add_alert(student.id, "tercera_matricula", "critico",
                            f"Estudiante con {n_asig_tm} asignatura(s) en tercera matrícula (oyente condicionado)")
+
+    # ========== Pase adicional: condicionados y repitentes que no están en el loop principal ==========
+    # Algunos estudiantes con tercera matrícula o repitencias pueden no tener grades/avac
+    # pero sí enrollments. Asegurarnos de generar alertas para todos ellos.
+    processed_ids = {s.id for s in students}
+
+    # Condicionados no procesados
+    tm_students = db.query(Student).filter(
+        Student.es_tercera_matricula == True,
+        ~Student.id.in_(processed_ids),
+    ).all()
+    for student in tm_students:
+        n_asig_tm = db.query(Enrollment).filter(
+            Enrollment.student_id == student.id,
+            Enrollment.es_tercera_matricula == True,
+        ).count()
+        if n_asig_tm > 0:
+            _add_alert(student.id, "tercera_matricula", "critico",
+                       f"Estudiante con {n_asig_tm} asignatura(s) en tercera matrícula (oyente condicionado)")
+
+    # Repitentes (2da matrícula) no procesados
+    rep_enroll_sids = set(r[0] for r in db.query(Enrollment.student_id).filter(
+        Enrollment.numero_repitencias > 1,
+        Enrollment.es_tercera_matricula == False,
+        or_(Enrollment.periodo == periodo_variants[0], Enrollment.periodo == periodo_variants[1]),
+    ).distinct().all())
+    rep_grade_sids = set(r[0] for r in db.query(Grade.student_id).filter(
+        Grade.numero_repitencias > 1,
+        or_(Grade.periodo == periodo_variants[0], Grade.periodo == periodo_variants[1]),
+    ).distinct().all())
+    all_rep_sids = (rep_enroll_sids | rep_grade_sids) - processed_ids
+
+    if all_rep_sids:
+        rep_students = db.query(Student).filter(
+            Student.id.in_(all_rep_sids),
+            Student.es_tercera_matricula == False,
+        ).all()
+        for student in rep_students:
+            n_asig_2m = db.query(Enrollment).filter(
+                Enrollment.student_id == student.id,
+                Enrollment.numero_repitencias > 1,
+                Enrollment.es_tercera_matricula == False,
+                or_(Enrollment.periodo == periodo_variants[0], Enrollment.periodo == periodo_variants[1]),
+            ).count()
+            if n_asig_2m == 0:
+                n_asig_2m = db.query(Grade).filter(
+                    Grade.student_id == student.id,
+                    Grade.numero_repitencias > 1,
+                    or_(Grade.periodo == periodo_variants[0], Grade.periodo == periodo_variants[1]),
+                ).count()
+            if n_asig_2m > 0:
+                _add_alert(student.id, "segunda_matricula", "alto",
+                           f"Estudiante con {n_asig_2m} asignatura(s) en segunda matrícula")
 
     db.commit()
 

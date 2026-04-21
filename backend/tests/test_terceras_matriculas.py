@@ -273,6 +273,60 @@ class TestTMAlerts:
         # Student 2 should NOT have tercera matrícula alert
         assert 2 not in student_ids
 
+    def test_second_pass_catches_students_without_grades_avac(
+        self, client, admin_token, db, semester_config
+    ):
+        """Students with es_tercera_matricula=True but no grades/avac data
+        should still get alerts via the second pass."""
+        # Student 10: condicionado, NO grades/avac → not in _active_period_student_ids
+        s_cond = Student(id=10, nombre="CONDICIONADO SIN DATOS", cedula="9999999999",
+                         carrera="INGENIERIA", es_tercera_matricula=True)
+        db.add(s_cond)
+        db.flush()
+        db.add(Enrollment(
+            student_id=10, asignatura="FÍSICA", codigo_asignatura="FIS-101",
+            periodo="68", es_tercera_matricula=True,
+        ))
+
+        # Student 11: repitente (2da matrícula), NO grades/avac
+        s_rep = Student(id=11, nombre="REPITENTE SIN DATOS", cedula="8888888888",
+                        carrera="INGENIERIA", es_tercera_matricula=False)
+        db.add(s_rep)
+        db.flush()
+        db.add(Enrollment(
+            student_id=11, asignatura="CÁLCULO", codigo_asignatura="CAL-101",
+            periodo="68", es_tercera_matricula=False, numero_repitencias=2,
+        ))
+
+        # Student 12: has grades → in main loop, repitente via grades
+        s_main = Student(id=12, nombre="REPITENTE CON DATOS", cedula="7777777777",
+                         carrera="INGENIERIA", es_tercera_matricula=False)
+        db.add(s_main)
+        db.flush()
+        db.add(Grade(student_id=12, asignatura="ALGEBRA", nota_final=50,
+                     periodo="P68", numero_repitencias=3))
+
+        db.commit()
+
+        resp = client.post("/alerts/generate", headers=auth(admin_token))
+        assert resp.status_code == 200
+
+        alerts = client.get("/alerts/pending?limit=500", headers=auth(admin_token))
+        all_alerts = alerts.json()
+
+        # Student 10 should get tercera_matricula alert (second pass)
+        tm_alerts = [a for a in all_alerts if a["tipo"] == "tercera_matricula"]
+        tm_sids = {a["student_id"] for a in tm_alerts}
+        assert 10 in tm_sids, f"Condicionado sin datos should get alert. Got IDs: {tm_sids}"
+
+        # Student 11 should get segunda_matricula alert (second pass)
+        sm_alerts = [a for a in all_alerts if a["tipo"] == "segunda_matricula"]
+        sm_sids = {a["student_id"] for a in sm_alerts}
+        assert 11 in sm_sids, f"Repitente sin datos should get alert. Got IDs: {sm_sids}"
+
+        # Student 12 should get segunda_matricula alert (main loop via grades)
+        assert 12 in sm_sids, f"Repitente con datos should get alert. Got IDs: {sm_sids}"
+
 
 # ── ETL: load_terceras_matriculas ────────────────────────────────────────
 
