@@ -197,10 +197,13 @@ def get_pending_alerts(
 
 @router.get("/count", response_model=AlertCountResponse)
 def get_alert_count(
+    carrera: Optional[str] = None,
+    asignatura: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Retorna conteo de alertas sin leer por severidad.
+    """Retorna conteo de alertas sin leer por severidad y tipo.
+    Acepta filtros opcionales de carrera y asignatura.
     Solo cuenta alertas de estudiantes del periodo activo."""
     if not _active_period_has_data(db):
         return AlertCountResponse(total=0, critico=0, alto=0, medio=0, por_tipo={})
@@ -209,14 +212,32 @@ def get_alert_count(
 
     unread = AlertEvent.leido == False
 
-    base_q = db.query(AlertEvent).filter(unread)
+    # Base filter: unread + period students
+    base_filters = [unread]
     if period_sids:
-        base_q = base_q.filter(AlertEvent.student_id.in_(period_sids))
+        base_filters.append(AlertEvent.student_id.in_(period_sids))
+
+    # Carrera filter: restrict to students of that carrera
+    if carrera:
+        carrera_sids = set(r[0] for r in db.query(Student.id).filter(
+            func.lower(Student.carrera).contains(carrera.lower()),
+        ).all())
+        base_filters.append(AlertEvent.student_id.in_(carrera_sids))
+
+    # Asignatura filter: restrict to alerts whose codigo_curso matches
+    if asignatura:
+        asig_codes = [r[0] for r in db.query(CourseConfig.codigo_avac).filter(
+            func.lower(CourseConfig.asignatura).contains(asignatura.lower()),
+        ).all()]
+        if asig_codes:
+            base_filters.append(AlertEvent.codigo_curso.in_(asig_codes))
+        else:
+            return AlertCountResponse(total=0, critico=0, alto=0, medio=0, por_tipo={})
 
     def _count(extra_filter=None):
-        q = db.query(func.count(AlertEvent.id)).filter(unread)
-        if period_sids:
-            q = q.filter(AlertEvent.student_id.in_(period_sids))
+        q = db.query(func.count(AlertEvent.id))
+        for f in base_filters:
+            q = q.filter(f)
         if extra_filter is not None:
             q = q.filter(extra_filter)
         return q.scalar() or 0
@@ -227,13 +248,10 @@ def get_alert_count(
     medio = _count(AlertEvent.severidad == "medio")
 
     # Per-type counts
-    tipo_rows = (
-        db.query(AlertEvent.tipo, func.count(AlertEvent.id))
-        .filter(unread)
-    )
-    if period_sids:
-        tipo_rows = tipo_rows.filter(AlertEvent.student_id.in_(period_sids))
-    tipo_rows = tipo_rows.group_by(AlertEvent.tipo).all()
+    tipo_q = db.query(AlertEvent.tipo, func.count(AlertEvent.id))
+    for f in base_filters:
+        tipo_q = tipo_q.filter(f)
+    tipo_rows = tipo_q.group_by(AlertEvent.tipo).all()
     por_tipo = {tipo: cnt for tipo, cnt in tipo_rows}
 
     return AlertCountResponse(

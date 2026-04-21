@@ -104,9 +104,12 @@ export default function Alertas() {
       if (filterCarrera) params.carrera = filterCarrera;
       if (filterAsignatura) params.asignatura = filterAsignatura;
       if (filterPeriodo) params.periodo = filterPeriodo;
+      const countParams = {};
+      if (filterCarrera) countParams.carrera = filterCarrera;
+      if (filterAsignatura) countParams.asignatura = filterAsignatura;
       const [data, counts] = await Promise.all([
         api.getAlertsPending(params),
-        api.getAlertCount(),
+        api.getAlertCount(countParams),
       ]);
       setAlerts(data || []);
       setAlertCounts(counts || { total: 0, critico: 0, alto: 0, medio: 0, por_tipo: {} });
@@ -383,20 +386,6 @@ export default function Alertas() {
             {asignaturas.map(a => (
               <option key={a} value={a}>{a}</option>
             ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="text-xs font-medium text-gray-500 block mb-1">Severidad</label>
-          <select
-            value={filterSeverity}
-            onChange={e => setFilterSeverity(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="all">Todas</option>
-            <option value="critico">Crítico ({counts.critico})</option>
-            <option value="alto">Alto ({counts.alto})</option>
-            <option value="medio">Medio ({counts.medio})</option>
           </select>
         </div>
 

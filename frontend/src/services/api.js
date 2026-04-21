@@ -266,7 +266,10 @@ class ApiClient {
   }
 
   // ── Alerts ──
-  getAlertCount() { return this.get("/alerts/count"); }
+  getAlertCount(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.get(`/alerts/count${qs ? "?" + qs : ""}`);
+  }
   getAlertsPending(params = {}) {
     const qs = new URLSearchParams(params).toString();
     return this.get(`/alerts/pending${qs ? "?" + qs : ""}`);
