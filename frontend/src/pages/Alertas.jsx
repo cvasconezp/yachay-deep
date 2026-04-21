@@ -12,6 +12,8 @@ const TIPO_LABELS = {
   nota_cero: "Nota Cero",
   tareas_bajas: "Tareas Bajas",
   calificacion_docente_pendiente: "Calificación Pendiente",
+  segunda_matricula: "2da Matrícula",
+  tercera_matricula: "Condicionados",
 };
 
 const TIPO_ICONS = {
@@ -20,6 +22,8 @@ const TIPO_ICONS = {
   nota_cero: "🚨",
   tareas_bajas: "📝",
   calificacion_docente_pendiente: "⏳",
+  segunda_matricula: "🔄",
+  tercera_matricula: "⚠️",
 };
 
 const SEVERITY_CONFIG = {
@@ -274,21 +278,41 @@ export default function Alertas() {
       {/* Summary Cards */}
       {!loading && alerts.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-5">
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <div
+            className={`rounded-xl border p-4 cursor-pointer transition-all ${filterSeverity === "all" ? "bg-blue-50 border-blue-300 ring-2 ring-blue-400 shadow-md" : "bg-white border-gray-200 hover:shadow-sm"}`}
+            onClick={() => setFilterSeverity(filterSeverity === "all" ? "all" : "all")}
+            title={filterSeverity !== "all" ? "Clic para quitar filtro" : ""}
+          >
             <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Total Pendientes</div>
             <div className="text-2xl font-bold text-gray-900 mt-1">{alerts.length}</div>
+            {filterSeverity !== "all" && <div className="text-[9px] text-gray-400 mt-1">Clic para ver todas</div>}
           </div>
-          <div className="bg-white rounded-xl border border-red-200 p-4">
+          <div
+            className={`rounded-xl border p-4 cursor-pointer transition-all ${filterSeverity === "critico" ? "bg-red-50 border-red-300 ring-2 ring-red-400 shadow-md scale-[1.02]" : "bg-white border-red-200 hover:shadow-sm"}`}
+            onClick={() => setFilterSeverity(filterSeverity === "critico" ? "all" : "critico")}
+            title={filterSeverity === "critico" ? "Clic para quitar filtro" : "Clic para filtrar críticas"}
+          >
             <div className="text-xs font-medium text-red-600 uppercase tracking-wide">Críticas</div>
             <div className="text-2xl font-bold text-red-700 mt-1">{counts.critico}</div>
+            {filterSeverity === "critico" && <div className="text-[9px] text-red-500 font-medium mt-1">✓ Filtro activo</div>}
           </div>
-          <div className="bg-white rounded-xl border border-orange-200 p-4">
+          <div
+            className={`rounded-xl border p-4 cursor-pointer transition-all ${filterSeverity === "alto" ? "bg-orange-50 border-orange-300 ring-2 ring-orange-400 shadow-md scale-[1.02]" : "bg-white border-orange-200 hover:shadow-sm"}`}
+            onClick={() => setFilterSeverity(filterSeverity === "alto" ? "all" : "alto")}
+            title={filterSeverity === "alto" ? "Clic para quitar filtro" : "Clic para filtrar altas"}
+          >
             <div className="text-xs font-medium text-orange-600 uppercase tracking-wide">Altas</div>
             <div className="text-2xl font-bold text-orange-600 mt-1">{counts.alto}</div>
+            {filterSeverity === "alto" && <div className="text-[9px] text-orange-500 font-medium mt-1">✓ Filtro activo</div>}
           </div>
-          <div className="bg-white rounded-xl border border-yellow-200 p-4">
+          <div
+            className={`rounded-xl border p-4 cursor-pointer transition-all ${filterSeverity === "medio" ? "bg-yellow-50 border-yellow-300 ring-2 ring-yellow-400 shadow-md scale-[1.02]" : "bg-white border-yellow-200 hover:shadow-sm"}`}
+            onClick={() => setFilterSeverity(filterSeverity === "medio" ? "all" : "medio")}
+            title={filterSeverity === "medio" ? "Clic para quitar filtro" : "Clic para filtrar medias"}
+          >
             <div className="text-xs font-medium text-yellow-600 uppercase tracking-wide">Medias</div>
             <div className="text-2xl font-bold text-yellow-600 mt-1">{counts.medio}</div>
+            {filterSeverity === "medio" && <div className="text-[9px] text-yellow-600 font-medium mt-1">✓ Filtro activo</div>}
           </div>
           <div
             className="bg-orange-50 rounded-xl border border-orange-200 p-4 cursor-pointer hover:ring-2 hover:ring-orange-300 hover:shadow-md transition-all"

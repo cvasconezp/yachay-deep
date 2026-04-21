@@ -464,6 +464,17 @@ def generate_alerts(
                 _add_alert(student.id, "tareas_bajas", "alto",
                            f"Porcentaje de tareas entregadas muy bajo: {student.porcentaje_tareas:.1f}%")
 
+        # ========== Segunda Matrícula (repitentes con 2 intentos) ==========
+        if not student.es_tercera_matricula:
+            n_asig_2m = db.query(Enrollment).filter(
+                Enrollment.student_id == student.id,
+                Enrollment.numero_repitencias == 2,
+                or_(Enrollment.periodo == periodo_variants[0], Enrollment.periodo == periodo_variants[1]),
+            ).count()
+            if n_asig_2m > 0:
+                _add_alert(student.id, "segunda_matricula", "alto",
+                           f"Estudiante con {n_asig_2m} asignatura(s) en segunda matrícula")
+
         # ========== Tercera Matrícula (per-student flag) ==========
         if student.es_tercera_matricula:
             n_asig_tm = db.query(Enrollment).filter(
