@@ -464,6 +464,16 @@ def generate_alerts(
                 _add_alert(student.id, "tareas_bajas", "alto",
                            f"Porcentaje de tareas entregadas muy bajo: {student.porcentaje_tareas:.1f}%")
 
+        # ========== Tercera Matrícula (per-student flag) ==========
+        if student.es_tercera_matricula:
+            n_asig_tm = db.query(Enrollment).filter(
+                Enrollment.student_id == student.id,
+                Enrollment.es_tercera_matricula == True,
+            ).count()
+            if n_asig_tm > 0:
+                _add_alert(student.id, "tercera_matricula", "critico",
+                           f"Estudiante con {n_asig_tm} asignatura(s) en tercera matrícula (oyente condicionado)")
+
     db.commit()
 
     detail_parts = []

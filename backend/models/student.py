@@ -53,6 +53,9 @@ class Student(Base):
     prob_reprobacion = Column(Float, nullable=True)        # 0.0-1.0
     prediccion_updated_at = Column(DateTime, nullable=True)
 
+    # Tercera matrícula (oyente condicionado)
+    es_tercera_matricula = Column(Boolean, default=False, nullable=False, server_default="false")
+
     # Metadata
     periodo = Column(String, nullable=True)            # e.g. "2026-1"
     estado_matricula = Column(String, nullable=True)

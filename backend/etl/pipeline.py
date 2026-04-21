@@ -537,6 +537,27 @@ class ETLPipeline:
                 logs.append(f"  ⚠️ Error en Prácticas Preprofesionales (no crítico): {prac_err}")
                 logger.error("Error en ETL de prácticas: %s", prac_err, exc_info=True)
 
+            # 7f. Terceras matrículas (oyentes condicionados)
+            try:
+                from .terceras_matriculas import load_terceras_matriculas
+                tm_path = Path(settings.DATA_PATH_TERCERAS_MATRICULAS)
+                if tm_path.exists() and any(tm_path.glob("*.xlsx")):
+                    logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Procesando Terceras Matrículas...")
+                    tm_stats = load_terceras_matriculas(self.db, str(tm_path))
+                    unmatched = tm_stats["unmatched"]
+                    suffix = f", {unmatched} sin match" if unmatched else ""
+                    logs.append(
+                        f"  → {tm_stats['matched']} estudiantes vinculados, "
+                        f"{tm_stats['enrollments_created']} enrollments creados, "
+                        f"{tm_stats['enrollments_updated']} actualizados, "
+                        f"{tm_stats['alerts_created']} alertas generadas{suffix}"
+                    )
+                else:
+                    logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Sin datos de Terceras Matrículas — omitiendo")
+            except Exception as tm_err:
+                logs.append(f"  ⚠️ Error en Terceras Matrículas (no crítico): {tm_err}")
+                logger.error("Error en ETL de terceras matrículas: %s", tm_err, exc_info=True)
+
             # 8. Reentrenar modelos ML con datos históricos actualizados
             try:
                 from ..ml.train import train_models

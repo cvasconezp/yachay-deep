@@ -107,6 +107,14 @@ def upgrade_tables():
         "alert_events": [
             ("codigo_curso", "VARCHAR"),
         ],
+        "students": [
+            ("es_tercera_matricula", "BOOLEAN DEFAULT false"),
+        ],
+        "enrollments": [
+            ("es_tercera_matricula", "BOOLEAN DEFAULT false"),
+            ("tipo_aprobacion", "VARCHAR"),
+            ("estado_solicitud", "VARCHAR"),
+        ],
     }
 
     inspector = inspect(engine)

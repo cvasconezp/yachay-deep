@@ -129,6 +129,7 @@ class RiskStudentOut(BaseModel):
     estado_matricula: Optional[str]
     prob_desercion: Optional[float] = None
     prob_reprobacion: Optional[float] = None
+    es_tercera_matricula: bool = False
     total_intervenciones: int
     ultima_intervencion: Optional[str]
 
@@ -143,6 +144,7 @@ def get_risk_dashboard(
     solo_sin_intervencion: bool = False,
     periodo: Optional[str] = None,
     asignatura: Optional[str] = None,
+    tercera_matricula: Optional[bool] = None,
     offset: int = Query(0, ge=0),
     limit: int = Query(500, le=2500),
     db: Session = Depends(get_db),
@@ -239,6 +241,8 @@ def get_risk_dashboard(
         query = query.filter(Student.nivel_riesgo == nivel_riesgo)
     if solo_sin_intervencion:
         query = query.filter(interv_sq.c.total_intervenciones.is_(None))
+    if tercera_matricula is not None:
+        query = query.filter(Student.es_tercera_matricula == tercera_matricula)
 
     # Ordenar: riesgo Alto primero, luego Medio, luego Bajo
     risk_order = case(
@@ -283,6 +287,7 @@ def get_risk_dashboard(
             estado_matricula=student.estado_matricula,
             prob_desercion=student.prob_desercion,
             prob_reprobacion=student.prob_reprobacion,
+            es_tercera_matricula=student.es_tercera_matricula or False,
             total_intervenciones=total_interv or 0,
             ultima_intervencion=ultima_interv.isoformat() if ultima_interv else None,
         ))
@@ -486,6 +491,10 @@ def get_stats(
         rep_sids &= carrera_sids
     total_repitentes = len(rep_sids)
 
+    # ── Terceras matrículas (oyentes condicionados) ──
+    tm_q = base.filter(Student.es_tercera_matricula == True)
+    total_terceras_matriculas = tm_q.count()
+
     return {
         "total_estudiantes": total,
         "por_nivel_riesgo": [{"nivel": r.nivel_riesgo, "total": r.total} for r in por_riesgo],
@@ -494,6 +503,7 @@ def get_stats(
         "estudiantes_intervenidos": estudiantes_intervenidos,
         "total_aulas_virtuales": total_aulas_virtuales,
         "total_repitentes": total_repitentes,
+        "total_terceras_matriculas": total_terceras_matriculas,
         "tiene_datos_periodo": has_data,
     }
 

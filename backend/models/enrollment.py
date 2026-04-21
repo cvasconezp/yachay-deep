@@ -43,6 +43,11 @@ class Enrollment(Base):
     pagado = Column(String, nullable=True)                  # PAGADO (SI/NO)
     estado_matriculado = Column(String, nullable=True)      # ESTADO_MATRICULADOS
 
+    # Tercera matrícula (oyente condicionado)
+    es_tercera_matricula = Column(Boolean, default=False, nullable=False, server_default="false")
+    tipo_aprobacion = Column(String, nullable=True)         # CONDICIONADO / None
+    estado_solicitud = Column(String, nullable=True)        # Aprobado / Trámite / No aplica
+
     # Período
     periodo = Column(String, nullable=True, index=True)     # PERIODO (ej: "68")
     fecha_matricula = Column(DateTime(timezone=True), nullable=True)  # FECHA_MATRICULA

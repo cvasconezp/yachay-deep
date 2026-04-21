@@ -232,6 +232,7 @@ async def upload_data_and_run_etl(
       Tareas/estado_XXXXX.csv                       → entregas por curso
       Reportes/XXXXX_reporte.xlsx                   → datos personales (cédula, teléfono, residencia)
       DatosEspecificos/DatosEspecificos EIB*.xlsx   → formulario EIB (nivel, sede, whatsapp, residencia)
+      TercerasMatriculas/XXXXX_Reporte.xlsx         → terceras matrículas (oyentes condicionados)
       (opcional) calificaciones.csv                 → se copia a ./data/calificaciones.csv
     """
     if not file.filename.lower().endswith(".zip"):
@@ -257,6 +258,7 @@ async def upload_data_and_run_etl(
         if len(parts) > 1 and parts[0] in (
             "Reportes", "IngresosAVAC", "Tareas",
             "DatosEspecificos", "TableauHistorico",
+            "TercerasMatriculas",
         ):
             return member_name
 

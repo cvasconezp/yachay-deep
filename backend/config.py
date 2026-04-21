@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     # - Formularios Practica P*.xlsx: datos de estudiantes y escuelas asignadas
     # - Escuelas Bilingues SEIBE*.xlsx: catálogo de escuelas con ubicaciones
     DATA_PATH_PRACTICAS: str = "./data/Practicas"
+    # Carpeta con reportes de terceras matrículas (oyentes condicionados)
+    DATA_PATH_TERCERAS_MATRICULAS: str = "./data/TercerasMatriculas"
 
     # Email (SMTP para derivaciones a Bienestar Estudiantil)
     SMTP_HOST: Optional[str] = None

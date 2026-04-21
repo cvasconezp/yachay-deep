@@ -153,7 +153,7 @@ function TabSistema() {
             Subir datos y ejecutar ETL
           </label>
           <p className="text-xs text-gray-400 mb-2">
-            Sube un archivo ZIP con los CSVs de calificaciones históricas (TableauHistorico/), IngresosAVAC/, Tareas/ y Reportes/.
+            Sube un archivo ZIP con los CSVs de calificaciones históricas (TableauHistorico/), IngresosAVAC/, Tareas/, Reportes/ y TercerasMatriculas/.
             Se extraen a la carpeta data/ del servidor y se ejecuta el ETL automáticamente.
           </p>
           <div className="flex items-center gap-3">
