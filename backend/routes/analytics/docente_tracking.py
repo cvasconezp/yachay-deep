@@ -135,10 +135,10 @@ def get_docente_tracking_resumen(
 ):
     """Resumen general del tracking de docentes."""
     # Total docentes únicos
-    docentes_query = db.query(distinct(DocenteTracking.docente)).filter(
+    docentes_query = db.query(DocenteTracking.docente).filter(
         DocenteTracking.docente.isnot(None),
         DocenteTracking.docente != "",
-    )
+    ).distinct()
     total_docentes = docentes_query.count()
 
     if total_docentes == 0:
