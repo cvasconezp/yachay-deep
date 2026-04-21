@@ -142,6 +142,11 @@ def upgrade_tables():
         # "ValueError: Out of range float values are not JSON compliant".
         # Solo aplica en PostgreSQL (SQLite no soporta 'nan'::float literal).
         is_postgres = "postgres" in str(engine.url).lower()
+
+        # ── Make enrollments.codigo_grupo nullable (for 3ra matrícula without grupo) ──
+        if "enrollments" in existing_tables and is_postgres:
+            conn.execute(text('ALTER TABLE "enrollments" ALTER COLUMN "codigo_grupo" DROP NOT NULL'))
+
         if is_postgres:
             nan_cleanups = [
                 ("avac_accesses", ["dias_sin_acceso"]),

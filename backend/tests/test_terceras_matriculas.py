@@ -426,22 +426,16 @@ class TestLoadTercerasMatriculas:
         assert e.tipo_aprobacion == "CONDICIONADO"
         assert e.pagado == "SI"
 
-    def test_resolves_codigo_grupo_from_existing(self, db, tmp_path):
-        """When report has no COD_GRUPO, resolve from existing enrollment."""
+    def test_empty_cod_grupo_stays_none(self, db, tmp_path):
+        """When report has no COD_GRUPO, codigo_grupo stays None."""
         import pandas as pd
         from backend.etl.terceras_matriculas import load_terceras_matriculas
 
         s = Student(id=1, nombre="TEST", cedula="1111111111", carrera="CONTABILIDAD")
         db.add(s)
-        # Pre-existing enrollment from previous period with real codigo_grupo
-        e_old = Enrollment(
-            student_id=1, codigo_grupo="405860", codigo_asignatura="MAT-101",
-            asignatura="MATEMATICAS", periodo="67",
-        )
-        db.add(e_old)
         db.commit()
 
-        # Report has NO COD_GRUPO — should resolve from existing enrollment
+        # Report has NO COD_GRUPO
         df = pd.DataFrame([{
             "PERIODO": 68,
             "IDENTIFICACION_EST": "1111111111",
@@ -462,9 +456,7 @@ class TestLoadTercerasMatriculas:
             Enrollment.es_tercera_matricula == True,
         ).first()
         assert new_enr is not None
-        # Should have resolved to "405860" from the old enrollment, not "3M-MAT-101"
-        assert new_enr.codigo_grupo == "405860"
-        assert not new_enr.codigo_grupo.startswith("3M-")
+        assert new_enr.codigo_grupo is None
 
     def test_generates_alerts(self, db, tmp_path):
         import pandas as pd

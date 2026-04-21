@@ -25,7 +25,7 @@ class Enrollment(Base):
     student_id = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), index=True)
 
     # Datos de la asignatura (del reporte)
-    codigo_grupo = Column(String, nullable=False)          # CODIGO_GRUPO (ej: 408364)
+    codigo_grupo = Column(String, nullable=True)            # CODIGO_GRUPO (ej: 408364) — nullable for 3ra matrícula without grupo
     codigo_asignatura = Column(String, nullable=True)       # CODIGO_ASIGNATURA (ej: C-HU-201)
     asignatura = Column(String, nullable=False)             # ASIGNATURA (ej: METODOLOGÍA DE LA INVESTIGACIÓN)
     tipo_asignatura = Column(String, nullable=True)         # TIPO_ASIGNATURA (COMUN/GENERICA/ESPECIFICA)
