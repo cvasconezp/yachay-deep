@@ -8,7 +8,7 @@ Enrollment como fallback (inicio de semestre sin AVAC).
 from typing import Optional
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from sqlalchemy import func, distinct, or_
+from sqlalchemy import func, distinct
 from pydantic import BaseModel
 
 from ...database import get_db
@@ -16,7 +16,7 @@ from ...models import Student, Grade, Intervention, Enrollment
 from ...models.course_config import CourseConfig
 from ...auth.jwt import get_current_user
 from ...models.user import User
-from ._helpers import apply_periodo_filter
+from ._helpers import apply_periodo_filter, get_umbrales, build_risk_map
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
@@ -41,24 +41,11 @@ class DocenteAnalytics(BaseModel):
         from_attributes = True
 
 
-def _enroll_periodo_filter(query, periodo: Optional[str]):
-    """Aplica filtro de periodo a Enrollment (dual-format)."""
-    col = Enrollment.periodo
-    pf = periodo if periodo else "actual"
-    if pf == "actual" or pf == "todos":
-        return query, pf
-    if pf.startswith("P"):
-        raw = pf[1:]
-        query = query.filter(or_(col == pf, col == raw))
-    else:
-        query = query.filter(or_(col == pf, col == f"P{pf}"))
-    return query, pf
-
 
 def _docentes_from_enrollment(db: Session, periodo: Optional[str], carrera: Optional[str]):
     """Genera lista de docentes desde Enrollment (fallback sin grades)."""
     eq = db.query(Enrollment).filter(Enrollment.docente.isnot(None), Enrollment.docente != "")
-    eq, _ = _enroll_periodo_filter(eq, periodo)
+    eq, _ = apply_periodo_filter(eq, periodo, column=Enrollment.periodo)
     if carrera:
         eq = eq.filter(func.lower(Enrollment.carrera).contains(carrera.lower()))
     enrolls = eq.all()
@@ -84,7 +71,7 @@ def _docentes_from_enrollment(db: Session, periodo: Optional[str], carrera: Opti
         student_ids = list(data["sids"])
         risk_counts = db.query(Student.nivel_riesgo, func.count(Student.id)).filter(
             Student.id.in_(student_ids)).group_by(Student.nivel_riesgo).all() if student_ids else []
-        risk_map = {r[0]: r[1] for r in risk_counts}
+        risk_map = build_risk_map(risk_counts)
 
         output.append(DocenteAnalytics(
             docente=docente_name,
@@ -135,6 +122,9 @@ def get_docentes_analytics(
     if not docentes:
         return _docentes_from_enrollment(db, periodo, carrera)
 
+    umbrales = get_umbrales(db)
+    nota_aprob = umbrales["nota_aprobacion"]
+
     output = []
     for docente_name in docentes:
         grades_q = db.query(Grade).filter(Grade.docente == docente_name)
@@ -152,13 +142,13 @@ def get_docentes_analytics(
         student_ids = list(set(g.student_id for g in all_grades))
         notas = [g.nota_final for g in all_grades if g.nota_final is not None]
         promedio = round(sum(notas) / max(len(notas), 1), 1) if notas else None
-        aprobados = sum(1 for n in notas if n >= 70)
+        aprobados = sum(1 for n in notas if n >= nota_aprob)
         pct_aprob = round((aprobados / max(len(notas), 1)) * 100, 1) if notas else None
         pct_reprob = round(((len(notas) - aprobados) / max(len(notas), 1)) * 100, 1) if notas else None
 
         risk_counts = db.query(Student.nivel_riesgo, func.count(Student.id)).filter(
             Student.id.in_(student_ids)).group_by(Student.nivel_riesgo).all()
-        risk_map = {r[0]: r[1] for r in risk_counts}
+        risk_map = build_risk_map(risk_counts)
 
         avg_comp = db.query(func.avg(Student.indice_compromiso)).filter(
             Student.id.in_(student_ids)).scalar()
@@ -190,6 +180,8 @@ def get_docente_detalle(
     current_user: User = Depends(get_current_user),
 ):
     """Ficha detallada del docente. Fallback a Enrollment sin grades."""
+    umbrales_d = get_umbrales(db)
+    nota_aprob_d = umbrales_d["nota_aprobacion"]
     grades_q = db.query(Grade).filter(Grade.docente == docente_nombre)
     grades_q, _ = apply_periodo_filter(grades_q, periodo)
     grades = grades_q.all()
@@ -197,7 +189,7 @@ def get_docente_detalle(
     if not grades:
         # Fallback: enrollment
         eq = db.query(Enrollment).filter(Enrollment.docente == docente_nombre)
-        eq, _ = _enroll_periodo_filter(eq, periodo)
+        eq, _ = apply_periodo_filter(eq, periodo, column=Enrollment.periodo)
         enrolls = eq.all()
         if not enrolls:
             return {"docente": docente_nombre, "asignaturas_detalle": [], "total_estudiantes": 0}
@@ -304,7 +296,7 @@ def get_docente_detalle(
                     "nota_final": g.nota_final, "nivel_riesgo": s.nivel_riesgo,
                     "indice_compromiso": s.indice_compromiso, "dias_sin_acceso": s.dias_sin_acceso,
                 })
-        aprobados = sum(1 for n in notas if n >= 70)
+        aprobados = sum(1 for n in notas if n >= nota_aprob_d)
         total = len(notas) if notas else 1
         asignaturas_detalle.append({
             "asignatura": data["asignatura"], "carrera": data["carrera"], "nivel": data["nivel"],

@@ -4,7 +4,7 @@ Reemplaza la lista hardcodeada de códigos en los scripts de scraping.
 El admin actualiza esta tabla al inicio de cada semestre.
 """
 from datetime import datetime, timezone as tz
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, Float
 from sqlalchemy.sql import func
 from ..database import Base
 
@@ -57,6 +57,12 @@ class SemesterConfig(Base):
     # Calendario académico: fechas de entrega y paso de notas (JSON)
     # Formato: [{"fecha": "2026-04-19", "tipo": "entrega", "label": "Entrega act. 1"}, ...]
     calendario_academico = Column(String, nullable=True)
+
+    # Umbrales académicos configurables (con defaults sensatos)
+    umbral_nota_aprobacion = Column(Float, default=70.0)         # nota mínima para aprobar
+    umbral_dias_inactividad = Column(Integer, default=14)        # días sin acceso → inactivo
+    umbral_tareas_minimo = Column(Float, default=50.0)           # % mínimo de tareas entregadas
+    umbral_compromiso_minimo = Column(Float, default=0.4)        # índice compromiso mínimo
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

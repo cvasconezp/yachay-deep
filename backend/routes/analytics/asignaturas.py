@@ -9,7 +9,7 @@ sin métricas de rendimiento (inicio de semestre).
 from typing import Optional
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from sqlalchemy import func, case, and_, distinct, or_
+from sqlalchemy import func, case, and_, distinct
 from pydantic import BaseModel
 
 from ...database import get_db
@@ -17,7 +17,7 @@ from ...models import Student, Grade, Intervention, Enrollment
 from ...models.course_config import CourseConfig
 from ...auth.jwt import get_current_user
 from ...models.user import User
-from ._helpers import apply_periodo_filter
+from ._helpers import apply_periodo_filter, get_umbrales, build_risk_map, normalize_riesgo
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
@@ -48,20 +48,6 @@ class AsignaturaAnalytics(BaseModel):
         from_attributes = True
 
 
-def _enrollment_periodo_filter(query, periodo: Optional[str]):
-    """Aplica filtro de periodo a Enrollment (mismo dual-format que grades)."""
-    col = Enrollment.periodo
-    pf = periodo if periodo else "actual"
-    if pf == "actual":
-        return query, pf
-    elif pf != "todos":
-        if pf.startswith("P"):
-            raw = pf[1:]
-            query = query.filter(or_(col == pf, col == raw))
-        else:
-            query = query.filter(or_(col == pf, col == f"P{pf}"))
-    return query, pf
-
 
 def _get_enrollment_results(db: Session, periodo: Optional[str], carrera: Optional[str], nivel: Optional[int]):
     """Genera resultados de asignaturas desde Enrollment (sin calificaciones).
@@ -74,7 +60,7 @@ def _get_enrollment_results(db: Session, periodo: Optional[str], carrera: Option
         func.count(distinct(Enrollment.student_id)).label("total_estudiantes"),
         func.sum(case((Enrollment.numero_repitencias > 1, 1), else_=0)).label("total_repitentes"),
     )
-    query, _ = _enrollment_periodo_filter(query, periodo)
+    query, _ = apply_periodo_filter(query, periodo, column=Enrollment.periodo)
     query = query.group_by(Enrollment.asignatura, Enrollment.docente)
 
     if carrera:
@@ -90,12 +76,14 @@ def _get_enrollment_results(db: Session, periodo: Optional[str], carrera: Option
                  func.count(distinct(Student.id)).label("cnt"))
         .join(Student, Student.id == Enrollment.student_id)
     )
-    risk_q, _ = _enrollment_periodo_filter(risk_q, periodo)
+    risk_q, _ = apply_periodo_filter(risk_q, periodo, column=Enrollment.periodo)
     risk_batch = risk_q.group_by(Enrollment.asignatura, Enrollment.docente, Student.nivel_riesgo).all()
     risk_lookup = {}
     for rb in risk_batch:
         key = (rb.asignatura, rb.docente)
-        risk_lookup.setdefault(key, {})[rb.nivel_riesgo] = rb.cnt
+        nr = normalize_riesgo(rb.nivel_riesgo)
+        if nr:
+            risk_lookup.setdefault(key, {"Alto": 0, "Medio": 0, "Bajo": 0})[nr] += rb.cnt
 
     # Lookup codigo_avac + grupos from Enrollment per (asignatura, docente)
     enr_avac = {}
@@ -153,6 +141,8 @@ def get_asignaturas_analytics(
 ):
     """Vista agregada por asignatura. Framework §8.2.
     Si no hay grades para el periodo, usa Enrollment como fallback."""
+    umbrales = get_umbrales(db)
+    nota_aprob = umbrales["nota_aprobacion"]
     query = db.query(
         Grade.asignatura, Grade.docente,
         func.min(Grade.carrera).label("carrera"),
@@ -161,8 +151,8 @@ def get_asignaturas_analytics(
         func.avg(Grade.nota_final).label("promedio_general"),
         func.max(Grade.nota_final).label("nota_maxima"),
         func.min(Grade.nota_final).label("nota_minima"),
-        func.sum(case((Grade.nota_final >= 70, 1), else_=0)).label("aprobados"),
-        func.sum(case((and_(Grade.nota_final < 70, Grade.nota_final.isnot(None)), 1), else_=0)).label("reprobados"),
+        func.sum(case((Grade.nota_final >= nota_aprob, 1), else_=0)).label("aprobados"),
+        func.sum(case((and_(Grade.nota_final < nota_aprob, Grade.nota_final.isnot(None)), 1), else_=0)).label("reprobados"),
         func.sum(case((Grade.numero_repitencias > 1, 1), else_=0)).label("total_repitentes"),
     )
     query, _ = apply_periodo_filter(query, periodo)
@@ -196,7 +186,9 @@ def get_asignaturas_analytics(
     risk_lookup = {}
     for rb in risk_batch:
         key = (rb.asignatura, rb.docente)
-        risk_lookup.setdefault(key, {})[rb.nivel_riesgo] = rb.cnt
+        nr = normalize_riesgo(rb.nivel_riesgo)
+        if nr:
+            risk_lookup.setdefault(key, {"Alto": 0, "Medio": 0, "Bajo": 0})[nr] += rb.cnt
 
     # Batch: compromiso
     comp_batch_q = (
@@ -276,6 +268,8 @@ def get_asignatura_detalle(
 ):
     """Detalle de una asignatura: lista de estudiantes con indicadores.
     Si no hay grades, usa Enrollment como fallback."""
+    umbrales_det = get_umbrales(db)
+    nota_aprob_det = umbrales_det["nota_aprobacion"]
     query = db.query(Grade).filter(Grade.asignatura == asignatura)
     query, _ = apply_periodo_filter(query, periodo)
     if docente:
@@ -294,7 +288,7 @@ def get_asignatura_detalle(
     if not grades:
         # Fallback: enrollment data
         eq = db.query(Enrollment).filter(Enrollment.asignatura == asignatura)
-        eq, _ = _enrollment_periodo_filter(eq, periodo)
+        eq, _ = apply_periodo_filter(eq, periodo, column=Enrollment.periodo)
         if docente:
             eq = eq.filter(Enrollment.docente == docente)
         enrolls = eq.all()
@@ -424,7 +418,7 @@ def get_asignatura_detalle(
                 "intervenciones_asignatura": interv_counts.get(s.id, 0),
             })
         est_list.sort(key=lambda x: (x["nota_final"] or 0))
-        aprobados = sum(1 for n in notas if n >= 70)
+        aprobados = sum(1 for n in notas if n >= nota_aprob_det)
         total = len(notas) if notas else 1
         total_all += len(est_list)
         total_aprobados_all += aprobados

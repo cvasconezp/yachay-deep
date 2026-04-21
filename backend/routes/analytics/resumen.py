@@ -16,7 +16,7 @@ from ...models import Student, Grade, Intervention, Enrollment, AvacAccess
 from ...models.course_config import CourseConfig, SemesterConfig
 from ...auth.jwt import get_current_user
 from ...models.user import User
-from ._helpers import apply_periodo_filter
+from ._helpers import apply_periodo_filter, get_umbrales
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
@@ -128,6 +128,8 @@ def get_resumen_datos(
     """Resumen estadístico general y por carrera."""
     from sqlalchemy import or_
     today = date.today()
+    umbrales = get_umbrales(db)
+    nota_aprob = umbrales["nota_aprobacion"]
 
     _carrera_sids = None
     if carrera:
@@ -244,7 +246,7 @@ def get_resumen_datos(
     # Repitentes y reprobados desde grades
     for g in grades:
         if g.student_id in student_ids:
-            if g.nota_final is not None and g.nota_final < 70:
+            if g.nota_final is not None and g.nota_final < nota_aprob:
                 reprobados_ids.add(g.student_id)
             if g.numero_repitencias and g.numero_repitencias > 1:
                 repitentes_ids.add(g.student_id)
@@ -599,7 +601,7 @@ def get_comparativa(
         if notas_por_est:
             promedios = [sum(ns) / len(ns) for ns in notas_por_est.values()]
             promedio_calif = _safe_float(round(sum(promedios) / len(promedios), 1))
-            aprobados = sum(1 for ns in notas_por_est.values() if (sum(ns) / len(ns)) >= 70)
+            aprobados = sum(1 for ns in notas_por_est.values() if (sum(ns) / len(ns)) >= nota_aprob)
             tasa_aprob = _safe_float(round(aprobados / len(notas_por_est) * 100, 1))
 
         riesgo_alto = db.query(func.count(Student.id)).filter(
