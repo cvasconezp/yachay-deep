@@ -395,26 +395,98 @@ def generate_alerts(
         for cc in db.query(CourseConfig).filter(CourseConfig.codigo_avac.in_(all_codes)).all():
             asignatura_map[cc.codigo_avac] = cc.asignatura
 
-    created = 0
+    # ========== PRE-CARGA BATCH para evitar N+1 queries ==========
+    from ..models import TaskSubmission
+
+    periodo_cond = or_(
+        Enrollment.periodo == periodo_variants[0],
+        Enrollment.periodo == periodo_variants[1],
+    )
+    grade_periodo_cond = or_(
+        Grade.periodo == periodo_variants[0],
+        Grade.periodo == periodo_variants[1],
+    )
+
+    # 1) Nota cero: student_id → primera asignatura con nota 0
+    nota_cero_map = {}
+    if hay_notas_esperadas:
+        for g in db.query(Grade).filter(
+            Grade.nota_final == 0,
+            grade_periodo_cond,
+        ).all():
+            if g.student_id not in nota_cero_map:
+                nota_cero_map[g.student_id] = g.asignatura
+
+    # 2) Tareas: set de student_ids que tienen tareas del periodo
+    task_sids = set(r[0] for r in db.query(TaskSubmission.student_id).filter(
+        or_(TaskSubmission.periodo == periodo_variants[0],
+            TaskSubmission.periodo == periodo_variants[1]),
+    ).distinct().all())
+
+    # 3) Segunda matrícula (enrollments): student_id → count de asignaturas con repitencias > 1
+    rep_enroll_counts = defaultdict(int)
+    for sid, in db.query(Enrollment.student_id).filter(
+        Enrollment.numero_repitencias > 1,
+        Enrollment.es_tercera_matricula == False,
+        periodo_cond,
+    ).all():
+        rep_enroll_counts[sid] += 1
+
+    # 4) Segunda matrícula (grades fallback): student_id → count
+    rep_grade_counts = defaultdict(int)
+    for sid, in db.query(Grade.student_id).filter(
+        Grade.numero_repitencias > 1,
+        grade_periodo_cond,
+    ).all():
+        rep_grade_counts[sid] += 1
+
+    # 5) Tercera matrícula (enrollments): student_id → count
+    tm_enroll_counts = defaultdict(int)
+    for sid, in db.query(Enrollment.student_id).filter(
+        Enrollment.es_tercera_matricula == True,
+    ).all():
+        tm_enroll_counts[sid] += 1
+
+    # 6) ALL condicionados y repitentes (para el segundo pase)
+    all_tm_sids = set(r[0] for r in db.query(Student.id).filter(
+        Student.es_tercera_matricula == True,
+    ).all())
+    all_rep_sids = set(rep_enroll_counts.keys()) | set(rep_grade_counts.keys())
+
+    # 7) Dedup: alertas leídas recientes (últimos 7 días) que sobrevivieron la limpieza
     threshold_date = now - timedelta(days=7)
+    existing_alerts = set()
+    for sid, tipo, cc in db.query(
+        AlertEvent.student_id, AlertEvent.tipo, AlertEvent.codigo_curso
+    ).filter(AlertEvent.created_at >= threshold_date).all():
+        existing_alerts.add((sid, tipo, cc))
 
-    def _add_alert(student_id, tipo, severidad, mensaje, codigo_curso=None):
+    created = 0
+
+    def _add_alert_fast(student_id, tipo, severidad, mensaje, codigo_curso=None):
+        """Agrega alerta verificando dedup batch contra alertas leídas recientes."""
         nonlocal created
-        q = db.query(AlertEvent).filter(
-            AlertEvent.student_id == student_id,
-            AlertEvent.tipo == tipo,
-            AlertEvent.created_at >= threshold_date,
-        )
-        if codigo_curso:
-            q = q.filter(AlertEvent.codigo_curso == codigo_curso)
-        if not q.first():
-            db.add(AlertEvent(
-                student_id=student_id, tipo=tipo, mensaje=mensaje,
-                severidad=severidad, codigo_curso=codigo_curso,
-            ))
-            created += 1
+        key = (student_id, tipo, codigo_curso)
+        if key in existing_alerts:
+            return
+        existing_alerts.add(key)  # evitar duplicados dentro de esta misma generación
+        db.add(AlertEvent(
+            student_id=student_id, tipo=tipo, mensaje=mensaje,
+            severidad=severidad, codigo_curso=codigo_curso,
+        ))
+        created += 1
 
-    for student in students:
+    # ========== Build set of all student_ids to process ==========
+    processed_ids = {s.id for s in students}
+    # Add condicionados and repitentes not in main loop
+    extra_sids = (all_tm_sids | all_rep_sids) - processed_ids
+
+    all_students = list(students)
+    if extra_sids:
+        extra_students = db.query(Student).filter(Student.id.in_(extra_sids)).all()
+        all_students.extend(extra_students)
+
+    for student in all_students:
         # ========== Inactividad POR ASIGNATURA (per-period AvacAccess) ==========
         cursos = avac_por_curso.get(student.id, [])
         for codigo_curso, dias in cursos:
@@ -423,128 +495,50 @@ def generate_alerts(
             asig = asignatura_map.get(codigo_curso, codigo_curso)
 
             if dias > 21:
-                _add_alert(student.id, "inactividad", "critico",
-                           f"Inactivo {int(dias)} días en {asig} (CRÍTICO)",
-                           codigo_curso=codigo_curso)
+                _add_alert_fast(student.id, "inactividad", "critico",
+                                f"Inactivo {int(dias)} días en {asig} (CRÍTICO)",
+                                codigo_curso=codigo_curso)
             elif dias > 14:
-                _add_alert(student.id, "inactividad", "alto",
-                           f"Inactivo {int(dias)} días en {asig}",
-                           codigo_curso=codigo_curso)
+                _add_alert_fast(student.id, "inactividad", "alto",
+                                f"Inactivo {int(dias)} días en {asig}",
+                                codigo_curso=codigo_curso)
 
         # ========== Compromiso Bajo ==========
         if student.indice_compromiso is not None:
             if student.indice_compromiso < 0.3:
-                _add_alert(student.id, "compromiso_bajo", "critico",
-                           f"Índice de compromiso muy bajo: {student.indice_compromiso:.2f}")
+                _add_alert_fast(student.id, "compromiso_bajo", "critico",
+                                f"Índice de compromiso muy bajo: {student.indice_compromiso:.2f}")
             elif student.indice_compromiso < 0.55:
-                _add_alert(student.id, "compromiso_bajo", "alto",
-                           f"Índice de compromiso bajo: {student.indice_compromiso:.2f}")
+                _add_alert_fast(student.id, "compromiso_bajo", "alto",
+                                f"Índice de compromiso bajo: {student.indice_compromiso:.2f}")
 
-        # ========== Nota Cero (solo si ya se esperan notas según calendario) ==========
-        if hay_notas_esperadas:
-            nota_cero = db.query(Grade).filter(
-                Grade.student_id == student.id,
-                Grade.nota_final == 0,
-                or_(Grade.periodo == periodo_variants[0], Grade.periodo == periodo_variants[1]),
-            ).first()
+        # ========== Nota Cero ==========
+        if hay_notas_esperadas and student.id in nota_cero_map:
+            _add_alert_fast(student.id, "nota_cero", "critico",
+                            f"Calificación de 0 en {nota_cero_map[student.id]}")
 
-            if nota_cero:
-                _add_alert(student.id, "nota_cero", "critico",
-                           f"Calificación de 0 en {nota_cero.asignatura}")
+        # ========== Tareas Bajas ==========
+        if (student.porcentaje_tareas is not None
+                and student.porcentaje_tareas < 40
+                and student.id in task_sids):
+            _add_alert_fast(student.id, "tareas_bajas", "alto",
+                            f"Porcentaje de tareas entregadas muy bajo: {student.porcentaje_tareas:.1f}%")
 
-        # ========== Tareas Bajas (solo si hay datos de tareas del periodo) ==========
-        if student.porcentaje_tareas is not None and student.porcentaje_tareas < 40:
-            # Solo alertar si hay registros de tareas del periodo actual
-            from ..models import TaskSubmission
-            has_tasks = db.query(TaskSubmission.id).filter(
-                TaskSubmission.student_id == student.id,
-                or_(TaskSubmission.periodo == periodo_variants[0], TaskSubmission.periodo == periodo_variants[1]),
-            ).limit(1).first()
-            if has_tasks:
-                _add_alert(student.id, "tareas_bajas", "alto",
-                           f"Porcentaje de tareas entregadas muy bajo: {student.porcentaje_tareas:.1f}%")
-
-        # ========== Segunda Matrícula (repitentes: numero_repitencias > 1, no 3ra matrícula) ==========
+        # ========== Segunda Matrícula ==========
         if not student.es_tercera_matricula:
-            n_asig_2m = db.query(Enrollment).filter(
-                Enrollment.student_id == student.id,
-                Enrollment.numero_repitencias > 1,
-                Enrollment.es_tercera_matricula == False,
-                or_(Enrollment.periodo == periodo_variants[0], Enrollment.periodo == periodo_variants[1]),
-            ).count()
+            n_asig_2m = rep_enroll_counts.get(student.id, 0)
             if n_asig_2m == 0:
-                # Fallback: check grades
-                n_asig_2m = db.query(Grade).filter(
-                    Grade.student_id == student.id,
-                    Grade.numero_repitencias > 1,
-                    or_(Grade.periodo == periodo_variants[0], Grade.periodo == periodo_variants[1]),
-                ).count()
+                n_asig_2m = rep_grade_counts.get(student.id, 0)
             if n_asig_2m > 0:
-                _add_alert(student.id, "segunda_matricula", "alto",
-                           f"Estudiante con {n_asig_2m} asignatura(s) en segunda matrícula")
+                _add_alert_fast(student.id, "segunda_matricula", "alto",
+                                f"Estudiante con {n_asig_2m} asignatura(s) en segunda matrícula")
 
-        # ========== Tercera Matrícula (per-student flag) ==========
+        # ========== Tercera Matrícula ==========
         if student.es_tercera_matricula:
-            n_asig_tm = db.query(Enrollment).filter(
-                Enrollment.student_id == student.id,
-                Enrollment.es_tercera_matricula == True,
-            ).count()
+            n_asig_tm = tm_enroll_counts.get(student.id, 0)
             if n_asig_tm > 0:
-                _add_alert(student.id, "tercera_matricula", "critico",
-                           f"Estudiante con {n_asig_tm} asignatura(s) en tercera matrícula (oyente condicionado)")
-
-    # ========== Pase adicional: condicionados y repitentes que no están en el loop principal ==========
-    # Algunos estudiantes con tercera matrícula o repitencias pueden no tener grades/avac
-    # pero sí enrollments. Asegurarnos de generar alertas para todos ellos.
-    processed_ids = {s.id for s in students}
-
-    # Condicionados no procesados
-    tm_students = db.query(Student).filter(
-        Student.es_tercera_matricula == True,
-        ~Student.id.in_(processed_ids),
-    ).all()
-    for student in tm_students:
-        n_asig_tm = db.query(Enrollment).filter(
-            Enrollment.student_id == student.id,
-            Enrollment.es_tercera_matricula == True,
-        ).count()
-        if n_asig_tm > 0:
-            _add_alert(student.id, "tercera_matricula", "critico",
-                       f"Estudiante con {n_asig_tm} asignatura(s) en tercera matrícula (oyente condicionado)")
-
-    # Repitentes (2da matrícula) no procesados
-    rep_enroll_sids = set(r[0] for r in db.query(Enrollment.student_id).filter(
-        Enrollment.numero_repitencias > 1,
-        Enrollment.es_tercera_matricula == False,
-        or_(Enrollment.periodo == periodo_variants[0], Enrollment.periodo == periodo_variants[1]),
-    ).distinct().all())
-    rep_grade_sids = set(r[0] for r in db.query(Grade.student_id).filter(
-        Grade.numero_repitencias > 1,
-        or_(Grade.periodo == periodo_variants[0], Grade.periodo == periodo_variants[1]),
-    ).distinct().all())
-    all_rep_sids = (rep_enroll_sids | rep_grade_sids) - processed_ids
-
-    if all_rep_sids:
-        rep_students = db.query(Student).filter(
-            Student.id.in_(all_rep_sids),
-            Student.es_tercera_matricula == False,
-        ).all()
-        for student in rep_students:
-            n_asig_2m = db.query(Enrollment).filter(
-                Enrollment.student_id == student.id,
-                Enrollment.numero_repitencias > 1,
-                Enrollment.es_tercera_matricula == False,
-                or_(Enrollment.periodo == periodo_variants[0], Enrollment.periodo == periodo_variants[1]),
-            ).count()
-            if n_asig_2m == 0:
-                n_asig_2m = db.query(Grade).filter(
-                    Grade.student_id == student.id,
-                    Grade.numero_repitencias > 1,
-                    or_(Grade.periodo == periodo_variants[0], Grade.periodo == periodo_variants[1]),
-                ).count()
-            if n_asig_2m > 0:
-                _add_alert(student.id, "segunda_matricula", "alto",
-                           f"Estudiante con {n_asig_2m} asignatura(s) en segunda matrícula")
+                _add_alert_fast(student.id, "tercera_matricula", "critico",
+                                f"Estudiante con {n_asig_tm} asignatura(s) en tercera matrícula (oyente condicionado)")
 
     db.commit()
 
