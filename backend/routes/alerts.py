@@ -95,6 +95,7 @@ class AlertCountResponse(BaseModel):
     critico: int = 0
     alto: int = 0
     medio: int = 0
+    por_tipo: dict = {}
 
 
 @router.get("/pending", response_model=list[AlertEventResponse])
@@ -201,11 +202,15 @@ def get_alert_count(
     """Retorna conteo de alertas sin leer por severidad.
     Solo cuenta alertas de estudiantes del periodo activo."""
     if not _active_period_has_data(db):
-        return AlertCountResponse(total=0, critico=0, alto=0, medio=0)
+        return AlertCountResponse(total=0, critico=0, alto=0, medio=0, por_tipo={})
 
     period_sids = _active_period_student_ids(db)
 
     unread = AlertEvent.leido == False
+
+    base_q = db.query(AlertEvent).filter(unread)
+    if period_sids:
+        base_q = base_q.filter(AlertEvent.student_id.in_(period_sids))
 
     def _count(extra_filter=None):
         q = db.query(func.count(AlertEvent.id)).filter(unread)
@@ -220,11 +225,22 @@ def get_alert_count(
     alto = _count(AlertEvent.severidad == "alto")
     medio = _count(AlertEvent.severidad == "medio")
 
+    # Per-type counts
+    tipo_rows = (
+        db.query(AlertEvent.tipo, func.count(AlertEvent.id))
+        .filter(unread)
+    )
+    if period_sids:
+        tipo_rows = tipo_rows.filter(AlertEvent.student_id.in_(period_sids))
+    tipo_rows = tipo_rows.group_by(AlertEvent.tipo).all()
+    por_tipo = {tipo: cnt for tipo, cnt in tipo_rows}
+
     return AlertCountResponse(
         total=total,
         critico=critico,
         alto=alto,
         medio=medio,
+        por_tipo=por_tipo,
     )
 
 
@@ -487,21 +503,36 @@ def generate_alerts(
         all_students.extend(extra_students)
 
     for student in all_students:
-        # ========== Inactividad POR ASIGNATURA (per-period AvacAccess) ==========
+        # ========== Inactividad: UNA alerta por estudiante (peor curso) ==========
         cursos = avac_por_curso.get(student.id, [])
+        worst_dias = 0
+        worst_codigo = None
+        inactive_courses = []
         for codigo_curso, dias in cursos:
             if max_dias_periodo is not None:
                 dias = min(dias, max_dias_periodo)
-            asig = asignatura_map.get(codigo_curso, codigo_curso)
+            if dias > 14:
+                asig = asignatura_map.get(codigo_curso, codigo_curso)
+                inactive_courses.append((asig, int(dias)))
+                if dias > worst_dias:
+                    worst_dias = dias
+                    worst_codigo = codigo_curso
 
-            if dias > 21:
+        if worst_dias > 14 and inactive_courses:
+            # Consolidar: una sola alerta con detalle de todas las materias inactivas
+            n_materias = len(inactive_courses)
+            worst_asig = asignatura_map.get(worst_codigo, worst_codigo)
+            if n_materias == 1:
+                msg = f"Inactivo {int(worst_dias)} días en {worst_asig}"
+            else:
+                msg = f"Inactivo en {n_materias} materias (peor: {int(worst_dias)} días en {worst_asig})"
+
+            if worst_dias > 21:
                 _add_alert_fast(student.id, "inactividad", "critico",
-                                f"Inactivo {int(dias)} días en {asig} (CRÍTICO)",
-                                codigo_curso=codigo_curso)
-            elif dias > 14:
+                                msg + " (CRÍTICO)", codigo_curso=worst_codigo)
+            else:
                 _add_alert_fast(student.id, "inactividad", "alto",
-                                f"Inactivo {int(dias)} días en {asig}",
-                                codigo_curso=codigo_curso)
+                                msg, codigo_curso=worst_codigo)
 
         # ========== Compromiso Bajo ==========
         if student.indice_compromiso is not None:

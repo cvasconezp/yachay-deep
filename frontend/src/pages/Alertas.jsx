@@ -62,6 +62,7 @@ function formatDate(isoStr) {
 
 export default function Alertas() {
   const [alerts, setAlerts] = useState([]);
+  const [alertCounts, setAlertCounts] = useState({ total: 0, critico: 0, alto: 0, medio: 0, por_tipo: {} });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -99,12 +100,16 @@ export default function Alertas() {
     setLoading(true);
     setError("");
     try {
-      const params = {};
+      const params = { limit: 1000 };
       if (filterCarrera) params.carrera = filterCarrera;
       if (filterAsignatura) params.asignatura = filterAsignatura;
       if (filterPeriodo) params.periodo = filterPeriodo;
-      const data = await api.getAlertsPending(params);
+      const [data, counts] = await Promise.all([
+        api.getAlertsPending(params),
+        api.getAlertCount(),
+      ]);
       setAlerts(data || []);
+      setAlertCounts(counts || { total: 0, critico: 0, alto: 0, medio: 0, por_tipo: {} });
       setSelectedIds(new Set());
     } catch (e) {
       setError("No se pudieron cargar las alertas.");
@@ -185,11 +190,18 @@ export default function Alertas() {
   });
   const sortedSeverities = Object.keys(groupedAlerts).sort((a, b) => (severityOrder[a] ?? 9) - (severityOrder[b] ?? 9));
 
-  // Summary counts
-  const counts = { critico: 0, alto: 0, medio: 0 };
-  alerts.forEach(a => { counts[a.severidad] = (counts[a.severidad] || 0) + 1; });
-  const tiposCounts = {};
-  alerts.forEach(a => { tiposCounts[a.tipo] = (tiposCounts[a.tipo] || 0) + 1; });
+  // Summary counts — use backend totals (accurate, not limited by fetch)
+  const counts = {
+    critico: alertCounts.critico || 0,
+    alto: alertCounts.alto || 0,
+    medio: alertCounts.medio || 0,
+  };
+  const totalAlerts = alertCounts.total || alerts.length;
+  const tiposCounts = alertCounts.por_tipo || {};
+  // Fallback: if por_tipo is empty, count from fetched alerts
+  if (Object.keys(tiposCounts).length === 0) {
+    alerts.forEach(a => { tiposCounts[a.tipo] = (tiposCounts[a.tipo] || 0) + 1; });
+  }
 
   // carreras loaded from /dashboard/carreras on mount (all system carreras)
 
@@ -284,7 +296,7 @@ export default function Alertas() {
             title={filterSeverity !== "all" ? "Clic para quitar filtro" : ""}
           >
             <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Total Pendientes</div>
-            <div className="text-2xl font-bold text-gray-900 mt-1">{alerts.length}</div>
+            <div className="text-2xl font-bold text-gray-900 mt-1">{totalAlerts}</div>
             {filterSeverity !== "all" && <div className="text-[9px] text-gray-400 mt-1">Clic para ver todas</div>}
           </div>
           <div
@@ -396,14 +408,17 @@ export default function Alertas() {
             className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="all">Todos los tipos</option>
-            {Object.entries(tiposCounts).map(([tipo, count]) => (
+            {Object.entries(tiposCounts)
+              .sort(([, a], [, b]) => b - a)
+              .map(([tipo, count]) => (
               <option key={tipo} value={tipo}>{TIPO_LABELS[tipo] || tipo} ({count})</option>
             ))}
           </select>
         </div>
 
         <div className="ml-auto text-sm text-gray-500">
-          {filteredAlerts.length} de {alerts.length} alertas
+          {filteredAlerts.length} de {totalAlerts} alertas
+          {alerts.length < totalAlerts && <span className="text-xs text-gray-400 ml-1">(mostrando {alerts.length})</span>}
         </div>
       </div>
 
