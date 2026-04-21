@@ -426,6 +426,46 @@ class TestLoadTercerasMatriculas:
         assert e.tipo_aprobacion == "CONDICIONADO"
         assert e.pagado == "SI"
 
+    def test_resolves_codigo_grupo_from_existing(self, db, tmp_path):
+        """When report has no COD_GRUPO, resolve from existing enrollment."""
+        import pandas as pd
+        from backend.etl.terceras_matriculas import load_terceras_matriculas
+
+        s = Student(id=1, nombre="TEST", cedula="1111111111", carrera="CONTABILIDAD")
+        db.add(s)
+        # Pre-existing enrollment from previous period with real codigo_grupo
+        e_old = Enrollment(
+            student_id=1, codigo_grupo="405860", codigo_asignatura="MAT-101",
+            asignatura="MATEMATICAS", periodo="67",
+        )
+        db.add(e_old)
+        db.commit()
+
+        # Report has NO COD_GRUPO — should resolve from existing enrollment
+        df = pd.DataFrame([{
+            "PERIODO": 68,
+            "IDENTIFICACION_EST": "1111111111",
+            "ESTUDIANTE": "TEST",
+            "COD_ASIGNATURA": "MAT-101",
+            "ASIGNATURA": "MATEMATICAS",
+            "ESTADO_ACTUAL": "Aprobado",
+            "CORREO_ESTUDIANTE": "test@test.com",
+        }])
+        df.to_excel(tmp_path / "reporte.xlsx", index=False)
+
+        result = load_terceras_matriculas(db, str(tmp_path))
+        assert result["enrollments_created"] == 1
+
+        new_enr = db.query(Enrollment).filter(
+            Enrollment.student_id == 1,
+            Enrollment.periodo == "68",
+            Enrollment.es_tercera_matricula == True,
+        ).first()
+        assert new_enr is not None
+        # Should have resolved to "405860" from the old enrollment, not "3M-MAT-101"
+        assert new_enr.codigo_grupo == "405860"
+        assert not new_enr.codigo_grupo.startswith("3M-")
+
     def test_generates_alerts(self, db, tmp_path):
         import pandas as pd
         from backend.etl.terceras_matriculas import load_terceras_matriculas

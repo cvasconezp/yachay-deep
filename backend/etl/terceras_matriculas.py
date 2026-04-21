@@ -191,6 +191,8 @@ def load_terceras_matriculas(db: Session, carpeta: str) -> dict:
             enrollment.es_tercera_matricula = True
             enrollment.tipo_aprobacion = tipo_aprobacion
             enrollment.estado_solicitud = estado
+            if cod_grupo and not enrollment.codigo_grupo:
+                enrollment.codigo_grupo = cod_grupo
             if docente and not enrollment.docente:
                 enrollment.docente = docente
             if correo_docente and not enrollment.correo_docente:
@@ -199,10 +201,23 @@ def load_terceras_matriculas(db: Session, carpeta: str) -> dict:
                 enrollment.pagado = pago
             stats["enrollments_updated"] += 1
         else:
+            # Resolver codigo_grupo: usar del reporte, o buscar en enrollments
+            # existentes del mismo estudiante+asignatura (cualquier periodo)
+            resolved_grupo = cod_grupo
+            if not resolved_grupo and cod_asignatura:
+                existing = db.query(Enrollment.codigo_grupo).filter(
+                    Enrollment.student_id == student.id,
+                    Enrollment.codigo_asignatura == cod_asignatura,
+                    Enrollment.codigo_grupo.isnot(None),
+                    ~Enrollment.codigo_grupo.startswith("3M-"),
+                ).first()
+                if existing and existing[0]:
+                    resolved_grupo = existing[0]
+
             # Crear enrollment nuevo
             new_enrollment = Enrollment(
                 student_id=student.id,
-                codigo_grupo=cod_grupo or f"3M-{cod_asignatura or 'SIN'}",
+                codigo_grupo=resolved_grupo or f"3M-{cod_asignatura or 'SIN'}",
                 codigo_asignatura=cod_asignatura or None,
                 asignatura=asignatura or "Sin asignatura",
                 carrera=carrera or student.carrera,
