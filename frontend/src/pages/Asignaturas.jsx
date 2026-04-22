@@ -323,6 +323,10 @@ export default function Asignaturas() {
                 const grupoLabel = grp.grupo ? `Grupo ${grp.grupo}` : "Sin grupo";
                 const exportFilename = `${detalle.asignatura}_${grupoLabel}`.replace(/\s+/g, "_");
                 const exportCols = [
+                  { key: "carrera", label: "Carrera" },
+                  { key: "grupo", label: "Grupo" },
+                  { key: "codigo_grupo", label: "Código Grupo" },
+                  { key: "docente", label: "Docente" },
                   { key: "nombre", label: "Estudiante" },
                   { key: "correo_institucional", label: "Correo" },
                   { key: "nota_final", label: "Nota Final" },
@@ -331,6 +335,13 @@ export default function Asignaturas() {
                   { key: "dias_sin_acceso", label: "Días sin acceso" },
                   { key: "numero_repitencias", label: "Repitencias" },
                 ];
+                const exportData = (grp.estudiantes || []).map(est => ({
+                  ...est,
+                  carrera: detalle.carrera || "",
+                  grupo: grp.grupo || "",
+                  codigo_grupo: grp.codigo_avac || "",
+                  docente: detalle.docente || "",
+                }));
                 return (
                 <div key={idx} className="border border-gray-200 rounded-xl overflow-hidden">
                   <div className="bg-gray-50 px-4 py-3 flex items-center justify-between flex-wrap gap-2">
@@ -355,7 +366,7 @@ export default function Asignaturas() {
                       <span>Reprobados: <b className="text-red-600">{grp.reprobados}</b></span>
                       {grp.riesgo_alto > 0 && <span>Riesgo alto: <b className="text-red-600">{grp.riesgo_alto}</b></span>}
                       <ExportExcelButton
-                        data={grp.estudiantes || []}
+                        data={exportData}
                         columns={exportCols}
                         filename={exportFilename}
                         label="Excel"
