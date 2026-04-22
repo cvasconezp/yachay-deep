@@ -145,27 +145,6 @@ const TECH = [
 
 const PLANS = [
   {
-    name: "Básico",
-    desc: "Visibilidad y alertas para empezar",
-    totalSem: "3,000",
-    totalAnn: "4,800",
-    perStudent: "$3/estudiante activo",
-    periodLabel: "/semestre",
-    periodLabelAnn: "/año",
-    features: [
-      { text: "Dashboard de riesgo en tiempo real", ok: true },
-      { text: "Alertas académicas configurables", ok: true },
-      { text: "Búsqueda y fichas estudiantiles básicas", ok: true },
-      { text: "2 usuarios administradores", ok: true },
-      { text: "Soporte por email", ok: true },
-      { text: "Predicciones ML e IA", ok: false },
-      { text: "Intervenciones y seguimiento", ok: false },
-      { text: "Exportaciones y reportes", ok: false },
-    ],
-    cta: "Comenzar",
-    featured: false,
-  },
-  {
     name: "Profesional",
     desc: "IA predictiva + gestión de intervenciones",
     totalSem: "5,000",
@@ -174,7 +153,8 @@ const PLANS = [
     periodLabel: "/semestre",
     periodLabelAnn: "/año",
     features: [
-      { text: "Todo del plan Básico", ok: true },
+      { text: "Dashboard de riesgo en tiempo real", ok: true },
+      { text: "Alertas académicas configurables", ok: true },
       { text: "Predicciones ML con 87%+ precisión", ok: true },
       { text: "Simulaciones What-If y contrafactuales", ok: true },
       { text: "Gestión de intervenciones + impacto", ok: true },
@@ -213,9 +193,9 @@ const FAQS = [
   { q: "¿Cuánto toma la implementación?", a: "El proceso completo toma entre 2 y 4 semanas, dependiendo de la disponibilidad de datos históricos y la complejidad de integración con tu LMS. Incluye configuración, calibración de modelos ML, capacitación del equipo y acompañamiento en go-live." },
   { q: "¿Funciona con mi Moodle actual?", a: "Sí. Yachay Deep se integra con cualquier instalación de Moodle mediante scraping automatizado de datos de actividad. No requiere plugins adicionales ni cambios en tu Moodle. También soportamos importación por Excel/CSV para otros sistemas." },
   { q: "¿Qué precisión tienen las predicciones?", a: "Nuestros modelos alcanzan un 87%+ de precisión en predicción de aprobación/deserción, entrenados con datos reales de tu institución. La precisión mejora conforme acumulamos más datos históricos." },
-  { q: "¿Puedo probar antes de comprar?", a: "Primero agendamos una demostración donde te mostramos la plataforma en acción. Si hay interés, activamos un piloto gratuito de 30 días con el plan Profesional usando tus propios datos, incluyendo onboarding completo y soporte prioritario. Si dentro de los primeros 60 días de suscripción paga no estás satisfecho, reembolsamos el 100%." },
+  { q: "¿Puedo probar antes de comprar?", a: "Primero agendamos una demostración donde te mostramos la plataforma en acción. Si hay interés, activamos un piloto gratuito de 30 días con el plan Profesional usando tus propios datos, incluyendo onboarding completo y soporte prioritario. Sin compromiso de compra." },
   { q: "¿Mis datos están seguros?", a: "Absolutamente. Usamos cifrado TLS 1.3 en tránsito y AES-256 en reposo. Autenticación con cookies HttpOnly, control de acceso por roles (RBAC), y cumplimiento con la Ley Orgánica de Protección de Datos Personales de Ecuador." },
-  { q: "¿Cuántos estudiantes se necesitan como mínimo?", a: "Nuestros planes están diseñados para instituciones con 500+ estudiantes activos. El modelo de ML requiere un mínimo de datos históricos para funcionar con precisión, pero podemos comenzar con el plan Básico desde el primer día." },
+  { q: "¿Cuántos estudiantes se necesitan como mínimo?", a: "Nuestros planes están diseñados para instituciones con 500+ estudiantes activos. El modelo de ML requiere un mínimo de datos históricos para funcionar con precisión. Durante el piloto gratuito evaluamos la viabilidad con tus datos reales." },
   { q: "¿Cómo se calcula el precio de mi institución?", a: "El precio se calcula multiplicando la tarifa del plan por el número de estudiantes activos. Cada plan tiene un mínimo semestral que cubre los costos base de infraestructura y soporte: si el cálculo es menor al mínimo, se cobra el mínimo. Por ejemplo, un instituto con 500 estudiantes en el plan Profesional ($6/est): 500 × $6 = $3,000, pero el mínimo es $5,000, así que paga $5,000/semestre. Una universidad con 3,000 estudiantes en Profesional: 3,000 × $6 = $18,000/semestre. El plan Enterprise incluye tarifa degresiva: $10/est para los primeros 5,000 y $5/est a partir del 5,001. La contratación anual tiene un 20% de descuento." },
 ];
 
