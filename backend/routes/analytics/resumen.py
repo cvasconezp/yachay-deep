@@ -573,6 +573,8 @@ def get_comparativa(
     current_user: User = Depends(get_current_user),
 ):
     """KPIs por período para gráficos de tendencia."""
+    umbrales = get_umbrales(db)
+    nota_aprob = umbrales["nota_aprobacion"]
     periodos_raw = db.query(Grade.periodo).distinct().order_by(Grade.periodo).all()
     periodos = [p for (p,) in periodos_raw if p is not None]
     periodos.append("actual")

@@ -227,7 +227,7 @@ function PracticasTab({ data: practicasData, loading, filtros, setFiltros, expan
   const treemapData = (pd.por_distrito || []).map((d, i) => ({
     name: d.distrito,
     size: d.total,
-    fill: PBI.palette[i % PBI.treemap.length],
+    fill: PBI.palette[i % PBI.palette.length],
   }));
 
   // Nivel data for horizontal bars (cleaned names)
