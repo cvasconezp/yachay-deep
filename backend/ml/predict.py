@@ -266,6 +266,89 @@ class Predictor:
             "timestamp": now.isoformat(),
         }
 
+    @staticmethod
+    def _generate_narrative(feature: str, valor: float, media: float, direccion: str, target: str) -> str:
+        """Genera una explicación contextual en español para un factor XAI."""
+        tipo = "abandono" if target == "desercion" else "reprobación"
+        sube = direccion == "incrementa"
+
+        # Comparación con la media
+        if media and media != 0:
+            diff_pct = abs(valor - media) / abs(media) * 100
+        else:
+            diff_pct = 0
+        arriba = valor > media
+        cerca = diff_pct < 10
+
+        narratives = {
+            "promedio_notas": (
+                f"Su promedio de {valor} está por debajo de la media ({media}). Históricamente, promedios bajos se asocian con mayor riesgo de {tipo}."
+                if sube else
+                f"Su promedio de {valor} es superior a la media ({media}), lo cual es un indicador protector contra {tipo}."
+            ),
+            "num_asignaturas": (
+                f"Cursa {int(valor)} materias (media: {media}). Tener menos materias que el promedio puede indicar carga reducida o posible retiro parcial."
+                if valor < media else
+                f"Cursa {int(valor)} materias (media: {media}). Una carga académica alta puede generar sobrecarga, pero también indica compromiso con la carrera."
+                if sube else
+                f"Cursa {int(valor)} materias, cerca del promedio ({media}). Su carga académica es adecuada."
+            ),
+            "num_reprobadas": (
+                f"Tiene {int(valor)} materia(s) reprobada(s) (media: {media}). Las reprobaciones previas son un predictor importante de {tipo}."
+                if valor > 0 else
+                f"No tiene materias reprobadas (media del grupo: {media}). Esto reduce significativamente su riesgo de {tipo}."
+            ),
+            "pct_reprobadas": (
+                f"Ha reprobado el {valor}% de sus materias (media: {media}%). Un porcentaje alto de reprobación incrementa el riesgo de {tipo}."
+                if sube else
+                f"Su porcentaje de reprobación ({valor}%) está por debajo de la media ({media}%), lo cual es favorable."
+            ),
+            "nota_min": (
+                f"Su nota más baja es {valor} (media: {media}). Una nota mínima baja puede indicar dificultad severa en alguna materia."
+                if sube else
+                f"Su nota más baja es {valor}, por encima de la media ({media}). No presenta materias con calificación crítica."
+            ),
+            "nota_max": (
+                f"Su nota más alta es {valor} (media: {media}). Aunque parece positivo, el modelo detecta que notas altas aisladas combinadas con otros indicadores débiles pueden asociarse con {tipo}."
+                if sube else
+                f"Su nota más alta es {valor} (media: {media}). Un buen rendimiento en al menos una materia es un factor protector."
+            ),
+            "std_notas": (
+                f"La variación entre sus notas es de {valor} (media: {media}). Alta dispersión indica rendimiento muy desigual entre materias, lo cual incrementa el riesgo."
+                if sube else
+                f"La variación entre sus notas ({valor}) es baja comparada con la media ({media}). Un rendimiento uniforme es un indicador positivo."
+            ),
+            "num_zeros": (
+                f"Tiene {int(valor)} materia(s) con nota cero (media: {media}). Las notas cero suelen indicar abandono de materia, un predictor fuerte de {tipo}."
+                if valor > 0 else
+                f"No tiene materias con nota cero (media: {media}). Esto indica que participa en todas sus asignaturas."
+            ),
+            "dias_sin_acceso": (
+                f"Lleva {int(valor)} día(s) sin entrar al AVAC (media: {media}). La inactividad prolongada es uno de los indicadores más fuertes de riesgo de {tipo}."
+                if sube else
+                f"Su último acceso al AVAC fue hace {int(valor)} día(s) (media: {media}). Se mantiene activo/a en la plataforma."
+            ),
+            "porcentaje_tareas": (
+                f"Ha entregado el {valor}% de sus tareas (media: {media}%). Un bajo porcentaje de entregas incrementa el riesgo de {tipo}."
+                if sube else
+                f"Ha entregado el {valor}% de sus tareas, por encima de la media ({media}%). Cumple con sus actividades académicas."
+            ),
+            "indice_compromiso": (
+                f"Su índice de compromiso es {valor} (media: {media}). Un compromiso bajo refleja poca interacción con la plataforma y las actividades, aumentando el riesgo de {tipo}."
+                if sube else
+                f"Su índice de compromiso es {valor}, superior a la media ({media}). Muestra participación activa en su proceso académico."
+            ),
+        }
+
+        if feature in narratives:
+            return narratives[feature]
+
+        # Fallback genérico
+        label = FEATURE_LABELS.get(feature, feature)
+        if sube:
+            return f"{label}: valor {valor} (media: {media}). Este indicador incrementa la probabilidad de {tipo} según el modelo."
+        return f"{label}: valor {valor} (media: {media}). Este indicador reduce la probabilidad de {tipo} según el modelo."
+
     def _compute_explanations(
         self, features: dict, model_key: str, target: str, top_n: int = 5
     ) -> Optional[list]:
@@ -306,6 +389,9 @@ class Predictor:
                 continue
 
             direction = "incrementa" if contrib > 0 else "reduce"
+            narrative = self._generate_narrative(
+                col, round(val, 2), round(mean, 2), direction, target
+            )
             contributions.append({
                 "feature": col,
                 "label": FEATURE_LABELS.get(col, col),
@@ -313,6 +399,7 @@ class Predictor:
                 "media_carrera": round(mean, 2),
                 "contribucion": round(float(contrib), 4),
                 "direccion": direction,
+                "explicacion": narrative,
             })
 
         # [GAP-F3-01] Filtrar factores con contribución insignificante

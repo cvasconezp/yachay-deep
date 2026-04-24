@@ -1285,24 +1285,6 @@ function FichaEstudianteInner() {
     {activeTab === "indicadores" && (
       <div className="space-y-3">
         {prediccion?.xai && (() => {
-          const explicarFactor = (f, tipo) => {
-            const v = typeof f.valor === 'number' ? f.valor.toFixed(2) : f.valor;
-            const m = typeof f.media_carrera === 'number' ? f.media_carrera.toFixed(2) : f.media_carrera;
-            const nombre = (f.label || f.feature).toLowerCase();
-            const sube = f.direccion === 'incrementa';
-            const tipoTxt = tipo === 'desercion' ? 'abandono' : 'reprobación';
-            const diff = Math.abs((f.valor || 0) - (f.media_carrera || 0));
-            const diffPct = f.media_carrera ? Math.round((diff / Math.abs(f.media_carrera)) * 100) : 0;
-            const comparacion = f.valor > f.media_carrera
-              ? `está ${diffPct}% por encima del promedio (${m})`
-              : f.valor < f.media_carrera
-              ? `está ${diffPct}% por debajo del promedio (${m})`
-              : `coincide con el promedio (${m})`;
-            if (sube) {
-              return `${f.label || f.feature}: el valor ${v} ${comparacion}. El modelo de IA identifica esto como un factor que AUMENTA la probabilidad de ${tipoTxt} del estudiante.`;
-            }
-            return `${f.label || f.feature}: el valor ${v} ${comparacion}. El modelo de IA identifica esto como un factor PROTECTOR que reduce la probabilidad de ${tipoTxt}.`;
-          };
           const FactorCard = ({ f, i, tipo, colorUp, colorBar }) => {
             const sube = f.direccion === 'incrementa';
             const pct = Math.min(100, Math.round(Math.abs(f.contribucion || 0) * 100));
@@ -1317,7 +1299,7 @@ function FichaEstudianteInner() {
                   <div className={'h-1.5 rounded-full ' + (sube ? colorBar : 'bg-emerald-400')} style={{ width: pct + '%' }} />
                 </div>
                 <div className="invisible group-hover:visible absolute z-20 left-0 right-0 top-full mt-1 bg-gray-900 text-white text-[11px] leading-relaxed rounded-lg px-3 py-2 shadow-lg">
-                  {explicarFactor(f, tipo)}
+                  {f.explicacion || `${f.label || f.feature}: valor ${f.valor} (media: ${f.media_carrera})`}
                 </div>
               </div>
             );
