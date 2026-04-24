@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from ..models import Student, Enrollment
 from ..models.alert_event import AlertEvent
+from .transformers import normalizar_carrera
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +137,7 @@ def load_terceras_matriculas(db: Session, carpeta: str) -> dict:
         asignatura = _clean(row.get("ASIGNATURA", ""))
         cod_grupo = _clean(row.get("COD_GRUPO", ""))
         grupo = _clean(row.get("GRUPO", ""))
-        carrera = _clean(row.get("CARRERA", ""))
+        carrera = normalizar_carrera(_clean(row.get("CARRERA", "")))
         docente = _clean(row.get("DOCENTE", ""))
         correo_docente = _clean(row.get("CORREO_DOCENTE", ""))
         pago = _clean(row.get("PAGO_MATRICULA", ""))

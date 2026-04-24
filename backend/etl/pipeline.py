@@ -396,25 +396,31 @@ class ETLPipeline:
             # 2c-bis. Migración única: etiquetar registros huérfanos (periodo=NULL) como P67
             # Cualquier dato cargado antes de 2026-03-30 22:29:25 quedó sin periodo;
             # corresponden al semestre P67.
+            # Guard: solo corre si no se ha ejecutado antes (flag en system_settings).
             try:
-                from ..models import Grade as _Grade
-                from ..models.course import Course as _Course
-                _n_g = self.db.query(_Grade).filter(
-                    _Grade.periodo.is_(None)
-                ).update({"periodo": "P67"}, synchronize_session=False)
-                _n_c = self.db.query(_Course).filter(
-                    _Course.periodo.is_(None)
-                ).update({"periodo": "P67"}, synchronize_session=False)
-                _n_a = self.db.query(AvacAccess).filter(
-                    AvacAccess.periodo.is_(None)
-                ).update({"periodo": "P67"}, synchronize_session=False)
-                _n_t = self.db.query(TaskSubmission).filter(
-                    TaskSubmission.periodo.is_(None)
-                ).update({"periodo": "P67"}, synchronize_session=False)
-                if _n_g or _n_c or _n_a or _n_t:
-                    self.db.flush()
-                    logs.append(f"  🔧 Migración P67: {_n_g} calificaciones + {_n_c} cursos + {_n_a} accesos AVAC + {_n_t} tareas etiquetados como P67")
-                    logger.info("Migración P67: %d grades, %d courses, %d avac, %d tasks", _n_g, _n_c, _n_a, _n_t)
+                from ..models.system_setting import SystemSetting as _SS
+                _migrated = _SS.get(self.db, "p67_migration_done")
+                if not _migrated:
+                    from ..models import Grade as _Grade
+                    from ..models.course import Course as _Course
+                    _n_g = self.db.query(_Grade).filter(
+                        _Grade.periodo.is_(None)
+                    ).update({"periodo": "P67"}, synchronize_session=False)
+                    _n_c = self.db.query(_Course).filter(
+                        _Course.periodo.is_(None)
+                    ).update({"periodo": "P67"}, synchronize_session=False)
+                    _n_a = self.db.query(AvacAccess).filter(
+                        AvacAccess.periodo.is_(None)
+                    ).update({"periodo": "P67"}, synchronize_session=False)
+                    _n_t = self.db.query(TaskSubmission).filter(
+                        TaskSubmission.periodo.is_(None)
+                    ).update({"periodo": "P67"}, synchronize_session=False)
+                    if _n_g or _n_c or _n_a or _n_t:
+                        self.db.flush()
+                        logs.append(f"  🔧 Migración P67: {_n_g} calificaciones + {_n_c} cursos + {_n_a} accesos AVAC + {_n_t} tareas etiquetados como P67")
+                        logger.info("Migración P67: %d grades, %d courses, %d avac, %d tasks", _n_g, _n_c, _n_a, _n_t)
+                    _SS.set(self.db, "p67_migration_done", "true")
+                    logs.append("  ✓ Migración P67 completada y marcada como ejecutada")
             except Exception as e:
                 logs.append(f"  ⚠ Error en migración P67: {e}")
                 logger.error("Error en migración P67: %s", e, exc_info=True)
@@ -1090,8 +1096,6 @@ class ETLPipeline:
         self.db.delete(orphan)
         self.db.flush()
         return 1
-
-        return merged
 
     def _upsert_students(
         self,

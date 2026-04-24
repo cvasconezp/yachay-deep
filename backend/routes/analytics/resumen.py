@@ -405,7 +405,7 @@ def get_resumen_datos(
     if carrera:
         interv_base_q = interv_base_q.filter(func.lower(Intervention.carrera).contains(carrera.lower()))
     if periodo_filter != "todos":
-        interv_base_q = interv_base_q.filter(Intervention.student_id.in_(grade_student_ids))
+        interv_base_q = interv_base_q.filter(Intervention.student_id.in_(all_period_sids))
 
     total_intervenciones = interv_base_q.count()
     por_motivo_interv = interv_base_q.with_entities(Intervention.motivo, func.count(Intervention.id)).group_by(Intervention.motivo).all()
@@ -628,8 +628,8 @@ def get_comparativa(
 
         result.append({
             "periodo": per, "label": "Actual" if per == "actual" else per,
-            "total_estudiantes": len(sids), "promedio_calificaciones": _safe_float(promedio_calif),
-            "tasa_aprobacion": _safe_float(tasa_aprob), "riesgo_alto": riesgo_alto,
+            "total_estudiantes": len(sids), "promedio_calificaciones": promedio_calif,
+            "tasa_aprobacion": tasa_aprob, "riesgo_alto": riesgo_alto,
             "total_docentes": len(docentes_set), "total_intervenciones": total_interv,
         })
 
