@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../services/api";
 import { useStudentListModal } from "../components/StudentListModal";
 import { PeriodSelector } from "../components/PeriodSelector";
@@ -118,6 +119,7 @@ const DEFAULT_EXPORT_COLS = [
    MAIN COMPONENT
    ══════════════════════════════════════════ */
 export default function ResumenDatos() {
+  const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -847,7 +849,12 @@ export default function ResumenDatos() {
                                           <tbody className="divide-y divide-gray-50">
                                             {esc.estudiantes.map((est, sIdx) => (
                                               <tr key={sIdx} className="hover:bg-blue-50/40">
-                                                <td className="px-3 py-2 text-gray-800 font-medium">{est.nombre}</td>
+                                                <td className="px-3 py-2">
+                                                  <button className="font-medium text-blue-700 hover:text-blue-900 hover:underline text-left"
+                                                    onClick={() => navigate(`/ficha/${est.student_id}`)}>
+                                                    {est.nombre || est.cedula || `#${est.student_id}`}
+                                                  </button>
+                                                </td>
                                                 <td className="px-3 py-2 text-gray-500">{est.cedula}</td>
                                                 <td className="px-3 py-2 text-gray-500">{est.correo}</td>
                                                 <td className="px-3 py-2 text-gray-500">{est.centro_apoyo}</td>
