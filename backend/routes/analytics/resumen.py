@@ -202,7 +202,6 @@ def get_resumen_datos(
     tiene_datos_periodo = len(grades) > 0
 
     # === Métricas de enrollment ===
-    carreras_set = set()
     asignaturas_set = set()
     docentes_enroll_set = set()
     enroll_por_tipo = {}
@@ -210,8 +209,6 @@ def get_resumen_datos(
     enroll_pagado = {"SI": 0, "NO": 0, "Otro": 0}
     enroll_repitencias = 0
     for e in enrollments:
-        if e.carrera:
-            carreras_set.add(e.carrera)
         if e.asignatura:
             asignaturas_set.add(e.asignatura)
         if e.docente:
@@ -231,7 +228,8 @@ def get_resumen_datos(
         if e.numero_repitencias and e.numero_repitencias > 1:
             enroll_repitencias += 1
 
-    # Carreras from students too
+    # Carreras: solo desde students (fuente canónica, misma que /dashboard/carreras)
+    carreras_set = set()
     for s in students:
         if s.carrera:
             carreras_set.add(s.carrera)
