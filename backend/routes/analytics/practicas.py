@@ -32,6 +32,16 @@ def get_practicas_resumen(
     Devuelve totales, filtros disponibles, y desglose jerárquico:
     sistema_educativo → distrito → escuela → estudiantes.
     """
+    # --- Check table exists (graceful fallback) ---
+    from sqlalchemy import inspect as sa_inspect
+    inspector = sa_inspect(db.bind)
+    if "practicas_preprofesionales" not in inspector.get_table_names():
+        return {
+            "total_estudiantes": 0, "total_escuelas": 0, "total_distritos": 0,
+            "en_mineduc": 0, "por_sistema": [], "por_nivel": [], "por_centro": [],
+            "distritos": [], "filtros": {"sistemas_educativos": [], "distritos": [], "centros_apoyo": [], "niveles_practica": []},
+        }
+
     # --- Base query ---
     q = db.query(PracticaPreprofesional).join(
         Student, PracticaPreprofesional.student_id == Student.id

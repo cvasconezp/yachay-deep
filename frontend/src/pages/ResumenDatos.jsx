@@ -196,7 +196,7 @@ export default function ResumenDatos() {
     if (practicasFiltros.nivel) params.nivel_practica = practicasFiltros.nivel;
     api.getPracticasResumen(params)
       .then(d => { setPracticasData(d); setPracticasEscuela(null); })
-      .catch(() => {})
+      .catch(e => { console.error("Error cargando prácticas:", e); setPracticasData(null); })
       .finally(() => setPracticasLoading(false));
   }, [activeTab, filtroPeriodo, practicasFiltros]);
 
