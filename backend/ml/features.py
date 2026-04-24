@@ -87,7 +87,8 @@ def build_features(db: Session) -> pd.DataFrame:
       - reprobo: 1 si alguna nota < 70, 0 si todas >= 70
     """
     query = text("""
-        SELECT g.student_id, g.periodo, g.nota_final, g.carrera, g.asignatura
+        SELECT g.student_id, g.periodo, g.nota_final, g.carrera, g.asignatura,
+               g.numero_repitencias, g.nivel
         FROM grades g
         WHERE g.periodo IS NOT NULL
         ORDER BY g.student_id, g.periodo
@@ -98,7 +99,10 @@ def build_features(db: Session) -> pd.DataFrame:
         logger.warning("No hay calificaciones historicas para construir features")
         return pd.DataFrame()
 
-    df = pd.DataFrame(rows, columns=["student_id", "periodo", "nota_final", "carrera", "asignatura"])
+    df = pd.DataFrame(rows, columns=[
+        "student_id", "periodo", "nota_final", "carrera", "asignatura",
+        "numero_repitencias", "nivel_asig",
+    ])
     df["nota_final"] = pd.to_numeric(df["nota_final"], errors="coerce").fillna(0)
 
     # Determinar carrera principal por estudiante (la más frecuente)
@@ -137,6 +141,54 @@ def build_features(db: Session) -> pd.DataFrame:
         )
 
 
+    # ── Segundas matrículas por estudiante-periodo ──
+    # Grade.numero_repitencias >= 1 indica que la materia ya fue cursada antes
+    df["es_segunda_mat"] = pd.to_numeric(df.get("numero_repitencias", 0), errors="coerce").fillna(0) >= 1
+
+    # ── Nivel por asignatura (para nivel_actual) ──
+    df["nivel_asig"] = pd.to_numeric(df.get("nivel_asig", 0), errors="coerce").fillna(0)
+
+    # ── Tendencia: promedio por estudiante-periodo para calcular delta ──
+    promedios_por_sp = df.groupby(["student_id", "periodo"])["nota_final"].mean().reset_index()
+    promedios_por_sp.columns = ["student_id", "periodo", "_promedio_periodo"]
+
+    # Calcular delta vs periodo anterior
+    def _calc_tendencia(group):
+        group = group.sort_values("periodo", key=lambda s: s.map(
+            lambda p: PERIODOS_ORDENADOS.index(p) if p in PERIODOS_ORDENADOS else 999
+        ))
+        group["tendencia_academica"] = group["_promedio_periodo"].diff().fillna(0)
+        return group
+
+    tendencia_df = promedios_por_sp.groupby("student_id", group_keys=False).apply(_calc_tendencia)
+    tendencia_map = tendencia_df.set_index(["student_id", "periodo"])["tendencia_academica"].to_dict()
+
+    # ── pct_avance_malla: materias aprobadas acumuladas / total malla ──
+    # Calcular acumulado de materias aprobadas por estudiante hasta cada periodo
+    total_malla_por_carrera = {}
+    for ck, malla_set in malla_por_carrera.items():
+        total_malla_por_carrera[ck] = len(malla_set)
+    # Fallback: inferir total de malla desde grades históricos
+    malla_inferida = _build_malla_from_grades(df)
+    for ck, asig_set in malla_inferida.items():
+        if ck not in total_malla_por_carrera:
+            total_malla_por_carrera[ck] = len(asig_set)
+
+    # Materias aprobadas acumuladas por estudiante hasta cada periodo
+    aprobadas_acum_por_sp: dict[tuple, int] = {}
+    for sid in df["student_id"].unique():
+        df_sid = df[df["student_id"] == sid].sort_values("periodo", key=lambda s: s.map(
+            lambda p: PERIODOS_ORDENADOS.index(p) if p in PERIODOS_ORDENADOS else 999
+        ))
+        acum = set()
+        for periodo, grp in df_sid.groupby("periodo", sort=False):
+            nuevas = set(
+                _normalize_asig(a) for a, nota in zip(grp["asignatura"].fillna(""), grp["nota_final"])
+                if nota >= 70 and a
+            )
+            acum |= nuevas
+            aprobadas_acum_por_sp[(sid, periodo)] = len(acum)
+
     # Agrupar por estudiante-periodo
     grouped = df.groupby(["student_id", "periodo"])
     features = grouped.agg(
@@ -147,10 +199,33 @@ def build_features(db: Session) -> pd.DataFrame:
         nota_max=("nota_final", "max"),
         std_notas=("nota_final", "std"),
         num_zeros=("nota_final", lambda x: (x == 0).sum()),
+        num_segundas_matriculas=("es_segunda_mat", "sum"),
+        nivel_actual=("nivel_asig", "max"),
     ).reset_index()
 
     features["std_notas"] = features["std_notas"].fillna(0)
     features["pct_reprobadas"] = features["num_reprobadas"] / features["num_asignaturas"]
+    features["num_segundas_matriculas"] = features["num_segundas_matriculas"].fillna(0).astype(int)
+    features["nivel_actual"] = features["nivel_actual"].fillna(0).astype(int)
+
+    # Tendencia académica (delta de promedio vs periodo anterior)
+    features["tendencia_academica"] = features.apply(
+        lambda r: tendencia_map.get((r["student_id"], r["periodo"]), 0), axis=1
+    )
+
+    # pct_avance_malla
+    def _calc_avance(row):
+        sid = row["student_id"]
+        per = row["periodo"]
+        acum = aprobadas_acum_por_sp.get((sid, per), 0)
+        carrera = carrera_por_estudiante.get(sid, "")
+        ck = (carrera or "").strip().upper()
+        total = total_malla_por_carrera.get(ck, 0)
+        if total > 0:
+            return round(acum / total * 100, 1)
+        return 0.0
+
+    features["pct_avance_malla"] = features.apply(_calc_avance, axis=1)
 
     # Asignar carrera principal a cada registro
     features["carrera"] = features["student_id"].map(carrera_por_estudiante)
@@ -328,13 +403,15 @@ def build_current_features(db: Session) -> pd.DataFrame:
     active_periodo = _get_active_periodo(db)
     periodo_cond = _build_periodo_condition(active_periodo)
 
-    query = text(f"""
+    _current_query_cols = """
         SELECT g.student_id, g.nota_final, s.carrera,
-               s.dias_sin_acceso, s.porcentaje_tareas, s.indice_compromiso
+               s.dias_sin_acceso, s.porcentaje_tareas, s.indice_compromiso,
+               g.numero_repitencias, g.nivel, s.nivel_academico, g.asignatura
         FROM grades g
         JOIN students s ON s.id = g.student_id
-        WHERE {periodo_cond}
-    """)
+    """
+
+    query = text(f"{_current_query_cols} WHERE {periodo_cond}")
 
     rows = db.execute(query).fetchall()
     logger.info(f"build_current_features: periodo_config={active_periodo}, rows={len(rows)}")
@@ -345,13 +422,7 @@ def build_current_features(db: Session) -> pd.DataFrame:
         if detected and detected != active_periodo:
             logger.info(f"build_current_features: fallback a periodo detectado={detected}")
             periodo_cond2 = _build_periodo_condition(detected)
-            query2 = text(f"""
-                SELECT g.student_id, g.nota_final, s.carrera,
-                       s.dias_sin_acceso, s.porcentaje_tareas, s.indice_compromiso
-                FROM grades g
-                JOIN students s ON s.id = g.student_id
-                WHERE {periodo_cond2}
-            """)
+            query2 = text(f"{_current_query_cols} WHERE {periodo_cond2}")
             rows = db.execute(query2).fetchall()
             logger.info(f"build_current_features: fallback rows={len(rows)}")
 
@@ -361,6 +432,7 @@ def build_current_features(db: Session) -> pd.DataFrame:
     df = pd.DataFrame(rows, columns=[
         "student_id", "nota_final", "carrera",
         "dias_sin_acceso", "porcentaje_tareas", "indice_compromiso",
+        "numero_repitencias", "nivel_asig", "nivel_academico", "asignatura",
     ])
     df["nota_final"] = pd.to_numeric(df["nota_final"], errors="coerce").fillna(0)
 
@@ -376,7 +448,12 @@ def build_current_features(db: Session) -> pd.DataFrame:
         dias_sin_acceso=("dias_sin_acceso", "first"),
         porcentaje_tareas=("porcentaje_tareas", "first"),
         indice_compromiso=("indice_compromiso", "first"),
+        nivel_academico=("nivel_academico", "first"),
     ).reset_index()
+
+    # ── Segundas matrículas ──
+    df["es_segunda_mat"] = pd.to_numeric(df["numero_repitencias"], errors="coerce").fillna(0) >= 1
+    df["nivel_asig"] = pd.to_numeric(df["nivel_asig"], errors="coerce").fillna(0)
 
     grouped = df.groupby("student_id")
     features = grouped.agg(
@@ -387,10 +464,12 @@ def build_current_features(db: Session) -> pd.DataFrame:
         nota_max=("nota_final", "max"),
         std_notas=("nota_final", "std"),
         num_zeros=("nota_final", lambda x: (x == 0).sum()),
+        num_segundas_matriculas=("es_segunda_mat", "sum"),
     ).reset_index()
 
     features["std_notas"] = features["std_notas"].fillna(0)
     features["pct_reprobadas"] = features["num_reprobadas"] / features["num_asignaturas"]
+    features["num_segundas_matriculas"] = features["num_segundas_matriculas"].fillna(0).astype(int)
     features["carrera"] = features["student_id"].map(carrera_por_estudiante)
 
     # [GAP-F2-01] Merge variables conductuales
@@ -399,10 +478,87 @@ def build_current_features(db: Session) -> pd.DataFrame:
     features["porcentaje_tareas"] = features["porcentaje_tareas"].fillna(50)  # neutral default
     features["indice_compromiso"] = features["indice_compromiso"].fillna(0.5)
 
+    # ── nivel_actual: usar nivel_academico de Student, fallback a max nivel de grades ──
+    nivel_max_grades = df.groupby("student_id")["nivel_asig"].max().to_dict()
+    features["nivel_actual"] = features.apply(
+        lambda r: int(r["nivel_academico"] or 0) if pd.notna(r.get("nivel_academico")) and r.get("nivel_academico")
+        else int(nivel_max_grades.get(r["student_id"], 0)),
+        axis=1,
+    )
+
+    # ── pct_avance_malla: materias aprobadas históricas / total malla ──
+    # Consultar TODAS las materias aprobadas históricas del estudiante (no solo periodo actual)
+    try:
+        hist_query = text("""
+            SELECT g.student_id, g.asignatura, s.carrera
+            FROM grades g
+            JOIN students s ON s.id = g.student_id
+            WHERE g.nota_final >= 70 AND g.asignatura IS NOT NULL
+        """)
+        hist_rows = db.execute(hist_query).fetchall()
+        hist_df = pd.DataFrame(hist_rows, columns=["student_id", "asignatura", "carrera"])
+
+        aprobadas_por_sid = {}
+        for sid, grp in hist_df.groupby("student_id"):
+            aprobadas_por_sid[sid] = set(_normalize_asig(a) for a in grp["asignatura"].unique())
+
+        # Total malla por carrera
+        total_malla = {}
+        for ck in set(c.strip().upper() for c in df["carrera"].dropna().unique()):
+            ref = _load_reference_malla(ck)
+            if ref:
+                total_malla[ck] = len(ref)
+            else:
+                # Inferir de grades históricos
+                all_asig = set(_normalize_asig(a) for a in hist_df[hist_df["carrera"].str.upper().str.strip() == ck]["asignatura"].unique()) if not hist_df.empty else set()
+                if all_asig:
+                    total_malla[ck] = len(all_asig)
+
+        def _avance(row):
+            sid = row["student_id"]
+            acum = len(aprobadas_por_sid.get(sid, set()))
+            ck = (carrera_por_estudiante.get(sid, "") or "").strip().upper()
+            total = total_malla.get(ck, 0)
+            return round(acum / total * 100, 1) if total > 0 else 0.0
+
+        features["pct_avance_malla"] = features.apply(_avance, axis=1)
+    except Exception as e:
+        logger.warning(f"No se pudo calcular pct_avance_malla: {e}")
+        features["pct_avance_malla"] = 0.0
+
+    # ── tendencia_academica: promedio actual vs último periodo histórico ──
+    try:
+        trend_query = text("""
+            SELECT g.student_id, g.periodo, AVG(g.nota_final) as promedio
+            FROM grades g
+            WHERE g.periodo IS NOT NULL
+            GROUP BY g.student_id, g.periodo
+            ORDER BY g.student_id, g.periodo
+        """)
+        trend_rows = db.execute(trend_query).fetchall()
+        trend_df = pd.DataFrame(trend_rows, columns=["student_id", "periodo", "promedio"])
+
+        # Para cada estudiante, obtener su promedio del periodo previo al actual
+        prev_promedio = {}
+        for sid, grp in trend_df.groupby("student_id"):
+            grp_sorted = grp.sort_values("periodo")
+            if len(grp_sorted) >= 2:
+                prev_promedio[sid] = float(grp_sorted.iloc[-2]["promedio"])
+            elif len(grp_sorted) == 1:
+                prev_promedio[sid] = float(grp_sorted.iloc[0]["promedio"])
+
+        features["tendencia_academica"] = features.apply(
+            lambda r: round(r["promedio_notas"] - prev_promedio.get(r["student_id"], r["promedio_notas"]), 2),
+            axis=1,
+        )
+    except Exception as e:
+        logger.warning(f"No se pudo calcular tendencia_academica: {e}")
+        features["tendencia_academica"] = 0.0
+
     return features
 
 
-# Features originales (8) — compatibles con modelos históricos
+# Features académicas (12) — incluye contexto curricular y tendencia
 FEATURE_COLUMNS = [
     "promedio_notas",
     "num_asignaturas",
@@ -412,6 +568,11 @@ FEATURE_COLUMNS = [
     "nota_max",
     "std_notas",
     "num_zeros",
+    # Nuevas features de contexto curricular y tendencia
+    "num_segundas_matriculas",
+    "pct_avance_malla",
+    "nivel_actual",
+    "tendencia_academica",
 ]
 
 # [GAP-F2-01] Features extendidas con variables conductuales

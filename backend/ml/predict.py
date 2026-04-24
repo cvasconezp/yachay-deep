@@ -18,6 +18,27 @@ logger = logging.getLogger(__name__)
 
 MODELS_DIR = Path(__file__).parent / "models"
 
+# Features originales (8) para compatibilidad con modelos entrenados antes de v2
+_LEGACY_FEATURE_COLUMNS = [
+    "promedio_notas", "num_asignaturas", "num_reprobadas", "pct_reprobadas",
+    "nota_min", "nota_max", "std_notas", "num_zeros",
+]
+
+
+def _get_model_features(model) -> list[str]:
+    """Detecta cuántas features espera un modelo para compatibilidad legacy."""
+    try:
+        n = model.n_features_in_
+        if n == len(FEATURE_COLUMNS):
+            return FEATURE_COLUMNS
+        elif n == len(_LEGACY_FEATURE_COLUMNS):
+            return _LEGACY_FEATURE_COLUMNS
+        # Fallback: si no coincide con ninguno, usar el que tenga el mismo count
+        return FEATURE_COLUMNS[:n] if n <= len(FEATURE_COLUMNS) else FEATURE_COLUMNS
+    except AttributeError:
+        # Modelo viejo sin n_features_in_ — asumir legacy
+        return _LEGACY_FEATURE_COLUMNS
+
 
 FEATURE_LABELS = {
     "promedio_notas": "Promedio de notas",
@@ -28,6 +49,11 @@ FEATURE_LABELS = {
     "nota_max": "Nota máxima",
     "std_notas": "Dispersión de notas",
     "num_zeros": "Materias con nota cero",
+    # Features de contexto curricular y tendencia
+    "num_segundas_matriculas": "Materias en segunda matrícula",
+    "pct_avance_malla": "Avance en la malla curricular",
+    "nivel_actual": "Nivel académico actual",
+    "tendencia_academica": "Tendencia académica",
     # [GAP-F2-01] Features conductuales
     "dias_sin_acceso": "Días sin acceso al AVAC",
     "porcentaje_tareas": "Porcentaje de tareas entregadas",
@@ -233,15 +259,17 @@ class Predictor:
             model_key = self._get_model_key(carrera)
             models = self.models.get(model_key) or self.models.get("global", {})
 
-            X = np.array([[row[c] for c in FEATURE_COLUMNS]])
-
             student = db.query(Student).filter(Student.id == sid).first()
             if not student:
                 continue
 
             if "desercion" in models:
+                cols = _get_model_features(models["desercion"])
+                X = np.array([[row.get(c, 0) for c in cols]])
                 student.prob_desercion = round(float(models["desercion"].predict_proba(X)[0, 1]), 4)
             if "reprobacion" in models:
+                cols = _get_model_features(models["reprobacion"])
+                X = np.array([[row.get(c, 0) for c in cols]])
                 student.prob_reprobacion = round(float(models["reprobacion"].predict_proba(X)[0, 1]), 4)
             student.prediccion_updated_at = now
             updated += 1
@@ -338,6 +366,26 @@ class Predictor:
                 if sube else
                 f"Su índice de compromiso es {valor}, superior a la media ({media}). Muestra participación activa en su proceso académico."
             ),
+            "num_segundas_matriculas": (
+                f"Tiene {int(valor)} materia(s) en segunda matrícula (media: {media}). Repetir materias indica dificultades acumuladas que incrementan el riesgo de {tipo}."
+                if valor > 0 else
+                f"No tiene materias en segunda matrícula (media: {media}). Avanza sin repeticiones, lo cual es un indicador positivo."
+            ),
+            "pct_avance_malla": (
+                f"Ha completado el {valor}% de su malla curricular (media: {media}%). Un avance bajo respecto a sus compañeros puede indicar rezago académico."
+                if sube else
+                f"Ha completado el {valor}% de su malla curricular (media: {media}%). Un avance alto indica cercanía al egreso, lo cual reduce significativamente el riesgo de {tipo}."
+            ),
+            "nivel_actual": (
+                f"Se encuentra en nivel {int(valor)} (media: {media}). Los estudiantes en niveles iniciales tienen mayor vulnerabilidad al {tipo}."
+                if sube else
+                f"Se encuentra en nivel {int(valor)} (media: {media}). Estudiantes en niveles avanzados tienen menor probabilidad de {tipo} por la inversión acumulada en su carrera."
+            ),
+            "tendencia_academica": (
+                f"Su promedio bajó {abs(valor)} puntos respecto al periodo anterior (media de cambio: {media}). Una tendencia descendente incrementa el riesgo de {tipo}."
+                if sube else
+                f"Su promedio subió {abs(valor)} puntos respecto al periodo anterior (media de cambio: {media}). Una tendencia de recuperación es un factor protector contra {tipo}."
+            ),
         }
 
         if feature in narratives:
@@ -369,9 +417,12 @@ class Predictor:
         means = stats_key.get("feature_means", {})
         stds = stats_key.get("feature_stds", {})
 
+        # Usar las features del modelo entrenado (compatibilidad legacy)
+        model_features = stats_key.get("feature_columns", FEATURE_COLUMNS)
+
         contributions = []
 
-        for col in FEATURE_COLUMNS:
+        for col in model_features:
             val = features.get(col, 0)
             mean = means.get(col, 0)
             std = stds.get(col, 1)
@@ -425,7 +476,8 @@ class Predictor:
         periodo_cond = _build_periodo_condition(active_periodo)
 
         query = sql_text(f"""
-            SELECT g.nota_final FROM grades g
+            SELECT g.nota_final, g.numero_repitencias, g.nivel, g.asignatura
+            FROM grades g
             WHERE g.student_id = :sid AND {periodo_cond}
         """)
         rows = db.execute(query, {"sid": student_id}).fetchall()
@@ -436,7 +488,8 @@ class Predictor:
             if detected and detected != active_periodo:
                 periodo_cond2 = _build_periodo_condition(detected)
                 query2 = sql_text(f"""
-                    SELECT g.nota_final FROM grades g
+                    SELECT g.nota_final, g.numero_repitencias, g.nivel, g.asignatura
+                    FROM grades g
                     WHERE g.student_id = :sid AND {periodo_cond2}
                 """)
                 rows = db.execute(query2, {"sid": student_id}).fetchall()
@@ -446,15 +499,15 @@ class Predictor:
         used_fallback_periodo = None
         if not rows:
             fallback_q = sql_text("""
-                SELECT g.nota_final, g.periodo FROM grades g
+                SELECT g.nota_final, g.numero_repitencias, g.nivel, g.asignatura, g.periodo
+                FROM grades g
                 WHERE g.student_id = :sid AND g.periodo IS NOT NULL
                 ORDER BY g.periodo DESC
             """)
             fallback_rows = db.execute(fallback_q, {"sid": student_id}).fetchall()
             if fallback_rows:
-                # Tomar el periodo más reciente
-                latest_periodo = fallback_rows[0][1]
-                rows = [r for r in fallback_rows if r[1] == latest_periodo]
+                latest_periodo = fallback_rows[0][4]
+                rows = [(r[0], r[1], r[2], r[3]) for r in fallback_rows if r[4] == latest_periodo]
                 used_fallback_periodo = latest_periodo
                 logger.info(f"predict_single: sin notas actuales para student {student_id}, usando periodo fallback={latest_periodo}")
 
@@ -463,6 +516,59 @@ class Predictor:
 
         notas = [float(r[0]) if r[0] is not None else 0.0 for r in rows]
         notas_arr = np.array(notas)
+
+        # Segundas matrículas en periodo actual
+        num_seg_mat = sum(1 for r in rows if r[1] is not None and r[1] >= 1)
+
+        # Nivel actual: de Student o max nivel de grades
+        nivel_actual = int(student.nivel_academico or 0) if student and student.nivel_academico else 0
+        if nivel_actual == 0:
+            niveles = [int(r[2]) for r in rows if r[2] is not None and r[2] > 0]
+            nivel_actual = max(niveles) if niveles else 0
+
+        # pct_avance_malla: materias aprobadas históricas / total malla
+        from .features import _load_reference_malla, _normalize_asig
+        pct_avance = 0.0
+        try:
+            hist_q = sql_text("""
+                SELECT DISTINCT g.asignatura FROM grades g
+                WHERE g.student_id = :sid AND g.nota_final >= 70 AND g.asignatura IS NOT NULL
+            """)
+            hist_aprobadas = db.execute(hist_q, {"sid": student_id}).fetchall()
+            aprobadas_set = set(_normalize_asig(r[0]) for r in hist_aprobadas if r[0])
+            carrera_key = (carrera or "").strip().upper()
+            ref_malla = _load_reference_malla(carrera_key)
+            if ref_malla and len(ref_malla) > 0:
+                pct_avance = round(len(aprobadas_set & ref_malla) / len(ref_malla) * 100, 1)
+            elif len(aprobadas_set) > 0:
+                # Fallback: inferir total de grades históricos de la carrera
+                total_q = sql_text("""
+                    SELECT COUNT(DISTINCT g.asignatura) FROM grades g
+                    JOIN students s ON s.id = g.student_id
+                    WHERE s.carrera = :carrera AND g.asignatura IS NOT NULL
+                """)
+                total_row = db.execute(total_q, {"carrera": carrera}).fetchone()
+                total = total_row[0] if total_row else 0
+                if total > 0:
+                    pct_avance = round(len(aprobadas_set) / total * 100, 1)
+        except Exception as e:
+            logger.warning(f"predict_single: error calculando pct_avance_malla: {e}")
+
+        # tendencia_academica: promedio actual vs promedio del periodo anterior
+        tendencia = 0.0
+        try:
+            trend_q = sql_text("""
+                SELECT g.periodo, AVG(g.nota_final) as promedio
+                FROM grades g
+                WHERE g.student_id = :sid AND g.periodo IS NOT NULL
+                GROUP BY g.periodo
+                ORDER BY g.periodo
+            """)
+            trend_rows = db.execute(trend_q, {"sid": student_id}).fetchall()
+            if len(trend_rows) >= 2:
+                tendencia = round(float(trend_rows[-1][1]) - float(trend_rows[-2][1]), 2)
+        except Exception as e:
+            logger.warning(f"predict_single: error calculando tendencia: {e}")
 
         features = {
             "promedio_notas": float(notas_arr.mean()),
@@ -473,9 +579,11 @@ class Predictor:
             "nota_max": float(notas_arr.max()),
             "std_notas": float(notas_arr.std()) if len(notas) > 1 else 0.0,
             "num_zeros": int((notas_arr == 0).sum()),
+            "num_segundas_matriculas": num_seg_mat,
+            "pct_avance_malla": pct_avance,
+            "nivel_actual": nivel_actual,
+            "tendencia_academica": tendencia,
         }
-
-        X = np.array([[features[c] for c in FEATURE_COLUMNS]])
 
         model_key = self._get_model_key(carrera)
         models = self.models.get(model_key) or self.models.get("global", {})
@@ -491,11 +599,15 @@ class Predictor:
 
         xai = {}
         if "desercion" in models:
+            cols = _get_model_features(models["desercion"])
+            X = np.array([[features.get(c, 0) for c in cols]])
             result["prob_desercion"] = round(float(models["desercion"].predict_proba(X)[0, 1]), 4)
             xai["desercion"] = self._compute_explanations(
                 features, model_key, "desercion"
             )
         if "reprobacion" in models:
+            cols = _get_model_features(models["reprobacion"])
+            X = np.array([[features.get(c, 0) for c in cols]])
             result["prob_reprobacion"] = round(float(models["reprobacion"].predict_proba(X)[0, 1]), 4)
             xai["reprobacion"] = self._compute_explanations(
                 features, model_key, "reprobacion"
