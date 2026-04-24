@@ -1284,56 +1284,71 @@ function FichaEstudianteInner() {
     {/* ── Tab: Indicadores · Predicción IA ── */}
     {activeTab === "indicadores" && (
       <div className="space-y-3">
-        {prediccion?.xai && (
+        {prediccion?.xai && (() => {
+          const explicarFactor = (f, tipo) => {
+            const v = typeof f.valor === 'number' ? f.valor.toFixed(2) : f.valor;
+            const m = typeof f.media_carrera === 'number' ? f.media_carrera.toFixed(2) : f.media_carrera;
+            const nombre = (f.label || f.feature).toLowerCase();
+            const sube = f.direccion === 'incrementa';
+            const tipoTxt = tipo === 'desercion' ? 'abandono' : 'reprobación';
+            const diff = Math.abs((f.valor || 0) - (f.media_carrera || 0));
+            const diffPct = f.media_carrera ? Math.round((diff / Math.abs(f.media_carrera)) * 100) : 0;
+            const comparacion = f.valor > f.media_carrera
+              ? `está ${diffPct}% por encima del promedio (${m})`
+              : f.valor < f.media_carrera
+              ? `está ${diffPct}% por debajo del promedio (${m})`
+              : `coincide con el promedio (${m})`;
+            if (sube) {
+              return `${f.label || f.feature}: el valor ${v} ${comparacion}. El modelo de IA identifica esto como un factor que AUMENTA la probabilidad de ${tipoTxt} del estudiante.`;
+            }
+            return `${f.label || f.feature}: el valor ${v} ${comparacion}. El modelo de IA identifica esto como un factor PROTECTOR que reduce la probabilidad de ${tipoTxt}.`;
+          };
+          const FactorCard = ({ f, i, tipo, colorUp, colorBar }) => {
+            const sube = f.direccion === 'incrementa';
+            const pct = Math.min(100, Math.round(Math.abs(f.contribucion || 0) * 100));
+            return (
+              <div key={i} className="group relative cursor-help">
+                <div className="flex justify-between text-xs mb-0.5">
+                  <span className="font-medium text-gray-700">{f.label || f.feature}</span>
+                  <span className={sube ? colorUp : 'text-emerald-500'}>{sube ? '↑ aumenta riesgo' : '↓ reduce riesgo'}</span>
+                </div>
+                <p className="text-xs text-gray-400 mb-1">Valor: {typeof f.valor === 'number' ? f.valor.toFixed(2) : f.valor} · Media: {typeof f.media_carrera === 'number' ? f.media_carrera.toFixed(2) : f.media_carrera}</p>
+                <div className="h-1.5 bg-gray-100 rounded-full">
+                  <div className={'h-1.5 rounded-full ' + (sube ? colorBar : 'bg-emerald-400')} style={{ width: pct + '%' }} />
+                </div>
+                <div className="invisible group-hover:visible absolute z-20 left-0 right-0 top-full mt-1 bg-gray-900 text-white text-[11px] leading-relaxed rounded-lg px-3 py-2 shadow-lg">
+                  {explicarFactor(f, tipo)}
+                </div>
+              </div>
+            );
+          };
+          return (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {prediccion.xai.desercion?.length > 0 && (
             <div className="bg-white rounded-xl border border-red-100 shadow-sm p-4">
               <p className="text-xs font-bold text-red-700 mb-3 uppercase">Factores · Deserción</p>
+              <p className="text-[10px] text-gray-400 -mt-2 mb-3">Pasa el cursor sobre cada factor para ver la explicación</p>
               <div className="space-y-3">
-                {prediccion.xai.desercion.slice(0,3).map((f,i) => {
-                  const sube = f.direccion==='incrementa';
-                  const pct = Math.min(100, Math.round(Math.abs(f.contribucion||0)*100));
-                  return (
-                  <div key={i}>
-                    <div className="flex justify-between text-xs mb-0.5">
-                      <span className="font-medium text-gray-700">{f.label || f.feature}</span>
-                      <span className={sube?'text-red-500':'text-emerald-500'}>{sube?'↑ aumenta riesgo':'↓ reduce riesgo'}</span>
-                    </div>
-                    <p className="text-xs text-gray-400 mb-1">Valor: {typeof f.valor==='number'?f.valor.toFixed(2):f.valor} · Media: {typeof f.media_carrera==='number'?f.media_carrera.toFixed(2):f.media_carrera}</p>
-                    <div className="h-1.5 bg-gray-100 rounded-full">
-                      <div className={'h-1.5 rounded-full ' + (sube?'bg-red-400':'bg-emerald-400')} style={{width: pct + '%'}}/>
-                    </div>
-                  </div>
-                  );
-                })}
+                {prediccion.xai.desercion.slice(0, 3).map((f, i) => (
+                  <FactorCard key={i} f={f} i={i} tipo="desercion" colorUp="text-red-500" colorBar="bg-red-400" />
+                ))}
               </div>
             </div>
             )}
             {prediccion.xai.reprobacion?.length > 0 && (
             <div className="bg-white rounded-xl border border-orange-100 shadow-sm p-4">
               <p className="text-xs font-bold text-orange-700 mb-3 uppercase">Factores · Reprobación</p>
+              <p className="text-[10px] text-gray-400 -mt-2 mb-3">Pasa el cursor sobre cada factor para ver la explicación</p>
               <div className="space-y-3">
-                {prediccion.xai.reprobacion.slice(0,3).map((f,i) => {
-                  const sube = f.direccion==='incrementa';
-                  const pct = Math.min(100, Math.round(Math.abs(f.contribucion||0)*100));
-                  return (
-                  <div key={i}>
-                    <div className="flex justify-between text-xs mb-0.5">
-                      <span className="font-medium text-gray-700">{f.label || f.feature}</span>
-                      <span className={sube?'text-orange-500':'text-emerald-500'}>{sube?'↑ aumenta riesgo':'↓ reduce riesgo'}</span>
-                    </div>
-                    <p className="text-xs text-gray-400 mb-1">Valor: {typeof f.valor==='number'?f.valor.toFixed(2):f.valor} · Media: {typeof f.media_carrera==='number'?f.media_carrera.toFixed(2):f.media_carrera}</p>
-                    <div className="h-1.5 bg-gray-100 rounded-full">
-                      <div className={'h-1.5 rounded-full ' + (sube?'bg-orange-400':'bg-emerald-400')} style={{width: pct + '%'}}/>
-                    </div>
-                  </div>
-                  );
-                })}
+                {prediccion.xai.reprobacion.slice(0, 3).map((f, i) => (
+                  <FactorCard key={i} f={f} i={i} tipo="reprobacion" colorUp="text-orange-500" colorBar="bg-orange-400" />
+                ))}
               </div>
             </div>
             )}
           </div>
-        )}
+          );
+        })()}
         {/* Contrafactuales ML (escenarios de cambio cuantitativo) */}
         {contrafactual?.contrafactual_desercion?.cambios?.length > 0 && (
           <div className="space-y-2 mt-3">
