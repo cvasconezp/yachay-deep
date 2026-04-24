@@ -148,6 +148,13 @@ export default function ResumenDatos() {
   // Tab
   const [activeTab, setActiveTab] = useState("general");
 
+  // Prácticas preprofesionales
+  const [practicasData, setPracticasData] = useState(null);
+  const [practicasLoading, setPracticasLoading] = useState(false);
+  const [practicasFiltros, setPracticasFiltros] = useState({ sistema: "", distrito: "", centro: "", nivel: "" });
+  const [practicasExpanded, setPracticasExpanded] = useState({});  // distrito idx
+  const [practicasEscuela, setPracticasEscuela] = useState(null);  // escuela seleccionada para ver estudiantes
+
   useEffect(() => {
     api.getCarreras().then(setCarreras).catch(() => {});
     api.getExportColumnas().then(setColsDisponibles).catch(() => {});
@@ -176,6 +183,22 @@ export default function ResumenDatos() {
   }, [filtroCarrera, filtroPeriodo]);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // Load prácticas data when tab is active
+  useEffect(() => {
+    if (activeTab !== "practicas") return;
+    setPracticasLoading(true);
+    const params = {};
+    if (filtroPeriodo) params.periodo = filtroPeriodo;
+    if (practicasFiltros.sistema) params.sistema_educativo = practicasFiltros.sistema;
+    if (practicasFiltros.distrito) params.distrito = practicasFiltros.distrito;
+    if (practicasFiltros.centro) params.centro_apoyo = practicasFiltros.centro;
+    if (practicasFiltros.nivel) params.nivel_practica = practicasFiltros.nivel;
+    api.getPracticasResumen(params)
+      .then(d => { setPracticasData(d); setPracticasEscuela(null); })
+      .catch(() => {})
+      .finally(() => setPracticasLoading(false));
+  }, [activeTab, filtroPeriodo, practicasFiltros]);
 
   const toggleCol = (key) => {
     setColsSeleccionadas(prev => {
@@ -233,6 +256,7 @@ export default function ResumenDatos() {
     { key: "demografico", label: "Demográfico" },
     { key: "carreras", label: "Por Carrera" },
     { key: "tendencias", label: "Tendencias" },
+    { key: "practicas", label: "Prácticas" },
   ];
 
   return (
@@ -680,6 +704,175 @@ export default function ResumenDatos() {
                 <div className="text-center py-12 text-gray-400 text-sm">
                   Se necesitan datos de al menos 2 períodos para mostrar tendencias.
                 </div>
+              )}
+            </div>
+          )}
+
+          {/* ═══ TAB: PRÁCTICAS PREPROFESIONALES ═══ */}
+          {activeTab === "practicas" && (
+            <div className="space-y-5">
+              {practicasLoading ? (
+                <div className="text-center py-10 text-gray-400">Cargando datos de prácticas...</div>
+              ) : !practicasData || practicasData.total_estudiantes === 0 ? (
+                <div className="text-center py-16 text-gray-300">
+                  <div className="text-4xl mb-3">{"🏫"}</div>
+                  <div className="text-sm">No hay datos de prácticas preprofesionales</div>
+                  <p className="text-xs text-gray-400 mt-1">Sube el archivo de formularios desde el panel Admin</p>
+                </div>
+              ) : (
+                <>
+                  {/* KPI cards */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <KPICard icon="👩‍🎓" label="Practicantes" value={practicasData.total_estudiantes} color="text-blue-700" bg="bg-blue-50/60" />
+                    <KPICard icon="🏫" label="Escuelas" value={practicasData.total_escuelas} color="text-emerald-700" bg="bg-emerald-50/60" />
+                    <KPICard icon="📍" label="Distritos" value={practicasData.total_distritos} color="text-purple-700" bg="bg-purple-50/60" />
+                    <KPICard icon="✅" label="En Mineduc" value={practicasData.en_mineduc} color="text-amber-700" bg="bg-amber-50/60"
+                      sub={`${practicasData.total_estudiantes ? Math.round(practicasData.en_mineduc / practicasData.total_estudiantes * 100) : 0}% del total`} />
+                  </div>
+
+                  {/* Filtros */}
+                  <div className="flex flex-wrap gap-3">
+                    <select value={practicasFiltros.sistema} onChange={e => setPracticasFiltros(f => ({ ...f, sistema: e.target.value }))}
+                      className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-300 focus:border-blue-400">
+                      <option value="">Todos los sistemas</option>
+                      {(practicasData.filtros?.sistemas_educativos || []).map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                    <select value={practicasFiltros.distrito} onChange={e => setPracticasFiltros(f => ({ ...f, distrito: e.target.value }))}
+                      className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-300 focus:border-blue-400">
+                      <option value="">Todos los distritos</option>
+                      {(practicasData.filtros?.distritos || []).map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                    <select value={practicasFiltros.centro} onChange={e => setPracticasFiltros(f => ({ ...f, centro: e.target.value }))}
+                      className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-300 focus:border-blue-400">
+                      <option value="">Todos los centros</option>
+                      {(practicasData.filtros?.centros_apoyo || []).map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    <select value={practicasFiltros.nivel} onChange={e => setPracticasFiltros(f => ({ ...f, nivel: e.target.value }))}
+                      className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-300 focus:border-blue-400">
+                      <option value="">Todos los niveles</option>
+                      {(practicasData.filtros?.niveles_practica || []).map(n => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                  </div>
+
+                  {/* Distribución: por sistema, por nivel, por centro */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* Por sistema educativo */}
+                    <div className="bg-white rounded-xl border border-gray-200 p-4">
+                      <h3 className="text-sm font-semibold text-gray-700 mb-3">Por Sistema Educativo</h3>
+                      {(practicasData.por_sistema || []).map(s => (
+                        <div key={s.sistema} className="flex justify-between items-center py-1.5 border-b border-gray-50 last:border-0">
+                          <span className="text-sm text-gray-600">{s.sistema}</span>
+                          <span className="text-sm font-semibold text-gray-800">{s.total}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {/* Por nivel */}
+                    <div className="bg-white rounded-xl border border-gray-200 p-4">
+                      <h3 className="text-sm font-semibold text-gray-700 mb-3">Por Nivel de Práctica</h3>
+                      {(practicasData.por_nivel || []).map(n => (
+                        <div key={n.nivel} className="flex justify-between items-center py-1.5 border-b border-gray-50 last:border-0">
+                          <span className="text-sm text-gray-600">{n.nivel}</span>
+                          <span className="text-sm font-semibold text-gray-800">{n.total}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {/* Por centro de apoyo */}
+                    <div className="bg-white rounded-xl border border-gray-200 p-4">
+                      <h3 className="text-sm font-semibold text-gray-700 mb-3">Por Centro de Apoyo</h3>
+                      {(practicasData.por_centro || []).map(c => (
+                        <div key={c.centro} className="flex justify-between items-center py-1.5 border-b border-gray-50 last:border-0">
+                          <span className="text-sm text-gray-600">{c.centro}</span>
+                          <span className="text-sm font-semibold text-gray-800">{c.total}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Distritos → Escuelas → Estudiantes (jerarquía expandible) */}
+                  <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                    <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
+                      <h3 className="text-sm font-semibold text-gray-700">Distritos y Escuelas</h3>
+                    </div>
+                    <div className="divide-y divide-gray-100">
+                      {(practicasData.distritos || []).map((dist, dIdx) => (
+                        <div key={dist.distrito}>
+                          {/* Distrito header */}
+                          <button onClick={() => setPracticasExpanded(prev => ({ ...prev, [dIdx]: !prev[dIdx] }))}
+                            className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors text-left">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs">{practicasExpanded[dIdx] ? "▼" : "▶"}</span>
+                              <span className="font-medium text-gray-800">{dist.distrito}</span>
+                            </div>
+                            <div className="flex items-center gap-3 text-xs text-gray-500">
+                              <span>{dist.total_escuelas} escuela{dist.total_escuelas !== 1 ? "s" : ""}</span>
+                              <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">{dist.total_estudiantes} est.</span>
+                            </div>
+                          </button>
+
+                          {/* Escuelas del distrito */}
+                          {practicasExpanded[dIdx] && (
+                            <div className="bg-gray-50/50 border-t border-gray-100">
+                              {dist.escuelas.map((esc, eIdx) => (
+                                <div key={esc.amie || eIdx}>
+                                  <button onClick={() => setPracticasEscuela(practicasEscuela?.amie === esc.amie && practicasEscuela?.distrito === dist.distrito ? null : esc)}
+                                    className="w-full flex items-center justify-between px-6 py-2.5 hover:bg-blue-50/60 transition-colors text-left">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs text-gray-400">{practicasEscuela?.amie === esc.amie && practicasEscuela?.distrito === dist.distrito ? "▼" : "▶"}</span>
+                                      <span className="text-sm text-gray-700">{esc.nombre_escuela || "Sin nombre"}</span>
+                                      {esc.amie && <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{esc.amie}</span>}
+                                    </div>
+                                    <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">{esc.total_estudiantes} est.</span>
+                                  </button>
+
+                                  {/* Lista de estudiantes de la escuela */}
+                                  {practicasEscuela?.amie === esc.amie && practicasEscuela?.distrito === dist.distrito && (
+                                    <div className="px-6 pb-3">
+                                      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                                        {esc.nombre_autoridad && (
+                                          <div className="px-3 py-2 bg-amber-50 border-b border-amber-100 text-xs text-amber-800">
+                                            <span className="font-medium">Autoridad:</span> {esc.nombre_autoridad} ({esc.cargo_autoridad}) — {esc.telefono_autoridad}
+                                          </div>
+                                        )}
+                                        <table className="w-full text-xs">
+                                          <thead>
+                                            <tr className="bg-gray-50 text-gray-500 text-left">
+                                              <th className="px-3 py-2 font-medium">Estudiante</th>
+                                              <th className="px-3 py-2 font-medium">Cédula</th>
+                                              <th className="px-3 py-2 font-medium">Correo</th>
+                                              <th className="px-3 py-2 font-medium">Centro</th>
+                                              <th className="px-3 py-2 font-medium">Nivel / Práctica</th>
+                                              <th className="px-3 py-2 font-medium">Mineduc</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody className="divide-y divide-gray-50">
+                                            {esc.estudiantes.map((est, sIdx) => (
+                                              <tr key={sIdx} className="hover:bg-blue-50/40">
+                                                <td className="px-3 py-2 text-gray-800 font-medium">{est.nombre}</td>
+                                                <td className="px-3 py-2 text-gray-500">{est.cedula}</td>
+                                                <td className="px-3 py-2 text-gray-500">{est.correo}</td>
+                                                <td className="px-3 py-2 text-gray-500">{est.centro_apoyo}</td>
+                                                <td className="px-3 py-2 text-gray-500">{est.nivel_practica}</td>
+                                                <td className="px-3 py-2">
+                                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${est.en_mineduc === "Sí" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600"}`}>
+                                                    {est.en_mineduc || "—"}
+                                                  </span>
+                                                </td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
               )}
             </div>
           )}

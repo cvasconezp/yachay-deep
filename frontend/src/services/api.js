@@ -265,6 +265,12 @@ class ApiClient {
     return this.get(`/analytics/entregas-resumen${qs ? "?" + qs : ""}`);
   }
 
+  // ── Prácticas ──
+  getPracticasResumen(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.get(`/analytics/practicas-resumen${qs ? "?" + qs : ""}`);
+  }
+
   // ── Alerts ──
   getAlertCount(params = {}) {
     const qs = new URLSearchParams(params).toString();
