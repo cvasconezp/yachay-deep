@@ -21,6 +21,7 @@ from ...models.student import Student
 from ...models.task_submission import TaskSubmission
 from ...models.course_config import CourseConfig, SemesterConfig
 from ...models.enrollment import Enrollment
+from ...models.intervention import Intervention
 
 logger = logging.getLogger(__name__)
 
@@ -302,6 +303,31 @@ def entregas_pendientes(
 
     # Ordenar: primero las actividades con más pendientes
     resultado.sort(key=lambda x: x["no_entregaron"], reverse=True)
+
+    # Marcar estudiantes que ya tienen intervención reciente (motivo "Tareas no entregadas")
+    all_pending_ids = set()
+    for act in resultado:
+        for p in act["pendientes"]:
+            all_pending_ids.add(p["student_id"])
+
+    intervenidos = set()
+    if all_pending_ids:
+        from datetime import timedelta, datetime, timezone
+        umbral = datetime.now(timezone.utc) - timedelta(days=30)
+        rows = (
+            db.query(Intervention.student_id)
+            .filter(
+                Intervention.student_id.in_(all_pending_ids),
+                Intervention.created_at >= umbral,
+            )
+            .distinct()
+            .all()
+        )
+        intervenidos = {r[0] for r in rows}
+
+    for act in resultado:
+        for p in act["pendientes"]:
+            p["intervenido"] = p["student_id"] in intervenidos
 
     # Grupos disponibles para la carrera seleccionada (para filtro en frontend)
     grupos_disponibles = []

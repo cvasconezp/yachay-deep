@@ -75,6 +75,8 @@ export default function EntregasPendientes() {
   // Selección de estudiantes en vista asignatura (por actividad)
   const [actSelectedIds, setActSelectedIds] = useState({}); // { actKey: Set<student_id> }
   const [actBulkModal, setActBulkModal] = useState(null);   // { students, asignatura, unidad }
+  // IDs intervenidos en esta sesión (complementa el flag `intervenido` del backend)
+  const [sessionIntervenidos, setSessionIntervenidos] = useState(new Set());
 
   // Selección de estudiantes (vista estudiante)
   const [selectedIds, setSelectedIds] = useState(new Set());
@@ -604,11 +606,17 @@ export default function EntregasPendientes() {
                               </div>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-1.5">
-                              {act.pendientes.map((p) => (
+                              {act.pendientes.map((p) => {
+                                const yaIntervenido = p.intervenido || sessionIntervenidos.has(p.student_id);
+                                return (
                                 <div
                                   key={p.student_id}
-                                  className={`flex items-center gap-2 bg-white rounded-lg border px-3 py-1.5 transition-colors ${
-                                    sel.has(p.student_id) ? "border-blue-400 bg-blue-50/50" : "border-red-100 hover:border-blue-300"
+                                  className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 transition-colors ${
+                                    yaIntervenido
+                                      ? "bg-green-50/60 border-green-300"
+                                      : sel.has(p.student_id)
+                                        ? "bg-blue-50/50 border-blue-400"
+                                        : "bg-white border-red-100 hover:border-blue-300"
                                   }`}
                                 >
                                   <input
@@ -617,11 +625,14 @@ export default function EntregasPendientes() {
                                     onChange={(e) => { e.stopPropagation(); toggleOne(p.student_id); }}
                                     className="rounded shrink-0"
                                   />
+                                  {yaIntervenido && (
+                                    <span className="text-green-600 text-sm shrink-0" title="Intervención registrada">✓</span>
+                                  )}
                                   <div
                                     className="flex-1 min-w-0 cursor-pointer"
                                     onClick={(e) => { e.stopPropagation(); navigate(`/ficha/${p.student_id}`); }}
                                   >
-                                    <div className="text-xs font-medium text-gray-800 truncate">{p.nombre}</div>
+                                    <div className={`text-xs font-medium truncate ${yaIntervenido ? "text-green-800" : "text-gray-800"}`}>{p.nombre}</div>
                                     <div className="text-[10px] text-gray-400 truncate">{p.correo}</div>
                                   </div>
                                   <CopyButton
@@ -629,7 +640,8 @@ export default function EntregasPendientes() {
                                     label="📋"
                                   />
                                 </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           </div>
                         </td>
@@ -782,6 +794,12 @@ export default function EntregasPendientes() {
           }}
           onClose={() => setActBulkModal(null)}
           onSaved={() => {
+            // Marcar estos estudiantes como intervenidos en la sesión
+            setSessionIntervenidos(prev => {
+              const next = new Set(prev);
+              actBulkModal.students.forEach(s => next.add(s.id));
+              return next;
+            });
             setActBulkModal(null);
             setActSelectedIds(prev => ({ ...prev, [actBulkModal.actKey]: new Set() }));
           }}
