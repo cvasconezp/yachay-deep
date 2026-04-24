@@ -1291,14 +1291,13 @@ function FichaEstudianteInner() {
               <p className="text-xs font-bold text-red-700 mb-3 uppercase">Factores · Deserción</p>
               <div className="space-y-3">
                 {prediccion.xai.desercion.slice(0,3).map((f,i) => {
-                  const nm = {promedio_notas:'Promedio Calificaciones',num_reprobadas:'Materias Reprobadas',pct_reprobadas:'% Reprobadas',nota_min:'Nota Mínima',std_notas:'Dispersión Notas',num_zeros:'Materias con Cero'};
-                  const sube = f.direccion==='aumenta';
-                  const pct = Math.min(100, Math.round(Math.abs(f.impacto||0)*100));
+                  const sube = f.direccion==='incrementa';
+                  const pct = Math.min(100, Math.round(Math.abs(f.contribucion||0)*100));
                   return (
                   <div key={i}>
                     <div className="flex justify-between text-xs mb-0.5">
-                      <span className="font-medium text-gray-700">{nm[f.feature]||f.feature}</span>
-                      <span className={sube?'text-red-500':'text-emerald-500'}>{sube?'↑ riesgo':'↓ riesgo'}</span>
+                      <span className="font-medium text-gray-700">{f.label || f.feature}</span>
+                      <span className={sube?'text-red-500':'text-emerald-500'}>{sube?'↑ aumenta riesgo':'↓ reduce riesgo'}</span>
                     </div>
                     <p className="text-xs text-gray-400 mb-1">Valor: {typeof f.valor==='number'?f.valor.toFixed(2):f.valor} · Media: {typeof f.media_carrera==='number'?f.media_carrera.toFixed(2):f.media_carrera}</p>
                     <div className="h-1.5 bg-gray-100 rounded-full">
@@ -1315,14 +1314,13 @@ function FichaEstudianteInner() {
               <p className="text-xs font-bold text-orange-700 mb-3 uppercase">Factores · Reprobación</p>
               <div className="space-y-3">
                 {prediccion.xai.reprobacion.slice(0,3).map((f,i) => {
-                  const nm = {promedio_notas:'Promedio Calificaciones',num_reprobadas:'Materias Reprobadas',pct_reprobadas:'% Reprobadas',nota_min:'Nota Mínima',std_notas:'Dispersión Notas',num_zeros:'Materias con Cero'};
-                  const sube = f.direccion==='aumenta';
-                  const pct = Math.min(100, Math.round(Math.abs(f.impacto||0)*100));
+                  const sube = f.direccion==='incrementa';
+                  const pct = Math.min(100, Math.round(Math.abs(f.contribucion||0)*100));
                   return (
                   <div key={i}>
                     <div className="flex justify-between text-xs mb-0.5">
-                      <span className="font-medium text-gray-700">{nm[f.feature]||f.feature}</span>
-                      <span className={sube?'text-orange-500':'text-emerald-500'}>{sube?'↑ riesgo':'↓ riesgo'}</span>
+                      <span className="font-medium text-gray-700">{f.label || f.feature}</span>
+                      <span className={sube?'text-orange-500':'text-emerald-500'}>{sube?'↑ aumenta riesgo':'↓ reduce riesgo'}</span>
                     </div>
                     <p className="text-xs text-gray-400 mb-1">Valor: {typeof f.valor==='number'?f.valor.toFixed(2):f.valor} · Media: {typeof f.media_carrera==='number'?f.media_carrera.toFixed(2):f.media_carrera}</p>
                     <div className="h-1.5 bg-gray-100 rounded-full">
