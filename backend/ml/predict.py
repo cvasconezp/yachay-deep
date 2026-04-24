@@ -132,6 +132,9 @@ class Predictor:
 
                 for row in rows:
                     name = row.name
+                    # Skip special metadata rows (handled separately below)
+                    if name.startswith("__"):
+                        continue
                     # Restaurar .joblib a disco
                     model_path = MODELS_DIR / f"{name}.joblib"
                     model_path.write_bytes(row.model_data)
@@ -198,6 +201,8 @@ class Predictor:
         return {
             "loaded": self._loaded,
             "models": {k: list(v.keys()) for k, v in self.models.items()},
+            "has_desercion": any("desercion" in v for v in self.models.values()),
+            "has_reprobacion": any("reprobacion" in v for v in self.models.values()),
             "carrera_mapping": self.carrera_mapping,
             "metadata": self.metadata,
         }
@@ -397,16 +402,19 @@ class Predictor:
             result["periodo_usado"] = used_fallback_periodo
             result["nota"] = "Predicción basada en notas del periodo anterior (aún no hay notas del semestre actual)"
 
+        xai = {}
         if "desercion" in models:
             result["prob_desercion"] = round(float(models["desercion"].predict_proba(X)[0, 1]), 4)
-            result["explicacion_desercion"] = self._compute_explanations(
+            xai["desercion"] = self._compute_explanations(
                 features, model_key, "desercion"
             )
         if "reprobacion" in models:
             result["prob_reprobacion"] = round(float(models["reprobacion"].predict_proba(X)[0, 1]), 4)
-            result["explicacion_reprobacion"] = self._compute_explanations(
+            xai["reprobacion"] = self._compute_explanations(
                 features, model_key, "reprobacion"
             )
+        if xai:
+            result["xai"] = xai
 
         # [GAP-F3-02] Contexto conductual adicional (no depende del modelo ML)
         # Enriquece las explicaciones con indicadores intuitivos para tutores.
