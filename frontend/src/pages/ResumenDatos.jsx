@@ -12,61 +12,70 @@ import {
   Treemap,
 } from "recharts";
 
-/* ── Paleta de colores ─────────────────── */
-const RISK_COLORS = { Alto: "#ef4444", Medio: "#f59e0b", Bajo: "#22c55e" };
-const CHART_COLORS = [
-  "#3b82f6", "#8b5cf6", "#06b6d4", "#f97316", "#ec4899",
-  "#14b8a6", "#6366f1", "#84cc16", "#f43f5e", "#0ea5e9",
-];
-const GENDER_COLORS = { Masculino: "#3b82f6", Femenino: "#ec4899", "Sin dato": "#94a3b8" };
+/* ── Paleta Power BI global ────────────── */
+const PBI = {
+  navy: "#1B2A4A", blue: "#2B5EA7", teal: "#0F9B8D",
+  gold: "#F2C94C", coral: "#EB5757", purple: "#7B61FF",
+  slate: "#64748B", bg: "#F8FAFC", card: "#FFFFFF", border: "#E2E8F0",
+  green: "#0F9B8D", orange: "#F97316",
+  // Treemap & chart palette (varied, high contrast)
+  palette: ["#2B5EA7","#0F9B8D","#7B61FF","#EB5757","#F2C94C","#14B8A6","#6366F1","#F97316","#EC4899","#06B6D4","#84CC16","#8B5CF6","#0EA5E9","#F43F5E","#10B981","#A855F7","#EAB308","#3B82F6"],
+};
+const RISK_COLORS = { Alto: PBI.coral, Medio: PBI.gold, Bajo: PBI.teal };
+const CHART_COLORS = PBI.palette;
+const GENDER_COLORS = { Masculino: PBI.blue, Femenino: "#EC4899", "Sin dato": PBI.slate };
 
-/* ── KPI Card ──────────────────────────── */
-function KPICard({ label, value, sub, icon, color = "text-gray-900", bg = "bg-white", onClick }) {
+/* ── Tooltip estilo PBI (reutilizable) ── */
+const pbiTooltipStyle = { fontSize: 12, borderRadius: 8, border: "none", boxShadow: "0 4px 12px rgba(0,0,0,.1)", background: "#fff" };
+
+/* ── KPI Card (Power BI style) ─────────── */
+function KPICard({ label, value, sub, icon, accent = PBI.blue, onClick }) {
   const clickable = !!onClick;
   return (
     <div
-      className={`${bg} rounded-xl border border-gray-200 p-4 shadow-sm flex flex-col ${clickable ? "cursor-pointer hover:ring-2 hover:ring-blue-300 hover:shadow-md transition-all" : ""}`}
+      className={`rounded-lg p-4 flex flex-col ${clickable ? "cursor-pointer hover:shadow-md transition-all" : ""}`}
+      style={{ background: PBI.card, border: `1px solid ${PBI.border}`, borderTop: `3px solid ${accent}` }}
       onClick={onClick}
       title={clickable ? "Clic para ver listado" : undefined}
     >
       <div className="flex items-center gap-2 mb-1">
-        {icon && <span className="text-lg">{icon}</span>}
-        <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">{label}</span>
-        {clickable && <span className="text-[10px] text-blue-400 ml-auto">▸ ver lista</span>}
+        {icon && <span className="text-base">{icon}</span>}
+        <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: PBI.slate }}>{label}</span>
+        {clickable && <span className="text-[10px] ml-auto" style={{ color: PBI.blue }}>▸ ver lista</span>}
       </div>
-      <div className={`text-2xl font-bold ${color} leading-tight`}>{value ?? "—"}</div>
-      {sub && <span className="text-[11px] text-gray-400 mt-0.5">{sub}</span>}
+      <div className="text-2xl font-bold leading-tight" style={{ color: PBI.navy }}>{value ?? "—"}</div>
+      {sub && <span className="text-[11px] mt-0.5" style={{ color: PBI.slate }}>{sub}</span>}
     </div>
   );
 }
 
 /* ── Mini horizontal bar ───────────────── */
-function MiniBar({ label, value, total, color = "bg-blue-500" }) {
+function MiniBar({ label, value, total, color = PBI.blue }) {
   const pct = total > 0 ? (value / total) * 100 : 0;
   return (
     <div className="flex items-center gap-2 text-xs">
-      <span className="w-28 text-gray-500 truncate" title={label}>{label}</span>
-      <div className="flex-1 bg-gray-100 rounded-full h-2.5 overflow-hidden">
-        <div className={`${color} h-full rounded-full transition-all`} style={{ width: `${Math.min(pct, 100)}%` }} />
+      <span className="w-28 truncate" style={{ color: PBI.slate }} title={label}>{label}</span>
+      <div className="flex-1 rounded-full h-2.5 overflow-hidden" style={{ background: "#f1f5f9" }}>
+        <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(pct, 100)}%`, background: color }} />
       </div>
-      <span className="w-12 text-right font-medium text-gray-700">{value}</span>
+      <span className="w-12 text-right font-semibold" style={{ color: PBI.navy }}>{value}</span>
     </div>
   );
 }
 
-/* ── Donut chart section ───────────────── */
+/* ── Donut chart section (PBI style) ──── */
 function DonutSection({ title, data, colors, total, onItemClick }) {
   if (!data || data.length === 0) return null;
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-      <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-3">{title}</h3>
+    <div className="rounded-lg p-4" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
+      <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: PBI.slate }}>{title}</h3>
       <div className="flex items-center gap-4">
         <ResponsiveContainer width={120} height={120}>
           <PieChart>
-            <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={30} outerRadius={50} paddingAngle={2}>
+            <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={30} outerRadius={50} paddingAngle={3} strokeWidth={0}>
               {data.map((_, i) => <Cell key={i} fill={colors[i % colors.length]} />)}
             </Pie>
-            <Tooltip formatter={(v) => v.toLocaleString()} />
+            <Tooltip contentStyle={pbiTooltipStyle} formatter={(v, name) => [`${v.toLocaleString()}`, name]} />
           </PieChart>
         </ResponsiveContainer>
         <div className="flex-1 space-y-1.5">
@@ -74,13 +83,13 @@ function DonutSection({ title, data, colors, total, onItemClick }) {
             const clickHandler = onItemClick ? () => onItemClick(d.name) : undefined;
             return (
               <div key={d.name}
-                className={`flex items-center gap-2 text-xs ${clickHandler ? "cursor-pointer hover:bg-gray-50 rounded-md px-1 -mx-1 py-0.5 transition-colors" : ""}`}
+                className={`flex items-center gap-2 text-xs ${clickHandler ? "cursor-pointer hover:bg-blue-50/40 rounded-md px-1 -mx-1 py-0.5 transition-colors" : ""}`}
                 onClick={clickHandler} title={clickHandler ? "Clic para ver listado" : undefined}>
                 <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: colors[i % colors.length] }} />
-                <span className="text-gray-600 truncate flex-1">{d.name}</span>
-                <span className="font-semibold text-gray-800">{d.value.toLocaleString()}</span>
-                <span className="text-gray-400 w-10 text-right">{total > 0 ? `${Math.round(d.value / total * 100)}%` : ""}</span>
-                {clickHandler && <span className="text-[10px] text-blue-400">▸</span>}
+                <span className="truncate flex-1" style={{ color: PBI.navy }}>{d.name}</span>
+                <span className="font-semibold" style={{ color: PBI.navy }}>{d.value.toLocaleString()}</span>
+                <span className="w-10 text-right" style={{ color: PBI.slate }}>{total > 0 ? `${Math.round(d.value / total * 100)}%` : ""}</span>
+                {clickHandler && <span className="text-[10px]" style={{ color: PBI.blue }}>▸</span>}
               </div>
             );
           })}
@@ -90,20 +99,20 @@ function DonutSection({ title, data, colors, total, onItemClick }) {
   );
 }
 
-/* ── Horizontal bar chart (top N) ──────── */
-function HBarChart({ title, data, color = "#3b82f6", maxItems = 10 }) {
+/* ── Horizontal bar chart (top N, PBI) ── */
+function HBarChart({ title, data, color = PBI.blue, maxItems = 10 }) {
   if (!data || data.length === 0) return null;
   const sliced = data.slice(0, maxItems);
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-      <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-3">{title}</h3>
+    <div className="rounded-lg p-4" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
+      <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: PBI.slate }}>{title}</h3>
       <ResponsiveContainer width="100%" height={Math.max(sliced.length * 32, 120)}>
         <BarChart data={sliced} layout="vertical" margin={{ top: 0, right: 20, bottom: 0, left: 100 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
-          <XAxis type="number" tick={{ fontSize: 11 }} />
-          <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={95} />
-          <Tooltip />
-          <Bar dataKey="value" fill={color} radius={[0, 4, 4, 0]} barSize={18} />
+          <CartesianGrid horizontal={false} stroke="#f1f5f9" />
+          <XAxis type="number" tick={{ fontSize: 10, fill: PBI.slate }} axisLine={false} tickLine={false} />
+          <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: PBI.navy }} width={95} axisLine={false} tickLine={false} />
+          <Tooltip contentStyle={pbiTooltipStyle} formatter={(v) => [`${v.toLocaleString()}`, ""]} />
+          <Bar dataKey="value" fill={color} radius={[0, 6, 6, 0]} barSize={18} />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -162,21 +171,7 @@ function StudentTable({ esc, navigate }) {
   );
 }
 
-/* ── Paleta Power BI para prácticas ── */
-const PBI = {
-  navy: "#1B2A4A",
-  blue: "#2B5EA7",
-  teal: "#0F9B8D",
-  gold: "#F2C94C",
-  coral: "#EB5757",
-  purple: "#7B61FF",
-  slate: "#64748B",
-  bg: "#F8FAFC",
-  card: "#FFFFFF",
-  border: "#E2E8F0",
-  // Treemap palette (varied, high contrast)
-  treemap: ["#2B5EA7","#0F9B8D","#7B61FF","#EB5757","#F2C94C","#14B8A6","#6366F1","#F97316","#EC4899","#06B6D4","#84CC16","#8B5CF6","#0EA5E9","#F43F5E","#10B981","#A855F7","#EAB308","#3B82F6"],
-};
+/* (PBI palette is now defined globally at the top of the file) */
 
 /* ── Custom Treemap cell ── */
 function TreemapCell({ x, y, width, height, name, value, fill }) {
@@ -232,7 +227,7 @@ function PracticasTab({ data: practicasData, loading, filtros, setFiltros, expan
   const treemapData = (pd.por_distrito || []).map((d, i) => ({
     name: d.distrito,
     size: d.total,
-    fill: PBI.treemap[i % PBI.treemap.length],
+    fill: PBI.palette[i % PBI.treemap.length],
   }));
 
   // Nivel data for horizontal bars (cleaned names)
@@ -599,11 +594,12 @@ export default function ResumenDatos() {
       {/* ── Header ─── */}
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Resumen de Datos</h1>
-          <p className="text-gray-400 text-sm">Panel analítico integral — estudiantes, carreras y métricas institucionales</p>
+          <h1 className="text-2xl font-bold" style={{ color: PBI.navy }}>Resumen de Datos</h1>
+          <p className="text-sm" style={{ color: PBI.slate }}>Panel analítico integral — estudiantes, carreras y métricas institucionales</p>
         </div>
         <button onClick={() => setExportOpen(!exportOpen)}
-          className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm">
+          className="flex items-center gap-2 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm hover:opacity-90"
+          style={{ background: PBI.teal }}>
           {"📥"} Exportar Excel
         </button>
       </div>
@@ -704,33 +700,39 @@ export default function ResumenDatos() {
       {/* ── Main content (show if students exist) ─── */}
       {!loading && g.total_estudiantes > 0 && (
         <>
-          {/* ── KPI Cards ─── */}
+          {/* ── KPI Cards (PBI style) ─── */}
           <div className="space-y-4 mb-6">
             {/* Fila 1: Población y estructura */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-              <KPICard icon="🎓" label="Estudiantes" value={g.total_estudiantes?.toLocaleString()} color="text-blue-700" bg="bg-blue-50/60" />
-              <KPICard icon="👨‍🏫" label="Docentes" value={g.total_docentes_enrollment || g.total_docentes || "—"} color="text-emerald-700" bg="bg-emerald-50/60" />
-              <KPICard icon="📚" label="Carreras" value={g.total_carreras} color="text-purple-700" bg="bg-purple-50/60" />
-              <KPICard icon="📋" label="Matrículas" value={g.total_matriculas?.toLocaleString()} color="text-teal-700" bg="bg-teal-50/60" sub="registros est × materia" />
-              <KPICard icon="📊" label="Prom. Calificaciones" value={g.promedio_calificaciones ?? "—"} color="text-gray-700" bg="bg-gray-50/60" sub={g.promedio_calificaciones ? "sobre 100" : "Aún sin AVAC"} />
+              <KPICard icon="🎓" label="Estudiantes" value={g.total_estudiantes?.toLocaleString()} accent={PBI.blue} />
+              <KPICard icon="👨‍🏫" label="Docentes" value={g.total_docentes_enrollment || g.total_docentes || "—"} accent={PBI.teal} />
+              <KPICard icon="📚" label="Carreras" value={g.total_carreras} accent={PBI.purple} />
+              <KPICard icon="📋" label="Matrículas" value={g.total_matriculas?.toLocaleString()} accent={PBI.gold} sub="registros est × materia" />
+              <KPICard icon="📊" label="Prom. Calificaciones" value={g.promedio_calificaciones ?? "—"} accent={PBI.coral} sub={g.promedio_calificaciones ? "sobre 100" : "Aún sin AVAC"} />
             </div>
 
             {/* Fila 2: Oferta académica */}
             <div>
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2 ml-1">Oferta académica</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wider mb-2 ml-1" style={{ color: PBI.slate }}>Oferta académica</p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <KPICard icon="📖" label="Asignaturas" value={g.total_asignaturas} color="text-cyan-700" bg="bg-cyan-50/60" sub="materias únicas" />
-                <KPICard icon="📑" label="Secciones" value={g.total_secciones ?? "—"} color="text-orange-700" bg="bg-orange-50/60" sub="materia × docente" />
-                <KPICard icon="🖥️" label="Aulas Virtuales" value={g.total_aulas_virtuales ?? "—"} color="text-indigo-700" bg="bg-indigo-50/60" sub="cursos en AVAC" />
+                <KPICard icon="📖" label="Asignaturas" value={g.total_asignaturas} accent="#06B6D4" sub="materias únicas" />
+                <KPICard icon="📑" label="Secciones" value={g.total_secciones ?? "—"} accent={PBI.orange} sub="materia × docente" />
+                <KPICard icon="🖥️" label="Aulas Virtuales" value={g.total_aulas_virtuales ?? "—"} accent="#6366F1" sub="cursos en AVAC" />
               </div>
             </div>
           </div>
 
-          {/* ── Tab Navigation ─── */}
-          <div className="flex gap-1 mb-5 bg-gray-100 rounded-lg p-1 overflow-x-auto">
+          {/* ── Tab Navigation (PBI style) ─── */}
+          <div className="flex gap-0 mb-5 overflow-x-auto" style={{ borderBottom: `2px solid ${PBI.border}` }}>
             {TABS.map(t => (
               <button key={t.key} onClick={() => setActiveTab(t.key)}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${activeTab === t.key ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>
+                className="px-5 py-2.5 text-sm font-medium transition-colors whitespace-nowrap relative"
+                style={{
+                  color: activeTab === t.key ? PBI.navy : PBI.slate,
+                  fontWeight: activeTab === t.key ? 700 : 500,
+                  borderBottom: activeTab === t.key ? `3px solid ${PBI.blue}` : "3px solid transparent",
+                  marginBottom: "-2px",
+                }}>
                 {t.label}
               </button>
             ))}
@@ -751,34 +753,34 @@ export default function ResumenDatos() {
                 <DonutSection title="Género" data={genderData} colors={genderColors} total={g.total_estudiantes} />
 
                 {/* Academic indicators */}
-                <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-                  <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-3">Indicadores Clave</h3>
+                <div className="rounded-lg p-4" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: PBI.slate }}>Indicadores Clave</h3>
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-500">Reprobados</span>
-                      <span className="text-lg font-bold text-red-600">{g.reprobados ?? 0}</span>
+                      <span className="text-sm" style={{ color: PBI.slate }}>Reprobados</span>
+                      <span className="text-lg font-bold" style={{ color: PBI.coral }}>{g.reprobados ?? 0}</span>
                     </div>
-                    <div className="flex justify-between items-center cursor-pointer hover:bg-orange-50 rounded-lg px-2 py-1 -mx-2 transition-colors"
+                    <div className="flex justify-between items-center cursor-pointer hover:bg-blue-50/40 rounded-lg px-2 py-1 -mx-2 transition-colors"
                          onClick={() => openStudentList("repitentes")} title="Clic para ver listado">
-                      <span className="text-sm text-gray-500">Repitentes</span>
-                      <span className="text-lg font-bold text-orange-600 flex items-center gap-1">{g.repitentes ?? 0} <span className="text-[10px] text-orange-300">▸</span></span>
+                      <span className="text-sm" style={{ color: PBI.slate }}>Repitentes</span>
+                      <span className="text-lg font-bold flex items-center gap-1" style={{ color: PBI.gold }}>{g.repitentes ?? 0} <span className="text-[10px]" style={{ color: PBI.blue }}>▸</span></span>
                     </div>
-                    <div className="flex justify-between items-center cursor-pointer hover:bg-purple-50 rounded-lg px-2 py-1 -mx-2 transition-colors"
+                    <div className="flex justify-between items-center cursor-pointer hover:bg-blue-50/40 rounded-lg px-2 py-1 -mx-2 transition-colors"
                          onClick={() => openStudentList("condicionados")} title="Clic para ver listado de condicionados (3ra matrícula)">
-                      <span className="text-sm text-gray-500">Condicionados</span>
-                      <span className="text-lg font-bold text-purple-600 flex items-center gap-1">{g.condicionados ?? 0} <span className="text-[10px] text-purple-300">▸</span></span>
+                      <span className="text-sm" style={{ color: PBI.slate }}>Condicionados</span>
+                      <span className="text-lg font-bold flex items-center gap-1" style={{ color: PBI.purple }}>{g.condicionados ?? 0} <span className="text-[10px]" style={{ color: PBI.blue }}>▸</span></span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-500">Prob. deserción alta</span>
-                      <span className="text-lg font-bold text-red-700">{g.desertores_prob ?? 0}</span>
+                      <span className="text-sm" style={{ color: PBI.slate }}>Prob. deserción alta</span>
+                      <span className="text-lg font-bold" style={{ color: PBI.coral }}>{g.desertores_prob ?? 0}</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-500">Compromiso promedio</span>
-                      <span className="text-lg font-bold text-teal-600">{g.promedio_compromiso ? `${(g.promedio_compromiso * 100).toFixed(0)}%` : "—"}</span>
+                      <span className="text-sm" style={{ color: PBI.slate }}>Compromiso promedio</span>
+                      <span className="text-lg font-bold" style={{ color: PBI.teal }}>{g.promedio_compromiso ? `${(g.promedio_compromiso * 100).toFixed(0)}%` : "—"}</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-500">Edad promedio</span>
-                      <span className="text-lg font-bold text-gray-700">{g.promedio_edad ? `${g.promedio_edad} años` : "—"}</span>
+                      <span className="text-sm" style={{ color: PBI.slate }}>Edad promedio</span>
+                      <span className="text-lg font-bold" style={{ color: PBI.navy }}>{g.promedio_edad ? `${g.promedio_edad} años` : "—"}</span>
                     </div>
                   </div>
                 </div>
@@ -791,48 +793,41 @@ export default function ResumenDatos() {
 
               {/* Intervenciones summary */}
               {g.intervenciones && g.intervenciones.total > 0 && (
-                <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                  <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+                <div className="rounded-lg overflow-hidden" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
+                  <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: `1px solid ${PBI.border}` }}>
                     <div>
-                      <h3 className="text-sm font-bold text-gray-800">Intervenciones</h3>
-                      <p className="text-xs text-gray-400 mt-0.5">Seguimiento y resolución de casos</p>
+                      <h3 className="text-sm font-bold" style={{ color: PBI.navy }}>Intervenciones</h3>
+                      <p className="text-xs mt-0.5" style={{ color: PBI.slate }}>Seguimiento y resolución de casos</p>
                     </div>
                   </div>
                   <div className="p-5">
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                      <div className="text-center bg-blue-50 rounded-lg px-3 py-2.5">
-                        <div className="text-xl font-bold text-blue-700">{g.intervenciones.total}</div>
-                        <div className="text-[10px] text-blue-500 uppercase font-medium">Total</div>
-                      </div>
-                      <div className="text-center bg-green-50 rounded-lg px-3 py-2.5">
-                        <div className="text-xl font-bold text-green-700">{g.intervenciones.resueltas}</div>
-                        <div className="text-[10px] text-green-500 uppercase font-medium">Resueltas</div>
-                      </div>
-                      <div className="text-center bg-orange-50 rounded-lg px-3 py-2.5">
-                        <div className="text-xl font-bold text-orange-700">{g.intervenciones.pendientes_seguimiento}</div>
-                        <div className="text-[10px] text-orange-500 uppercase font-medium">Pendientes</div>
-                      </div>
-                      <div className="text-center bg-gray-50 rounded-lg px-3 py-2.5">
-                        <div className="text-xl font-bold text-gray-700">
-                          {g.intervenciones.total > 0 ? `${Math.round((g.intervenciones.resueltas / g.intervenciones.total) * 100)}%` : "—"}
+                      {[
+                        { v: g.intervenciones.total, l: "Total", c: PBI.blue },
+                        { v: g.intervenciones.resueltas, l: "Resueltas", c: PBI.teal },
+                        { v: g.intervenciones.pendientes_seguimiento, l: "Pendientes", c: PBI.gold },
+                        { v: g.intervenciones.total > 0 ? `${Math.round((g.intervenciones.resueltas / g.intervenciones.total) * 100)}%` : "—", l: "Resolución", c: PBI.slate },
+                      ].map(({ v, l, c }) => (
+                        <div key={l} className="text-center rounded-lg px-3 py-2.5" style={{ background: `${c}10`, borderTop: `3px solid ${c}` }}>
+                          <div className="text-xl font-bold" style={{ color: PBI.navy }}>{v}</div>
+                          <div className="text-[10px] uppercase font-medium" style={{ color: c }}>{l}</div>
                         </div>
-                        <div className="text-[10px] text-gray-500 uppercase font-medium">Resolución</div>
-                      </div>
+                      ))}
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <div className="text-[10px] font-semibold text-gray-500 uppercase mb-2">Por motivo</div>
+                        <div className="text-[10px] font-semibold uppercase mb-2" style={{ color: PBI.slate }}>Por motivo</div>
                         <div className="space-y-1.5">
                           {Object.entries(g.intervenciones.por_motivo || {}).sort((a,b) => b[1]-a[1]).map(([m, c]) => (
-                            <MiniBar key={m} label={m} value={c} total={g.intervenciones.total} color="bg-blue-400" />
+                            <MiniBar key={m} label={m} value={c} total={g.intervenciones.total} color={PBI.blue} />
                           ))}
                         </div>
                       </div>
                       <div>
-                        <div className="text-[10px] font-semibold text-gray-500 uppercase mb-2">Por resultado</div>
+                        <div className="text-[10px] font-semibold uppercase mb-2" style={{ color: PBI.slate }}>Por resultado</div>
                         <div className="space-y-1.5">
                           {Object.entries(g.intervenciones.por_resultado || {}).sort((a,b) => b[1]-a[1]).map(([r, c]) => (
-                            <MiniBar key={r} label={r} value={c} total={g.intervenciones.total} color="bg-purple-400" />
+                            <MiniBar key={r} label={r} value={c} total={g.intervenciones.total} color={PBI.purple} />
                           ))}
                         </div>
                       </div>
@@ -847,24 +842,24 @@ export default function ResumenDatos() {
           {activeTab === "academico" && (
             <div className="space-y-5">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <KPICard icon="📝" label="Matrículas con Repitencia" value={g.matriculas_con_repitencia ?? 0} color="text-orange-700" />
-                <KPICard icon="🎯" label="Con Riesgo Calculado" value={g.con_riesgo_calculado ?? 0} color="text-red-600" />
-                <KPICard icon="📈" label="Con Calificaciones" value={g.con_calificaciones ?? 0} color="text-blue-600" />
-                <KPICard icon="👨‍🏫" label="Docentes (calificaciones)" value={g.total_docentes ?? 0} color="text-gray-700" />
+                <KPICard icon="📝" label="Matrículas con Repitencia" value={g.matriculas_con_repitencia ?? 0} accent={PBI.gold} />
+                <KPICard icon="🎯" label="Con Riesgo Calculado" value={g.con_riesgo_calculado ?? 0} accent={PBI.coral} />
+                <KPICard icon="📈" label="Con Calificaciones" value={g.con_calificaciones ?? 0} accent={PBI.blue} />
+                <KPICard icon="👨‍🏫" label="Docentes (calificaciones)" value={g.total_docentes ?? 0} accent={PBI.teal} />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Nivel académico */}
                 {nivelData.length > 0 && (
-                  <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-                    <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-3">Estudiantes por Nivel Académico</h3>
+                  <div className="rounded-lg p-4" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
+                    <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: PBI.slate }}>Estudiantes por Nivel Académico</h3>
                     <ResponsiveContainer width="100%" height={240}>
                       <BarChart data={nivelData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                        <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                        <YAxis tick={{ fontSize: 11 }} />
-                        <Tooltip />
-                        <Bar dataKey="value" name="Estudiantes" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                        <CartesianGrid vertical={false} stroke="#f1f5f9" />
+                        <XAxis dataKey="name" tick={{ fontSize: 11, fill: PBI.slate }} axisLine={false} tickLine={false} />
+                        <YAxis tick={{ fontSize: 11, fill: PBI.slate }} axisLine={false} tickLine={false} />
+                        <Tooltip contentStyle={pbiTooltipStyle} formatter={(v) => [`${v} estudiantes`, ""]} />
+                        <Bar dataKey="value" name="Estudiantes" fill={PBI.blue} radius={[6, 6, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -878,13 +873,13 @@ export default function ResumenDatos() {
 
               {/* Estado matrícula */}
               {g.por_estado_matricula && Object.keys(g.por_estado_matricula).length > 0 && (
-                <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-                  <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-3">Estado de Matrícula</h3>
+                <div className="rounded-lg p-4" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: PBI.slate }}>Estado de Matrícula</h3>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                     {Object.entries(g.por_estado_matricula).sort((a,b) => b[1]-a[1]).map(([est, cnt]) => (
-                      <div key={est} className="flex justify-between text-sm bg-gray-50 rounded-lg px-3 py-2">
-                        <span className="text-gray-600 truncate" title={est}>{est}</span>
-                        <span className="font-bold text-blue-700 ml-2">{cnt}</span>
+                      <div key={est} className="flex justify-between text-sm rounded-lg px-3 py-2" style={{ background: "#f8fafc" }}>
+                        <span className="truncate" style={{ color: PBI.slate }} title={est}>{est}</span>
+                        <span className="font-bold ml-2" style={{ color: PBI.navy }}>{cnt}</span>
                       </div>
                     ))}
                   </div>
@@ -893,16 +888,16 @@ export default function ResumenDatos() {
 
               {/* Pago matrícula */}
               {g.matriculas_pagadas && (g.matriculas_pagadas.SI > 0 || g.matriculas_pagadas.NO > 0) && (
-                <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-                  <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-3">Estado de Pago de Matrícula</h3>
+                <div className="rounded-lg p-4" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: PBI.slate }}>Estado de Pago de Matrícula</h3>
                   <div className="flex gap-4">
-                    <div className="flex-1 text-center bg-green-50 rounded-lg py-3">
-                      <div className="text-2xl font-bold text-green-700">{g.matriculas_pagadas.SI?.toLocaleString()}</div>
-                      <div className="text-xs text-green-500 uppercase font-medium">Pagadas</div>
+                    <div className="flex-1 text-center rounded-lg py-3" style={{ background: `${PBI.teal}10`, borderTop: `3px solid ${PBI.teal}` }}>
+                      <div className="text-2xl font-bold" style={{ color: PBI.navy }}>{g.matriculas_pagadas.SI?.toLocaleString()}</div>
+                      <div className="text-xs uppercase font-medium" style={{ color: PBI.teal }}>Pagadas</div>
                     </div>
-                    <div className="flex-1 text-center bg-red-50 rounded-lg py-3">
-                      <div className="text-2xl font-bold text-red-700">{g.matriculas_pagadas.NO?.toLocaleString()}</div>
-                      <div className="text-xs text-red-500 uppercase font-medium">No Pagadas</div>
+                    <div className="flex-1 text-center rounded-lg py-3" style={{ background: `${PBI.coral}10`, borderTop: `3px solid ${PBI.coral}` }}>
+                      <div className="text-2xl font-bold" style={{ color: PBI.navy }}>{g.matriculas_pagadas.NO?.toLocaleString()}</div>
+                      <div className="text-xs uppercase font-medium" style={{ color: PBI.coral }}>No Pagadas</div>
                     </div>
                   </div>
                 </div>
@@ -949,74 +944,66 @@ export default function ResumenDatos() {
 
               {/* Expandable carrera cards */}
               <div>
-                <h3 className="text-sm font-bold text-gray-700 mb-3">Detalle por Carrera</h3>
+                <h3 className="text-sm font-bold mb-3" style={{ color: PBI.navy }}>Detalle por Carrera</h3>
                 <div className="space-y-2">
                   {porCarrera.map(c => (
-                    <div key={c.carrera} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                    <div key={c.carrera} className="rounded-lg overflow-hidden" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
                       <button onClick={() => setExpandedCarrera(expandedCarrera === c.carrera ? null : c.carrera)}
-                        className="w-full px-5 py-3 flex items-center justify-between hover:bg-gray-50 transition-colors">
+                        className="w-full px-5 py-3 flex items-center justify-between hover:bg-blue-50/30 transition-colors">
                         <div className="flex items-center gap-4">
-                          <h4 className="text-sm font-bold text-gray-800">{c.carrera}</h4>
-                          <div className="flex gap-3 text-xs text-gray-500">
-                            <span><strong className="text-blue-700">{c.total_estudiantes}</strong> est.</span>
-                            <span><strong className="text-blue-600">{c.total_docentes}</strong> doc.</span>
-                            <span>Prom: <strong>{c.promedio_calificaciones ?? "—"}</strong></span>
-                            <span className="text-red-600"><strong>{c.por_riesgo?.Alto || 0}</strong> alto riesgo</span>
+                          <span className="text-xs" style={{ color: PBI.blue }}>{expandedCarrera === c.carrera ? "▼" : "▶"}</span>
+                          <h4 className="text-sm font-bold" style={{ color: PBI.navy }}>{c.carrera}</h4>
+                          <div className="flex gap-3 text-xs" style={{ color: PBI.slate }}>
+                            <span><strong style={{ color: PBI.blue }}>{c.total_estudiantes}</strong> est.</span>
+                            <span><strong style={{ color: PBI.teal }}>{c.total_docentes}</strong> doc.</span>
+                            <span>Prom: <strong style={{ color: PBI.navy }}>{c.promedio_calificaciones ?? "—"}</strong></span>
+                            <span><strong style={{ color: PBI.coral }}>{c.por_riesgo?.Alto || 0}</strong> alto riesgo</span>
                           </div>
                         </div>
-                        <span className="text-gray-400 text-lg">{expandedCarrera === c.carrera ? "−" : "+"}</span>
                       </button>
                       {expandedCarrera === c.carrera && (
-                        <div className="border-t border-gray-100 px-5 py-4 bg-gray-50/50">
+                        <div className="px-5 py-4" style={{ borderTop: `1px solid ${PBI.border}`, background: PBI.bg }}>
                           <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
-                            <div className="text-center">
-                              <div className="text-2xl font-bold text-blue-700">{c.total_estudiantes}</div>
-                              <div className="text-[10px] text-gray-500 uppercase">Estudiantes</div>
-                            </div>
-                            <div className="text-center">
-                              <div className="text-2xl font-bold text-gray-700">{c.promedio_calificaciones ?? "—"}</div>
-                              <div className="text-[10px] text-gray-500 uppercase">Promedio</div>
-                            </div>
-                            <div className="text-center">
-                              <div className="text-2xl font-bold text-gray-600">{c.promedio_edad ?? "—"}</div>
-                              <div className="text-[10px] text-gray-500 uppercase">Edad prom.</div>
-                            </div>
-                            <div className="text-center">
-                              <div className="text-2xl font-bold text-teal-600">{c.promedio_compromiso ? `${(c.promedio_compromiso * 100).toFixed(0)}%` : "—"}</div>
-                              <div className="text-[10px] text-gray-500 uppercase">Compromiso</div>
-                            </div>
-                            <div className="text-center">
-                              <div className="text-2xl font-bold text-blue-600">{c.total_docentes}</div>
-                              <div className="text-[10px] text-gray-500 uppercase">Docentes</div>
-                            </div>
+                            {[
+                              { v: c.total_estudiantes, l: "Estudiantes", c: PBI.blue },
+                              { v: c.promedio_calificaciones ?? "—", l: "Promedio", c: PBI.teal },
+                              { v: c.promedio_edad ?? "—", l: "Edad prom.", c: PBI.slate },
+                              { v: c.promedio_compromiso ? `${(c.promedio_compromiso * 100).toFixed(0)}%` : "—", l: "Compromiso", c: PBI.purple },
+                              { v: c.total_docentes, l: "Docentes", c: PBI.gold },
+                            ].map(({ v, l, c: accent }) => (
+                              <div key={l} className="text-center rounded-lg py-2" style={{ borderTop: `3px solid ${accent}`, background: PBI.card }}>
+                                <div className="text-2xl font-bold" style={{ color: PBI.navy }}>{v}</div>
+                                <div className="text-[10px] uppercase" style={{ color: PBI.slate }}>{l}</div>
+                              </div>
+                            ))}
                           </div>
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <div className="space-y-1.5">
-                              <div className="text-[10px] font-semibold text-gray-500 uppercase">Riesgo</div>
-                              <MiniBar label="Alto" value={c.por_riesgo?.Alto || 0} total={c.total_estudiantes} color="bg-red-500" />
-                              <MiniBar label="Medio" value={c.por_riesgo?.Medio || 0} total={c.total_estudiantes} color="bg-yellow-500" />
-                              <MiniBar label="Bajo" value={c.por_riesgo?.Bajo || 0} total={c.total_estudiantes} color="bg-green-500" />
+                              <div className="text-[10px] font-semibold uppercase" style={{ color: PBI.slate }}>Riesgo</div>
+                              <MiniBar label="Alto" value={c.por_riesgo?.Alto || 0} total={c.total_estudiantes} color={PBI.coral} />
+                              <MiniBar label="Medio" value={c.por_riesgo?.Medio || 0} total={c.total_estudiantes} color={PBI.gold} />
+                              <MiniBar label="Bajo" value={c.por_riesgo?.Bajo || 0} total={c.total_estudiantes} color={PBI.teal} />
                             </div>
                             <div className="space-y-1.5">
-                              <div className="text-[10px] font-semibold text-gray-500 uppercase">Académico</div>
-                              <div className="flex justify-between text-xs"><span className="text-gray-500">Reprobados</span><span className="font-bold text-red-600">{c.reprobados ?? 0}</span></div>
-                              <div className="flex justify-between text-xs"><span className="text-gray-500">Repitentes</span><span className="font-bold text-orange-600">{c.repitentes ?? 0}</span></div>
-                              <div className="flex justify-between text-xs"><span className="text-gray-500">Prob. deserción alta</span><span className="font-bold text-red-700">{c.desertores_prob ?? 0}</span></div>
+                              <div className="text-[10px] font-semibold uppercase" style={{ color: PBI.slate }}>Académico</div>
+                              <div className="flex justify-between text-xs"><span style={{ color: PBI.slate }}>Reprobados</span><span className="font-bold" style={{ color: PBI.coral }}>{c.reprobados ?? 0}</span></div>
+                              <div className="flex justify-between text-xs"><span style={{ color: PBI.slate }}>Repitentes</span><span className="font-bold" style={{ color: PBI.gold }}>{c.repitentes ?? 0}</span></div>
+                              <div className="flex justify-between text-xs"><span style={{ color: PBI.slate }}>Prob. deserción alta</span><span className="font-bold" style={{ color: PBI.coral }}>{c.desertores_prob ?? 0}</span></div>
                             </div>
                             <div className="space-y-1.5">
-                              <div className="text-[10px] font-semibold text-gray-500 uppercase">Ciudades top</div>
+                              <div className="text-[10px] font-semibold uppercase" style={{ color: PBI.slate }}>Ciudades top</div>
                               {c.por_ciudad && Object.entries(c.por_ciudad).slice(0, 5).map(([city, cnt]) => (
-                                <MiniBar key={city} label={city} value={cnt} total={c.total_estudiantes} color="bg-teal-400" />
+                                <MiniBar key={city} label={city} value={cnt} total={c.total_estudiantes} color={PBI.teal} />
                               ))}
                             </div>
                           </div>
                           {c.por_nivel && Object.keys(c.por_nivel).length > 0 && (
                             <div className="mt-3">
-                              <div className="text-[10px] font-semibold text-gray-500 uppercase mb-1.5">Estudiantes por nivel</div>
+                              <div className="text-[10px] font-semibold uppercase mb-1.5" style={{ color: PBI.slate }}>Estudiantes por nivel</div>
                               <div className="flex flex-wrap gap-2">
                                 {Object.entries(c.por_nivel).map(([niv, cnt]) => (
-                                  <div key={niv} className="bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs">
-                                    <span className="text-gray-500">Niv. {niv}:</span> <span className="font-bold text-blue-700">{cnt}</span>
+                                  <div key={niv} className="rounded-lg px-3 py-1.5 text-xs" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
+                                    <span style={{ color: PBI.slate }}>Niv. {niv}:</span> <span className="font-bold" style={{ color: PBI.navy }}>{cnt}</span>
                                   </div>
                                 ))}
                               </div>
