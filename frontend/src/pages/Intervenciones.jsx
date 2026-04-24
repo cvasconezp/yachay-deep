@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../services/api";
 import { RiskBadge } from "../components/RiskBadge";
@@ -21,6 +21,13 @@ export default function Intervenciones() {
     seguimiento: "",
     periodo: "",
   });
+
+  // Búsqueda por texto libre
+  const [search, setSearch] = useState("");
+
+  // Ordenamiento
+  const [sortBy, setSortBy] = useState("fecha");    // campo actual
+  const [sortDir, setSortDir] = useState("desc");    // "asc" | "desc"
 
   // Edit modal
   const [editItem, setEditItem] = useState(null);
@@ -160,7 +167,87 @@ export default function Intervenciones() {
   };
 
   const resumen = data?.resumen || {};
-  const items = data?.items || [];
+  const rawItems = data?.items || [];
+
+  // Filtrar por búsqueda de texto
+  const filteredItems = useMemo(() => {
+    if (!search.trim()) return rawItems;
+    const q = search.trim().toLowerCase();
+    return rawItems.filter(inv =>
+      (inv.nombre || "").toLowerCase().includes(q) ||
+      (inv.carrera || "").toLowerCase().includes(q) ||
+      (inv.observacion || "").toLowerCase().includes(q) ||
+      (inv.asignatura || "").toLowerCase().includes(q) ||
+      (inv.motivo || "").toLowerCase().includes(q) ||
+      (inv.monitor_nombre || "").toLowerCase().includes(q)
+    );
+  }, [rawItems, search]);
+
+  // Ordenar
+  const items = useMemo(() => {
+    const sorted = [...filteredItems];
+    const dir = sortDir === "asc" ? 1 : -1;
+    sorted.sort((a, b) => {
+      let va, vb;
+      switch (sortBy) {
+        case "nombre":
+          va = (a.nombre || "").toLowerCase();
+          vb = (b.nombre || "").toLowerCase();
+          return va < vb ? -dir : va > vb ? dir : 0;
+        case "carrera":
+          va = (a.carrera || "").toLowerCase();
+          vb = (b.carrera || "").toLowerCase();
+          return va < vb ? -dir : va > vb ? dir : 0;
+        case "motivo":
+          va = (a.motivo || "").toLowerCase();
+          vb = (b.motivo || "").toLowerCase();
+          return va < vb ? -dir : va > vb ? dir : 0;
+        case "medio":
+          va = (a.medio || "").toLowerCase();
+          vb = (b.medio || "").toLowerCase();
+          return va < vb ? -dir : va > vb ? dir : 0;
+        case "resultado":
+          va = (a.resultado || "").toLowerCase();
+          vb = (b.resultado || "").toLowerCase();
+          return va < vb ? -dir : va > vb ? dir : 0;
+        case "monitor":
+          va = (a.monitor_nombre || "").toLowerCase();
+          vb = (b.monitor_nombre || "").toLowerCase();
+          return va < vb ? -dir : va > vb ? dir : 0;
+        case "fecha":
+        default:
+          va = a.created_at || "";
+          vb = b.created_at || "";
+          return va < vb ? -dir : va > vb ? dir : 0;
+      }
+    });
+    return sorted;
+  }, [filteredItems, sortBy, sortDir]);
+
+  const toggleSort = (field) => {
+    if (sortBy === field) {
+      setSortDir(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(field);
+      setSortDir(field === "fecha" ? "desc" : "asc");
+    }
+  };
+
+  const SortHeader = ({ field, children, className = "" }) => (
+    <th
+      className={`px-3 py-2.5 font-semibold text-gray-600 text-xs uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none ${className}`}
+      onClick={() => toggleSort(field)}
+    >
+      <span className="inline-flex items-center gap-1">
+        {children}
+        {sortBy === field ? (
+          <span className="text-blue-500">{sortDir === "asc" ? "▲" : "▼"}</span>
+        ) : (
+          <span className="text-gray-300">⇅</span>
+        )}
+      </span>
+    </th>
+  );
 
   return (
     <div>
@@ -316,6 +403,14 @@ export default function Intervenciones() {
             className="accent-brand" />
           <span className="text-gray-600">Solo pendientes</span>
         </label>
+
+        <input
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Buscar por nombre, carrera, asignatura..."
+          className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[240px]"
+        />
       </div>
 
       {/* Error */}
@@ -338,16 +433,16 @@ export default function Intervenciones() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="text-left px-4 py-2.5 font-semibold text-gray-600 text-xs uppercase tracking-wider">Estudiante</th>
-                  <th className="text-left px-3 py-2.5 font-semibold text-gray-600 text-xs uppercase tracking-wider">Carrera</th>
+                  <SortHeader field="nombre" className="text-left px-4">Estudiante</SortHeader>
+                  <SortHeader field="carrera" className="text-left">Carrera</SortHeader>
                   <th className="text-center px-3 py-2.5 font-semibold text-gray-600 text-xs uppercase tracking-wider">Riesgo</th>
-                  <th className="text-left px-3 py-2.5 font-semibold text-gray-600 text-xs uppercase tracking-wider">Motivo</th>
-                  <th className="text-left px-3 py-2.5 font-semibold text-gray-600 text-xs uppercase tracking-wider">Medio</th>
-                  <th className="text-left px-3 py-2.5 font-semibold text-gray-600 text-xs uppercase tracking-wider">Resultado</th>
+                  <SortHeader field="motivo" className="text-left">Motivo</SortHeader>
+                  <SortHeader field="medio" className="text-left">Medio</SortHeader>
+                  <SortHeader field="resultado" className="text-left">Resultado</SortHeader>
                   <th className="text-center px-3 py-2.5 font-semibold text-gray-600 text-xs uppercase tracking-wider">Seg.</th>
                   <th className="text-center px-3 py-2.5 font-semibold text-gray-600 text-xs uppercase tracking-wider">Bienestar</th>
-                  <th className="text-left px-3 py-2.5 font-semibold text-gray-600 text-xs uppercase tracking-wider">Monitor</th>
-                  <th className="text-left px-3 py-2.5 font-semibold text-gray-600 text-xs uppercase tracking-wider">Fecha</th>
+                  <SortHeader field="monitor" className="text-left">Monitor</SortHeader>
+                  <SortHeader field="fecha" className="text-left">Fecha</SortHeader>
                   <th className="text-center px-3 py-2.5 font-semibold text-gray-600 text-xs uppercase tracking-wider">Acción</th>
                 </tr>
               </thead>
@@ -456,7 +551,7 @@ export default function Intervenciones() {
             </table>
           </div>
           <div className="px-4 py-2 bg-gray-50 border-t border-gray-200 text-xs text-gray-400">
-            Mostrando {items.length} intervenciones · Click en una fila para ver la ficha del estudiante
+            Mostrando {items.length}{search ? ` de ${rawItems.length}` : ""} intervenciones · Click en una fila para ver la ficha del estudiante
           </div>
         </div>
       )}

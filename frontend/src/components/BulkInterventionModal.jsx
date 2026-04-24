@@ -14,11 +14,14 @@ const inputClass = "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm f
  *   onSaved: () => void
  */
 export default function BulkInterventionModal({ selectedStudents, periodo, prefill, onClose, onSaved }) {
+  // If prefill has context (e.g. "No entregó actividad de Unidad 1 — Matemáticas"),
+  // keep it as a fixed prefix and let user add their own notes
+  const contextLine = prefill?.observacion || "";
   const [form, setForm] = useState({
     medio: prefill?.medio || "",
     motivo: prefill?.motivo || "",
     estado: prefill?.estado || "",
-    observacion: prefill?.observacion || "",
+    observacion_extra: "",   // user's custom notes (appended to contextLine)
     resultado: prefill?.resultado || "",
     requiere_seguimiento: prefill?.requiere_seguimiento || "no",
     periodo: periodo || "",
@@ -28,7 +31,7 @@ export default function BulkInterventionModal({ selectedStudents, periodo, prefi
 
   const update = (field, value) => setForm(f => ({ ...f, [field]: value }));
 
-  const isDirty = form.medio || form.motivo || form.observacion;
+  const isDirty = form.medio || form.motivo || form.observacion_extra;
 
   const handleCancel = () => {
     if (isDirty && !confirm("Tienes datos sin guardar. ¿Cerrar de todos modos?")) return;
@@ -44,9 +47,13 @@ export default function BulkInterventionModal({ selectedStudents, periodo, prefi
     setSaving(true);
     setError("");
     try {
+      // Combine context + user notes into final observacion
+      const observacionFinal = [contextLine, form.observacion_extra].filter(Boolean).join(" — ");
+      const { observacion_extra, ...rest } = form;
       const payload = {
         student_ids: selectedStudents.map(s => s.id),
-        ...form,
+        ...rest,
+        observacion: observacionFinal,
       };
       const result = await api.bulkCreateInterventions(payload);
       if (result.errors?.length) {
@@ -120,12 +127,17 @@ export default function BulkInterventionModal({ selectedStudents, periodo, prefi
 
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Observaciones</label>
+            {contextLine && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 mb-2 text-xs text-blue-800">
+                {contextLine}
+              </div>
+            )}
             <textarea
-              value={form.observacion}
-              onChange={e => update("observacion", e.target.value)}
+              value={form.observacion_extra}
+              onChange={e => update("observacion_extra", e.target.value)}
               rows={3}
               className={inputClass + " resize-none"}
-              placeholder="Descripción de la intervención (se aplicará a todos los seleccionados)..."
+              placeholder={contextLine ? "Agregar observaciones adicionales (opcional)..." : "Descripción de la intervención (se aplicará a todos los seleccionados)..."}
             />
           </div>
 
