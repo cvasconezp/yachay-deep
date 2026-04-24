@@ -114,7 +114,7 @@ def get_practicas_resumen(
             "student_id": r.student_id,
             "nombre": student.nombre if student else "",
             "cedula": student.cedula if student else "",
-            "correo": student.correo_personal if student else "",
+            "correo": student.correo if student else "",
             "telefono": student.telefono if student else "",
             "centro_apoyo": r.centro_apoyo or "",
             "nivel_practica": r.nivel_y_practica or "",
