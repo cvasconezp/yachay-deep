@@ -13,14 +13,14 @@ const inputClass = "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm f
  *   onClose: () => void
  *   onSaved: () => void
  */
-export default function BulkInterventionModal({ selectedStudents, periodo, onClose, onSaved }) {
+export default function BulkInterventionModal({ selectedStudents, periodo, prefill, onClose, onSaved }) {
   const [form, setForm] = useState({
-    medio: "",
-    motivo: "",
-    estado: "",
-    observacion: "",
-    resultado: "",
-    requiere_seguimiento: "no",
+    medio: prefill?.medio || "",
+    motivo: prefill?.motivo || "",
+    estado: prefill?.estado || "",
+    observacion: prefill?.observacion || "",
+    resultado: prefill?.resultado || "",
+    requiere_seguimiento: prefill?.requiere_seguimiento || "no",
     periodo: periodo || "",
   });
   const [saving, setSaving] = useState(false);

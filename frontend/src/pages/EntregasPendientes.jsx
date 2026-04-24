@@ -72,6 +72,10 @@ export default function EntregasPendientes() {
   // Control de filas expandidas (vista asignatura)
   const [expanded, setExpanded] = useState({});
 
+  // Selección de estudiantes en vista asignatura (por actividad)
+  const [actSelectedIds, setActSelectedIds] = useState({}); // { actKey: Set<student_id> }
+  const [actBulkModal, setActBulkModal] = useState(null);   // { students, asignatura, unidad }
+
   // Selección de estudiantes (vista estudiante)
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [showBulkModal, setShowBulkModal] = useState(false);
@@ -537,27 +541,82 @@ export default function EntregasPendientes() {
                         </a>
                       </td>
                     </tr>,
-                    isExpanded && act.pendientes?.length > 0 && (
+                    isExpanded && act.pendientes?.length > 0 && (() => {
+                      const sel = actSelectedIds[key] || new Set();
+                      const allChecked = sel.size === act.pendientes.length;
+                      const toggleOne = (sid) => {
+                        setActSelectedIds(prev => {
+                          const s = new Set(prev[key] || []);
+                          s.has(sid) ? s.delete(sid) : s.add(sid);
+                          return { ...prev, [key]: s };
+                        });
+                      };
+                      const toggleAll = () => {
+                        setActSelectedIds(prev => ({
+                          ...prev,
+                          [key]: allChecked ? new Set() : new Set(act.pendientes.map(p => p.student_id)),
+                        }));
+                      };
+                      return (
                       <tr key={`${key}-detail`}>
                         <td colSpan={8} className="bg-red-50/30 px-4 py-0">
                           <div className="py-2 pl-8">
-                            <div className="flex items-center justify-between mb-2">
-                              <div className="text-xs font-semibold text-red-700 uppercase tracking-wide">
-                                Estudiantes sin entregar — {act.asignatura} · Unidad {act.unidad}
+                            <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="checkbox"
+                                  checked={allChecked}
+                                  onChange={(e) => { e.stopPropagation(); toggleAll(); }}
+                                  className="rounded"
+                                  title="Seleccionar todos"
+                                />
+                                <div className="text-xs font-semibold text-red-700 uppercase tracking-wide">
+                                  Estudiantes sin entregar — {act.asignatura} · Unidad {act.unidad}
+                                  {sel.size > 0 && (
+                                    <span className="ml-2 text-blue-600 normal-case font-medium">({sel.size} seleccionado{sel.size !== 1 ? "s" : ""})</span>
+                                  )}
+                                </div>
                               </div>
-                              <CopyButton
-                                text={generarMensajesTodos(act.pendientes, act.asignatura, act.unidad)}
-                                label={`📋 Copiar todos (${act.pendientes.length})`}
-                                className="text-xs px-2 py-1"
-                              />
+                              <div className="flex items-center gap-2">
+                                {sel.size > 0 && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setActBulkModal({
+                                        students: act.pendientes.filter(p => sel.has(p.student_id)).map(p => ({ id: p.student_id, nombre: p.nombre })),
+                                        asignatura: act.asignatura,
+                                        unidad: act.unidad,
+                                        actKey: key,
+                                      });
+                                    }}
+                                    className="bg-blue-600 text-white text-[11px] font-semibold px-3 py-1 rounded-lg hover:bg-blue-700 transition-colors"
+                                  >
+                                    Registrar intervención ({sel.size})
+                                  </button>
+                                )}
+                                <CopyButton
+                                  text={sel.size > 0
+                                    ? generarMensajesTodos(act.pendientes.filter(p => sel.has(p.student_id)), act.asignatura, act.unidad)
+                                    : generarMensajesTodos(act.pendientes, act.asignatura, act.unidad)}
+                                  label={sel.size > 0 ? `📋 Copiar seleccionados (${sel.size})` : `📋 Copiar todos (${act.pendientes.length})`}
+                                  className="text-xs px-2 py-1"
+                                />
+                              </div>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-1.5">
                               {act.pendientes.map((p) => (
                                 <div
                                   key={p.student_id}
-                                  className="flex items-center gap-2 bg-white rounded-lg border border-red-100 px-3 py-1.5 hover:border-blue-300 transition-colors"
+                                  className={`flex items-center gap-2 bg-white rounded-lg border px-3 py-1.5 transition-colors ${
+                                    sel.has(p.student_id) ? "border-blue-400 bg-blue-50/50" : "border-red-100 hover:border-blue-300"
+                                  }`}
                                 >
-                                  <span className="text-red-400 text-xs">●</span>
+                                  <input
+                                    type="checkbox"
+                                    checked={sel.has(p.student_id)}
+                                    onChange={(e) => { e.stopPropagation(); toggleOne(p.student_id); }}
+                                    className="rounded shrink-0"
+                                  />
                                   <div
                                     className="flex-1 min-w-0 cursor-pointer"
                                     onClick={(e) => { e.stopPropagation(); navigate(`/ficha/${p.student_id}`); }}
@@ -575,7 +634,8 @@ export default function EntregasPendientes() {
                           </div>
                         </td>
                       </tr>
-                    ),
+                      );
+                    })(),
                   ];
                 })}
               </tbody>
@@ -698,7 +758,7 @@ export default function EntregasPendientes() {
         )}
       </div>
 
-      {/* Modal de intervención masiva */}
+      {/* Modal de intervención masiva (vista estudiante) */}
       {showBulkModal && (
         <BulkInterventionModal
           selectedStudents={selectedStudentsForModal}
@@ -707,6 +767,23 @@ export default function EntregasPendientes() {
           onSaved={() => {
             setShowBulkModal(false);
             setSelectedIds(new Set());
+          }}
+        />
+      )}
+
+      {/* Modal de intervención masiva (vista asignatura — con contexto de materia) */}
+      {actBulkModal && (
+        <BulkInterventionModal
+          selectedStudents={actBulkModal.students}
+          periodo=""
+          prefill={{
+            motivo: "Tareas no entregadas",
+            observacion: `No entregó actividad de Unidad ${actBulkModal.unidad} — ${actBulkModal.asignatura}`,
+          }}
+          onClose={() => setActBulkModal(null)}
+          onSaved={() => {
+            setActBulkModal(null);
+            setActSelectedIds(prev => ({ ...prev, [actBulkModal.actKey]: new Set() }));
           }}
         />
       )}
