@@ -108,6 +108,7 @@ export default function Intervenciones() {
       resultado: inv.resultado || "",
       requiere_seguimiento: inv.requiere_seguimiento || "",
       observacion: inv.observacion || "",
+      nota_cierre: inv.nota_cierre || "",
       derivar_bienestar: inv.derivar_bienestar || false,
       tipo_evento_critico: inv.tipo_evento_critico || "",
       reporte_bienestar: inv.reporte_bienestar || "",
@@ -459,6 +460,11 @@ export default function Intervenciones() {
                           {inv.observacion}
                         </div>
                       )}
+                      {inv.nota_cierre && (
+                        <div className="text-[11px] text-green-600 truncate max-w-[200px] flex items-center gap-0.5" title={inv.nota_cierre}>
+                          <span>✓</span> {inv.nota_cierre}
+                        </div>
+                      )}
                     </td>
                     <td className="px-3 py-2.5 text-xs text-gray-500 max-w-[120px] truncate" title={inv.carrera}>
                       {inv.carrera || "—"}
@@ -602,11 +608,22 @@ export default function Intervenciones() {
               </div>
 
               <div>
-                <label className="text-xs font-medium text-gray-600 block mb-1">Observación</label>
-                <textarea value={editForm.observacion} onChange={e => setEditForm(f => ({ ...f, observacion: e.target.value }))}
+                <label className="text-xs font-medium text-gray-600 block mb-1">Observación original</label>
+                {editForm.observacion ? (
+                  <div className="w-full border border-gray-200 bg-gray-50 rounded-lg px-3 py-2 text-sm text-gray-600 whitespace-pre-wrap max-h-24 overflow-y-auto">
+                    {editForm.observacion}
+                  </div>
+                ) : (
+                  <div className="text-xs text-gray-400 italic">Sin observación registrada</div>
+                )}
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-gray-600 block mb-1">Nota de cierre / Resolución</label>
+                <textarea value={editForm.nota_cierre} onChange={e => setEditForm(f => ({ ...f, nota_cierre: e.target.value }))}
                   rows={3}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                  placeholder="Agregar o actualizar observación..."
+                  placeholder="Ej: La docente aceptó recibir la tarea por la mitad de la nota..."
                 />
               </div>
 

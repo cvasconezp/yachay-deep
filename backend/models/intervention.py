@@ -25,6 +25,7 @@ class Intervention(Base):
     # Additional web-app fields
     resultado = Column(String, nullable=True)        # Contactado / No contestó / etc
     requiere_seguimiento = Column(String, nullable=True)  # "si" / "no"
+    nota_cierre = Column(Text, nullable=True)        # Notas de resolución/cierre
 
     # Derivaciones (Fase 4+)
     derivar_bienestar = Column(Boolean, nullable=True, default=False)

@@ -86,6 +86,7 @@ class InterventionUpdate(BaseModel):
     observacion: Optional[str] = Field(None, max_length=2000)
     resultado: Optional[str] = Field(None, max_length=200)
     requiere_seguimiento: Optional[str] = Field(None, max_length=10)
+    nota_cierre: Optional[str] = Field(None, max_length=2000)
     derivar_bienestar: Optional[bool] = None
     derivar_financiero: Optional[bool] = None
     derivar_coordinacion: Optional[bool] = None
@@ -97,7 +98,7 @@ class InterventionUpdate(BaseModel):
 
     @field_validator("medio", "motivo", "estado", "asignatura", "docente",
                      "observacion", "resultado", "tipo_evento_critico", "reporte_bienestar",
-                     "reporte_derivacion", mode="before")
+                     "reporte_derivacion", "nota_cierre", mode="before")
     @classmethod
     def strip_whitespace(cls, v):
         return _strip_str(v)
@@ -114,6 +115,7 @@ class InterventionResponse(BaseModel):
     observacion: Optional[str]
     resultado: Optional[str]
     requiere_seguimiento: Optional[str]
+    nota_cierre: Optional[str]
     derivar_bienestar: Optional[bool]
     derivar_financiero: Optional[bool]
     derivar_coordinacion: Optional[bool]
@@ -511,6 +513,7 @@ def interventions_dashboard(
             "resultado": inv.resultado,
             "requiere_seguimiento": inv.requiere_seguimiento,
             "observacion": inv.observacion,
+            "nota_cierre": inv.nota_cierre,
             "derivar_bienestar": inv.derivar_bienestar,
             "derivar_financiero": inv.derivar_financiero,
             "derivar_coordinacion": inv.derivar_coordinacion,
