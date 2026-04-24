@@ -138,11 +138,28 @@ def _get_codigos_incluir_bloque_default(db: Session) -> set:
 
 
 def _get_latest_snapshot_date(db: Session, periodo_filter, codigos_incluir: set):
-    """Encuentra la fecha del snapshot más reciente."""
+    """Encuentra la fecha del snapshot más reciente (global)."""
     q = db.query(func.max(TaskSubmission.snapshot_date)).filter(periodo_filter)
     if codigos_incluir:
         q = q.filter(TaskSubmission.codigo_curso.in_(codigos_incluir))
     return q.scalar()
+
+
+def _get_latest_snapshot_per_course(db: Session, periodo_filter, codigos_incluir: set) -> dict:
+    """Retorna {codigo_curso: max_snapshot_date} para cada curso.
+
+    Corrige el bug donde se usaba una fecha global: si un curso se scrapeó
+    el lunes y otro el miércoles, la consulta global (miércoles) haría
+    desaparecer los datos del lunes. Ahora cada curso usa su propio snapshot.
+    """
+    q = db.query(
+        TaskSubmission.codigo_curso,
+        func.max(TaskSubmission.snapshot_date).label("latest"),
+    ).filter(periodo_filter, TaskSubmission.student_id.isnot(None))
+    if codigos_incluir:
+        q = q.filter(TaskSubmission.codigo_curso.in_(codigos_incluir))
+    rows = q.group_by(TaskSubmission.codigo_curso).all()
+    return {r[0]: r[1] for r in rows if r[0] and r[1]}
 
 
 @router.get("/entregas-pendientes")
@@ -180,21 +197,24 @@ def entregas_pendientes(
             ).all()
             codigos_incluir = codigos_incluir - {r[0] for r in excl_by_grupo if r[0]}
 
-    # Encontrar el snapshot más reciente
-    latest_date = _get_latest_snapshot_date(db, periodo_filter, codigos_incluir)
-    if not latest_date:
+    # Snapshot más reciente POR CURSO (no global)
+    snapshot_per_course = _get_latest_snapshot_per_course(db, periodo_filter, codigos_incluir)
+    if not snapshot_per_course:
         return {"actividades": [], "resumen": {"total_actividades": 0, "total_pendientes": 0}}
 
-    # Filtro base: periodo + snapshot más reciente + solo cursos del bloque
+    # Para la consulta de cursos+unidades usamos el rango de fechas de snapshots
+    all_snapshot_dates = set(snapshot_per_course.values())
+
+    # Filtro base: periodo + solo cursos del bloque + snapshot dates relevantes
     base_filters = [
         periodo_filter,
         TaskSubmission.student_id.isnot(None),
-        TaskSubmission.snapshot_date == latest_date,
+        TaskSubmission.snapshot_date.in_(all_snapshot_dates),
     ]
     if codigos_incluir:
         base_filters.append(TaskSubmission.codigo_curso.in_(codigos_incluir))
 
-    # Todos los cursos+unidades del snapshot más reciente
+    # Todos los cursos+unidades de los snapshots más recientes
     base_q = db.query(
         TaskSubmission.codigo_curso,
         TaskSubmission.unidad,
@@ -238,7 +258,11 @@ def entregas_pendientes(
     for cod_curso, uni in sorted(actividades_unicas, key=lambda x: (x[0], x[1] or "")):
         cc = cc_map.get(cod_curso)
 
-        # Solo registros del snapshot más reciente
+        # Snapshot más reciente PARA ESTE CURSO (no global)
+        course_snapshot = snapshot_per_course.get(cod_curso)
+        if not course_snapshot:
+            continue
+
         subs = (
             db.query(
                 TaskSubmission.student_id,
@@ -248,7 +272,7 @@ def entregas_pendientes(
             .filter(
                 TaskSubmission.codigo_curso == cod_curso,
                 TaskSubmission.unidad == uni,
-                TaskSubmission.snapshot_date == latest_date,
+                TaskSubmission.snapshot_date == course_snapshot,
                 periodo_filter,
                 TaskSubmission.student_id.isnot(None),
             )
@@ -258,7 +282,8 @@ def entregas_pendientes(
         if not subs:
             continue
 
-        # Deduplicar por student_id: si hay varios registros, priorizar entregada=True
+        # Deduplicar por student_id: priorizar entregada=True
+        # (puede haber duplicados si un curso tiene registros de distintos snapshots)
         by_student = {}
         for s in subs:
             if s.student_id not in by_student or (s.entregada and not by_student[s.student_id].entregada):
@@ -388,9 +413,24 @@ def entregas_resumen(
             ).all()
             codigos_incluir = codigos_incluir - {r[0] for r in excl_by_grupo if r[0]}
 
-    latest_date = _get_latest_snapshot_date(db, periodo_filter, codigos_incluir)
-    if not latest_date:
+    # Snapshot más reciente POR CURSO
+    snapshot_per_course = _get_latest_snapshot_per_course(db, periodo_filter, codigos_incluir)
+    if not snapshot_per_course:
         return {"cursos": []}
+
+    # Construir filtro OR: (curso=A AND snapshot=dateA) OR (curso=B AND snapshot=dateB) ...
+    # Para eficiencia, agrupar cursos por snapshot_date
+    from collections import defaultdict
+    courses_by_date = defaultdict(set)
+    for cod, dt in snapshot_per_course.items():
+        courses_by_date[dt].add(cod)
+
+    date_filters = []
+    for dt, codes in courses_by_date.items():
+        date_filters.append(and_(
+            TaskSubmission.snapshot_date == dt,
+            TaskSubmission.codigo_curso.in_(codes),
+        ))
 
     q = db.query(
         TaskSubmission.codigo_curso,
@@ -400,11 +440,8 @@ def entregas_resumen(
     ).filter(
         periodo_filter,
         TaskSubmission.student_id.isnot(None),
-        TaskSubmission.snapshot_date == latest_date,
+        or_(*date_filters),
     )
-
-    if codigos_incluir:
-        q = q.filter(TaskSubmission.codigo_curso.in_(codigos_incluir))
 
     rows = q.group_by(TaskSubmission.codigo_curso, TaskSubmission.unidad).all()
 
