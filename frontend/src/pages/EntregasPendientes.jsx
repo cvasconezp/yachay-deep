@@ -36,14 +36,21 @@ export default function EntregasPendientes() {
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [showBulkModal, setShowBulkModal] = useState(false);
 
-  // Primera carga: obtener defaults del backend (bloque y unidad actual)
+  // Lista maestra de carreras (igual que Dashboard)
+  const [carrerasList, setCarrerasList] = useState([]);
+
+  // Primera carga: obtener defaults del backend (bloque y unidad actual) + carreras
   useEffect(() => {
     (async () => {
       try {
-        const result = await api.getEntregasPendientes({});
+        const [result, allCarreras] = await Promise.all([
+          api.getEntregasPendientes({}),
+          api.getCarreras(),
+        ]);
         const defaults = result?.defaults || {};
         setBloque(defaults.bloque_actual || "1");
         setUnidad(defaults.unidad_actual || "");
+        setCarrerasList(allCarreras || []);
         setDefaultsLoaded(true);
       } catch {
         setBloque("1");
@@ -85,12 +92,11 @@ export default function EntregasPendientes() {
     }
   };
 
-  // Extraer carreras y asignaturas únicas
-  const { carreras, asignaturas } = useMemo(() => {
-    if (!data?.actividades) return { carreras: [], asignaturas: [] };
-    const cs = [...new Set(data.actividades.map(a => a.carrera).filter(Boolean))].sort();
-    const as_ = [...new Set(data.actividades.map(a => a.asignatura).filter(Boolean))].sort();
-    return { carreras: cs, asignaturas: as_ };
+  // Carreras: lista maestra del backend; asignaturas: derivadas de los datos
+  const carreras = carrerasList;
+  const asignaturas = useMemo(() => {
+    if (!data?.actividades) return [];
+    return [...new Set(data.actividades.map(a => a.asignatura).filter(Boolean))].sort();
   }, [data]);
 
   // Filtrar actividades (asignatura y búsqueda)
