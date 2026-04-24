@@ -2,6 +2,7 @@
 Módulo de Analítica de Prácticas Preprofesionales.
 Endpoint para resumen agregado: sistema educativo, distritos, escuelas, estudiantes.
 """
+import re
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
@@ -15,6 +16,29 @@ from ...models.user import User
 from ._helpers import apply_periodo_filter
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
+
+
+# ── Data normalisation helpers ──────────────────────────────────────
+_SISTEMA_MAP = {
+    "intercultural":          "Intercultural",
+    "intercultural (hispana)": "Intercultural",
+    "intercultural bilingüe": "Intercultural Bilingüe",
+    "intercultural bilingue": "Intercultural Bilingüe",
+}
+
+def _norm_sistema(raw: str | None) -> str:
+    if not raw:
+        return "Sin dato"
+    return _SISTEMA_MAP.get(raw.strip().lower(), raw.strip())
+
+def _norm_distrito(raw: str | None) -> str:
+    if not raw:
+        return "Sin distrito"
+    d = raw.strip()
+    # "Distrito Distrito 10D02" → "Distrito 10D02"
+    d = re.sub(r"(?i)^distrito\s+distrito\s+", "Distrito ", d)
+    # Ensure trailing spaces are removed
+    return d.strip()
 
 
 @router.get("/practicas-resumen")
@@ -36,11 +60,7 @@ def get_practicas_resumen(
     from sqlalchemy import inspect as sa_inspect
     inspector = sa_inspect(db.bind)
     if "practicas_preprofesionales" not in inspector.get_table_names():
-        return {
-            "total_estudiantes": 0, "total_escuelas": 0, "total_distritos": 0,
-            "en_mineduc": 0, "por_sistema": [], "por_nivel": [], "por_centro": [],
-            "distritos": [], "filtros": {"sistemas_educativos": [], "distritos": [], "centros_apoyo": [], "niveles_practica": []},
-        }
+        return _empty_response()
 
     # --- Base query ---
     q = db.query(PracticaPreprofesional).join(
@@ -56,15 +76,6 @@ def get_practicas_resumen(
             variants.append(f"P{periodo}")
         q = q.filter(PracticaPreprofesional.periodo.in_(variants))
 
-    if sistema_educativo:
-        q = q.filter(PracticaPreprofesional.sistema_educativo == sistema_educativo)
-    if distrito:
-        q = q.filter(PracticaPreprofesional.distrito == distrito)
-    if centro_apoyo:
-        q = q.filter(PracticaPreprofesional.centro_apoyo == centro_apoyo)
-    if nivel_practica:
-        q = q.filter(PracticaPreprofesional.nivel_y_practica == nivel_practica)
-
     rows = q.all()
 
     # --- Pre-load all students in one query (avoid N+1) ---
@@ -74,51 +85,73 @@ def get_practicas_resumen(
         students = db.query(Student).filter(Student.id.in_(student_ids)).all()
         students_map = {s.id: s for s in students}
 
-    # --- Gather unique filter options (before filtering, for dropdowns) ---
-    all_q = db.query(PracticaPreprofesional)
-    if periodo and periodo not in ("todos",):
-        variants = [periodo]
-        if periodo.startswith("P"):
-            variants.append(periodo[1:])
-        else:
-            variants.append(f"P{periodo}")
-        all_q = all_q.filter(PracticaPreprofesional.periodo.in_(variants))
-
-    all_rows = all_q.all()
-
-    sistemas = sorted(set(r.sistema_educativo for r in all_rows if r.sistema_educativo))
-    distritos_all = sorted(set(r.distrito for r in all_rows if r.distrito))
-    centros = sorted(set(r.centro_apoyo for r in all_rows if r.centro_apoyo))
-    niveles = sorted(set(r.nivel_y_practica for r in all_rows if r.nivel_y_practica))
-
-    # --- Build hierarchical data: sistema → distrito → escuela → estudiantes ---
-    # Group by distrito → escuela
-    escuelas_map = {}  # (distrito, amie) → { info, estudiantes }
+    # --- Normalise each row into a lightweight dict ---
+    normalised = []
     for r in rows:
-        dist = r.distrito or "Sin distrito"
-        amie = r.amie_escuela or "SIN_AMIE"
-        key = (dist, amie)
+        normalised.append({
+            "student_id": r.student_id,
+            "sistema": _norm_sistema(r.sistema_educativo),
+            "distrito": _norm_distrito(r.distrito),
+            "centro_apoyo": (r.centro_apoyo or "").strip() or "Sin dato",
+            "nivel_practica": (r.nivel_y_practica or "").strip() or "Sin dato",
+            "amie": (r.amie_escuela or "").strip(),
+            "nombre_escuela": (r.nombre_escuela or "").strip(),
+            "nombre_autoridad": (r.nombre_autoridad or "").strip(),
+            "cargo_autoridad": (r.cargo_autoridad or "").strip(),
+            "telefono_autoridad": (r.telefono_autoridad or "").strip(),
+            "en_mineduc": (r.en_mineduc or "").strip(),
+        })
+
+    # --- Apply post-normalisation filters ---
+    if sistema_educativo:
+        normalised = [n for n in normalised if n["sistema"] == sistema_educativo]
+    if distrito:
+        normalised = [n for n in normalised if n["distrito"] == distrito]
+    if centro_apoyo:
+        normalised = [n for n in normalised if n["centro_apoyo"] == centro_apoyo]
+    if nivel_practica:
+        normalised = [n for n in normalised if n["nivel_practica"] == nivel_practica]
+
+    # --- Gather unique filter options (from ALL rows, pre-filter) ---
+    all_normalised = []
+    for r in rows:
+        all_normalised.append({
+            "sistema": _norm_sistema(r.sistema_educativo),
+            "distrito": _norm_distrito(r.distrito),
+            "centro_apoyo": (r.centro_apoyo or "").strip() or "Sin dato",
+            "nivel_practica": (r.nivel_y_practica or "").strip() or "Sin dato",
+        })
+
+    sistemas = sorted(set(n["sistema"] for n in all_normalised if n["sistema"] != "Sin dato"))
+    distritos_all = sorted(set(n["distrito"] for n in all_normalised if n["distrito"] != "Sin distrito"))
+    centros = sorted(set(n["centro_apoyo"] for n in all_normalised if n["centro_apoyo"] != "Sin dato"))
+    niveles = sorted(set(n["nivel_practica"] for n in all_normalised if n["nivel_practica"] != "Sin dato"))
+
+    # --- Build hierarchical data: distrito → escuela → estudiantes ---
+    escuelas_map = {}  # (distrito, amie) → { info, estudiantes }
+    for n in normalised:
+        key = (n["distrito"], n["amie"] or "SIN_AMIE")
         if key not in escuelas_map:
             escuelas_map[key] = {
-                "amie": r.amie_escuela or "",
-                "nombre_escuela": r.nombre_escuela or "",
-                "distrito": dist,
-                "sistema_educativo": r.sistema_educativo or "",
-                "nombre_autoridad": r.nombre_autoridad or "",
-                "cargo_autoridad": r.cargo_autoridad or "",
-                "telefono_autoridad": r.telefono_autoridad or "",
+                "amie": n["amie"],
+                "nombre_escuela": n["nombre_escuela"],
+                "distrito": n["distrito"],
+                "sistema_educativo": n["sistema"],
+                "nombre_autoridad": n["nombre_autoridad"],
+                "cargo_autoridad": n["cargo_autoridad"],
+                "telefono_autoridad": n["telefono_autoridad"],
                 "estudiantes": [],
             }
-        student = students_map.get(r.student_id)
+        student = students_map.get(n["student_id"])
         escuelas_map[key]["estudiantes"].append({
-            "student_id": r.student_id,
+            "student_id": n["student_id"],
             "nombre": student.nombre if student else "",
             "cedula": student.cedula if student else "",
             "correo": student.correo if student else "",
             "telefono": student.telefono if student else "",
-            "centro_apoyo": r.centro_apoyo or "",
-            "nivel_practica": r.nivel_y_practica or "",
-            "en_mineduc": r.en_mineduc or "",
+            "centro_apoyo": n["centro_apoyo"],
+            "nivel_practica": n["nivel_practica"],
+            "en_mineduc": n["en_mineduc"],
         })
 
     # Group escuelas by distrito
@@ -139,32 +172,54 @@ def get_practicas_resumen(
         d["escuelas"] = sorted(d["escuelas"], key=lambda e: e["nombre_escuela"])
         d["total_escuelas"] = len(d["escuelas"])
 
+    # --- Flat escuelas list (for search) ---
+    escuelas_flat = []
+    for d in distritos_list:
+        for e in d["escuelas"]:
+            escuelas_flat.append({
+                "amie": e["amie"],
+                "nombre_escuela": e["nombre_escuela"],
+                "distrito": d["distrito"],
+                "sistema_educativo": e["sistema_educativo"],
+                "total_estudiantes": e["total_estudiantes"],
+                "nombre_autoridad": e["nombre_autoridad"],
+                "cargo_autoridad": e["cargo_autoridad"],
+                "telefono_autoridad": e["telefono_autoridad"],
+                "estudiantes": e["estudiantes"],
+            })
+
     # --- KPI totals ---
-    total_estudiantes = len(rows)
-    total_escuelas = len(set((r.amie_escuela or "") for r in rows if r.amie_escuela))
-    total_distritos = len(set((r.distrito or "") for r in rows if r.distrito))
-    en_mineduc_count = sum(1 for r in rows if r.en_mineduc and r.en_mineduc.lower() == "sí")
+    total_estudiantes = len(normalised)
+    total_escuelas = len(set(n["amie"] for n in normalised if n["amie"]))
+    total_distritos = len(set(n["distrito"] for n in normalised if n["distrito"] != "Sin distrito"))
+    en_mineduc_count = sum(1 for n in normalised if n["en_mineduc"].lower() == "sí")
 
     # por sistema educativo
     por_sistema = {}
-    for r in rows:
-        se = r.sistema_educativo or "Sin dato"
-        por_sistema[se] = por_sistema.get(se, 0) + 1
+    for n in normalised:
+        por_sistema[n["sistema"]] = por_sistema.get(n["sistema"], 0) + 1
     por_sistema_list = [{"sistema": k, "total": v} for k, v in sorted(por_sistema.items())]
 
     # por nivel de práctica
     por_nivel = {}
-    for r in rows:
-        nv = r.nivel_y_practica or "Sin dato"
-        por_nivel[nv] = por_nivel.get(nv, 0) + 1
+    for n in normalised:
+        por_nivel[n["nivel_practica"]] = por_nivel.get(n["nivel_practica"], 0) + 1
     por_nivel_list = [{"nivel": k, "total": v} for k, v in sorted(por_nivel.items())]
 
     # por centro de apoyo
     por_centro = {}
-    for r in rows:
-        ca = r.centro_apoyo or "Sin dato"
-        por_centro[ca] = por_centro.get(ca, 0) + 1
+    for n in normalised:
+        por_centro[n["centro_apoyo"]] = por_centro.get(n["centro_apoyo"], 0) + 1
     por_centro_list = [{"centro": k, "total": v} for k, v in sorted(por_centro.items())]
+
+    # por distrito (for chart)
+    por_distrito = {}
+    for n in normalised:
+        por_distrito[n["distrito"]] = por_distrito.get(n["distrito"], 0) + 1
+    por_distrito_list = sorted(
+        [{"distrito": k, "total": v} for k, v in por_distrito.items()],
+        key=lambda x: -x["total"],
+    )
 
     return {
         "total_estudiantes": total_estudiantes,
@@ -174,11 +229,22 @@ def get_practicas_resumen(
         "por_sistema": por_sistema_list,
         "por_nivel": por_nivel_list,
         "por_centro": por_centro_list,
+        "por_distrito": por_distrito_list,
         "distritos": distritos_list,
+        "escuelas": escuelas_flat,
         "filtros": {
             "sistemas_educativos": sistemas,
             "distritos": distritos_all,
             "centros_apoyo": centros,
             "niveles_practica": niveles,
         },
+    }
+
+
+def _empty_response():
+    return {
+        "total_estudiantes": 0, "total_escuelas": 0, "total_distritos": 0,
+        "en_mineduc": 0, "por_sistema": [], "por_nivel": [], "por_centro": [],
+        "por_distrito": [], "distritos": [], "escuelas": [],
+        "filtros": {"sistemas_educativos": [], "distritos": [], "centros_apoyo": [], "niveles_practica": []},
     }

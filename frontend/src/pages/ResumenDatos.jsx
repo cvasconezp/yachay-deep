@@ -115,6 +115,52 @@ const DEFAULT_EXPORT_COLS = [
   "nivel_academico", "nivel_riesgo", "promedio_calificaciones",
 ];
 
+/* ── Tabla de estudiantes de una escuela (prácticas) ── */
+function StudentTable({ esc, navigate }) {
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      {esc.nombre_autoridad && (
+        <div className="px-3 py-2 bg-amber-50 border-b border-amber-100 text-xs text-amber-800">
+          <span className="font-medium">Autoridad:</span> {esc.nombre_autoridad} ({esc.cargo_autoridad}) — {esc.telefono_autoridad}
+        </div>
+      )}
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="bg-gray-50 text-gray-500 text-left">
+            <th className="px-3 py-2 font-medium">Estudiante</th>
+            <th className="px-3 py-2 font-medium">Cédula</th>
+            <th className="px-3 py-2 font-medium">Correo</th>
+            <th className="px-3 py-2 font-medium">Centro</th>
+            <th className="px-3 py-2 font-medium">Nivel / Práctica</th>
+            <th className="px-3 py-2 font-medium">Mineduc</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-50">
+          {(esc.estudiantes || []).map((est, i) => (
+            <tr key={i} className="hover:bg-blue-50/40">
+              <td className="px-3 py-2">
+                <button className="font-medium text-blue-700 hover:text-blue-900 hover:underline text-left"
+                  onClick={() => navigate(`/ficha/${est.student_id}`)}>
+                  {est.nombre || est.cedula || `#${est.student_id}`}
+                </button>
+              </td>
+              <td className="px-3 py-2 text-gray-500">{est.cedula}</td>
+              <td className="px-3 py-2 text-gray-500">{est.correo}</td>
+              <td className="px-3 py-2 text-gray-500">{est.centro_apoyo}</td>
+              <td className="px-3 py-2 text-gray-500">{est.nivel_practica}</td>
+              <td className="px-3 py-2">
+                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${est.en_mineduc === "Sí" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600"}`}>
+                  {est.en_mineduc || "—"}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 /* ══════════════════════════════════════════
    MAIN COMPONENT
    ══════════════════════════════════════════ */
@@ -156,6 +202,7 @@ export default function ResumenDatos() {
   const [practicasFiltros, setPracticasFiltros] = useState({ sistema: "", distrito: "", centro: "", nivel: "" });
   const [practicasExpanded, setPracticasExpanded] = useState({});  // distrito idx
   const [practicasEscuela, setPracticasEscuela] = useState(null);  // escuela seleccionada para ver estudiantes
+  const [practicasSearch, setPracticasSearch] = useState("");  // búsqueda de escuelas
 
   useEffect(() => {
     api.getCarreras().then(setCarreras).catch(() => {});
@@ -756,41 +803,123 @@ export default function ResumenDatos() {
                     </select>
                   </div>
 
-                  {/* Distribución: por sistema, por nivel, por centro */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {/* Por sistema educativo */}
+                  {/* Gráficos estadísticos */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Pie: por sistema educativo */}
                     <div className="bg-white rounded-xl border border-gray-200 p-4">
                       <h3 className="text-sm font-semibold text-gray-700 mb-3">Por Sistema Educativo</h3>
-                      {(practicasData.por_sistema || []).map(s => (
-                        <div key={s.sistema} className="flex justify-between items-center py-1.5 border-b border-gray-50 last:border-0">
-                          <span className="text-sm text-gray-600">{s.sistema}</span>
-                          <span className="text-sm font-semibold text-gray-800">{s.total}</span>
-                        </div>
-                      ))}
+                      <ResponsiveContainer width="100%" height={200}>
+                        <PieChart>
+                          <Pie data={(practicasData.por_sistema || []).map(s => ({ name: s.sistema, value: s.total }))}
+                            cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2} dataKey="value" nameKey="name"
+                            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                            labelLine={false}
+                            style={{ fontSize: "11px" }}>
+                            {(practicasData.por_sistema || []).map((_, i) => (
+                              <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                            ))}
+                          </Pie>
+                          <Tooltip formatter={(v) => [`${v} estudiantes`, ""]} />
+                        </PieChart>
+                      </ResponsiveContainer>
                     </div>
-                    {/* Por nivel */}
-                    <div className="bg-white rounded-xl border border-gray-200 p-4">
-                      <h3 className="text-sm font-semibold text-gray-700 mb-3">Por Nivel de Práctica</h3>
-                      {(practicasData.por_nivel || []).map(n => (
-                        <div key={n.nivel} className="flex justify-between items-center py-1.5 border-b border-gray-50 last:border-0">
-                          <span className="text-sm text-gray-600">{n.nivel}</span>
-                          <span className="text-sm font-semibold text-gray-800">{n.total}</span>
-                        </div>
-                      ))}
-                    </div>
-                    {/* Por centro de apoyo */}
+                    {/* Bar: por centro de apoyo */}
                     <div className="bg-white rounded-xl border border-gray-200 p-4">
                       <h3 className="text-sm font-semibold text-gray-700 mb-3">Por Centro de Apoyo</h3>
-                      {(practicasData.por_centro || []).map(c => (
-                        <div key={c.centro} className="flex justify-between items-center py-1.5 border-b border-gray-50 last:border-0">
-                          <span className="text-sm text-gray-600">{c.centro}</span>
-                          <span className="text-sm font-semibold text-gray-800">{c.total}</span>
-                        </div>
-                      ))}
+                      <ResponsiveContainer width="100%" height={200}>
+                        <BarChart data={(practicasData.por_centro || []).map(c => ({ name: c.centro, value: c.total }))}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                          <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                          <YAxis tick={{ fontSize: 11 }} />
+                          <Tooltip formatter={(v) => [`${v} estudiantes`, ""]} />
+                          <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                            {(practicasData.por_centro || []).map((_, i) => (
+                              <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
                     </div>
                   </div>
 
-                  {/* Distritos → Escuelas → Estudiantes (jerarquía expandible) */}
+                  {/* Bar horizontal: por nivel de práctica */}
+                  <div className="bg-white rounded-xl border border-gray-200 p-4">
+                    <h3 className="text-sm font-semibold text-gray-700 mb-3">Por Nivel de Práctica</h3>
+                    <ResponsiveContainer width="100%" height={120}>
+                      <BarChart data={(practicasData.por_nivel || []).map(n => ({ name: n.nivel.replace(/^\d+\w+ nivel - /, ""), value: n.total, full: n.nivel }))} layout="vertical">
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                        <XAxis type="number" tick={{ fontSize: 11 }} />
+                        <YAxis type="category" dataKey="name" width={200} tick={{ fontSize: 11 }} />
+                        <Tooltip formatter={(v, _, p) => [`${v} estudiantes`, p.payload.full]} />
+                        <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                          {(practicasData.por_nivel || []).map((_, i) => (
+                            <Cell key={i} fill={CHART_COLORS[(i + 3) % CHART_COLORS.length]} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Top distritos: bar chart horizontal */}
+                  {(practicasData.por_distrito || []).length > 3 && (
+                    <div className="bg-white rounded-xl border border-gray-200 p-4">
+                      <h3 className="text-sm font-semibold text-gray-700 mb-3">Estudiantes por Distrito (top 15)</h3>
+                      <ResponsiveContainer width="100%" height={Math.min(400, (practicasData.por_distrito || []).slice(0, 15).length * 28 + 40)}>
+                        <BarChart data={(practicasData.por_distrito || []).slice(0, 15).map(d => ({ name: d.distrito.replace(/^Distrito\s+/, ""), value: d.total }))} layout="vertical">
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                          <XAxis type="number" tick={{ fontSize: 11 }} />
+                          <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 10 }} />
+                          <Tooltip formatter={(v) => [`${v} estudiantes`, ""]} />
+                          <Bar dataKey="value" fill="#6366f1" radius={[0, 4, 4, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+
+                  {/* ── Buscador de escuelas ── */}
+                  <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                    <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center gap-3">
+                      <h3 className="text-sm font-semibold text-gray-700">Buscar Escuela</h3>
+                      <input type="text" placeholder="Nombre o código AMIE..."
+                        value={practicasSearch} onChange={e => setPracticasSearch(e.target.value)}
+                        className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-300 focus:border-blue-400" />
+                    </div>
+                    {practicasSearch.trim().length >= 2 && (() => {
+                      const q = practicasSearch.trim().toLowerCase();
+                      const matches = (practicasData.escuelas || []).filter(e =>
+                        (e.nombre_escuela || "").toLowerCase().includes(q) || (e.amie || "").toLowerCase().includes(q)
+                      ).slice(0, 20);
+                      if (matches.length === 0) return (
+                        <div className="px-4 py-6 text-center text-gray-400 text-sm">No se encontraron escuelas</div>
+                      );
+                      return (
+                        <div className="divide-y divide-gray-100">
+                          {matches.map((esc, i) => (
+                            <div key={esc.amie || i}>
+                              <button onClick={() => setPracticasEscuela(practicasEscuela?.amie === esc.amie ? null : esc)}
+                                className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-blue-50/60 transition-colors text-left">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-xs text-gray-400">{practicasEscuela?.amie === esc.amie ? "▼" : "▶"}</span>
+                                  <span className="text-sm font-medium text-gray-700">{esc.nombre_escuela}</span>
+                                  {esc.amie && <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{esc.amie}</span>}
+                                  <span className="text-[10px] text-purple-500">{esc.distrito}</span>
+                                  <span className="text-[10px] text-gray-400">{esc.sistema_educativo}</span>
+                                </div>
+                                <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">{esc.total_estudiantes} est.</span>
+                              </button>
+                              {practicasEscuela?.amie === esc.amie && (
+                                <div className="px-4 pb-3">
+                                  <StudentTable esc={esc} navigate={navigate} />
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* ── Distritos → Escuelas → Estudiantes (jerarquía expandible) ── */}
                   <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                     <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
                       <h3 className="text-sm font-semibold text-gray-700">Distritos y Escuelas</h3>
@@ -829,46 +958,7 @@ export default function ResumenDatos() {
                                   {/* Lista de estudiantes de la escuela */}
                                   {practicasEscuela?.amie === esc.amie && practicasEscuela?.distrito === dist.distrito && (
                                     <div className="px-6 pb-3">
-                                      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-                                        {esc.nombre_autoridad && (
-                                          <div className="px-3 py-2 bg-amber-50 border-b border-amber-100 text-xs text-amber-800">
-                                            <span className="font-medium">Autoridad:</span> {esc.nombre_autoridad} ({esc.cargo_autoridad}) — {esc.telefono_autoridad}
-                                          </div>
-                                        )}
-                                        <table className="w-full text-xs">
-                                          <thead>
-                                            <tr className="bg-gray-50 text-gray-500 text-left">
-                                              <th className="px-3 py-2 font-medium">Estudiante</th>
-                                              <th className="px-3 py-2 font-medium">Cédula</th>
-                                              <th className="px-3 py-2 font-medium">Correo</th>
-                                              <th className="px-3 py-2 font-medium">Centro</th>
-                                              <th className="px-3 py-2 font-medium">Nivel / Práctica</th>
-                                              <th className="px-3 py-2 font-medium">Mineduc</th>
-                                            </tr>
-                                          </thead>
-                                          <tbody className="divide-y divide-gray-50">
-                                            {esc.estudiantes.map((est, sIdx) => (
-                                              <tr key={sIdx} className="hover:bg-blue-50/40">
-                                                <td className="px-3 py-2">
-                                                  <button className="font-medium text-blue-700 hover:text-blue-900 hover:underline text-left"
-                                                    onClick={() => navigate(`/ficha/${est.student_id}`)}>
-                                                    {est.nombre || est.cedula || `#${est.student_id}`}
-                                                  </button>
-                                                </td>
-                                                <td className="px-3 py-2 text-gray-500">{est.cedula}</td>
-                                                <td className="px-3 py-2 text-gray-500">{est.correo}</td>
-                                                <td className="px-3 py-2 text-gray-500">{est.centro_apoyo}</td>
-                                                <td className="px-3 py-2 text-gray-500">{est.nivel_practica}</td>
-                                                <td className="px-3 py-2">
-                                                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${est.en_mineduc === "Sí" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600"}`}>
-                                                    {est.en_mineduc || "—"}
-                                                  </span>
-                                                </td>
-                                              </tr>
-                                            ))}
-                                          </tbody>
-                                        </table>
-                                      </div>
+                                      <StudentTable esc={esc} navigate={navigate} />
                                     </div>
                                   )}
                                 </div>
