@@ -9,6 +9,7 @@ import {
   PieChart, Pie, Cell,
   BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  Treemap,
 } from "recharts";
 
 /* ── Paleta de colores ─────────────────── */
@@ -157,6 +158,291 @@ function StudentTable({ esc, navigate }) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+/* ── Paleta Power BI para prácticas ── */
+const PBI = {
+  navy: "#1B2A4A",
+  blue: "#2B5EA7",
+  teal: "#0F9B8D",
+  gold: "#F2C94C",
+  coral: "#EB5757",
+  purple: "#7B61FF",
+  slate: "#64748B",
+  bg: "#F8FAFC",
+  card: "#FFFFFF",
+  border: "#E2E8F0",
+  // Treemap palette (varied, high contrast)
+  treemap: ["#2B5EA7","#0F9B8D","#7B61FF","#EB5757","#F2C94C","#14B8A6","#6366F1","#F97316","#EC4899","#06B6D4","#84CC16","#8B5CF6","#0EA5E9","#F43F5E","#10B981","#A855F7","#EAB308","#3B82F6"],
+};
+
+/* ── Custom Treemap cell ── */
+function TreemapCell({ x, y, width, height, name, value, fill }) {
+  if (width < 30 || height < 20) return null;
+  const code = (name || "").replace(/^Distrito\s+/, "");
+  return (
+    <g>
+      <rect x={x} y={y} width={width} height={height} rx={4}
+        style={{ fill, stroke: "#fff", strokeWidth: 2, cursor: "default" }} />
+      {width > 50 && height > 30 && (
+        <>
+          <text x={x + width / 2} y={y + height / 2 - 6} textAnchor="middle" fill="#fff"
+            style={{ fontSize: Math.min(13, width / 6), fontWeight: 700 }}>{code}</text>
+          <text x={x + width / 2} y={y + height / 2 + 10} textAnchor="middle" fill="rgba(255,255,255,0.85)"
+            style={{ fontSize: Math.min(11, width / 7) }}>{value} est.</text>
+        </>
+      )}
+    </g>
+  );
+}
+
+/* ── Componente PBI KPI (mini card estilo dashboard) ── */
+function PBIKpi({ label, value, sub, accent }) {
+  return (
+    <div className="rounded-lg p-4 flex flex-col" style={{ background: PBI.card, border: `1px solid ${PBI.border}`, borderTop: `3px solid ${accent}` }}>
+      <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: PBI.slate }}>{label}</span>
+      <span className="text-2xl font-bold mt-1" style={{ color: PBI.navy }}>{value}</span>
+      {sub && <span className="text-[11px] mt-0.5" style={{ color: PBI.slate }}>{sub}</span>}
+    </div>
+  );
+}
+
+/* ── Chip de filtro ── */
+const filterCls = "border rounded-lg px-3 py-1.5 text-xs bg-white focus:ring-2 focus:ring-blue-200 focus:border-blue-400 transition-colors";
+
+/* ══════════════════════════════════════════
+   PRÁCTICAS TAB (Power BI style)
+   ══════════════════════════════════════════ */
+function PracticasTab({ data: practicasData, loading, filtros, setFiltros, expanded, setExpanded, escuelaAbierta, setEscuelaAbierta, search, setSearch, navigate }) {
+  if (loading) return <div className="text-center py-10 text-gray-400">Cargando datos de prácticas...</div>;
+  if (!practicasData || practicasData.total_estudiantes === 0) return (
+    <div className="text-center py-16 text-gray-300">
+      <div className="text-4xl mb-3">{"🏫"}</div>
+      <div className="text-sm">No hay datos de prácticas preprofesionales</div>
+      <p className="text-xs text-gray-400 mt-1">Sube el archivo de formularios desde el panel Admin</p>
+    </div>
+  );
+
+  const pd = practicasData;
+  const pctMineduc = pd.total_estudiantes ? Math.round(pd.en_mineduc / pd.total_estudiantes * 100) : 0;
+
+  // Treemap data
+  const treemapData = (pd.por_distrito || []).map((d, i) => ({
+    name: d.distrito,
+    size: d.total,
+    fill: PBI.treemap[i % PBI.treemap.length],
+  }));
+
+  // Nivel data for horizontal bars (cleaned names)
+  const nivelData = (pd.por_nivel || []).map(n => ({
+    name: n.nivel.replace(/^\d+\w+ nivel - /, ""),
+    full: n.nivel,
+    value: n.total,
+  }));
+
+  // Sistema data for donut
+  const sistemaData = (pd.por_sistema || []).map(s => ({ name: s.sistema, value: s.total }));
+  const sistemaColors = ["#2B5EA7", "#0F9B8D", "#7B61FF", "#EB5757"];
+
+  // Centro data for bar
+  const centroData = (pd.por_centro || []).map(c => ({ name: c.centro, value: c.total }));
+  const centroColors = ["#2B5EA7", "#0F9B8D", "#F2C94C", "#EB5757"];
+
+  return (
+    <div className="space-y-4" style={{ background: PBI.bg }}>
+      {/* ── Row 1: KPI strip ── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <PBIKpi label="Practicantes" value={pd.total_estudiantes} accent={PBI.blue} />
+        <PBIKpi label="Escuelas" value={pd.total_escuelas} accent={PBI.teal} />
+        <PBIKpi label="Distritos" value={pd.total_distritos} accent={PBI.purple} />
+        <PBIKpi label="En Mineduc" value={pd.en_mineduc} accent={PBI.gold} sub={`${pctMineduc}% del total`} />
+      </div>
+
+      {/* ── Filtros (pill bar) ── */}
+      <div className="flex flex-wrap gap-2 items-center">
+        <span className="text-[10px] font-semibold uppercase tracking-widest mr-1" style={{ color: PBI.slate }}>Filtros</span>
+        <select value={filtros.sistema} onChange={e => setFiltros(f => ({ ...f, sistema: e.target.value }))} className={filterCls} style={{ borderColor: PBI.border }}>
+          <option value="">Sistema educativo</option>
+          {(pd.filtros?.sistemas_educativos || []).map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <select value={filtros.distrito} onChange={e => setFiltros(f => ({ ...f, distrito: e.target.value }))} className={filterCls} style={{ borderColor: PBI.border }}>
+          <option value="">Distrito</option>
+          {(pd.filtros?.distritos || []).map(d => <option key={d} value={d}>{d}</option>)}
+        </select>
+        <select value={filtros.centro} onChange={e => setFiltros(f => ({ ...f, centro: e.target.value }))} className={filterCls} style={{ borderColor: PBI.border }}>
+          <option value="">Centro de apoyo</option>
+          {(pd.filtros?.centros_apoyo || []).map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <select value={filtros.nivel} onChange={e => setFiltros(f => ({ ...f, nivel: e.target.value }))} className={filterCls} style={{ borderColor: PBI.border }}>
+          <option value="">Nivel de práctica</option>
+          {(pd.filtros?.niveles_practica || []).map(n => <option key={n} value={n}>{n}</option>)}
+        </select>
+        {(filtros.sistema || filtros.distrito || filtros.centro || filtros.nivel) && (
+          <button onClick={() => setFiltros({ sistema: "", distrito: "", centro: "", nivel: "" })}
+            className="text-[10px] text-red-500 hover:text-red-700 font-medium ml-1">Limpiar</button>
+        )}
+      </div>
+
+      {/* ── Row 2: Charts grid (2 cols) ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Sistema Educativo — donut */}
+        <div className="rounded-lg p-4" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
+          <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: PBI.slate }}>Sistema Educativo</h3>
+          <ResponsiveContainer width="100%" height={180}>
+            <PieChart>
+              <Pie data={sistemaData} cx="50%" cy="50%" innerRadius={45} outerRadius={75} paddingAngle={3}
+                dataKey="value" nameKey="name" strokeWidth={0}>
+                {sistemaData.map((_, i) => <Cell key={i} fill={sistemaColors[i % sistemaColors.length]} />)}
+              </Pie>
+              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: "none", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}
+                formatter={(v, name) => [`${v} estudiantes`, name]} />
+              <Legend iconType="circle" iconSize={8}
+                formatter={(v) => <span style={{ fontSize: 11, color: PBI.slate }}>{v}</span>} />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Centro de Apoyo — bar */}
+        <div className="rounded-lg p-4" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
+          <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: PBI.slate }}>Centro de Apoyo</h3>
+          <ResponsiveContainer width="100%" height={180}>
+            <BarChart data={centroData} barCategoryGap="20%">
+              <CartesianGrid vertical={false} stroke="#f1f5f9" />
+              <XAxis dataKey="name" tick={{ fontSize: 11, fill: PBI.slate }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 10, fill: PBI.slate }} axisLine={false} tickLine={false} />
+              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: "none", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}
+                formatter={(v) => [`${v} est.`, ""]} />
+              <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+                {centroData.map((_, i) => <Cell key={i} fill={centroColors[i % centroColors.length]} />)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* ── Row 3: Nivel de práctica (horizontal) + Treemap distritos ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Nivel de práctica */}
+        <div className="rounded-lg p-4" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
+          <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: PBI.slate }}>Nivel de Práctica</h3>
+          <ResponsiveContainer width="100%" height={nivelData.length * 45 + 20}>
+            <BarChart data={nivelData} layout="vertical" barCategoryGap="25%">
+              <CartesianGrid horizontal={false} stroke="#f1f5f9" />
+              <XAxis type="number" tick={{ fontSize: 10, fill: PBI.slate }} axisLine={false} tickLine={false} />
+              <YAxis type="category" dataKey="name" width={180} tick={{ fontSize: 11, fill: PBI.navy }} axisLine={false} tickLine={false} />
+              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: "none", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}
+                formatter={(v, _, p) => [`${v} estudiantes`, p.payload.full]} />
+              <Bar dataKey="value" radius={[0, 6, 6, 0]}>
+                {nivelData.map((_, i) => <Cell key={i} fill={[PBI.teal, PBI.blue, PBI.purple][i % 3]} />)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Treemap de distritos */}
+        <div className="rounded-lg p-4" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
+          <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: PBI.slate }}>Distribución por Distrito</h3>
+          <ResponsiveContainer width="100%" height={Math.max(200, nivelData.length * 45 + 20)}>
+            <Treemap data={treemapData} dataKey="size" nameKey="name" isAnimationActive={false}
+              content={<TreemapCell />}>
+              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: "none", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}
+                formatter={(v, name) => [`${v} estudiantes`, name]} />
+            </Treemap>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* ── Buscador de escuelas ── */}
+      <div className="rounded-lg overflow-hidden" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
+        <div className="px-4 py-3 flex items-center gap-3" style={{ borderBottom: `1px solid ${PBI.border}` }}>
+          <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: PBI.slate }}>Buscar escuela</span>
+          <input type="text" placeholder="Nombre o código AMIE..."
+            value={search} onChange={e => setSearch(e.target.value)}
+            className="flex-1 border rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-400"
+            style={{ borderColor: PBI.border }} />
+        </div>
+        {search.trim().length >= 2 && (() => {
+          const q = search.trim().toLowerCase();
+          const matches = (pd.escuelas || []).filter(e =>
+            (e.nombre_escuela || "").toLowerCase().includes(q) || (e.amie || "").toLowerCase().includes(q)
+          ).slice(0, 20);
+          if (matches.length === 0) return <div className="px-4 py-6 text-center text-sm" style={{ color: PBI.slate }}>No se encontraron escuelas</div>;
+          return (
+            <div className="divide-y" style={{ borderColor: PBI.border }}>
+              {matches.map((esc, i) => (
+                <div key={esc.amie || i}>
+                  <button onClick={() => setEscuelaAbierta(escuelaAbierta?.amie === esc.amie ? null : esc)}
+                    className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-blue-50/40 transition-colors text-left">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[10px]" style={{ color: PBI.slate }}>{escuelaAbierta?.amie === esc.amie ? "▼" : "▶"}</span>
+                      <span className="text-sm font-medium" style={{ color: PBI.navy }}>{esc.nombre_escuela}</span>
+                      {esc.amie && <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ background: "#f1f5f9", color: PBI.slate }}>{esc.amie}</span>}
+                      <span className="text-[10px]" style={{ color: PBI.purple }}>{esc.distrito}</span>
+                      <span className="text-[10px]" style={{ color: PBI.slate }}>{esc.sistema_educativo}</span>
+                    </div>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold" style={{ background: "#ecfdf5", color: PBI.teal }}>{esc.total_estudiantes} est.</span>
+                  </button>
+                  {escuelaAbierta?.amie === esc.amie && (
+                    <div className="px-4 pb-3"><StudentTable esc={esc} navigate={navigate} /></div>
+                  )}
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+      </div>
+
+      {/* ── Distritos → Escuelas → Estudiantes ── */}
+      <div className="rounded-lg overflow-hidden" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
+        <div className="px-4 py-3" style={{ background: PBI.navy }}>
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-white">Distritos y Escuelas</h3>
+        </div>
+        <div className="divide-y" style={{ borderColor: PBI.border }}>
+          {(pd.distritos || []).map((dist, dIdx) => (
+            <div key={dist.distrito}>
+              <button onClick={() => setExpanded(prev => ({ ...prev, [dIdx]: !prev[dIdx] }))}
+                className="w-full flex items-center justify-between px-4 py-3 transition-colors text-left"
+                style={{ background: expanded[dIdx] ? "#f8fafc" : "transparent" }}
+                onMouseEnter={e => { if (!expanded[dIdx]) e.currentTarget.style.background = "#f8fafc"; }}
+                onMouseLeave={e => { if (!expanded[dIdx]) e.currentTarget.style.background = "transparent"; }}>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs" style={{ color: PBI.blue }}>{expanded[dIdx] ? "▼" : "▶"}</span>
+                  <span className="font-semibold text-sm" style={{ color: PBI.navy }}>{dist.distrito}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-[10px]" style={{ color: PBI.slate }}>{dist.total_escuelas} escuela{dist.total_escuelas !== 1 ? "s" : ""}</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold" style={{ background: "#dbeafe", color: PBI.blue }}>{dist.total_estudiantes} est.</span>
+                </div>
+              </button>
+              {expanded[dIdx] && (
+                <div style={{ borderTop: `1px solid ${PBI.border}`, background: "#fafbfc" }}>
+                  {dist.escuelas.map((esc, eIdx) => {
+                    const isOpen = escuelaAbierta?.amie === esc.amie && escuelaAbierta?.distrito === dist.distrito;
+                    return (
+                      <div key={esc.amie || eIdx}>
+                        <button onClick={() => setEscuelaAbierta(isOpen ? null : esc)}
+                          className="w-full flex items-center justify-between px-6 py-2 hover:bg-blue-50/50 transition-colors text-left">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px]" style={{ color: PBI.teal }}>{isOpen ? "▼" : "▶"}</span>
+                            <span className="text-sm" style={{ color: PBI.navy }}>{esc.nombre_escuela || "Sin nombre"}</span>
+                            {esc.amie && <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: "#f1f5f9", color: PBI.slate }}>{esc.amie}</span>}
+                          </div>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold" style={{ background: "#ecfdf5", color: PBI.teal }}>{esc.total_estudiantes} est.</span>
+                        </button>
+                        {isOpen && (
+                          <div className="px-6 pb-3"><StudentTable esc={esc} navigate={navigate} /></div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -759,219 +1045,19 @@ export default function ResumenDatos() {
 
           {/* ═══ TAB: PRÁCTICAS PREPROFESIONALES ═══ */}
           {activeTab === "practicas" && (
-            <div className="space-y-5">
-              {practicasLoading ? (
-                <div className="text-center py-10 text-gray-400">Cargando datos de prácticas...</div>
-              ) : !practicasData || practicasData.total_estudiantes === 0 ? (
-                <div className="text-center py-16 text-gray-300">
-                  <div className="text-4xl mb-3">{"🏫"}</div>
-                  <div className="text-sm">No hay datos de prácticas preprofesionales</div>
-                  <p className="text-xs text-gray-400 mt-1">Sube el archivo de formularios desde el panel Admin</p>
-                </div>
-              ) : (
-                <>
-                  {/* KPI cards */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    <KPICard icon="👩‍🎓" label="Practicantes" value={practicasData.total_estudiantes} color="text-blue-700" bg="bg-blue-50/60" />
-                    <KPICard icon="🏫" label="Escuelas" value={practicasData.total_escuelas} color="text-emerald-700" bg="bg-emerald-50/60" />
-                    <KPICard icon="📍" label="Distritos" value={practicasData.total_distritos} color="text-purple-700" bg="bg-purple-50/60" />
-                    <KPICard icon="✅" label="En Mineduc" value={practicasData.en_mineduc} color="text-amber-700" bg="bg-amber-50/60"
-                      sub={`${practicasData.total_estudiantes ? Math.round(practicasData.en_mineduc / practicasData.total_estudiantes * 100) : 0}% del total`} />
-                  </div>
-
-                  {/* Filtros */}
-                  <div className="flex flex-wrap gap-3">
-                    <select value={practicasFiltros.sistema} onChange={e => setPracticasFiltros(f => ({ ...f, sistema: e.target.value }))}
-                      className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-300 focus:border-blue-400">
-                      <option value="">Todos los sistemas</option>
-                      {(practicasData.filtros?.sistemas_educativos || []).map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                    <select value={practicasFiltros.distrito} onChange={e => setPracticasFiltros(f => ({ ...f, distrito: e.target.value }))}
-                      className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-300 focus:border-blue-400">
-                      <option value="">Todos los distritos</option>
-                      {(practicasData.filtros?.distritos || []).map(d => <option key={d} value={d}>{d}</option>)}
-                    </select>
-                    <select value={practicasFiltros.centro} onChange={e => setPracticasFiltros(f => ({ ...f, centro: e.target.value }))}
-                      className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-300 focus:border-blue-400">
-                      <option value="">Todos los centros</option>
-                      {(practicasData.filtros?.centros_apoyo || []).map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                    <select value={practicasFiltros.nivel} onChange={e => setPracticasFiltros(f => ({ ...f, nivel: e.target.value }))}
-                      className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-300 focus:border-blue-400">
-                      <option value="">Todos los niveles</option>
-                      {(practicasData.filtros?.niveles_practica || []).map(n => <option key={n} value={n}>{n}</option>)}
-                    </select>
-                  </div>
-
-                  {/* Gráficos estadísticos */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Pie: por sistema educativo */}
-                    <div className="bg-white rounded-xl border border-gray-200 p-4">
-                      <h3 className="text-sm font-semibold text-gray-700 mb-3">Por Sistema Educativo</h3>
-                      <ResponsiveContainer width="100%" height={200}>
-                        <PieChart>
-                          <Pie data={(practicasData.por_sistema || []).map(s => ({ name: s.sistema, value: s.total }))}
-                            cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2} dataKey="value" nameKey="name"
-                            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                            labelLine={false}
-                            style={{ fontSize: "11px" }}>
-                            {(practicasData.por_sistema || []).map((_, i) => (
-                              <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                            ))}
-                          </Pie>
-                          <Tooltip formatter={(v) => [`${v} estudiantes`, ""]} />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </div>
-                    {/* Bar: por centro de apoyo */}
-                    <div className="bg-white rounded-xl border border-gray-200 p-4">
-                      <h3 className="text-sm font-semibold text-gray-700 mb-3">Por Centro de Apoyo</h3>
-                      <ResponsiveContainer width="100%" height={200}>
-                        <BarChart data={(practicasData.por_centro || []).map(c => ({ name: c.centro, value: c.total }))}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                          <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                          <YAxis tick={{ fontSize: 11 }} />
-                          <Tooltip formatter={(v) => [`${v} estudiantes`, ""]} />
-                          <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                            {(practicasData.por_centro || []).map((_, i) => (
-                              <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                            ))}
-                          </Bar>
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-
-                  {/* Bar horizontal: por nivel de práctica */}
-                  <div className="bg-white rounded-xl border border-gray-200 p-4">
-                    <h3 className="text-sm font-semibold text-gray-700 mb-3">Por Nivel de Práctica</h3>
-                    <ResponsiveContainer width="100%" height={120}>
-                      <BarChart data={(practicasData.por_nivel || []).map(n => ({ name: n.nivel.replace(/^\d+\w+ nivel - /, ""), value: n.total, full: n.nivel }))} layout="vertical">
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                        <XAxis type="number" tick={{ fontSize: 11 }} />
-                        <YAxis type="category" dataKey="name" width={200} tick={{ fontSize: 11 }} />
-                        <Tooltip formatter={(v, _, p) => [`${v} estudiantes`, p.payload.full]} />
-                        <Bar dataKey="value" radius={[0, 4, 4, 0]}>
-                          {(practicasData.por_nivel || []).map((_, i) => (
-                            <Cell key={i} fill={CHART_COLORS[(i + 3) % CHART_COLORS.length]} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-
-                  {/* Top distritos: bar chart horizontal */}
-                  {(practicasData.por_distrito || []).length > 3 && (
-                    <div className="bg-white rounded-xl border border-gray-200 p-4">
-                      <h3 className="text-sm font-semibold text-gray-700 mb-3">Estudiantes por Distrito (top 15)</h3>
-                      <ResponsiveContainer width="100%" height={Math.min(400, (practicasData.por_distrito || []).slice(0, 15).length * 28 + 40)}>
-                        <BarChart data={(practicasData.por_distrito || []).slice(0, 15).map(d => ({ name: d.distrito.replace(/^Distrito\s+/, ""), value: d.total }))} layout="vertical">
-                          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                          <XAxis type="number" tick={{ fontSize: 11 }} />
-                          <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 10 }} />
-                          <Tooltip formatter={(v) => [`${v} estudiantes`, ""]} />
-                          <Bar dataKey="value" fill="#6366f1" radius={[0, 4, 4, 0]} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  )}
-
-                  {/* ── Buscador de escuelas ── */}
-                  <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                    <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center gap-3">
-                      <h3 className="text-sm font-semibold text-gray-700">Buscar Escuela</h3>
-                      <input type="text" placeholder="Nombre o código AMIE..."
-                        value={practicasSearch} onChange={e => setPracticasSearch(e.target.value)}
-                        className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-300 focus:border-blue-400" />
-                    </div>
-                    {practicasSearch.trim().length >= 2 && (() => {
-                      const q = practicasSearch.trim().toLowerCase();
-                      const matches = (practicasData.escuelas || []).filter(e =>
-                        (e.nombre_escuela || "").toLowerCase().includes(q) || (e.amie || "").toLowerCase().includes(q)
-                      ).slice(0, 20);
-                      if (matches.length === 0) return (
-                        <div className="px-4 py-6 text-center text-gray-400 text-sm">No se encontraron escuelas</div>
-                      );
-                      return (
-                        <div className="divide-y divide-gray-100">
-                          {matches.map((esc, i) => (
-                            <div key={esc.amie || i}>
-                              <button onClick={() => setPracticasEscuela(practicasEscuela?.amie === esc.amie ? null : esc)}
-                                className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-blue-50/60 transition-colors text-left">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="text-xs text-gray-400">{practicasEscuela?.amie === esc.amie ? "▼" : "▶"}</span>
-                                  <span className="text-sm font-medium text-gray-700">{esc.nombre_escuela}</span>
-                                  {esc.amie && <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{esc.amie}</span>}
-                                  <span className="text-[10px] text-purple-500">{esc.distrito}</span>
-                                  <span className="text-[10px] text-gray-400">{esc.sistema_educativo}</span>
-                                </div>
-                                <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">{esc.total_estudiantes} est.</span>
-                              </button>
-                              {practicasEscuela?.amie === esc.amie && (
-                                <div className="px-4 pb-3">
-                                  <StudentTable esc={esc} navigate={navigate} />
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      );
-                    })()}
-                  </div>
-
-                  {/* ── Distritos → Escuelas → Estudiantes (jerarquía expandible) ── */}
-                  <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                    <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
-                      <h3 className="text-sm font-semibold text-gray-700">Distritos y Escuelas</h3>
-                    </div>
-                    <div className="divide-y divide-gray-100">
-                      {(practicasData.distritos || []).map((dist, dIdx) => (
-                        <div key={dist.distrito}>
-                          {/* Distrito header */}
-                          <button onClick={() => setPracticasExpanded(prev => ({ ...prev, [dIdx]: !prev[dIdx] }))}
-                            className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors text-left">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs">{practicasExpanded[dIdx] ? "▼" : "▶"}</span>
-                              <span className="font-medium text-gray-800">{dist.distrito}</span>
-                            </div>
-                            <div className="flex items-center gap-3 text-xs text-gray-500">
-                              <span>{dist.total_escuelas} escuela{dist.total_escuelas !== 1 ? "s" : ""}</span>
-                              <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">{dist.total_estudiantes} est.</span>
-                            </div>
-                          </button>
-
-                          {/* Escuelas del distrito */}
-                          {practicasExpanded[dIdx] && (
-                            <div className="bg-gray-50/50 border-t border-gray-100">
-                              {dist.escuelas.map((esc, eIdx) => (
-                                <div key={esc.amie || eIdx}>
-                                  <button onClick={() => setPracticasEscuela(practicasEscuela?.amie === esc.amie && practicasEscuela?.distrito === dist.distrito ? null : esc)}
-                                    className="w-full flex items-center justify-between px-6 py-2.5 hover:bg-blue-50/60 transition-colors text-left">
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-xs text-gray-400">{practicasEscuela?.amie === esc.amie && practicasEscuela?.distrito === dist.distrito ? "▼" : "▶"}</span>
-                                      <span className="text-sm text-gray-700">{esc.nombre_escuela || "Sin nombre"}</span>
-                                      {esc.amie && <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{esc.amie}</span>}
-                                    </div>
-                                    <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">{esc.total_estudiantes} est.</span>
-                                  </button>
-
-                                  {/* Lista de estudiantes de la escuela */}
-                                  {practicasEscuela?.amie === esc.amie && practicasEscuela?.distrito === dist.distrito && (
-                                    <div className="px-6 pb-3">
-                                      <StudentTable esc={esc} navigate={navigate} />
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
+            <PracticasTab
+              data={practicasData}
+              loading={practicasLoading}
+              filtros={practicasFiltros}
+              setFiltros={setPracticasFiltros}
+              expanded={practicasExpanded}
+              setExpanded={setPracticasExpanded}
+              escuelaAbierta={practicasEscuela}
+              setEscuelaAbierta={setPracticasEscuela}
+              search={practicasSearch}
+              setSearch={setPracticasSearch}
+              navigate={navigate}
+            />
           )}
         </>
       )}
