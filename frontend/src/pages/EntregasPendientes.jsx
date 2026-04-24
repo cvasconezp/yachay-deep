@@ -7,6 +7,46 @@ import { useStudentListModal } from "../components/StudentListModal";
 const AVAC_BASE = "https://avac.ups.edu.ec/grado68";
 const avacCourseUrl = (codigo) => `${AVAC_BASE}/course/search.php?areaids=core_course-course&q=${encodeURIComponent(codigo)}`;
 
+/* ── Generador de mensaje personalizado para WhatsApp / correo ── */
+function generarMensaje(nombre, asignatura, unidad) {
+  return (
+    `Estimado/a ${nombre},\n\n` +
+    `Hemos identificado que aún no has enviado la actividad correspondiente a la Unidad ${unidad} de la asignatura ${asignatura}. ` +
+    `Por favor, cuéntanos cuál fue el inconveniente para ayudarte a resolverlo lo antes posible.\n\n` +
+    `Quedamos atentos.\nEquipo de Acompañamiento Académico`
+  );
+}
+
+function generarMensajesTodos(pendientes, asignatura, unidad) {
+  return pendientes
+    .map((p) => generarMensaje(p.nombre, asignatura, unidad))
+    .join("\n\n---\n\n");
+}
+
+function CopyButton({ text, label, className = "" }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = (e) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+  return (
+    <button
+      onClick={handleCopy}
+      title={label}
+      className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded transition-colors shrink-0 ${
+        copied
+          ? "bg-green-100 text-green-700"
+          : "bg-gray-100 text-gray-500 hover:bg-blue-100 hover:text-blue-600"
+      } ${className}`}
+    >
+      {copied ? "✓ Copiado" : label}
+    </button>
+  );
+}
+
 export default function EntregasPendientes() {
   const navigate = useNavigate();
   const { openStudentList, StudentListModalEl } = useStudentListModal();
@@ -501,22 +541,34 @@ export default function EntregasPendientes() {
                       <tr key={`${key}-detail`}>
                         <td colSpan={8} className="bg-red-50/30 px-4 py-0">
                           <div className="py-2 pl-8">
-                            <div className="text-xs font-semibold text-red-700 mb-2 uppercase tracking-wide">
-                              Estudiantes sin entregar — {act.asignatura} · Unidad {act.unidad}
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="text-xs font-semibold text-red-700 uppercase tracking-wide">
+                                Estudiantes sin entregar — {act.asignatura} · Unidad {act.unidad}
+                              </div>
+                              <CopyButton
+                                text={generarMensajesTodos(act.pendientes, act.asignatura, act.unidad)}
+                                label={`📋 Copiar todos (${act.pendientes.length})`}
+                                className="text-xs px-2 py-1"
+                              />
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-1.5">
                               {act.pendientes.map((p) => (
                                 <div
                                   key={p.student_id}
-                                  className="flex items-center gap-2 bg-white rounded-lg border border-red-100 px-3 py-1.5 hover:border-blue-300 cursor-pointer transition-colors"
-                                  onClick={(e) => { e.stopPropagation(); navigate(`/ficha/${p.student_id}`); }}
+                                  className="flex items-center gap-2 bg-white rounded-lg border border-red-100 px-3 py-1.5 hover:border-blue-300 transition-colors"
                                 >
                                   <span className="text-red-400 text-xs">●</span>
-                                  <div className="flex-1 min-w-0">
+                                  <div
+                                    className="flex-1 min-w-0 cursor-pointer"
+                                    onClick={(e) => { e.stopPropagation(); navigate(`/ficha/${p.student_id}`); }}
+                                  >
                                     <div className="text-xs font-medium text-gray-800 truncate">{p.nombre}</div>
                                     <div className="text-[10px] text-gray-400 truncate">{p.correo}</div>
                                   </div>
-                                  <span className="text-[10px] text-gray-300 shrink-0">→</span>
+                                  <CopyButton
+                                    text={generarMensaje(p.nombre, act.asignatura, act.unidad)}
+                                    label="📋"
+                                  />
                                 </div>
                               ))}
                             </div>
