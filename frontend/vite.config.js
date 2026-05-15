@@ -19,5 +19,24 @@ export default defineConfig({
     setupFiles: ["./src/test/setup.js"],
     css: false,
     include: ["src/**/*.{test,spec}.{js,jsx}"],
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "text-summary", "lcov"],
+      reportsDirectory: "./coverage",
+      include: ["src/**/*.{js,jsx}"],
+      exclude: [
+        "src/test/**",
+        "src/**/*.test.{js,jsx}",
+        "src/**/*.spec.{js,jsx}",
+        "src/main.jsx",
+        "src/data/**",
+      ],
+      thresholds: {
+        lines: 10,
+        functions: 8,
+        branches: 7,
+        statements: 10,
+      },
+    },
   },
 });

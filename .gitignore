@@ -44,3 +44,9 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Coverage reports
+coverage_html/
+frontend/coverage/
+.coverage
+htmlcov/

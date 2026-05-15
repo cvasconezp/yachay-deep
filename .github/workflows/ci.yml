@@ -26,7 +26,7 @@ jobs:
       - run: ruff check backend/ || true
       - run: ruff format --check backend/ || true
 
-  # ── Tests Backend ──
+  # ── Tests Backend con Coverage ──
   test-backend:
     runs-on: ubuntu-latest
     steps:
@@ -35,8 +35,9 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install -r backend/requirements.txt
-      - run: pip install pytest pytest-asyncio httpx
-      - run: pytest --tb=short -q
+      - run: pip install pytest pytest-asyncio httpx pytest-cov
+      - name: Run tests with coverage
+        run: pytest --tb=short -q --cov=backend --cov-report=term-missing --cov-fail-under=60
         env:
           DATABASE_URL: "sqlite://"
           SECRET_KEY: "ci-test-secret-key"
@@ -44,7 +45,7 @@ jobs:
           ADMIN_EMAIL: "ci@test.com"
           ADMIN_PASSWORD: "CiTestPass123!"
 
-  # ── Tests Frontend ──
+  # ── Tests Frontend con Coverage ──
   test-frontend:
     runs-on: ubuntu-latest
     steps:
@@ -53,7 +54,8 @@ jobs:
         with:
           node-version: "20"
       - run: cd frontend && npm ci
-      - run: cd frontend && npx vitest run
+      - name: Run tests with coverage
+        run: cd frontend && npx vitest run --coverage
 
   # ── Auditoría de dependencias ──
   security-audit:
