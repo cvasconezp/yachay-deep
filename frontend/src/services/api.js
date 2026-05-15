@@ -324,4 +324,8 @@ class ApiClient {
   }
   previewDigest() { return this.get("/alerts/digest/preview"); }
 
+  // Score de Recuperabilidad (Épica 1.4)
+  getRecoveryScore(studentId) { return this.get(`/students/${studentId}/recovery-score`); }
+  batchRecoveryScores() { return this.post("/students/recovery-scores/batch"); }
+
 export const api = new ApiClient();

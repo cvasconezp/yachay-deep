@@ -6,6 +6,15 @@ import { PeriodSelector } from "../components/PeriodSelector";
 import EcuadorMap from "../components/EcuadorMap";
 import InterventionForm from "./InterventionForm";
 
+// Componentes extraídos (Épica 1.5)
+import {
+  SectionHeader, PersonalRow, TaskCell, RecoveryScoreCard,
+  GradeChip, MallaChip, MallaCeldaFija,
+  getNoteStyle, getDiagnosticoStyle, getRiesgoStyle, getCompromisoLabel,
+  parseLocalDate, calcAge, ordinalNivel, compactarAcceso,
+  toTitleCase, abbreviateGrupo, formatNivel, parseNivelNum,
+  getNoteStyleHistorico, getMallaEstado, abreviarAsignatura,
+} from "../components/ficha";
 // ── ErrorBoundary: captura crashes de render y permite recargar ──────────────
 class FichaErrorBoundary extends Component {
   constructor(props) {
@@ -41,88 +50,6 @@ class FichaErrorBoundary extends Component {
     }
     return this.props.children;
   }
-}
-
-// ── Helpers de color ──────────────────────────────────────────────────────────
-function getNoteStyle(nota, max = 40) {
-  if (nota == null) return { bg: "", text: "text-gray-400", border: "" };
-  const pct = nota / max;
-  if (pct >= 0.70) return { bg: "bg-green-100",  text: "text-green-800",  border: "border-green-300" };
-  if (pct >= 0.50) return { bg: "bg-yellow-100", text: "text-yellow-800", border: "border-yellow-300" };
-  return               { bg: "bg-red-100",    text: "text-red-700",   border: "border-red-300" };
-}
-
-/**
- * Mapea el diagnóstico computado (Framework_FichaEst §3.5) a colores + etiqueta.
- * 4 estados: Aprobación | Riesgo Académico | Riesgo de Deserción | En riesgo
- */
-function getDiagnosticoStyle(diagnostico) {
-  switch (diagnostico) {
-    case "Aprobación":
-      return { bg: "bg-green-100",  text: "text-green-800",  badge: "bg-green-500",  label: "Aprobación" };
-    case "Riesgo Académico":
-      return { bg: "bg-yellow-100", text: "text-yellow-800", badge: "bg-yellow-500", label: "Riesgo Académico" };
-    case "Riesgo de Deserción":
-      return { bg: "bg-orange-100", text: "text-orange-700", badge: "bg-orange-500", label: "Riesgo de Deserción" };
-    case "En riesgo":
-      return { bg: "bg-red-100",    text: "text-red-700",    badge: "bg-red-600",    label: "En riesgo" };
-    default:
-      return { bg: "bg-gray-100",   text: "text-gray-500",   badge: "bg-gray-400",   label: "Sin datos" };
-  }
-}
-
-/** Mantener compatibilidad con nivel_riesgo (Alto/Medio/Bajo) del ETL */
-function getRiesgoStyle(nivel) {
-  if (nivel === "Alto")  return { bg: "bg-red-100",    text: "text-red-700",    label: "En riesgo" };
-  if (nivel === "Medio") return { bg: "bg-yellow-100", text: "text-yellow-700", label: "Riesgo moderado" };
-  if (nivel === "Bajo")  return { bg: "bg-green-100",  text: "text-green-700",  label: "Sin riesgo" };
-  return                        { bg: "bg-gray-100",   text: "text-gray-500",   label: "Sin evaluar" };
-}
-
-function getCompromisoLabel(val) {
-  if (val == null) return "—";
-  if (val < 0.3) return "Bajo";
-  if (val < 0.6) return "Medio";
-  return "Alto";
-}
-
-/**
- * Parsea una fecha ISO date-only ("2001-12-31") como fecha LOCAL, no UTC.
- * new Date("2001-12-31") → UTC midnight → en Ecuador (UTC-5) muestra día anterior.
- * Agregando T00:00:00 se interpreta como hora local.
- */
-function parseLocalDate(isoDate) {
-  if (!isoDate) return null;
-  return new Date(isoDate + (isoDate.includes("T") ? "" : "T00:00:00"));
-}
-
-/** Calcula la edad a partir de una fecha de nacimiento ISO */
-function calcAge(isoDate) {
-  if (!isoDate) return null;
-  const birth = parseLocalDate(isoDate);
-  const today = new Date();
-  let age = today.getFullYear() - birth.getFullYear();
-  const m = today.getMonth() - birth.getMonth();
-  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
-  return age;
-}
-
-/** Convierte número de nivel a ordinal en español: 1→"1er", 2→"2do", etc. */
-function ordinalNivel(n) {
-  const map = { 1: "1er", 2: "2do", 3: "3er", 4: "4to", 5: "5to", 6: "6to", 7: "7mo", 8: "8vo" };
-  return map[n] || `${n}°`;
-}
-
-/** Compactar texto de acceso AVAC: "3 días 15 horas 20 minutos" → "3d 15h 20m" */
-function compactarAcceso(texto) {
-  if (!texto) return null;
-  return texto
-    .replace(/(\d+)\s*días?/i,    "$1d")
-    .replace(/(\d+)\s*horas?/i,   " $1h")
-    .replace(/(\d+)\s*minutos?/i, " $1m")
-    .replace(/(\d+)\s*segundos?/i,"")
-    .replace(/,\s*/g, " ")
-    .trim();
 }
 
 /** Trend chart component: BI-style sparkline + KPIs — full-width, compact height */
@@ -391,262 +318,6 @@ function TrendChart({ calificacionesHistoricas, calificaciones }) {
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-/** Title Case: primera letra de cada palabra en mayúscula, excepto números romanos */
-function toTitleCase(str) {
-  if (!str) return str;
-  // Limpiar artefactos Excel (_x000d_, _x000a_) antes de formatear
-  const clean = str.replace(/_x[0-9a-fA-F]{4}_/g, " ").replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
-  const roman = /^(I{1,3}|IV|VI{0,3}|IX|X{0,3}|XI{0,3}|XII)$/;
-  return clean.toLowerCase().split(/\s+/).map(word => {
-    if (roman.test(word.toUpperCase())) return word.toUpperCase();
-    return word.charAt(0).toUpperCase() + word.slice(1);
-  }).join(" ");
-}
-
-/** Abrevia el grupo: "3" → "G3", "Grupo - 3" → "G3", ya formateado "G6" → "G6" */
-function abbreviateGrupo(grupo) {
-  if (!grupo) return null;
-  const s = String(grupo).trim();
-  if (/^G\d+$/i.test(s)) return s.toUpperCase(); // ya abreviado
-  const m = s.match(/(\d+)/);
-  return m ? `G${m[1]}` : s;
-}
-
-/**
- * Formatea nivel para encabezados: "9° Nivel".
- * Prioriza nivel_academico (entero), luego el nivel más frecuente de calificaciones.
- * NO parsea nivel_detectado ("Semestre 67") porque es código de período, no nivel real.
- */
-function formatNivel(nivelAcademico, calificaciones, calificacionesHistoricas) {
-  if (nivelAcademico != null && nivelAcademico > 0 && nivelAcademico <= 12)
-    return `${nivelAcademico}° Nivel`;
-  // Fallback: nivel más frecuente de calificaciones del semestre actual
-  if (calificaciones?.length > 0) {
-    const niveles = calificaciones.map(c => c.nivel).filter(n => n != null && n > 0 && n <= 12);
-    if (niveles.length > 0) {
-      const counts = {};
-      niveles.forEach(n => { counts[n] = (counts[n] || 0) + 1; });
-      const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
-      return `${top}° Nivel`;
-    }
-  }
-  // Fallback 2: nivel más alto del último período histórico
-  if (calificacionesHistoricas?.length > 0) {
-    const periodos = [...new Set(calificacionesHistoricas.map(c => c.periodo))].sort();
-    const ultimoPeriodo = periodos[periodos.length - 1];
-    const delUltimo = calificacionesHistoricas.filter(c => c.periodo === ultimoPeriodo);
-    const niveles = delUltimo.map(c => c.nivel).filter(n => n != null && n > 0 && n <= 12);
-    if (niveles.length > 0) {
-      const maxNivel = Math.max(...niveles) + 1; // Next level after the last completed
-      return maxNivel <= 12 ? `${maxNivel}° Nivel` : `${Math.max(...niveles)}° Nivel`;
-    }
-  }
-  return null;
-}
-
-/** Normaliza un valor de nivel individual (de calificaciones) a entero 1-12. */
-function parseNivelNum(val) {
-  if (val == null || val === "") return null;
-  const n = parseInt(String(val), 10);
-  return (!isNaN(n) && n >= 1 && n <= 12) ? n : null;
-}
-
-// ── Fila de dato personal ─────────────────────────────────────────────────────
-function PersonalRow({ label, value, href, warning }) {
-  if (!value || value === "—") {
-    return (
-      <tr>
-        <td className="text-right text-[11px] text-gray-500 font-semibold px-2 py-0.5 border border-gray-200 bg-[#F2F2F2] whitespace-nowrap w-28">{label}</td>
-        <td className="text-[11px] px-2 py-0.5 border border-gray-200 text-gray-300 italic">—</td>
-      </tr>
-    );
-  }
-  return (
-    <tr className={warning ? "bg-red-50" : ""}>
-      <td className="text-right text-[11px] text-gray-500 font-semibold px-2 py-0.5 border border-gray-200 bg-[#F2F2F2] whitespace-nowrap w-28">{label}</td>
-      <td className="text-[11px] px-2 py-0.5 border border-gray-200">
-        {href
-          ? <a href={href} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline break-all">{value}</a>
-          : <span className={warning ? "text-red-600 font-semibold" : "text-gray-800"}>{value}</span>
-        }
-      </td>
-    </tr>
-  );
-}
-
-// ── Celda de actividad/tarea ───────────────────────────────────────────────────
-function TaskCell({ entregada, retrasada, title }) {
-  let cls = "inline-flex items-center justify-center w-[14px] h-[14px] rounded-sm text-white text-[8px] font-bold";
-  if (entregada && !retrasada) return <span className={`${cls} bg-green-500`} title={title}>✓</span>;
-  if (retrasada)               return <span className={`${cls} bg-red-500`}   title={title}>✗</span>;
-  return                              <span className={`${cls} bg-gray-300`}  title={title}>·</span>;
-}
-
-// ── Estilo de nota para escala 0–100 (TableauHistorico)
-// Umbral EIB: ≥70 aprobado, 60–69 en proceso, <60 reprobado
-function getNoteStyleHistorico(nota) {
-  if (nota == null) return { bg: "", text: "text-gray-400", border: "border-gray-200" };
-  if (nota >= 70) return { bg: "bg-green-100",  text: "text-green-800",  border: "border-green-300" };
-  if (nota >= 60) return { bg: "bg-yellow-100", text: "text-yellow-800", border: "border-yellow-300" };
-  return               { bg: "bg-red-100",    text: "text-red-700",   border: "border-red-300" };
-}
-
-// ── Chip de calificación histórica ────────────────────────────────────────────
-function GradeChip({ asignatura, nota_final, docente }) {
-  const s = getNoteStyle(nota_final);
-  return (
-    <div className={`border ${s.border || "border-gray-200"} ${s.bg} rounded p-1.5 text-center`}
-         style={{ minWidth: "72px", maxWidth: "90px" }}
-         title={toTitleCase(docente) || toTitleCase(asignatura)}>
-      <div className="text-[9px] text-gray-500 leading-tight mb-1 overflow-hidden"
-           style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
-        {toTitleCase(asignatura)}
-      </div>
-      <div className={`text-xs font-bold ${s.text}`}>{nota_final ?? "—"}</div>
-    </div>
-  );
-}
-
-// ── Chip de calificación en malla histórica (legacy — used in old grid) ──────
-function MallaChip({ asignatura, nota_final, docente }) {
-  const s = getNoteStyleHistorico(nota_final);
-  const titleName = toTitleCase(asignatura) || "";
-  const abrev = titleName
-    .replace(/\b(de|la|las|los|el|y|en|del|para|con|por)\b/gi, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 18);
-  return (
-    <div className={`border ${s.border} ${s.bg} rounded px-1.5 py-1 text-center cursor-default`}
-         style={{ minWidth: "70px", maxWidth: "88px" }}
-         title={`${titleName}${docente ? " · " + toTitleCase(docente) : ""}${nota_final != null ? " · " + nota_final + "/100" : ""}`}>
-      <div className="text-[8px] text-gray-500 leading-tight mb-0.5 overflow-hidden whitespace-nowrap"
-           style={{ overflow: "hidden", textOverflow: "ellipsis", maxWidth: "84px" }}>
-        {abrev}
-      </div>
-      <div className={`text-[11px] font-bold ${s.text}`}>{nota_final ?? "—"}</div>
-    </div>
-  );
-}
-
-// ── Estilos para la malla fija ──────────────────────────────────────────────
-function getMallaEstado(estado) {
-  switch (estado) {
-    case "aprobada":   return { bg: "bg-green-50",  border: "border-green-300", text: "text-green-800",  label: "Aprobada" };
-    case "reprobada":  return { bg: "bg-red-50",    border: "border-red-300",   text: "text-red-700",    label: "Reprobada" };
-    case "cursando":   return { bg: "bg-amber-50",  border: "border-amber-400", text: "text-amber-800",  label: "Cursando" };
-    default:           return { bg: "bg-gray-50",   border: "border-gray-200",  text: "text-gray-400",   label: "No cursado" };
-  }
-}
-
-// ── Abreviar nombres largos de asignaturas ──────────────────────────────────
-function abreviarAsignatura(nombre, maxLen = 32) {
-  // Quitar conectores para compactar.
-  // Usamos lookaround con espacios en vez de \b para evitar que
-  // \bA\b matchee la "a" al final de palabras acentuadas (ej. Antropología → Antropologí)
-  let short = nombre
-    .replace(/(?<=^|\s)(De La|De Los|De Las|Del|De|La|Las|Los|El|Y|En|Para|Con|Por|A)(?=\s|$)/gi, "")
-    .replace(/\s{2,}/g, " ")
-    .trim();
-  if (short.length <= maxLen) return short;
-  // Quitar subtítulos después de ":" para acortar más
-  const colonIdx = short.indexOf(":");
-  if (colonIdx > 0 && colonIdx <= maxLen - 1) {
-    return short.slice(0, colonIdx).trim() + "…";
-  }
-  // Truncar con elipsis
-  const words = short.split(" ");
-  let result = "";
-  for (const w of words) {
-    if ((result + " " + w).trim().length > maxLen - 1) break;
-    result = (result + " " + w).trim();
-  }
-  return result + "…";
-}
-
-// ── Celda compacta de la malla con soporte de repeticiones ──────────────────
-function MallaCeldaFija({ asignatura }) {
-  const [showTooltip, setShowTooltip] = useState(false);
-  const s = getMallaEstado(asignatura.estado);
-  const titleName = toTitleCase(asignatura.nombre) || "";
-  const shortName = abreviarAsignatura(titleName);
-
-  const esRepeticion = asignatura.es_repeticion;
-  const numIntentos = asignatura.num_intentos;
-  const nota = asignatura.nota_vigente;
-
-  return (
-    <div
-      className={`relative border ${s.border} ${s.bg} rounded cursor-default transition-shadow hover:shadow-sm`}
-      style={{
-        padding: "5px 7px",
-        ...(esRepeticion ? { borderLeftWidth: "3px", borderLeftColor: "#f97316", borderLeftStyle: "solid" } : {}),
-      }}
-      onMouseEnter={() => setShowTooltip(true)}
-      onMouseLeave={() => setShowTooltip(false)}
-    >
-      {/* Badge de repetición */}
-      {esRepeticion && (
-        <div className="absolute -top-1.5 -right-1.5 bg-orange-500 text-white font-bold rounded-full flex items-center justify-center shadow-sm z-10"
-             style={{ width: "16px", height: "16px", fontSize: "8px" }}
-             title={`${numIntentos} intentos`}>
-          {numIntentos}
-        </div>
-      )}
-
-      {/* Nombre abreviado + nota — overflow controlado */}
-      <div className="overflow-hidden" style={{ minWidth: 0 }}>
-        <div className="flex items-start gap-1" style={{ minWidth: 0 }}>
-          <div className="leading-snug" style={{ fontSize: "10.5px", color: "#1f2937", flex: "1 1 0%", minWidth: 0, wordBreak: "break-word" }}>
-            {shortName}
-          </div>
-          <div className={`font-bold ${s.text}`} style={{ fontSize: "12px", flexShrink: 0, textAlign: "right" }}>
-            {nota != null ? nota : "—"}
-          </div>
-        </div>
-      </div>
-
-      {/* Tooltip: nombre completo (siempre) + historial de intentos (si repetición) */}
-      {showTooltip && (
-        <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-1 bg-gray-900 text-white rounded-lg shadow-xl px-3 py-2"
-             style={{ minWidth: "200px", maxWidth: "300px", fontSize: "10px" }}>
-          <div className="font-bold mb-0.5" style={{ fontSize: "11px", color: esRepeticion ? "#fdba74" : "#e5e7eb", whiteSpace: "normal" }}>
-            {titleName}
-          </div>
-          {esRepeticion && asignatura.intentos.length > 0 && (
-            <>
-              <div className="font-semibold text-gray-300 mb-0.5">{numIntentos} intentos:</div>
-              {asignatura.intentos.map((intento, i) => (
-                <div key={i} className="flex justify-between gap-3 py-px border-t border-gray-700 whitespace-nowrap">
-                  <span className="text-gray-300">{intento.periodo || "Actual"}</span>
-                  <span className={
-                    intento.estado === "aprobada" ? "text-green-400 font-bold" :
-                    intento.estado === "reprobada" ? "text-red-400 font-bold" :
-                    intento.estado === "cursando" ? "text-amber-400" :
-                    "text-yellow-400"
-                  }>
-                    {intento.nota != null ? intento.nota : "—"}
-                  </span>
-                </div>
-              ))}
-            </>
-          )}
-          <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Sección header ────────────────────────────────────────────────────────────
-function SectionHeader({ children, className = "" }) {
-  return (
-    <div className={`bg-[#D6E4F0] border-y border-gray-300 px-3 py-0.5 text-[10px] font-bold text-[#1B3A6B] uppercase tracking-wide ${className}`}>
-      {children}
     </div>
   );
 }
@@ -2001,6 +1672,9 @@ function FichaEstudianteInner() {
                   </span>
                 </div>
               </div>
+
+              {/* ══ SCORE DE RECUPERABILIDAD (Épica 1.4) ══ */}
+              <RecoveryScoreCard studentId={ficha.id} />
 
               {/* ══ MALLA CURRICULAR FIJA (grid por niveles canónicos) ══ */}
               {ficha.malla_curricular?.semestres?.length > 0 && (() => {

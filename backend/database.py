@@ -104,12 +104,17 @@ def upgrade_tables():
             ("umbral_tareas_minimo", "FLOAT"),
             ("umbral_compromiso_minimo", "FLOAT"),
             ("auto_alertas", "BOOLEAN DEFAULT true"),
+            ("retrain_cada_n_etl", "INTEGER DEFAULT 5"),
+            ("retrain_contador_etl", "INTEGER DEFAULT 0"),
+            ("ultimo_retrain", "TIMESTAMP"),
         ],
         "alert_events": [
             ("codigo_curso", "VARCHAR"),
         ],
         "students": [
             ("es_tercera_matricula", "BOOLEAN DEFAULT false"),
+            ("score_recuperabilidad", "FLOAT"),
+            ("nivel_recuperabilidad", "VARCHAR"),
         ],
         "enrollments": [
             ("es_tercera_matricula", "BOOLEAN DEFAULT false"),

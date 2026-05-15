@@ -564,20 +564,45 @@ class ETLPipeline:
                 logs.append(f"  ⚠️ Error en Terceras Matrículas (no crítico): {tm_err}")
                 logger.error("Error en ETL de terceras matrículas: %s", tm_err, exc_info=True)
 
-            # 8. Reentrenar modelos ML con datos históricos actualizados
+            # 8. Reentrenar modelos ML (condicional) [Épica 1.2]
             try:
                 from ..ml.train import train_models
-                logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Reentrenando modelos ML (por carrera)...")
-                train_result = train_models(self.db)
-                if train_result.get("status") == "ok":
-                    carreras_modelo = len(train_result.get("carreras_con_modelo", []))
-                    carreras_fallback = len(train_result.get("carreras_fallback", []))
-                    logs.append(
-                        f"  → Modelos entrenados: {carreras_modelo} por carrera, "
-                        f"{carreras_fallback} usando global ({train_result.get('estudiantes', 0)} estudiantes)"
-                    )
+                from ..ml.predict import Predictor
+
+                # Determinar si toca reentrenar
+                retrain_cada_n = getattr(semconfig, 'retrain_cada_n_etl', 5) if semconfig else 5
+                retrain_contador = getattr(semconfig, 'retrain_contador_etl', 0) if semconfig else 0
+                predictor_check = Predictor.get_instance()
+                tiene_modelos = predictor_check._loaded or predictor_check.load_models()
+
+                debe_reentrenar = (
+                    not tiene_modelos                          # sin modelos → entrenar siempre
+                    or retrain_contador + 1 >= retrain_cada_n  # cada N ETLs
+                )
+
+                if debe_reentrenar:
+                    logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Reentrenando modelos ML (cada {retrain_cada_n} ETLs, contador={retrain_contador + 1})...")
+                    train_result = train_models(self.db)
+                    if train_result.get("status") == "ok":
+                        carreras_modelo = len(train_result.get("carreras_con_modelo", []))
+                        carreras_fallback = len(train_result.get("carreras_fallback", []))
+                        logs.append(
+                            f"  → Modelos entrenados: {carreras_modelo} por carrera, "
+                            f"{carreras_fallback} usando global ({train_result.get('estudiantes', 0)} estudiantes)"
+                        )
+                    else:
+                        logs.append(f"  ⚠️ Entrenamiento ML: {train_result.get('message', 'sin resultado')}")
+                    # Reset contador y registrar fecha
+                    if semconfig:
+                        semconfig.retrain_contador_etl = 0
+                        semconfig.ultimo_retrain = datetime.now(timezone.utc)
+                        self.db.commit()
                 else:
-                    logs.append(f"  ⚠️ Entrenamiento ML: {train_result.get('message', 'sin resultado')}")
+                    # Incrementar contador
+                    if semconfig:
+                        semconfig.retrain_contador_etl = (retrain_contador or 0) + 1
+                        self.db.commit()
+                    logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Reentrenamiento ML omitido (ETL {retrain_contador + 1}/{retrain_cada_n})")
             except Exception as train_err:
                 logs.append(f"  ⚠️ Error en entrenamiento ML (no crítico): {train_err}")
 
@@ -623,6 +648,17 @@ class ETLPipeline:
                     logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Alertas automáticas desactivadas (auto_alertas=False)")
             except Exception as alert_err:
                 logs.append(f"  ⚠️ Error en generación de alertas (no crítico): {alert_err}")
+
+            # 11. Score de recuperabilidad [Épica 1.4]
+            try:
+                from ..services.recovery_score import calcular_scores_batch
+                recovery_result = calcular_scores_batch(self.db)
+                n_scores = recovery_result["total_calculados"]
+                dist = recovery_result["distribucion"]
+                logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Scores de recuperabilidad: {n_scores} calculados")
+                logs.append(f"  → Alto: {dist['alto']}, Medio: {dist['medio']}, Bajo: {dist['bajo']}")
+            except Exception as rec_err:
+                logs.append(f"  ⚠️ Error en scores de recuperabilidad (no crítico): {rec_err}")
 
             run.status = "success"
 

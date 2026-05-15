@@ -67,6 +67,11 @@ class SemesterConfig(Base):
     # Automatización post-ETL [Épica 1.1]
     auto_alertas = Column(Boolean, default=True)                  # generar alertas automáticas tras ETL
 
+    # Auto-reentrenamiento ML [Épica 1.2]
+    retrain_cada_n_etl = Column(Integer, default=5)               # reentrenar cada N ejecuciones ETL
+    retrain_contador_etl = Column(Integer, default=0)             # contador de ETLs desde último retrain
+    ultimo_retrain = Column(DateTime(timezone=True), nullable=True)  # fecha del último reentrenamiento
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

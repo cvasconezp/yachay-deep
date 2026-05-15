@@ -1539,3 +1539,48 @@ def get_student_comparative(
         percentil_general=percentil_general,
         asignaturas=sorted(asignaturas_result, key=lambda x: x.asignatura),
     )
+
+
+# ── Score de Recuperabilidad (Épica 1.4) ───────────────────────────
+
+class RecoveryScoreResponse(BaseModel):
+    student_id: int
+    nombre: Optional[str]
+    score_total: float
+    nivel: str
+    componentes: dict
+    recomendacion: str
+
+class RecoveryBatchResponse(BaseModel):
+    total_calculados: int
+    distribucion: dict
+
+
+@router.get("/{student_id}/recovery-score", response_model=RecoveryScoreResponse)
+def get_recovery_score(student_id: int, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    """Calcula y retorna el score de recuperabilidad de un estudiante."""
+    student = db.query(Student).filter(Student.id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Estudiante no encontrado")
+
+    from ..services.recovery_score import calcular_score_estudiante
+    result = calcular_score_estudiante(student, db)
+
+    # Persistir
+    student.score_recuperabilidad = result["score_total"]
+    student.nivel_recuperabilidad = result["nivel"]
+    db.commit()
+
+    return RecoveryScoreResponse(
+        student_id=student.id,
+        nombre=student.nombre,
+        **result,
+    )
+
+
+@router.post("/recovery-scores/batch", response_model=RecoveryBatchResponse)
+def batch_recovery_scores(db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    """Recalcula scores de recuperabilidad para todos los estudiantes."""
+    from ..services.recovery_score import calcular_scores_batch
+    result = calcular_scores_batch(db)
+    return RecoveryBatchResponse(**result)

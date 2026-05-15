@@ -56,6 +56,10 @@ class Student(Base):
     # Tercera matrícula (oyente condicionado)
     es_tercera_matricula = Column(Boolean, default=False, nullable=False, server_default="false")
 
+    # Score de recuperabilidad (Épica 1.4)
+    score_recuperabilidad = Column(Float, nullable=True)       # 0-100
+    nivel_recuperabilidad = Column(String, nullable=True)      # alto / medio / bajo
+
     # Metadata
     periodo = Column(String, nullable=True)            # e.g. "2026-1"
     estado_matricula = Column(String, nullable=True)
