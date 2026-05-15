@@ -6,7 +6,8 @@
  *     carrera: "", nivel_riesgo: "", periodo: "",
  *   });
  */
-import { useSearchParams, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
+import { useCallback } from "react";
 
 export function useUrlFilters(defaults = {}) {
   const [searchParams, setSearchParams] = useSearchParams();
