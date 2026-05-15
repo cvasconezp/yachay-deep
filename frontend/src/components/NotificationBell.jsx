@@ -110,7 +110,7 @@ export default function NotificationBell({ alertCount, criticoCount }) {
 
       {/* Panel desplegable */}
       {open && (
-        <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden"
+        <div className="absolute left-0 bottom-full mb-2 w-80 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 overflow-hidden"
              style={{ maxHeight: "460px" }}>
           {/* Header */}
           <div className="bg-[#1B3A6B] text-white px-4 py-2.5 flex items-center justify-between">

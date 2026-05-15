@@ -19,7 +19,6 @@ import Admin from "./pages/Admin";
 import About from "./pages/About";
 import EntregasPendientes from "./pages/EntregasPendientes";
 import MiBandeja from "./pages/MiBandeja";
-import Ejecutivo from "./pages/Ejecutivo";
 
 function PrivateRoute({ children, adminOnly = false }) {
   const { user, loading } = useAuth();
@@ -157,14 +156,6 @@ export default function App() {
               element={
                 <PrivateRoute adminOnly>
                   <Admin />
-                </PrivateRoute>
-              }
-            />
-            <Route
-              path="/ejecutivo"
-              element={
-                <PrivateRoute>
-                  <Ejecutivo />
                 </PrivateRoute>
               }
             />

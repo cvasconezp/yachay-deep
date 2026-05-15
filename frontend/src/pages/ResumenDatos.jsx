@@ -484,6 +484,8 @@ export default function ResumenDatos() {
   const [practicasExpanded, setPracticasExpanded] = useState({});  // distrito idx
   const [practicasEscuela, setPracticasEscuela] = useState(null);  // escuela seleccionada para ver estudiantes
   const [practicasSearch, setPracticasSearch] = useState("");  // búsqueda de escuelas
+  const [execData, setExecData] = useState(null);
+  const [execLoading, setExecLoading] = useState(false);
 
   useEffect(() => {
     api.getCarreras().then(setCarreras).catch(() => {});
@@ -529,6 +531,16 @@ export default function ResumenDatos() {
       .catch(e => { console.error("Error cargando prácticas:", e); setPracticasData(null); })
       .finally(() => setPracticasLoading(false));
   }, [activeTab, filtroPeriodo, practicasFiltros]);
+
+  // Load executive dashboard data when tab is active
+  useEffect(() => {
+    if (activeTab !== "ejecutivo") return;
+    setExecLoading(true);
+    api.getExecutiveDashboard(filtroPeriodo)
+      .then(d => setExecData(d))
+      .catch(() => setExecData(null))
+      .finally(() => setExecLoading(false));
+  }, [activeTab, filtroPeriodo]);
 
   const toggleCol = (key) => {
     setColsSeleccionadas(prev => {
@@ -587,6 +599,7 @@ export default function ResumenDatos() {
     { key: "carreras", label: "Por Carrera" },
     { key: "tendencias", label: "Tendencias" },
     { key: "practicas", label: "Prácticas" },
+    { key: "ejecutivo", label: "Ejecutivo" },
   ];
 
   return (
@@ -1045,6 +1058,102 @@ export default function ResumenDatos() {
               setSearch={setPracticasSearch}
               navigate={navigate}
             />
+          )}
+
+          {/* ═══ TAB: EJECUTIVO ═══ */}
+          {activeTab === "ejecutivo" && (
+            <div className="space-y-5">
+              {execLoading ? (
+                <div className="flex items-center justify-center py-16 text-gray-400">
+                  <svg className="animate-spin h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" /></svg>
+                  Cargando indicadores ejecutivos...
+                </div>
+              ) : !execData ? (
+                <div className="text-center py-16 text-gray-400">No se pudieron cargar los datos ejecutivos.</div>
+              ) : (
+                <>
+                  {/* KPI Cards */}
+                  <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+                    {[{ t:"Retención estimada", v:`${(execData.kpis.retencion_estimada??0).toFixed(1)}%`, s:"% no riesgo alto", i:"🛡️", c:PBI.green },
+                      { t:"Cobertura", v:`${(execData.kpis.cobertura_intervencion??0).toFixed(1)}%`, s:"riesgo alto intervenido", i:"🎯", c:PBI.blue },
+                      { t:"Efectividad", v:`${(execData.kpis.efectividad_intervenciones??0).toFixed(1)}%`, s:"intervenciones resueltas", i:"✅", c:PBI.purple },
+                      { t:"Compromiso", v:`${((execData.kpis.compromiso_promedio??0)*100).toFixed(0)}%`, s:"promedio institucional", i:"📈", c:PBI.teal },
+                      { t:"Riesgo alto", v:(execData.kpis.estudiantes_riesgo_alto??0).toLocaleString("es-EC"), s:"estudiantes", i:"⚠️", c:PBI.coral },
+                      { t:"Intervenciones", v:(execData.kpis.intervenciones_activas??0).toLocaleString("es-EC"), s:"activas en curso", i:"🤝", c:PBI.gold },
+                    ].map((k,i) => (
+                      <div key={i} className="rounded-lg p-4" style={{ background:PBI.card, border:`1px solid ${PBI.border}`, borderTop:`3px solid ${k.c}` }}>
+                        <div className="flex items-start justify-between mb-2">
+                          <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">{k.t}</span>
+                          <span className="text-lg">{k.i}</span>
+                        </div>
+                        <div className="text-2xl font-bold" style={{color:k.c}}>{k.v}</div>
+                        {k.s && <div className="text-[10px] text-gray-400 mt-1">{k.s}</div>}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Semáforo por carrera */}
+                  {execData.semaforo_carreras?.length > 0 && (
+                    <div className="rounded-lg p-5" style={{ background:PBI.card, border:`1px solid ${PBI.border}` }}>
+                      <h3 className="text-sm font-semibold mb-4" style={{color:PBI.navy}}>Semáforo por Carrera</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {execData.semaforo_carreras.map(c => {
+                          const sColors = { rojo:{bg:"#fef2f2",bd:"#fca5a5",dot:"#ef4444",tx:"#b91c1c",lb:"Crítico"}, amarillo:{bg:"#fffbeb",bd:"#fcd34d",dot:"#f59e0b",tx:"#92400e",lb:"En riesgo"}, verde:{bg:"#f0fdf4",bd:"#86efac",dot:"#22c55e",tx:"#166534",lb:"Estable"} };
+                          const sc = sColors[c.semaforo] || sColors.verde;
+                          return (
+                            <div key={c.carrera} className="rounded-lg p-4" style={{ background:sc.bg, border:`1px solid ${sc.bd}` }}>
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="w-3 h-3 rounded-full" style={{background:sc.dot}} />
+                                <span className="text-sm font-semibold" style={{color:sc.tx}}>{sc.lb}</span>
+                              </div>
+                              <div className="text-sm font-medium text-gray-800 mb-2 truncate" title={c.carrera}>{c.carrera}</div>
+                              <div className="grid grid-cols-3 gap-2 text-xs text-gray-600">
+                                <div><span className="font-medium" style={{color:PBI.coral}}>{c.alto}</span> alto</div>
+                                <div><span className="font-medium" style={{color:PBI.gold}}>{c.medio}</span> medio</div>
+                                <div><span className="font-medium" style={{color:PBI.green}}>{c.bajo}</span> bajo</div>
+                              </div>
+                              <div className="flex items-center justify-between mt-2 text-xs text-gray-500">
+                                <span>Riesgo alto: {(c.tasa_riesgo_alto??0).toFixed(1)}%</span>
+                                <span>Compromiso: {((c.compromiso_promedio??0)*100).toFixed(0)}%</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Tendencia multi-período */}
+                  {execData.tendencia_periodos?.length >= 2 && (
+                    <div className="rounded-lg p-5" style={{ background:PBI.card, border:`1px solid ${PBI.border}` }}>
+                      <h3 className="text-sm font-semibold mb-1" style={{color:PBI.navy}}>Tendencia por Período</h3>
+                      <div className="flex gap-4 text-xs text-gray-500 mb-3">
+                        <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 rounded" style={{background:PBI.coral}} /> % Riesgo alto</span>
+                        <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5 rounded" style={{background:PBI.blue}} /> Compromiso %</span>
+                      </div>
+                      <ResponsiveContainer width="100%" height={220}>
+                        <BarChart data={execData.tendencia_periodos.map(t => ({ ...t, compromiso_pct: (t.compromiso_promedio*100) }))}>
+                          <CartesianGrid strokeDasharray="3 3" stroke={PBI.border} />
+                          <XAxis dataKey="periodo" tick={{fontSize:11}} />
+                          <YAxis tick={{fontSize:11}} />
+                          <Tooltip contentStyle={pbiTooltipStyle} />
+                          <Bar dataKey="tasa_riesgo_alto" name="% Riesgo alto" fill={PBI.coral} radius={[4,4,0,0]} />
+                          <Bar dataKey="compromiso_pct" name="Compromiso %" fill={PBI.blue} radius={[4,4,0,0]} />
+                          <Legend wrapperStyle={{fontSize:11}} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+
+                  {execData.total_estudiantes === 0 && (
+                    <div className="text-center py-16 text-gray-400">
+                      <div className="text-4xl mb-3">📭</div>
+                      <p className="text-sm">Sin datos ejecutivos para este período</p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
           )}
         </>
       )}
