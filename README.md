@@ -6,7 +6,7 @@ Sistema de inteligencia academica preventiva para la permanencia estudiantil en 
 
 ## Descripcion
 
-Yachay Deep integra cinco capas: Learning Analytics, Early Warning, Prediccion (ML), Explicabilidad (XAI) y Soporte a la Decision. Soporta 2,300+ estudiantes en 18 carreras virtuales de la Universidad Politecnica Salesiana.
+Yachay Deep integra cinco capas: Learning Analytics, Early Warning, Prediccion (ML), Explicabilidad (XAI) y Soporte a la Decision. Soporta 2,300+ estudiantes en 18 carreras virtuales.
 
 ## Stack Tecnologico
 
