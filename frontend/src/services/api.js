@@ -309,7 +309,6 @@ class ApiClient {
   notifyTutoria(data) {
     return this.post("/predictions/notify-tutoria", data);
   }
-}
 
   // ── Bandeja de Trabajo [Épica 2.3] ──
   getWorkqueue(params = {}) {
