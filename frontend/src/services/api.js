@@ -313,13 +313,13 @@ class ApiClient {
   // ── Bandeja de Trabajo [Épica 2.3] ──
   getWorkqueue(params = {}) {
     const qs = new URLSearchParams(params).toString();
-    return this.get(`/workqueue\${qs ? "?" + qs : ""}`);
+    return this.get(`/workqueue${qs ? "?" + qs : ""}`);
   }
 
   // ── Daily Digest [Épica 2.1] ──
   sendDigest(email = null) {
-    const qs = email ? `?email=\${encodeURIComponent(email)}` : "";
-    return this.post(`/alerts/digest/send\${qs}`);
+    const qs = email ? `?email=${encodeURIComponent(email)}` : "";
+    return this.post(`/alerts/digest/send${qs}`);
   }
   previewDigest() { return this.get("/alerts/digest/preview"); }
 
@@ -347,16 +347,16 @@ class ApiClient {
   // ML Avanzado (Fase 5)
   trainAdaptiveModel() { return this.post("/ml/adaptive/train"); }
   getAdaptiveStatus() { return this.get("/ml/adaptive/status"); }
-  getAdaptivePrediction(studentId) { return this.get(`/ml/adaptive/predict/\${studentId}`); }
-  getShapExplanation(studentId) { return this.get(`/ml/explain/\${studentId}`); }
-  runClustering(nClusters, periodo) { const params = []; if(nClusters) params.push(`n_clusters=\${nClusters}`); if(periodo) params.push(`periodo=\${periodo}`); const qs = params.length ? `?\${params.join("&")}` : ""; return this.post(`/ml/clustering/run\${qs}`); }
+  getAdaptivePrediction(studentId) { return this.get(`/ml/adaptive/predict/${studentId}`); }
+  getShapExplanation(studentId) { return this.get(`/ml/explain/${studentId}`); }
+  runClustering(nClusters, periodo) { const params = []; if(nClusters) params.push(`n_clusters=${nClusters}`); if(periodo) params.push(`periodo=${periodo}`); const qs = params.length ? `?${params.join("&")}` : ""; return this.post(`/ml/clustering/run${qs}`); }
   getClusteringStatus() { return this.get("/ml/clustering/status"); }
 
   // Instituciones (Fase 5)
   getInstitutions() { return this.get("/institutions"); }
   createInstitution(body) { return this.post("/institutions", body); }
-  updateInstitution(id, body) { return this.patch(`/institutions/\${id}`, body); }
-  getInstitution(id) { return this.get(`/institutions/\${id}`); }
+  updateInstitution(id, body) { return this.patch(`/institutions/${id}`, body); }
+  getInstitution(id) { return this.get(`/institutions/${id}`); }
 }
 
 export const api = new ApiClient();
