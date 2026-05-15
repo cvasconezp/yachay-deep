@@ -7,6 +7,7 @@ import NotificationBell from "./NotificationBell";
 
 const NAV_ITEMS = [
   { path: "/dashboard",      label: "Dashboard",        icon: "📊" },
+  { path: "/ejecutivo",     label: "Ejecutivo",        icon: "🏛️" },
   { path: "/ficha",          label: "Ficha Estudiante",  icon: "🎓" },
   { path: "/asignaturas",    label: "Asignaturas",       icon: "📚" },
   { path: "/docentes",       label: "Docentes",          icon: "👨‍🏫" },
