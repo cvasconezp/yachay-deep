@@ -19,7 +19,7 @@ class AlertEvent(Base):
     student_id = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), index=True)
 
     # Tipo de alerta
-    tipo = Column(String, nullable=False, index=True)  # inactividad, compromiso_bajo, nota_cero, tareas_bajas, calificacion_docente_pendiente
+    tipo = Column(String, nullable=False, index=True)  # inactividad, compromiso_bajo, nota_cero, tareas_bajas, segunda_matricula, tercera_matricula, deterioro_progresivo
 
     # Curso específico (para alertas por asignatura)
     codigo_curso = Column(String, nullable=True, index=True)

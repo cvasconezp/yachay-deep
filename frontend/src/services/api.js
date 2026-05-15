@@ -311,4 +311,17 @@ class ApiClient {
   }
 }
 
+  // ── Bandeja de Trabajo [Épica 2.3] ──
+  getWorkqueue(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.get(\`/workqueue\${qs ? "?" + qs : ""}\`);
+  }
+
+  // ── Daily Digest [Épica 2.1] ──
+  sendDigest(email = null) {
+    const qs = email ? \`?email=\${encodeURIComponent(email)}\` : "";
+    return this.post(\`/alerts/digest/send\${qs}\`);
+  }
+  previewDigest() { return this.get("/alerts/digest/preview"); }
+
 export const api = new ApiClient();

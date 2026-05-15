@@ -604,6 +604,26 @@ class ETLPipeline:
             except Exception as ml_err:
                 logs.append(f"  ⚠️ Error en predicciones ML (no crítico): {ml_err}")
 
+            # 10. Generación automática de alertas post-ETL [Épica 1.1]
+            try:
+                auto_alertas = getattr(semconfig, 'auto_alertas', True) if semconfig else True
+                if auto_alertas:
+                    from ..services.alert_generator import generate_alerts_batch
+                    logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Generando alertas automáticas...")
+                    alert_result = generate_alerts_batch(self.db)
+                    n_created = alert_result.get("created", 0)
+                    n_cleaned = alert_result.get("cleaned", 0)
+                    logs.append(
+                        f"  → Alertas generadas: {n_created} nuevas"
+                        f" ({n_cleaned} anteriores limpiadas)"
+                    )
+                    if alert_result.get("detail"):
+                        logs.append(f"  → {alert_result['detail']}")
+                else:
+                    logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Alertas automáticas desactivadas (auto_alertas=False)")
+            except Exception as alert_err:
+                logs.append(f"  ⚠️ Error en generación de alertas (no crítico): {alert_err}")
+
             run.status = "success"
 
         except Exception as e:

@@ -318,341 +318,45 @@ def generate_alerts(
 ):
     """
     Genera alertas barriendo todos los estudiantes por umbrales.
-
-    Reglas de inactividad (basado en AvacAccess del periodo actual):
-    - dias_sin_acceso > 14 → "inactividad" alto
-    - dias_sin_acceso > 21 → "inactividad" critico
-    - Días capeados al máximo de días desde inicio del bloque actual
-
-    Reglas de calificaciones (solo si ya pasó fecha esperada de notas):
-    - Nota final = 0 → "nota_cero" critico (solo del periodo activo)
-    - porcentaje_tareas < 40 → "tareas_bajas" alto
-
-    Compromiso: basado en indice_compromiso del estudiante.
-
-    Solo crea alertas que no existan para el mismo student+tipo en los últimos 7 días.
-    Solo escanea estudiantes del período activo.
+    Delega a generate_alerts_batch() para permitir reutilización desde el pipeline ETL.
     """
-    # ── Limpiar alertas stale: eliminar todas las no leídas antes de regenerar ──
-    # Las alertas leídas se conservan como registro histórico.
-    stale_deleted = db.query(AlertEvent).filter(AlertEvent.leido == False).delete()
-    db.flush()
+    from ..services.alert_generator import generate_alerts_batch
+    return generate_alerts_batch(db)
 
-    # Obtener configuración del semestre activo
-    semconfig = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
-    if not semconfig:
-        return {"created": 0, "timestamp": datetime.now(timezone.utc).isoformat(), "detail": "No hay semestre activo"}
 
-    pf = semconfig.semestre.strip() if semconfig.semestre else None
-    if not pf:
-        return {"created": 0, "timestamp": datetime.now(timezone.utc).isoformat(), "detail": "Semestre sin nombre"}
+@router.post("/digest/send")
+def send_digest_endpoint(
+    email: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Envía el Daily Digest por email.
+    Si se proporciona email, envía solo a ese destinatario.
+    Si no, envía a todos los admin/monitor.
+    Solo admin puede ejecutar este endpoint.
+    [Épica 2.1]
+    """
+    if current_user.role.value != "admin":
+        raise HTTPException(status_code=403, detail="Solo admin puede enviar digest")
 
-    # Cargar umbrales configurables
-    umbrales = get_umbrales(db)
-    umbral_dias_inactividad = umbrales["dias_inactividad"]         # default: 14
-    umbral_dias_inactividad_critico = umbral_dias_inactividad + 7  # 14+7=21
-    umbral_tareas = umbrales["tareas_minimo"]                      # default: 50
-    umbral_compromiso = umbrales["compromiso_minimo"]              # default: 0.4
-    umbral_compromiso_critico = umbral_compromiso * 0.6            # 0.4*0.6=0.24
+    from ..services.daily_digest import send_daily_digest
+    result = send_daily_digest(db, recipient_email=email)
+    return result
 
-    # Determinar inicio del bloque actual para capear inactividad
-    bloque_inicio = None
-    if semconfig.bloque_actual == "2" and semconfig.bloque2_inicio:
-        bloque_inicio = semconfig.bloque2_inicio
-    elif semconfig.bloque1_inicio:
-        bloque_inicio = semconfig.bloque1_inicio
 
-    now = datetime.now(timezone.utc)
-    max_dias_periodo = None
-    if bloque_inicio:
-        if bloque_inicio.tzinfo is None:
-            from datetime import timezone as tz
-            bloque_inicio = bloque_inicio.replace(tzinfo=tz.utc)
-        max_dias_periodo = (now - bloque_inicio).days
+@router.get("/digest/preview")
+def preview_digest(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Retorna el HTML del Daily Digest para preview sin enviar email.
+    [Épica 2.1]
+    """
+    from ..services.daily_digest import build_digest_data, build_digest_html
+    from fastapi.responses import HTMLResponse
 
-    # Calendario académico: ¿ya se esperan notas?
-    calendario = _get_calendario(semconfig)
-    fecha_notas = _primera_fecha_notas(calendario)
-    hay_notas_esperadas = fecha_notas is not None and now >= fecha_notas.replace(tzinfo=timezone.utc)
-
-    # Period format normalization
-    if pf.startswith("P"):
-        raw_p = pf[1:]
-        periodo_variants = (pf, raw_p)
-    else:
-        raw_p = pf
-        periodo_variants = (pf, f"P{pf}")
-
-    period_sids = _active_period_student_ids(db)
-    if period_sids:
-        students = db.query(Student).filter(Student.id.in_(period_sids)).all()
-    else:
-        students = db.query(Student).all()
-
-    # Filtrar cursos por bloque actual (whitelist) y excluir bloque contrario
-    excluded_course_codes = set()
-    included_course_codes = set()
-    if semconfig:
-        other_bloque = "2" if semconfig.bloque_actual == "1" else "1"
-        excluded_cc = db.query(CourseConfig.codigo_avac).filter(
-            CourseConfig.bloque == other_bloque,
-        ).all()
-        excluded_course_codes = {r[0] for r in excluded_cc}
-        # Cursos del bloque actual (whitelist para filtrar tareas/notas)
-        included_cc = db.query(CourseConfig.codigo_avac).filter(
-            or_(CourseConfig.bloque == semconfig.bloque_actual,
-                CourseConfig.bloque == "ambos",
-                CourseConfig.bloque.is_(None)),
-        ).all()
-        included_course_codes = {r[0] for r in included_cc}
-    # Asignaturas del bloque actual (para filtrar grades que no tienen codigo_curso)
-    included_asignaturas = set()
-    if included_course_codes:
-        for cc in db.query(CourseConfig.asignatura).filter(
-            CourseConfig.codigo_avac.in_(included_course_codes),
-            CourseConfig.asignatura.isnot(None),
-        ).distinct().all():
-            included_asignaturas.add(cc[0])
-
-    # Estudiantes del bloque actual (con al menos un curso AVAC del bloque)
-    bloque_actual_sids = set()
-    if included_course_codes:
-        bloque_avac_sids = set(r[0] for r in db.query(AvacAccess.student_id).filter(
-            AvacAccess.codigo_curso.in_(included_course_codes),
-            AvacAccess.student_id.isnot(None),
-        ).distinct().all())
-        bloque_enroll_sids = set(r[0] for r in db.query(Enrollment.student_id).filter(
-            Enrollment.codigo_grupo.in_(included_course_codes),
-            or_(Enrollment.periodo == periodo_variants[0], Enrollment.periodo == periodo_variants[1]),
-        ).distinct().all())
-        bloque_actual_sids = bloque_avac_sids | bloque_enroll_sids
-
-    # Pre-load per-period AvacAccess: dias_sin_acceso por estudiante POR CURSO
-    # Incluir periodo NULL como fallback (datos cargados antes de configurar periodo)
-    periodo_filter = or_(
-        AvacAccess.periodo.in_(periodo_variants),
-        AvacAccess.periodo.is_(None),
-    )
-
-    # Último snapshot disponible
-    latest_snap = (
-        db.query(func.max(AvacAccess.snapshot_date))
-        .filter(periodo_filter, AvacAccess.student_id.isnot(None))
-        .scalar()
-    )
-    avac_q = db.query(
-        AvacAccess.student_id,
-        AvacAccess.codigo_curso,
-        AvacAccess.dias_sin_acceso,
-    ).filter(
-        periodo_filter,
-        AvacAccess.student_id.isnot(None),
-        AvacAccess.dias_sin_acceso.isnot(None),
-    )
-    if latest_snap:
-        avac_q = avac_q.filter(AvacAccess.snapshot_date == latest_snap)
-    if excluded_course_codes:
-        avac_q = avac_q.filter(~AvacAccess.codigo_curso.in_(excluded_course_codes))
-
-    # Dict: student_id → [(codigo_curso, dias_sin_acceso), ...]
-    from collections import defaultdict
-    avac_por_curso = defaultdict(list)
-    for sid, codigo, dias in avac_q.all():
-        avac_por_curso[sid].append((codigo, dias))
-
-    # Pre-load asignatura names
-    all_codes = {codigo for entries in avac_por_curso.values() for codigo, _ in entries}
-    asignatura_map = {}
-    if all_codes:
-        for cc in db.query(CourseConfig).filter(CourseConfig.codigo_avac.in_(all_codes)).all():
-            asignatura_map[cc.codigo_avac] = cc.asignatura
-
-    # ========== PRE-CARGA BATCH para evitar N+1 queries ==========
-    from ..models import TaskSubmission
-
-    periodo_cond = or_(
-        Enrollment.periodo == periodo_variants[0],
-        Enrollment.periodo == periodo_variants[1],
-    )
-    grade_periodo_cond = or_(
-        Grade.periodo == periodo_variants[0],
-        Grade.periodo == periodo_variants[1],
-    )
-
-    # 1) Nota cero: student_id → primera asignatura con nota 0 (solo bloque actual)
-    nota_cero_map = {}
-    if hay_notas_esperadas:
-        nota_cero_q = db.query(Grade).filter(
-            Grade.nota_final == 0,
-            grade_periodo_cond,
-        )
-        # Filtrar por asignaturas del bloque actual si hay whitelist
-        if included_asignaturas:
-            nota_cero_q = nota_cero_q.filter(Grade.asignatura.in_(included_asignaturas))
-        for g in nota_cero_q.all():
-            if g.student_id not in nota_cero_map:
-                nota_cero_map[g.student_id] = g.asignatura
-
-    # 2) Tareas: set de student_ids que tienen tareas del periodo (solo bloque actual)
-    task_q = db.query(TaskSubmission.student_id).filter(
-        or_(TaskSubmission.periodo == periodo_variants[0],
-            TaskSubmission.periodo == periodo_variants[1]),
-    )
-    if included_course_codes:
-        task_q = task_q.filter(TaskSubmission.codigo_curso.in_(included_course_codes))
-    task_sids = set(r[0] for r in task_q.distinct().all())
-
-    # 3) Segunda matrícula (enrollments): student_id → count de asignaturas con repitencias > 1
-    rep_enroll_counts = defaultdict(int)
-    for sid, in db.query(Enrollment.student_id).filter(
-        Enrollment.numero_repitencias > 1,
-        Enrollment.es_tercera_matricula == False,
-        periodo_cond,
-    ).all():
-        rep_enroll_counts[sid] += 1
-
-    # 4) Segunda matrícula (grades fallback): student_id → count
-    rep_grade_counts = defaultdict(int)
-    for sid, in db.query(Grade.student_id).filter(
-        Grade.numero_repitencias > 1,
-        grade_periodo_cond,
-    ).all():
-        rep_grade_counts[sid] += 1
-
-    # 5) Tercera matrícula (enrollments): student_id → count
-    tm_enroll_counts = defaultdict(int)
-    for sid, in db.query(Enrollment.student_id).filter(
-        Enrollment.es_tercera_matricula == True,
-    ).all():
-        tm_enroll_counts[sid] += 1
-
-    # 6) ALL condicionados y repitentes (para el segundo pase)
-    all_tm_sids = set(r[0] for r in db.query(Student.id).filter(
-        Student.es_tercera_matricula == True,
-    ).all())
-    all_rep_sids = set(rep_enroll_counts.keys()) | set(rep_grade_counts.keys())
-
-    # 7) Dedup: alertas leídas recientes (últimos 7 días) que sobrevivieron la limpieza
-    threshold_date = now - timedelta(days=7)
-    existing_alerts = set()
-    for sid, tipo, cc in db.query(
-        AlertEvent.student_id, AlertEvent.tipo, AlertEvent.codigo_curso
-    ).filter(AlertEvent.created_at >= threshold_date).all():
-        existing_alerts.add((sid, tipo, cc))
-
-    created = 0
-
-    def _add_alert_fast(student_id, tipo, severidad, mensaje, codigo_curso=None):
-        """Agrega alerta verificando dedup batch contra alertas leídas recientes."""
-        nonlocal created
-        key = (student_id, tipo, codigo_curso)
-        if key in existing_alerts:
-            return
-        existing_alerts.add(key)  # evitar duplicados dentro de esta misma generación
-        db.add(AlertEvent(
-            student_id=student_id, tipo=tipo, mensaje=mensaje,
-            severidad=severidad, codigo_curso=codigo_curso,
-        ))
-        created += 1
-
-    # ========== Build set of all student_ids to process ==========
-    processed_ids = {s.id for s in students}
-    # Add condicionados and repitentes not in main loop
-    extra_sids = (all_tm_sids | all_rep_sids) - processed_ids
-
-    all_students = list(students)
-    if extra_sids:
-        extra_students = db.query(Student).filter(Student.id.in_(extra_sids)).all()
-        all_students.extend(extra_students)
-
-    for student in all_students:
-        # ========== Inactividad: UNA alerta por estudiante (peor curso) ==========
-        cursos = avac_por_curso.get(student.id, [])
-        worst_dias = 0
-        worst_codigo = None
-        inactive_courses = []
-        for codigo_curso, dias in cursos:
-            if max_dias_periodo is not None:
-                dias = min(dias, max_dias_periodo)
-            if dias > umbral_dias_inactividad:
-                asig = asignatura_map.get(codigo_curso, codigo_curso)
-                inactive_courses.append((asig, int(dias)))
-                if dias > worst_dias:
-                    worst_dias = dias
-                    worst_codigo = codigo_curso
-
-        if worst_dias > umbral_dias_inactividad and inactive_courses:
-            n_materias = len(inactive_courses)
-            worst_asig = asignatura_map.get(worst_codigo, worst_codigo)
-            if n_materias == 1:
-                msg = f"Inactivo {int(worst_dias)} días en {worst_asig}"
-            else:
-                msg = f"Inactivo en {n_materias} materias (peor: {int(worst_dias)} días en {worst_asig})"
-
-            if worst_dias > umbral_dias_inactividad_critico:
-                _add_alert_fast(student.id, "inactividad", "critico",
-                                msg + " (CRÍTICO)", codigo_curso=worst_codigo)
-            else:
-                _add_alert_fast(student.id, "inactividad", "alto",
-                                msg, codigo_curso=worst_codigo)
-
-        # ========== Compromiso Bajo (solo estudiantes del bloque actual) ==========
-        in_bloque = not bloque_actual_sids or student.id in bloque_actual_sids
-        if in_bloque and student.indice_compromiso is not None:
-            if student.indice_compromiso < umbral_compromiso_critico:
-                _add_alert_fast(student.id, "compromiso_bajo", "critico",
-                                f"Índice de compromiso muy bajo: {student.indice_compromiso:.2f}")
-            elif student.indice_compromiso < umbral_compromiso:
-                _add_alert_fast(student.id, "compromiso_bajo", "alto",
-                                f"Índice de compromiso bajo: {student.indice_compromiso:.2f}")
-
-        # ========== Nota Cero (ya filtrado por bloque en nota_cero_map) ==========
-        if hay_notas_esperadas and student.id in nota_cero_map:
-            _add_alert_fast(student.id, "nota_cero", "critico",
-                            f"Calificación de 0 en {nota_cero_map[student.id]}")
-
-        # ========== Tareas Bajas (solo estudiantes del bloque actual) ==========
-        if (in_bloque and student.porcentaje_tareas is not None
-                and student.porcentaje_tareas < umbral_tareas
-                and student.id in task_sids):
-            _add_alert_fast(student.id, "tareas_bajas", "alto",
-                            f"Porcentaje de tareas entregadas bajo: {student.porcentaje_tareas:.1f}% (umbral: {umbral_tareas}%)")
-
-        # ========== Segunda Matrícula ==========
-        if not student.es_tercera_matricula:
-            n_asig_2m = rep_enroll_counts.get(student.id, 0)
-            if n_asig_2m == 0:
-                n_asig_2m = rep_grade_counts.get(student.id, 0)
-            if n_asig_2m > 0:
-                _add_alert_fast(student.id, "segunda_matricula", "alto",
-                                f"Estudiante con {n_asig_2m} asignatura(s) en segunda matrícula")
-
-        # ========== Tercera Matrícula ==========
-        if student.es_tercera_matricula:
-            n_asig_tm = tm_enroll_counts.get(student.id, 0)
-            if n_asig_tm > 0:
-                _add_alert_fast(student.id, "tercera_matricula", "critico",
-                                f"Estudiante con {n_asig_tm} asignatura(s) en tercera matrícula (oyente condicionado)")
-
-    db.commit()
-
-    detail_parts = [
-        f"Umbrales: inactividad>{umbral_dias_inactividad}d, compromiso<{umbral_compromiso}, tareas<{umbral_tareas}%",
-        f"Estudiantes analizados: {len(all_students)}",
-    ]
-    if excluded_course_codes:
-        detail_parts.append(f"Bloque {semconfig.bloque_actual}: {len(excluded_course_codes)} cursos del otro bloque excluidos")
-    if not hay_notas_esperadas:
-        detail_parts.append(f"Alertas de nota_cero desactivadas (primera fecha esperada de notas: {fecha_notas.strftime('%d/%m/%Y') if fecha_notas else 'no configurada'})")
-    if max_dias_periodo is not None:
-        detail_parts.append(f"Inactividad capeada a máx {max_dias_periodo} días (inicio bloque: {bloque_inicio.strftime('%d/%m/%Y')})")
-
-    if stale_deleted:
-        detail_parts.append(f"{stale_deleted} alertas anteriores eliminadas")
-
-    return {
-        "created": created,
-        "cleaned": stale_deleted,
-        "timestamp": now.isoformat(),
-        "detail": " | ".join(detail_parts) if detail_parts else None,
-    }
+    data = build_digest_data(db)
+    html = build_digest_html(data)
+    return HTMLResponse(content=html)
