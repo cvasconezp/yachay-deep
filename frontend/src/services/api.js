@@ -314,13 +314,13 @@ class ApiClient {
   // ── Bandeja de Trabajo [Épica 2.3] ──
   getWorkqueue(params = {}) {
     const qs = new URLSearchParams(params).toString();
-    return this.get(\`/workqueue\${qs ? "?" + qs : ""}\`);
+    return this.get(`/workqueue\${qs ? "?" + qs : ""}`);
   }
 
   // ── Daily Digest [Épica 2.1] ──
   sendDigest(email = null) {
-    const qs = email ? \`?email=\${encodeURIComponent(email)}\` : "";
-    return this.post(\`/alerts/digest/send\${qs}\`);
+    const qs = email ? `?email=\${encodeURIComponent(email)}` : "";
+    return this.post(`/alerts/digest/send\${qs}`);
   }
   previewDigest() { return this.get("/alerts/digest/preview"); }
 
@@ -337,5 +337,14 @@ class ApiClient {
   checkSLA() { return this.post("/workflow/check-sla"); }
   getInterventionLogs(id) { return this.get(`/workflow/interventions/${id}/logs`); }
   getOverdueInterventions() { return this.get("/workflow/overdue"); }
+  // Analytics Ejecutivo (Fase 4)
+  getExecutiveDashboard(periodo) { const qs = periodo ? `?periodo=${periodo}` : ""; return this.get(`/analytics/executive${qs}`); }
+  getEffectiveness(periodo) { const qs = periodo ? `?periodo=${periodo}` : ""; return this.get(`/analytics/effectiveness${qs}`); }
+  getHistoricalAsignaturas(carrera) { const qs = carrera ? `?carrera=${encodeURIComponent(carrera)}` : ""; return this.get(`/analytics/historical/asignaturas${qs}`); }
+  getAbandonoAsignaturas(periodo) { const qs = periodo ? `?periodo=${periodo}` : ""; return this.get(`/analytics/historical/abandono-asignaturas${qs}`); }
+  getDocenteEffectiveness(periodo, carrera) { const params = []; if(periodo) params.push(`periodo=${periodo}`); if(carrera) params.push(`carrera=${encodeURIComponent(carrera)}`); const qs = params.length ? `?${params.join("&")}` : ""; return this.get(`/analytics/docente-effectiveness${qs}`); }
+  getMonthlyReport(periodo) { const qs = periodo ? `?periodo=${periodo}` : ""; return this.get(`/analytics/monthly-report${qs}`); }
+
+}
 
 export const api = new ApiClient();
