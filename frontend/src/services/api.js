@@ -328,4 +328,14 @@ class ApiClient {
   getRecoveryScore(studentId) { return this.get(`/students/${studentId}/recovery-score`); }
   batchRecoveryScores() { return this.post("/students/recovery-scores/batch"); }
 
+  // Workflow de Intervenciones (Fase 3)
+  getWorkflowStates() { return this.get("/workflow/states"); }
+  transitionIntervention(id, body) { return this.patch(`/workflow/interventions/${id}/transition`, body); }
+  assignIntervention(id, body) { return this.post(`/workflow/interventions/${id}/assign`, body); }
+  autoAssign(intervention_ids) { return this.post("/workflow/auto-assign", { intervention_ids }); }
+  getCargaMonitores() { return this.get("/workflow/carga"); }
+  checkSLA() { return this.post("/workflow/check-sla"); }
+  getInterventionLogs(id) { return this.get(`/workflow/interventions/${id}/logs`); }
+  getOverdueInterventions() { return this.get("/workflow/overdue"); }
+
 export const api = new ApiClient();

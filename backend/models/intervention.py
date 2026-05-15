@@ -46,7 +46,20 @@ class Intervention(Base):
     snapshot_prob_reprobacion = Column(Float, nullable=True)
     snapshot_nivel_riesgo = Column(String, nullable=True)
 
+    # Workflow de intervención (Fase 3 — Épica 3.1)
+    estado_workflow = Column(String, nullable=True, default="pendiente", index=True)  # pendiente/en_progreso/contactado/resuelto/escalado/sin_respuesta/cerrado
+    asignado_a = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)   # monitor asignado (Épica 3.2)
+    asignado_nombre = Column(String, nullable=True)          # denormalized
+    fecha_asignacion = Column(DateTime(timezone=True), nullable=True)
+    fecha_limite = Column(DateTime(timezone=True), nullable=True)       # SLA deadline (Épica 3.3)
+    fecha_contacto = Column(DateTime(timezone=True), nullable=True)     # cuándo se contactó al estudiante
+    fecha_resolucion = Column(DateTime(timezone=True), nullable=True)   # cuándo se resolvió
+    escalado = Column(Boolean, default=False)                           # fue escalada
+    escalado_a = Column(String, nullable=True)                          # a quién se escaló
+    prioridad = Column(Integer, nullable=True, default=2)               # 1=urgente, 2=normal, 3=baja
+    overdue = Column(Boolean, default=False)                            # SLA vencido
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     student = relationship("Student", back_populates="interventions")
-    monitor = relationship("User")
+    monitor = relationship("User", foreign_keys=[monitor_id])

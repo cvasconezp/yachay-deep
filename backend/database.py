@@ -85,6 +85,21 @@ def upgrade_tables():
             ("derivar_coordinacion", "BOOLEAN"),
             ("derivar_docente", "BOOLEAN"),
             ("reporte_derivacion", "TEXT"),
+            # Workflow de intervención (Fase 3)
+            ("estado_workflow", "VARCHAR DEFAULT 'pendiente'"),
+            ("asignado_a", "INTEGER"),
+            ("asignado_nombre", "VARCHAR"),
+            ("fecha_asignacion", "TIMESTAMP"),
+            ("fecha_limite", "TIMESTAMP"),
+            ("fecha_contacto", "TIMESTAMP"),
+            ("fecha_resolucion", "TIMESTAMP"),
+            ("escalado", "BOOLEAN DEFAULT false"),
+            ("escalado_a", "VARCHAR"),
+            ("prioridad", "INTEGER DEFAULT 2"),
+            ("overdue", "BOOLEAN DEFAULT false"),
+        ],
+        "intervention_logs": [
+            # tabla nueva — upgrade_tables() la creará si no existe
         ],
         "scraping_runs": [
             ("descripcion", "VARCHAR"),
