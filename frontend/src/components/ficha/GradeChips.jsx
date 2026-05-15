@@ -140,10 +140,10 @@ export function MallaCeldaFija({ asignatura }) {
         ref={cellRef}
         onMouseEnter={handleEnter}
         onMouseLeave={handleLeave}
-        className={`rounded border ${st.bg} ${st.border} px-1.5 py-1 truncate relative cursor-default hover:brightness-95 transition-all`}
+        className={`rounded border ${st.bg} ${st.border} px-2 py-1.5 truncate relative cursor-default hover:brightness-95 transition-all`}
         style={{
-          fontSize: "9px",
-          lineHeight: "1.4",
+          fontSize: "10px",
+          lineHeight: "1.5",
           borderLeftWidth: hasRepitencia ? "2.5px" : undefined,
           borderLeftColor: hasRepitencia ? "#f97316" : undefined,
         }}
@@ -152,7 +152,7 @@ export function MallaCeldaFija({ asignatura }) {
           {abreviarAsignatura(nombre, 28)}
         </div>
         {nota != null && (
-          <div className={`font-bold ${st.text}`} style={{ fontSize: "10px" }}>
+          <div className={`font-bold ${st.text}`} style={{ fontSize: "11px" }}>
             {nota}
           </div>
         )}

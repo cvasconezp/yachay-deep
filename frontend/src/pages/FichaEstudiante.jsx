@@ -1720,7 +1720,7 @@ function FichaEstudianteInner() {
                             yearCells.push(
                               <div key={`year-${i}`}
                                    className="bg-[#0F2A4A] text-white text-center font-bold uppercase tracking-wider rounded-t"
-                                   style={{ fontSize: "8px", padding: "3px 2px", gridColumn: `span ${span}` }}>
+                                   style={{ fontSize: "9px", padding: "5px 2px", gridColumn: `span ${span}` }}>
                                 {label}
                               </div>
                             );
@@ -1733,7 +1733,7 @@ function FichaEstudianteInner() {
                         {malla.semestres.map((sem) => (
                           <div key={`hdr-${sem.numero}`}
                                className="bg-[#1B3A6B] text-white text-center font-bold uppercase tracking-wider"
-                               style={{ fontSize: "11px", padding: "4px 2px" }}>
+                               style={{ fontSize: "11px", padding: "6px 2px" }}>
                             {sem.numero}°
                           </div>
                         ))}
@@ -1743,7 +1743,7 @@ function FichaEstudianteInner() {
                         {malla.semestres.map((sem) => {
                           const promedioStyle = getNoteStyleHistorico(sem.promedio != null ? Math.round(sem.promedio) : null);
                           return (
-                            <div key={`col-${sem.numero}`} className="border border-t-0 border-gray-200 rounded-b bg-white flex flex-col gap-0.5 min-w-0" style={{ padding: "4px" }}>
+                            <div key={`col-${sem.numero}`} className="border border-t-0 border-gray-200 rounded-b bg-white flex flex-col gap-1 min-w-0" style={{ padding: "6px" }}>
                               {sem.asignaturas.length > 0 ? (
                                 sem.asignaturas.map((asig, ai) => (
                                   <MallaCeldaFija key={ai} asignatura={asig} />
