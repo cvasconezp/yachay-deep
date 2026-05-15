@@ -6,6 +6,7 @@ import { PeriodSelector } from "../components/PeriodSelector";
 import ExportExcelButton from "../components/ExportExcelButton";
 import BulkInterventionModal from "../components/BulkInterventionModal";
 import { useStudentListModal } from "../components/StudentListModal";
+import DashboardCharts from "../components/DashboardCharts";
 
 const RISK_ORDER = { Alto: 0, Medio: 1, Bajo: 2 };
 
@@ -275,6 +276,9 @@ export default function Dashboard() {
           </button>
         </div>
       )}
+
+      {/* Gráficos de Dashboard (Épica 2.4) */}
+      <DashboardCharts stats={stats} students={students} />
 
       {/* Filtros */}
       <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4 flex flex-wrap gap-3 items-end">

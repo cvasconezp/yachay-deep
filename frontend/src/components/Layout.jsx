@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { api } from "../services/api";
 import { YachayLogo, YachayIcon } from "./YachayLogo";
+import NotificationBell from "./NotificationBell";
 
 const NAV_ITEMS = [
   { path: "/dashboard",      label: "Dashboard",        icon: "📊" },
@@ -121,8 +122,17 @@ export function Layout({ children }) {
           ))}
         </nav>
 
-        {/* User section */}
+        {/* Notification bell + User section */}
         <div className={`border-t border-white/10 ${sidebarOpen ? "p-4" : "p-2 flex flex-col items-center"}`}>
+          {/* Campana de notificaciones (Épica 2.2) */}
+          <div className={`mb-2 ${sidebarOpen ? "flex items-center justify-between" : "flex justify-center"}`}>
+            <NotificationBell alertCount={alertCount} criticoCount={alertCriticoCount} />
+            {sidebarOpen && alertCount > 0 && (
+              <span className="text-[10px] text-blue-300">
+                {alertCriticoCount > 0 ? `${alertCriticoCount} críticas` : `${alertCount} alertas`}
+              </span>
+            )}
+          </div>
           {sidebarOpen ? (
             <>
               <div className="text-sm text-blue-300 mb-2">
