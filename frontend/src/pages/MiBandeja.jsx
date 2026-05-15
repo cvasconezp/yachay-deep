@@ -33,6 +33,7 @@ export default function MiBandeja() {
   const [resumen, setResumen] = useState("");
   const [porPrioridad, setPorPrioridad] = useState({});
   const [filtroCarrera, setFiltroCarrera] = useState("");
+  const [carreras, setCarreras] = useState([]);
   const navigate = useNavigate();
 
   const fetchWorkqueue = useCallback(async () => {
@@ -55,6 +56,10 @@ export default function MiBandeja() {
   useEffect(() => {
     fetchWorkqueue();
   }, [fetchWorkqueue]);
+
+  useEffect(() => {
+    api.getCarreras().then(setCarreras).catch(() => setCarreras([]));
+  }, []);
 
   const handleMarkRead = async (alertId) => {
     try {
@@ -116,13 +121,16 @@ export default function MiBandeja() {
 
       {/* Filtro */}
       <div className="mb-4 flex items-center gap-3">
-        <input
-          type="text"
-          placeholder="Filtrar por carrera..."
+        <select
           value={filtroCarrera}
           onChange={(e) => setFiltroCarrera(e.target.value)}
-          className="px-3 py-2 border border-gray-300 rounded-lg text-sm w-64 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-        />
+          className="px-3 py-2 border border-gray-300 rounded-lg text-sm w-64 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+        >
+          <option value="">Todas las carreras</option>
+          {carreras.map(c => (
+            <option key={c} value={c}>{c}</option>
+          ))}
+        </select>
         <button
           onClick={fetchWorkqueue}
           className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700"
