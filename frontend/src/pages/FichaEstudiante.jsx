@@ -1706,9 +1706,9 @@ function FichaEstudianteInner() {
                       </span>
                     </div>
                     {/* Grid de niveles con años que abarcan 2 columnas */}
-                    <div className="bg-[#FAFAFA] px-1.5 pb-2 overflow-x-auto">
+                    <div className="bg-[#FAFAFA] px-1.5 pb-2">
                       {/* Fila de años — cada año abarca 2 niveles */}
-                      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${malla.total_semestres}, minmax(120px, 1fr))` }}>
+                      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${malla.total_semestres}, minmax(0, 1fr))` }}>
                         {(() => {
                           const yearCells = [];
                           const totalSem = malla.total_semestres;
@@ -1729,7 +1729,7 @@ function FichaEstudianteInner() {
                         })()}
                       </div>
                       {/* Fila de encabezados de nivel — todos alineados */}
-                      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${malla.total_semestres}, minmax(120px, 1fr))`, marginTop: "-1px" }}>
+                      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${malla.total_semestres}, minmax(0, 1fr))`, marginTop: "-1px" }}>
                         {malla.semestres.map((sem) => (
                           <div key={`hdr-${sem.numero}`}
                                className="bg-[#1B3A6B] text-white text-center font-bold uppercase tracking-wider"
@@ -1739,7 +1739,7 @@ function FichaEstudianteInner() {
                         ))}
                       </div>
                       {/* Filas de contenido — asignaturas */}
-                      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${malla.total_semestres}, minmax(120px, 1fr))`, marginTop: "-1px" }}>
+                      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${malla.total_semestres}, minmax(0, 1fr))`, marginTop: "-1px" }}>
                         {malla.semestres.map((sem) => {
                           const promedioStyle = getNoteStyleHistorico(sem.promedio != null ? Math.round(sem.promedio) : null);
                           return (
