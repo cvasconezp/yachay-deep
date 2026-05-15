@@ -36,6 +36,8 @@ from .routes.predictions import router as predictions_router
 from .routes.alerts import router as alerts_router
 from .routes.workqueue import router as workqueue_router
 from .routes.workflow import router as workflow_router
+from .routes.ml_advanced import router as ml_advanced_router
+from .routes.institutions import router as institutions_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -285,6 +287,8 @@ app.include_router(predictions_router)
 app.include_router(alerts_router)
 app.include_router(workqueue_router)
 app.include_router(workflow_router)
+app.include_router(ml_advanced_router)
+app.include_router(institutions_router)
 
 
 @app.middleware("http")

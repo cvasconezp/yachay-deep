@@ -345,6 +345,19 @@ class ApiClient {
   getDocenteEffectiveness(periodo, carrera) { const params = []; if(periodo) params.push(`periodo=${periodo}`); if(carrera) params.push(`carrera=${encodeURIComponent(carrera)}`); const qs = params.length ? `?${params.join("&")}` : ""; return this.get(`/analytics/docente-effectiveness${qs}`); }
   getMonthlyReport(periodo) { const qs = periodo ? `?periodo=${periodo}` : ""; return this.get(`/analytics/monthly-report${qs}`); }
 
+  // ML Avanzado (Fase 5)
+  trainAdaptiveModel() { return this.post("/ml/adaptive/train"); }
+  getAdaptiveStatus() { return this.get("/ml/adaptive/status"); }
+  getAdaptivePrediction(studentId) { return this.get(`/ml/adaptive/predict/\${studentId}`); }
+  getShapExplanation(studentId) { return this.get(`/ml/explain/\${studentId}`); }
+  runClustering(nClusters, periodo) { const params = []; if(nClusters) params.push(`n_clusters=\${nClusters}`); if(periodo) params.push(`periodo=\${periodo}`); const qs = params.length ? `?\${params.join("&")}` : ""; return this.post(`/ml/clustering/run\${qs}`); }
+  getClusteringStatus() { return this.get("/ml/clustering/status"); }
+
+  // Instituciones (Fase 5)
+  getInstitutions() { return this.get("/institutions"); }
+  createInstitution(body) { return this.post("/institutions", body); }
+  updateInstitution(id, body) { return this.patch(`/institutions/\${id}`, body); }
+  getInstitution(id) { return this.get(`/institutions/\${id}`); }
 }
 
 export const api = new ApiClient();

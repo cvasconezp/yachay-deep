@@ -39,7 +39,8 @@ def upgrade_tables():
     # Aquí solo gestionamos ALTER TABLE para columnas nuevas en tablas existentes.
 
     new_columns: dict[str, list[tuple[str, str]]] = {
-        "students": [
+        "institutions": [],  # new table, created by create_all()
+    "students": [
             ("whatsapp",       "VARCHAR"),
             ("nivel_academico", "INTEGER"),
             ("pais",           "VARCHAR"),
@@ -128,6 +129,7 @@ def upgrade_tables():
         ],
         "students": [
             ("es_tercera_matricula", "BOOLEAN DEFAULT false"),
+        ("institution_id", "INTEGER"),
             ("score_recuperabilidad", "FLOAT"),
             ("nivel_recuperabilidad", "VARCHAR"),
         ],
