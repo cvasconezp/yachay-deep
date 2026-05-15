@@ -103,6 +103,7 @@ def upgrade_tables():
             ("umbral_dias_inactividad", "INTEGER"),
             ("umbral_tareas_minimo", "FLOAT"),
             ("umbral_compromiso_minimo", "FLOAT"),
+            ("auto_alertas", "BOOLEAN DEFAULT true"),
         ],
         "alert_events": [
             ("codigo_curso", "VARCHAR"),
