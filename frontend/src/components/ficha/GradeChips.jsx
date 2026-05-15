@@ -1,8 +1,7 @@
 /**
  * GradeChip, MallaChip, MallaCeldaFija — chips de calificaciones (Épica 1.5).
  */
-import { useState, useRef, useEffect, useCallback } from "react";
-import { createPortal } from "react-dom";
+import { useState } from "react";
 import { getNoteStyleHistorico, toTitleCase, getMallaEstado, abreviarAsignatura } from "./fichaHelpers";
 
 export function GradeChip({ asignatura, nota_final, docente }) {
@@ -29,137 +28,75 @@ export function MallaChip({ asignatura, nota_final, docente }) {
   );
 }
 
-/* ─── Popup de intentos (hover) ─── */
-function IntentosPopup({ asignatura, anchorRect }) {
-  const { nombre, nota, estado, intentos, docente, repitencias } = asignatura;
-  const popupRef = useRef(null);
-  const [pos, setPos] = useState({ top: 0, left: 0 });
-
-  useEffect(() => {
-    if (!anchorRect || !popupRef.current) return;
-    const popup = popupRef.current;
-    const pw = popup.offsetWidth;
-    const ph = popup.offsetHeight;
-    let top = anchorRect.top - ph - 6;
-    let left = anchorRect.left + anchorRect.width / 2 - pw / 2;
-    if (top < 10) top = anchorRect.bottom + 6;
-    if (left < 10) left = 10;
-    if (left + pw > window.innerWidth - 10) left = window.innerWidth - pw - 10;
-    setPos({ top, left });
-  }, [anchorRect]);
-
-  const st = getMallaEstado(estado);
-  const estadoLabels = { aprobada: "Aprobada", reprobada: "Reprobada", cursando: "Cursando", no_cursado: "No cursada" };
-
-  return createPortal(
-    <div
-      ref={popupRef}
-      className="fixed z-[9999] bg-white rounded-lg shadow-xl border border-gray-200 p-3 min-w-[220px] max-w-[300px] pointer-events-none"
-      style={{ top: pos.top, left: pos.left }}
-    >
-      <div className="flex items-start gap-2 mb-2">
-        <span className={`w-2.5 h-2.5 rounded-full mt-0.5 flex-shrink-0 ${st.bg} border ${st.border}`} />
-        <div className="flex-1 min-w-0">
-          <div className="text-xs font-bold text-gray-800 leading-tight">{toTitleCase(nombre)}</div>
-          <div className={`text-[10px] font-semibold ${st.text} mt-0.5`}>{estadoLabels[estado] || estado}</div>
-        </div>
-        {nota != null && (
-          <span className={`text-sm font-bold ${st.text} flex-shrink-0`}>{nota}</span>
-        )}
-      </div>
-
-      {docente && (
-        <div className="text-[10px] text-gray-500 mb-2 truncate" title={docente}>Docente: {docente}</div>
-      )}
-
-      {repitencias > 0 && (
-        <div className="text-[10px] text-orange-600 font-semibold mb-1">
-          Repeticiones: {repitencias}
-        </div>
-      )}
-
-      {intentos && intentos.length > 0 && (
-        <div className="border-t border-gray-100 pt-2 mt-1">
-          <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Historial de matrículas</div>
-          <table className="w-full text-[10px]">
-            <thead>
-              <tr className="text-gray-400">
-                <th className="text-left font-medium pb-0.5">Período</th>
-                <th className="text-center font-medium pb-0.5">Nota</th>
-                <th className="text-right font-medium pb-0.5">Estado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {intentos.map((int_, i) => {
-                const intSt = getMallaEstado(int_.estado);
-                return (
-                  <tr key={i} className="border-t border-gray-50">
-                    <td className="py-0.5 text-gray-700 font-medium">{int_.periodo || "—"}</td>
-                    <td className={`py-0.5 text-center font-bold ${intSt.text}`}>{int_.nota != null ? int_.nota : "—"}</td>
-                    <td className={`py-0.5 text-right text-[9px] ${intSt.text}`}>
-                      {estadoLabels[int_.estado] || int_.estado}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>,
-    document.body
-  );
-}
-
 export function MallaCeldaFija({ asignatura }) {
-  const { nombre, nota, estado, repitencias } = asignatura;
-  const st = getMallaEstado(estado);
-  const hasRepitencia = repitencias && repitencias > 0;
-  const [hovered, setHovered] = useState(false);
-  const [anchorRect, setAnchorRect] = useState(null);
-  const cellRef = useRef(null);
-  const timerRef = useRef(null);
+  const [showTooltip, setShowTooltip] = useState(false);
+  const s = getMallaEstado(asignatura.estado);
+  const titleName = toTitleCase(asignatura.nombre) || "";
+  const shortName = abreviarAsignatura(titleName);
 
-  const handleEnter = useCallback(() => {
-    clearTimeout(timerRef.current);
-    if (cellRef.current) {
-      setAnchorRect(cellRef.current.getBoundingClientRect());
-      setHovered(true);
-    }
-  }, []);
-
-  const handleLeave = useCallback(() => {
-    timerRef.current = setTimeout(() => setHovered(false), 150);
-  }, []);
-
-  useEffect(() => () => clearTimeout(timerRef.current), []);
+  const esRepeticion = asignatura.es_repeticion;
+  const numIntentos = asignatura.num_intentos;
+  const nota = asignatura.nota_vigente;
 
   return (
-    <>
-      <div
-        ref={cellRef}
-        onMouseEnter={handleEnter}
-        onMouseLeave={handleLeave}
-        className={`rounded border ${st.bg} ${st.border} px-2 py-1.5 truncate relative cursor-default hover:brightness-95 transition-all`}
-        style={{
-          fontSize: "10px",
-          lineHeight: "1.5",
-          borderLeftWidth: hasRepitencia ? "2.5px" : undefined,
-          borderLeftColor: hasRepitencia ? "#f97316" : undefined,
-        }}
-      >
-        <div className={`font-semibold ${st.text} truncate`} style={{ maxWidth: "100%" }}>
-          {abreviarAsignatura(nombre, 28)}
+    <div
+      className={`relative border ${s.border} ${s.bg} rounded cursor-default transition-shadow hover:shadow-sm`}
+      style={{
+        padding: "5px 7px",
+        ...(esRepeticion ? { borderLeftWidth: "3px", borderLeftColor: "#f97316", borderLeftStyle: "solid" } : {}),
+      }}
+      onMouseEnter={() => setShowTooltip(true)}
+      onMouseLeave={() => setShowTooltip(false)}
+    >
+      {/* Badge de repetición */}
+      {esRepeticion && (
+        <div className="absolute -top-1.5 -right-1.5 bg-orange-500 text-white font-bold rounded-full flex items-center justify-center shadow-sm z-10"
+             style={{ width: "16px", height: "16px", fontSize: "8px" }}
+             title={`${numIntentos} intentos`}>
+          {numIntentos}
         </div>
-        {nota != null && (
-          <div className={`font-bold ${st.text}`} style={{ fontSize: "11px" }}>
-            {nota}
-          </div>
-        )}
-      </div>
-      {hovered && anchorRect && (
-        <IntentosPopup asignatura={asignatura} anchorRect={anchorRect} />
       )}
-    </>
+
+      {/* Nombre abreviado + nota */}
+      <div className="overflow-hidden" style={{ minWidth: 0 }}>
+        <div className="flex items-start gap-1" style={{ minWidth: 0 }}>
+          <div className="leading-snug" style={{ fontSize: "10.5px", color: "#1f2937", flex: "1 1 0%", minWidth: 0, wordBreak: "break-word" }}>
+            {shortName}
+          </div>
+          <div className={`font-bold ${s.text}`} style={{ fontSize: "12px", flexShrink: 0, textAlign: "right" }}>
+            {nota != null ? nota : "—"}
+          </div>
+        </div>
+      </div>
+
+      {/* Tooltip: nombre completo + historial de intentos */}
+      {showTooltip && (
+        <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-1 bg-gray-900 text-white rounded-lg shadow-xl px-3 py-2"
+             style={{ minWidth: "200px", maxWidth: "300px", fontSize: "10px" }}>
+          <div className="font-bold mb-0.5" style={{ fontSize: "11px", color: esRepeticion ? "#fdba74" : "#e5e7eb", whiteSpace: "normal" }}>
+            {titleName}
+          </div>
+          {esRepeticion && asignatura.intentos?.length > 0 && (
+            <>
+              <div className="font-semibold text-gray-300 mb-0.5">{numIntentos} intentos:</div>
+              {asignatura.intentos.map((intento, i) => (
+                <div key={i} className="flex justify-between gap-3 py-px border-t border-gray-700 whitespace-nowrap">
+                  <span className="text-gray-300">{intento.periodo || "Actual"}</span>
+                  <span className={
+                    intento.estado === "aprobada" ? "text-green-400 font-bold" :
+                    intento.estado === "reprobada" ? "text-red-400 font-bold" :
+                    intento.estado === "cursando" ? "text-amber-400" :
+                    "text-yellow-400"
+                  }>
+                    {intento.nota != null ? intento.nota : "—"}
+                  </span>
+                </div>
+              ))}
+            </>
+          )}
+          <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900"></div>
+        </div>
+      )}
+    </div>
   );
 }
