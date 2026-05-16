@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { YachayIcon } from "../components/YachayLogo";
+import { YachayLogo } from "../components/YachayLogo";
 
 const PODCASTS = [
   {
@@ -107,10 +107,16 @@ export default function About() {
 
   return (
     <div className="max-w-4xl mx-auto">
-      {/* Header */}
-      <div className="mb-10 flex items-center gap-5">
-        <YachayIcon size={72} />
-        <div>
+      {/* Header — OSCURO header lockup on a navy backdrop so the white
+          "Deep" wordmark contrasts with the otherwise light page. */}
+      <div className="mb-10">
+        <div className="bg-gradient-to-br from-brand to-brand-dark rounded-2xl px-6 py-7 sm:px-8 sm:py-9 shadow-lg">
+          <YachayLogo
+            variant="dark"
+            className="block mx-auto w-[min(90%,32rem)] sm:w-[min(80%,36rem)] h-auto"
+          />
+        </div>
+        <div className="mt-5 text-center sm:text-left">
           <h1 className="text-3xl font-bold text-gray-900 mb-1">Sobre Yachay Deep</h1>
           <p className="text-gray-500 text-sm">
             Learning Analytics-Driven Early Warning Decision Support System for Student Retention

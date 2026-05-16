@@ -79,14 +79,15 @@ export function Layout({ children }) {
         {/* Header con logo */}
         <div className={`border-b border-white/10 bg-brand-dark/40 ${sidebarOpen ? "p-5" : "p-3 flex items-center justify-center"}`}>
           {sidebarOpen ? (
-            <div className="flex flex-col gap-1.5">
-              {/* Brand: light header on dark sidebar — per brand guidelines (variant "light") */}
-              <YachayLogo variant="light" size={32} />
-              <p className="text-brand-ice text-xs">Monitoreo Académico</p>
+            /* CLARO header sits on dark sidebar → wrap in a white card so the
+               "Deep" wordmark (dark blue) stays readable (~10:1 contrast).
+               Logo fills the sidebar column width. */
+            <div className="bg-white rounded-lg px-3 py-2.5 shadow-sm">
+              <YachayLogo variant="light" className="w-full h-auto block" />
             </div>
           ) : (
-            <div className="bg-white/15 rounded-lg p-1">
-              <YachayIcon size={26} />
+            <div className="bg-white rounded-lg p-1.5 shadow-sm">
+              <YachayIcon className="w-7 h-7 block" />
             </div>
           )}
         </div>

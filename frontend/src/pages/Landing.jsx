@@ -234,8 +234,16 @@ export default function Landing() {
       {/* ── Hero ── */}
       <section className="pt-32 pb-20 bg-gradient-to-br from-brand via-brand-dark to-brand">
         <div className="max-w-6xl mx-auto px-4 text-center">
-          <div className="flex justify-center mb-6">
-            <YachayLogo variant="dark" size={80} />
+          <div className="flex justify-center mb-8">
+            {/* Hero bg is dark gradient → wrap CLARO header in a white card so
+                the "Deep" wordmark (dark blue) stays legible. Logo scales
+                fluidly with viewport. */}
+            <div className="bg-white rounded-2xl px-6 py-5 sm:px-8 sm:py-6 shadow-2xl shadow-black/30 ring-1 ring-white/10">
+              <YachayLogo
+                variant="light"
+                className="block w-[min(70vw,28rem)] sm:w-[min(60vw,32rem)] lg:w-[min(50vw,36rem)] h-auto"
+              />
+            </div>
           </div>
           <h1 className="text-4xl md:text-5xl font-bold text-white mb-4 leading-tight">
             Inteligencia académica preventiva<br />para la retención estudiantil
@@ -692,7 +700,7 @@ export default function Landing() {
       <footer className="bg-brand-dark py-8 border-t border-white/5">
         <div className="max-w-6xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <YachayLogo variant="dark" size={28} />
+            <YachayLogo variant="dark" className="h-7 sm:h-8 w-auto" />
           </div>
           <div className="text-gray-400 text-xs text-center">
             &copy; {new Date().getFullYear()} Carlos Vasconez-Paredes |{" "}
