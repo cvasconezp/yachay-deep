@@ -514,6 +514,7 @@ function FichaEstudianteInner() {
   const searchTimeout = useRef(null);
   const searchAbort = useRef(null);
   const searchContainerRef = useRef(null);
+  const searchInputRef = useRef(null);
 
   // Cargar lista de carreras al montar
   useEffect(() => {
@@ -588,6 +589,16 @@ function FichaEstudianteInner() {
   const handleSearch = (value) => {
     setQuery(value);
     triggerSearch(value, selectedCarrera);
+  };
+
+  // Clear the search input quickly so the user can search for someone else.
+  const handleClearSearch = () => {
+    if (searchAbort.current) searchAbort.current.abort();
+    clearTimeout(searchTimeout.current);
+    setQuery("");
+    setSearchResults([]);
+    // Refocus the input so the user can type immediately.
+    searchInputRef.current?.focus();
   };
 
   const handleCarreraChange = (carrera) => {
@@ -741,13 +752,33 @@ function FichaEstudianteInner() {
         {/* Buscador */}
         <div className="relative flex-1" ref={searchContainerRef}>
           <input
+            ref={searchInputRef}
             type="text"
             value={query}
             onChange={e => handleSearch(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === "Escape" && query.length > 0) {
+                e.preventDefault();
+                handleClearSearch();
+              }
+            }}
             placeholder="🔍 Buscar por nombre, correo o cédula..."
             className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10 bg-white shadow-sm"
           />
-          {loading && <span className="absolute right-3 top-3.5 text-gray-400 text-sm">⏳</span>}
+          {/* Loading takes priority; otherwise show clear (×) button when query has text. */}
+          {loading ? (
+            <span className="absolute right-3 top-3.5 text-gray-400 text-sm">⏳</span>
+          ) : query.length > 0 ? (
+            <button
+              type="button"
+              onClick={handleClearSearch}
+              aria-label="Limpiar búsqueda"
+              title="Limpiar (Esc)"
+              className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <span className="text-lg leading-none">×</span>
+            </button>
+          ) : null}
           {searchResults.length > 0 && (
             <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-xl shadow-lg mt-1 max-h-64 overflow-y-auto">
               {searchResults.map(s => (
