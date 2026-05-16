@@ -76,15 +76,15 @@ export function Layout({ children }) {
       <aside
         className={`${sidebarOpen ? "w-64" : "w-16"} bg-brand text-white flex flex-col shadow-xl transition-all duration-300 flex-shrink-0 sticky top-0 h-screen overflow-y-auto overflow-x-hidden`}
       >
-        {/* Header con logo — full-width white strip when expanded so the CLARO
-            logo flows edge-to-edge with no surrounding navy border.
-            The whole brand area is a link back to the public landing (/). */}
-        <div className={`border-b ${sidebarOpen ? "bg-white border-gray-200" : "bg-brand-dark/40 border-white/10 p-3 flex items-center justify-center"}`}>
+        {/* Header con logo — full-width white brand strip (edge-to-edge) in
+            both expanded and collapsed states. The entire area is a link
+            back to the public landing (/). */}
+        <div className="border-b border-gray-200 bg-white">
           {sidebarOpen ? (
             <Link
               to="/"
               aria-label="Ir al inicio de Yachay Deep"
-              className="block px-4 py-3.5 transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2"
+              className="block px-4 py-3.5 transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-inset"
             >
               <YachayLogo variant="light" className="w-full h-auto block" />
             </Link>
@@ -92,9 +92,9 @@ export function Layout({ children }) {
             <Link
               to="/"
               aria-label="Ir al inicio de Yachay Deep"
-              className="bg-white rounded-lg p-1.5 shadow-sm transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold"
+              className="block px-2 py-3 transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-inset"
             >
-              <YachayIcon className="w-7 h-7 block" />
+              <YachayIcon className="w-full h-auto block" />
             </Link>
           )}
         </div>
