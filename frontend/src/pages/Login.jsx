@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { YachayLogo } from "../components/YachayLogo";
@@ -8,8 +8,18 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { login, user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+
+  // [SESSION-UX] If the user already has a valid session (HttpOnly cookie),
+  // skip the login form entirely and send them straight to the dashboard.
+  // This prevents the "ghost logout" effect when navigating to /login from
+  // the public landing while already authenticated.
+  useEffect(() => {
+    if (!authLoading && user) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [authLoading, user, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -24,6 +34,17 @@ export default function Login() {
       setLoading(false);
     }
   };
+
+  // While the auth provider is resolving session state, or while we
+  // already know there's a session and we're about to redirect, render
+  // nothing (avoids a flash of the login form).
+  if (authLoading || user) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-brand to-brand-dark flex items-center justify-center p-4">
+        <div className="text-white/80 text-sm">Cargando…</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-brand to-brand-dark flex items-center justify-center p-4">

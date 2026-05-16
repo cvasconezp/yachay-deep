@@ -101,6 +101,7 @@ class ApiClient {
   me() { return this.get("/auth/me"); }
   createUser(data) { return this.post("/auth/users", data); }
   listUsers() { return this.get("/auth/users"); }
+  updateUser(id, data) { return this.patch(`/auth/users/${id}`, data); }
 
   // ── Students (PERF-01: paginado) ──
   searchStudents(q, carrera = "", options = {}) {

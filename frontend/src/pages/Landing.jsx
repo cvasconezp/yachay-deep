@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../hooks/useAuth";
 import { YachayLogo } from "../components/YachayLogo";
 
 /* ── Animated Counter Hook ───────────────────────────── */
@@ -201,9 +202,17 @@ const FAQS = [
 
 export default function Landing() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [playingIdx, setPlayingIdx] = useState(null);
   const [annual, setAnnual] = useState(false);
   const [openFaq, setOpenFaq] = useState(null);
+
+  // [SESSION-UX] If the visitor already has an active session, every
+  // "Iniciar sesión" CTA on the public landing turns into "Ir al Dashboard"
+  // so navigating back to / from the sidebar logo doesn't make users feel
+  // like they were logged out.
+  const ctaLabel = user ? "Ir al Dashboard" : "Iniciar sesión";
+  const ctaTarget = user ? "/dashboard" : "/login";
 
   return (
     <div className="min-h-screen bg-white">
@@ -223,10 +232,10 @@ export default function Landing() {
             <a href="#contact" className="hidden sm:inline text-sm text-gray-600 hover:text-brand transition-colors px-3 py-1">Contacto</a>
             <a href="https://pachatech.vercel.app/" target="_blank" rel="noopener noreferrer" className="hidden sm:inline text-sm text-gray-600 hover:text-brand transition-colors px-3 py-1">Pacha Tech</a>
             <button
-              onClick={() => navigate("/login")}
+              onClick={() => navigate(ctaTarget)}
               className="bg-brand-gold text-brand-dark font-semibold text-sm px-5 py-2 rounded-lg hover:bg-brand-gold-light transition-colors"
             >
-              Iniciar sesión
+              {ctaLabel}
             </button>
           </div>
         </div>
@@ -257,10 +266,10 @@ export default function Landing() {
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-14">
             <button
-              onClick={() => navigate("/login")}
+              onClick={() => navigate(ctaTarget)}
               className="bg-brand-gold text-brand-dark font-semibold px-8 py-3 rounded-xl text-base hover:bg-brand-gold-light transition-colors shadow-lg"
             >
-              Acceder a la plataforma
+              {user ? "Ir al Dashboard" : "Acceder a la plataforma"}
             </button>
             <a
               href="#features"
@@ -707,10 +716,10 @@ export default function Landing() {
             {" "}| Soluciones de inteligencia académica para carreras virtuales
           </div>
           <button
-            onClick={() => navigate("/login")}
+            onClick={() => navigate(ctaTarget)}
             className="text-brand-gold text-sm font-medium hover:text-brand-gold-light transition-colors"
           >
-            Iniciar sesión &rarr;
+            {ctaLabel} &rarr;
           </button>
         </div>
       </footer>

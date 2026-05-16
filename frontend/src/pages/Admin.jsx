@@ -1382,10 +1382,11 @@ function TabUsuarios() {
   const [users, setUsers] = useState([]);
   const [newUser, setNewUser] = useState({ email: "", nombre: "", password: "", role: "monitor" });
   const [userMsg, setUserMsg] = useState("");
+  const [editing, setEditing] = useState(null); // user being edited, or null
 
-  useEffect(() => {
-    api.listUsers().then(setUsers).catch(() => setUserMsg("Error: No se pudieron cargar los usuarios"));
-  }, []);
+  const reload = () => api.listUsers().then(setUsers).catch(() => setUserMsg("Error: No se pudieron cargar los usuarios"));
+
+  useEffect(() => { reload(); }, []);
 
   const handleCreateUser = async (e) => {
     e.preventDefault();
@@ -1393,7 +1394,7 @@ function TabUsuarios() {
       await api.createUser(newUser);
       setUserMsg("Usuario creado correctamente");
       setNewUser({ email: "", nombre: "", password: "", role: "monitor" });
-      api.listUsers().then(setUsers);
+      reload();
     } catch (err) {
       setUserMsg("Error: " + err.message);
     }
@@ -1401,8 +1402,8 @@ function TabUsuarios() {
 
   const toggleUser = async (user) => {
     try {
-      await api.patch(`/auth/users/${user.id}`, { is_active: !user.is_active });
-      api.listUsers().then(setUsers);
+      await api.updateUser(user.id, { is_active: !user.is_active });
+      reload();
     } catch (err) {
       setUserMsg("Error: " + err.message);
     }
@@ -1422,7 +1423,7 @@ function TabUsuarios() {
             placeholder="Nombre completo" required
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           <input value={newUser.password} onChange={e => setNewUser(u => ({ ...u, password: e.target.value }))}
-            type="password" placeholder="Contraseña" required
+            type="password" placeholder="Contraseña" required minLength={8}
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           <select value={newUser.role} onChange={e => setNewUser(u => ({ ...u, role: e.target.value }))}
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
@@ -1445,6 +1446,7 @@ function TabUsuarios() {
               <th className="text-left px-5 py-2.5 text-gray-600 font-medium">Email</th>
               <th className="text-center px-5 py-2.5 text-gray-600 font-medium">Rol</th>
               <th className="text-center px-5 py-2.5 text-gray-600 font-medium">Estado</th>
+              <th className="text-right px-5 py-2.5 text-gray-600 font-medium">Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -1459,10 +1461,121 @@ function TabUsuarios() {
                     {u.is_active ? "Activo" : "Inactivo"}
                   </button>
                 </td>
+                <td className="px-5 py-2.5 text-right">
+                  <button onClick={() => setEditing(u)}
+                    className="text-xs font-medium text-brand hover:text-brand-dark underline-offset-2 hover:underline">
+                    Editar
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
+      </div>
+
+      {editing && (
+        <EditUserModal
+          user={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); reload(); }}
+          onError={(msg) => setUserMsg("Error: " + msg)}
+        />
+      )}
+    </div>
+  );
+}
+
+function EditUserModal({ user, onClose, onSaved, onError }) {
+  const [nombre, setNombre] = useState(user.nombre || "");
+  const [role, setRole] = useState(user.role || "monitor");
+  const [isActive, setIsActive] = useState(!!user.is_active);
+  const [password, setPassword] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const payload = {};
+      if (nombre !== user.nombre) payload.nombre = nombre;
+      if (role !== user.role) payload.role = role;
+      if (isActive !== !!user.is_active) payload.is_active = isActive;
+      if (password.trim()) payload.password = password;
+
+      if (Object.keys(payload).length === 0) {
+        onClose();
+        return;
+      }
+      await api.updateUser(user.id, payload);
+      onSaved();
+    } catch (err) {
+      onError(err.message || "Error al actualizar usuario");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">Editar usuario</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
+        </div>
+
+        <p className="text-xs text-gray-500 mb-4">
+          <span className="font-medium text-gray-700">{user.email}</span>
+          <span className="text-gray-300"> • </span>
+          ID #{user.id}
+        </p>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Nombre completo</label>
+            <input value={nombre} onChange={(e) => setNombre(e.target.value)} required
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Rol</label>
+              <select value={role} onChange={(e) => setRole(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="monitor">Monitor</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Estado</label>
+              <select value={isActive ? "1" : "0"} onChange={(e) => setIsActive(e.target.value === "1")}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="1">Activo</option>
+                <option value="0">Inactivo</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              Nueva contraseña <span className="text-gray-400 font-normal">(opcional, mín. 8 caracteres)</span>
+            </label>
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+              placeholder="Dejar en blanco para no cambiar" minLength={password ? 8 : undefined}
+              autoComplete="new-password"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button type="button" onClick={onClose}
+              className="px-4 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-100">
+              Cancelar
+            </button>
+            <button type="submit" disabled={saving}
+              className="bg-brand text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-brand-light disabled:opacity-60">
+              {saving ? "Guardando..." : "Guardar cambios"}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
