@@ -211,8 +211,9 @@ export default function Landing() {
       <nav className="fixed top-0 w-full bg-white/90 backdrop-blur-sm border-b border-gray-100 z-50">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            {/* Navbar bg is white → use light variant (dark text). */}
-            <YachayLogo variant="light" size={32} />
+            {/* Navbar bg is white → CLARO header. Sized responsively to feel
+                like the dominant brand element on the top bar. */}
+            <YachayLogo variant="light" className="h-10 sm:h-11 lg:h-12 w-auto" />
           </div>
           <div className="flex items-center gap-3">
             <a href="#features" className="hidden sm:inline text-sm text-gray-600 hover:text-brand transition-colors px-3 py-1">Funcionalidades</a>
@@ -234,16 +235,14 @@ export default function Landing() {
       {/* ── Hero ── */}
       <section className="pt-32 pb-20 bg-gradient-to-br from-brand via-brand-dark to-brand">
         <div className="max-w-6xl mx-auto px-4 text-center">
-          <div className="flex justify-center mb-8">
-            {/* Hero bg is dark gradient → wrap CLARO header in a white card so
-                the "Deep" wordmark (dark blue) stays legible. Logo scales
-                fluidly with viewport. */}
-            <div className="bg-white rounded-2xl px-6 py-5 sm:px-8 sm:py-6 shadow-2xl shadow-black/30 ring-1 ring-white/10">
-              <YachayLogo
-                variant="light"
-                className="block w-[min(70vw,28rem)] sm:w-[min(60vw,32rem)] lg:w-[min(50vw,36rem)] h-auto"
-              />
-            </div>
+          <div className="flex justify-center mb-10">
+            {/* Hero bg is dark gradient → use OSCURO directly (white "Deep"
+                wordmark reads with full contrast on the navy gradient).
+                Logo is the dominant focal point; scales fluidly with viewport. */}
+            <YachayLogo
+              variant="dark"
+              className="block w-[min(92vw,34rem)] sm:w-[min(80vw,44rem)] lg:w-[min(65vw,56rem)] h-auto drop-shadow-2xl"
+            />
           </div>
           <h1 className="text-4xl md:text-5xl font-bold text-white mb-4 leading-tight">
             Inteligencia académica preventiva<br />para la retención estudiantil

@@ -107,16 +107,14 @@ export default function About() {
 
   return (
     <div className="max-w-4xl mx-auto">
-      {/* Header — OSCURO header lockup on a navy backdrop so the white
-          "Deep" wordmark contrasts with the otherwise light page. */}
+      {/* Header — CLARO header lockup directly on the page (no backdrop).
+          Dark-blue "Deep" wordmark contrasts naturally against the white page. */}
       <div className="mb-10">
-        <div className="bg-gradient-to-br from-brand to-brand-dark rounded-2xl px-6 py-7 sm:px-8 sm:py-9 shadow-lg">
-          <YachayLogo
-            variant="dark"
-            className="block mx-auto w-[min(90%,32rem)] sm:w-[min(80%,36rem)] h-auto"
-          />
-        </div>
-        <div className="mt-5 text-center sm:text-left">
+        <YachayLogo
+          variant="light"
+          className="block mx-auto sm:mx-0 w-[min(92%,38rem)] sm:w-[min(70%,44rem)] h-auto mb-6"
+        />
+        <div className="text-center sm:text-left">
           <h1 className="text-3xl font-bold text-gray-900 mb-1">Sobre Yachay Deep</h1>
           <p className="text-gray-500 text-sm">
             Learning Analytics-Driven Early Warning Decision Support System for Student Retention

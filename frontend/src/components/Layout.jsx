@@ -76,13 +76,11 @@ export function Layout({ children }) {
       <aside
         className={`${sidebarOpen ? "w-64" : "w-16"} bg-brand text-white flex flex-col shadow-xl transition-all duration-300 flex-shrink-0 sticky top-0 h-screen overflow-y-auto overflow-x-hidden`}
       >
-        {/* Header con logo */}
-        <div className={`border-b border-white/10 bg-brand-dark/40 ${sidebarOpen ? "p-5" : "p-3 flex items-center justify-center"}`}>
+        {/* Header con logo — full-width white strip when expanded so the CLARO
+            logo flows edge-to-edge with no surrounding navy border. */}
+        <div className={`border-b ${sidebarOpen ? "bg-white border-gray-200" : "bg-brand-dark/40 border-white/10 p-3 flex items-center justify-center"}`}>
           {sidebarOpen ? (
-            /* CLARO header sits on dark sidebar → wrap in a white card so the
-               "Deep" wordmark (dark blue) stays readable (~10:1 contrast).
-               Logo fills the sidebar column width. */
-            <div className="bg-white rounded-lg px-3 py-2.5 shadow-sm">
+            <div className="px-4 py-3.5">
               <YachayLogo variant="light" className="w-full h-auto block" />
             </div>
           ) : (
