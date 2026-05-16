@@ -176,6 +176,28 @@ class TestSearchStudents:
         assert r.status_code == 200
         assert r.json()["total"] >= 1
 
+    def test_search_multi_token_any_order(self, client, admin_token, sample_students):
+        """[SEARCH-UX] 'lopez garcia' must match 'GARCIA LOPEZ MARIA' (order-independent)."""
+        # Reversed surname order
+        r = client.get("/students/search?q=lopez+garcia", headers=auth(admin_token))
+        assert r.status_code == 200
+        items = r.json()["items"]
+        assert len(items) == 1
+        assert items[0]["nombre"] == "GARCIA LOPEZ MARIA"
+
+        # First name + middle of last name
+        r = client.get("/students/search?q=maria+lop", headers=auth(admin_token))
+        assert r.status_code == 200
+        items = r.json()["items"]
+        assert len(items) == 1
+        assert items[0]["nombre"] == "GARCIA LOPEZ MARIA"
+
+    def test_search_multi_token_requires_all(self, client, admin_token, sample_students):
+        """[SEARCH-UX] Multi-token query is AND across tokens — no student has both."""
+        r = client.get("/students/search?q=maria+juan", headers=auth(admin_token))
+        assert r.status_code == 200
+        assert r.json()["total"] == 0
+
     def test_carrera_filter_case_insensitive(
         self, client, admin_token, sample_students
     ):

@@ -460,16 +460,34 @@ def search_students(
         query = query.filter(Student.nivel_riesgo == nivel_riesgo.strip())
 
     # Filtro de búsqueda textual
+    # [SEARCH-UX] Tokenized name search: a query like "lopez tatia" matches
+    # students named "Maria Tatiana Lopez" regardless of word order. Each
+    # whitespace-separated token must appear somewhere in name / correo /
+    # telefono (AND across tokens, OR across fields). A single-token query
+    # also tries an exact cédula match for back-compat with previous behavior.
     q_lower = q.lower().strip()
+    q_stripped = q.strip()
     if q_lower and len(q_lower) >= 2:
-        query = query.filter(
-            or_(
-                func.lower(Student.nombre).contains(q_lower),
-                func.lower(Student.correo_institucional).contains(q_lower),
-                Student.cedula == q.strip(),
-                func.lower(Student.telefono).contains(q_lower),
+        tokens = [t for t in q_lower.split() if t]
+        if len(tokens) == 1:
+            tok = tokens[0]
+            query = query.filter(
+                or_(
+                    func.lower(Student.nombre).contains(tok),
+                    func.lower(Student.correo_institucional).contains(tok),
+                    Student.cedula == q_stripped,
+                    func.lower(Student.telefono).contains(tok),
+                )
             )
-        )
+        else:
+            for tok in tokens:
+                query = query.filter(
+                    or_(
+                        func.lower(Student.nombre).contains(tok),
+                        func.lower(Student.correo_institucional).contains(tok),
+                        func.lower(Student.telefono).contains(tok),
+                    )
+                )
     elif not carrera.strip() and not nivel_riesgo.strip():
         return PaginatedStudents(items=[], total=0, page=1, pages=0, limit=limit)
 
