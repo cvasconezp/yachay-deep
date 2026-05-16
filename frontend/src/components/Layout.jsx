@@ -79,14 +79,10 @@ export function Layout({ children }) {
         {/* Header con logo */}
         <div className={`border-b border-white/10 bg-brand-dark/40 ${sidebarOpen ? "p-5" : "p-3 flex items-center justify-center"}`}>
           {sidebarOpen ? (
-            <div className="flex items-center gap-3">
-              <div className="bg-white/15 rounded-lg p-1.5">
-                <YachayIcon size={32} />
-              </div>
-              <div>
-                <h1 className="text-lg font-bold tracking-tight leading-tight">Yachay Deep</h1>
-                <p className="text-brand-ice text-xs">Monitoreo Académico</p>
-              </div>
+            <div className="flex flex-col gap-1.5">
+              {/* Brand: light header on dark sidebar — per brand guidelines (variant "light") */}
+              <YachayLogo variant="light" size={32} />
+              <p className="text-brand-ice text-xs">Monitoreo Académico</p>
             </div>
           ) : (
             <div className="bg-white/15 rounded-lg p-1">

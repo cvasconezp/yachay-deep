@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { YachayLogo } from "../components/YachayLogo";
+import { YachayIcon } from "../components/YachayLogo";
 
 const PODCASTS = [
   {
@@ -109,7 +109,7 @@ export default function About() {
     <div className="max-w-4xl mx-auto">
       {/* Header */}
       <div className="mb-10 flex items-center gap-5">
-        <YachayLogo size={80} />
+        <YachayIcon size={72} />
         <div>
           <h1 className="text-3xl font-bold text-gray-900 mb-1">Sobre Yachay Deep</h1>
           <p className="text-gray-500 text-sm">

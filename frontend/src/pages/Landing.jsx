@@ -211,8 +211,8 @@ export default function Landing() {
       <nav className="fixed top-0 w-full bg-white/90 backdrop-blur-sm border-b border-gray-100 z-50">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <YachayLogo size={36} />
-            <span className="font-bold text-brand text-lg">Yachay Deep</span>
+            {/* Navbar bg is white → use light variant (dark text). */}
+            <YachayLogo variant="light" size={32} />
           </div>
           <div className="flex items-center gap-3">
             <a href="#features" className="hidden sm:inline text-sm text-gray-600 hover:text-brand transition-colors px-3 py-1">Funcionalidades</a>
@@ -235,7 +235,7 @@ export default function Landing() {
       <section className="pt-32 pb-20 bg-gradient-to-br from-brand via-brand-dark to-brand">
         <div className="max-w-6xl mx-auto px-4 text-center">
           <div className="flex justify-center mb-6">
-            <YachayLogo size={100} />
+            <YachayLogo variant="dark" size={80} />
           </div>
           <h1 className="text-4xl md:text-5xl font-bold text-white mb-4 leading-tight">
             Inteligencia académica preventiva<br />para la retención estudiantil
@@ -692,8 +692,7 @@ export default function Landing() {
       <footer className="bg-brand-dark py-8 border-t border-white/5">
         <div className="max-w-6xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <YachayLogo size={28} />
-            <span className="text-white font-semibold text-sm">Yachay Deep</span>
+            <YachayLogo variant="dark" size={28} />
           </div>
           <div className="text-gray-400 text-xs text-center">
             &copy; {new Date().getFullYear()} Carlos Vasconez-Paredes |{" "}

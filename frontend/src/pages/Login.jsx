@@ -30,9 +30,10 @@ export default function Login() {
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8">
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
-            <YachayLogo size={72} />
+            {/* Login card bg is white → use light header variant (dark text). */}
+            <YachayLogo variant="light" size={56} />
           </div>
-          <h1 className="text-3xl font-bold text-brand">Yachay Deep</h1>
+          <h1 className="sr-only">Yachay Deep</h1>
           <p className="text-gray-500 mt-2 text-sm">Sistema de Monitoreo Académico</p>
         </div>
 
