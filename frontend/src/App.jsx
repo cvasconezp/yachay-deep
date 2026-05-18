@@ -18,7 +18,6 @@ import ResumenDatos from "./pages/ResumenDatos";
 import Admin from "./pages/Admin";
 import About from "./pages/About";
 import EntregasPendientes from "./pages/EntregasPendientes";
-import MiBandeja from "./pages/MiBandeja";
 
 function PrivateRoute({ children, adminOnly = false }) {
   const { user, loading } = useAuth();
@@ -119,14 +118,7 @@ export default function App() {
                 </PrivateRoute>
               }
             />
-            <Route
-              path="/mi-bandeja"
-              element={
-                <PrivateRoute>
-                  <MiBandeja />
-                </PrivateRoute>
-              }
-            />
+            <Route path="/mi-bandeja" element={<Navigate to="/alertas" replace />} />
             <Route
               path="/resumen"
               element={

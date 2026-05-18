@@ -28,6 +28,17 @@ const TIPO_ICONS = {
   deterioro_progresivo: "📊",
 };
 
+
+const ACCIONES_SUGERIDAS = {
+  inactividad: "Contactar al estudiante por email/WhatsApp para verificar situación",
+  compromiso_bajo: "Agendar tutoría sincrónica con el docente de la materia",
+  nota_cero: "Verificar si el estudiante entregó la actividad; contactar docente",
+  tareas_bajas: "Enviar recordatorio de tareas pendientes y ofrecer apoyo",
+  segunda_matricula: "Programar sesión de acompañamiento académico personalizado",
+  tercera_matricula: "Derivar a Bienestar Estudiantil — seguimiento prioritario",
+  deterioro_progresivo: "Intervención inmediata: contactar estudiante + docente + coordinador",
+};
+
 const SEVERITY_CONFIG = {
   alto: {
     label: "ALTO",
@@ -567,6 +578,12 @@ export default function Alertas() {
                                     )}
                                   </div>
                                   <div className="text-sm text-gray-700 leading-relaxed">{alert.mensaje || "Sin detalle"}</div>
+                                  {ACCIONES_SUGERIDAS[alert.tipo] && (
+                                    <div className="mt-1.5 flex items-start gap-1.5">
+                                      <span className="text-[10px] font-semibold text-blue-600 uppercase whitespace-nowrap mt-0.5">Acción:</span>
+                                      <span className="text-xs text-blue-700">{ACCIONES_SUGERIDAS[alert.tipo]}</span>
+                                    </div>
+                                  )}
                                   <div className="text-[10px] text-gray-400 mt-1">{formatDate(alert.created_at)}</div>
                                 </div>
                                 <button onClick={(e) => handleMarkAsRead(alert.id, e)}
