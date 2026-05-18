@@ -31,6 +31,22 @@ export function Layout({ children }) {
   const navigate = useNavigate();
   const [alertCount, setAlertCount] = useState(null);
   const [alertAltoCount, setAlertAltoCount] = useState(0);
+  const [scrapingProgress, setScrapingProgress] = useState(null);
+
+  // Polling de progreso del scraping (cada 15s)
+  useEffect(() => {
+    if (!isAdmin) return;
+    let interval;
+    const check = async () => {
+      try {
+        const prog = await api.getScrapingProgress();
+        setScrapingProgress(prog);
+      } catch { /* ignore */ }
+    };
+    check();
+    interval = setInterval(check, 15000);
+    return () => clearInterval(interval);
+  }, [isAdmin]);
 
   // Sidebar open/closed con persistencia en localStorage
   const [sidebarOpen, setSidebarOpen] = useState(() => {
@@ -109,6 +125,53 @@ export function Layout({ children }) {
             </Link>
           )}
         </div>
+
+        {/* Scraping progress */}
+        {isAdmin && scrapingProgress?.running && (
+          <div className={`${sidebarOpen ? "px-3 py-2" : "px-1 py-2"} border-b border-white/10`}>
+            {sidebarOpen ? (
+              <div>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse flex-shrink-0"></div>
+                  <span className="text-[10px] font-semibold text-blue-200 uppercase tracking-wider truncate">Scraping activo</span>
+                </div>
+                {scrapingProgress.progress ? (
+                  <>
+                    <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
+                      <div className="bg-brand-gold h-full rounded-full transition-all duration-700"
+                        style={{ width: `${scrapingProgress.progress.percent}%` }}></div>
+                    </div>
+                    <div className="flex items-center justify-between mt-1">
+                      <span className="text-[9px] text-blue-300 truncate max-w-[120px]">
+                        {scrapingProgress.progress.current_step || `Paso ${scrapingProgress.progress.completed_steps}/${scrapingProgress.progress.total_steps}`}
+                      </span>
+                      <span className="text-[10px] font-bold text-brand-gold">{scrapingProgress.progress.percent}%</span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex items-center gap-1 mt-1">
+                    <div className="w-3 h-3 border-2 border-brand-gold border-t-transparent rounded-full animate-spin"></div>
+                    <span className="text-[10px] text-blue-300">Iniciando...</span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex justify-center" title={`Scraping: ${scrapingProgress.progress?.percent || 0}%`}>
+                <div className="relative w-8 h-8">
+                  <svg className="w-8 h-8 -rotate-90" viewBox="0 0 32 32">
+                    <circle cx="16" cy="16" r="12" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="3"/>
+                    <circle cx="16" cy="16" r="12" fill="none" stroke="#F5C518" strokeWidth="3"
+                      strokeDasharray={`${(scrapingProgress.progress?.percent || 0) * 0.754} 75.4`}
+                      strokeLinecap="round"/>
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Navigation */}
         <nav className={`flex-1 ${sidebarOpen ? "p-4" : "p-2"} space-y-1`}>
