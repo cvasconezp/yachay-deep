@@ -1377,10 +1377,81 @@ function TabSemestre() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TAB: USUARIOS
+
+// ── Pestañas disponibles para permisos granulares ──
+const PERMISSION_TABS = [
+  { key: "dashboard",      label: "Estudiantes",           group: "Monitoreo" },
+  { key: "alertas",        label: "Alertas",               group: "Monitoreo" },
+  { key: "intervenciones", label: "Intervenciones",        group: "Monitoreo" },
+  { key: "ficha",          label: "Ficha Estudiante",      group: "Monitoreo" },
+  { key: "asignaturas",    label: "Asignaturas",           group: "Académico" },
+  { key: "entregas",       label: "Entregas",              group: "Académico" },
+  { key: "docentes",       label: "Docentes",              group: "Académico" },
+  { key: "tutorias",       label: "Tutorías",              group: "Académico" },
+  { key: "resumen",        label: "Análisis Institucional",group: "Institucional" },
+  { key: "about",          label: "Sobre Yachay Deep",     group: "Institucional" },
+];
+
+const ALL_TAB_KEYS = PERMISSION_TABS.map(t => t.key);
+
+function PermissionCheckboxes({ selected, onChange, compact = false }) {
+  const grouped = {};
+  PERMISSION_TABS.forEach(t => {
+    if (!grouped[t.group]) grouped[t.group] = [];
+    grouped[t.group].push(t);
+  });
+
+  const allSelected = selected === null || (Array.isArray(selected) && selected.length === ALL_TAB_KEYS.length);
+
+  const handleToggleAll = () => {
+    if (allSelected) {
+      onChange([]);
+    } else {
+      onChange(null); // null = all access
+    }
+  };
+
+  const handleToggle = (key) => {
+    const current = selected === null ? [...ALL_TAB_KEYS] : [...(selected || [])];
+    const idx = current.indexOf(key);
+    if (idx >= 0) current.splice(idx, 1);
+    else current.push(key);
+    // If all selected, set to null (all access)
+    if (current.length === ALL_TAB_KEYS.length) onChange(null);
+    else onChange(current);
+  };
+
+  const isChecked = (key) => selected === null || (Array.isArray(selected) && selected.includes(key));
+
+  return (
+    <div className={compact ? "space-y-2" : "space-y-3"}>
+      <label className="flex items-center gap-2 cursor-pointer">
+        <input type="checkbox" checked={allSelected} onChange={handleToggleAll}
+          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+        <span className="text-sm font-semibold text-gray-700">Acceso completo</span>
+      </label>
+      {!allSelected && Object.entries(grouped).map(([group, tabs]) => (
+        <div key={group} className={compact ? "" : "ml-2"}>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">{group}</p>
+          <div className={compact ? "flex flex-wrap gap-x-4 gap-y-1" : "grid grid-cols-2 gap-1"}>
+            {tabs.map(t => (
+              <label key={t.key} className="flex items-center gap-1.5 cursor-pointer">
+                <input type="checkbox" checked={isChecked(t.key)} onChange={() => handleToggle(t.key)}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5" />
+                <span className="text-sm text-gray-600">{t.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 function TabUsuarios() {
   const [users, setUsers] = useState([]);
-  const [newUser, setNewUser] = useState({ email: "", nombre: "", password: "", role: "monitor" });
+  const [newUser, setNewUser] = useState({ email: "", nombre: "", password: "", role: "monitor", permissions: null, send_welcome_email: true });
   const [userMsg, setUserMsg] = useState("");
   const [editing, setEditing] = useState(null); // user being edited, or null
 
@@ -1393,7 +1464,7 @@ function TabUsuarios() {
     try {
       await api.createUser(newUser);
       setUserMsg("Usuario creado correctamente");
-      setNewUser({ email: "", nombre: "", password: "", role: "monitor" });
+      setNewUser({ email: "", nombre: "", password: "", role: "monitor", permissions: null, send_welcome_email: true });
       reload();
     } catch (err) {
       setUserMsg("Error: " + err.message);
@@ -1435,6 +1506,24 @@ function TabUsuarios() {
             Crear usuario
           </button>
         </form>
+
+        {/* Permisos de pestañas */}
+        <div className="mt-4 border-t border-gray-100 pt-4">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-medium text-gray-700">Permisos de acceso</h4>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={newUser.send_welcome_email}
+                onChange={e => setNewUser(u => ({ ...u, send_welcome_email: e.target.checked }))}
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+              <span className="text-xs text-gray-500">Enviar email de bienvenida</span>
+            </label>
+          </div>
+          <PermissionCheckboxes
+            selected={newUser.permissions}
+            onChange={(perms) => setNewUser(u => ({ ...u, permissions: perms }))}
+            compact
+          />
+        </div>
         {userMsg && <p className="text-sm mt-3">{userMsg}</p>}
       </div>
 
@@ -1446,6 +1535,7 @@ function TabUsuarios() {
               <th className="text-left px-5 py-2.5 text-gray-600 font-medium">Email</th>
               <th className="text-center px-5 py-2.5 text-gray-600 font-medium">Rol</th>
               <th className="text-center px-5 py-2.5 text-gray-600 font-medium">Estado</th>
+              <th className="text-center px-5 py-2.5 text-gray-600 font-medium">Permisos</th>
               <th className="text-right px-5 py-2.5 text-gray-600 font-medium">Acciones</th>
             </tr>
           </thead>
@@ -1460,6 +1550,15 @@ function TabUsuarios() {
                     className={`px-2 py-0.5 rounded-full text-xs font-medium ${u.is_active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
                     {u.is_active ? "Activo" : "Inactivo"}
                   </button>
+                </td>
+                <td className="px-5 py-2.5 text-center text-xs text-gray-500">
+                  {u.permissions === null ? (
+                    <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Completo</span>
+                  ) : u.permissions?.length > 0 ? (
+                    <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">{u.permissions.length} módulos</span>
+                  ) : (
+                    <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-full">Sin acceso</span>
+                  )}
                 </td>
                 <td className="px-5 py-2.5 text-right">
                   <button onClick={() => setEditing(u)}
@@ -1488,6 +1587,7 @@ function TabUsuarios() {
 function EditUserModal({ user, onClose, onSaved, onError }) {
   const [nombre, setNombre] = useState(user.nombre || "");
   const [role, setRole] = useState(user.role || "monitor");
+  const [permissions, setPermissions] = useState(user.permissions ?? null);
   const [isActive, setIsActive] = useState(!!user.is_active);
   const [password, setPassword] = useState("");
   const [saving, setSaving] = useState(false);

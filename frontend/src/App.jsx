@@ -19,7 +19,7 @@ import Admin from "./pages/Admin";
 import About from "./pages/About";
 import EntregasPendientes from "./pages/EntregasPendientes";
 
-function PrivateRoute({ children, adminOnly = false }) {
+function PrivateRoute({ children, adminOnly = false, tabKey = null }) {
   const { user, loading } = useAuth();
 
   // ← NUEVO: activa el enforcer solo cuando el usuario está autenticado
@@ -33,6 +33,10 @@ function PrivateRoute({ children, adminOnly = false }) {
     );
   if (!user) return <Navigate to="/login" />;
   if (adminOnly && user.role !== "admin") return <Navigate to="/dashboard" />;
+  // Verificar permisos granulares por pestaña
+  if (tabKey && user.permissions && !user.permissions.includes(tabKey)) {
+    return <Navigate to="/dashboard" />;
+  }
 
   return (
     <>
@@ -53,7 +57,7 @@ export default function App() {
             <Route
               path="/dashboard"
               element={
-                <PrivateRoute>
+                <PrivateRoute tabKey="dashboard">
                   <Dashboard />
                 </PrivateRoute>
               }
@@ -61,7 +65,7 @@ export default function App() {
             <Route
               path="/ficha"
               element={
-                <PrivateRoute>
+                <PrivateRoute tabKey="ficha">
                   <FichaEstudiante />
                 </PrivateRoute>
               }
@@ -77,7 +81,7 @@ export default function App() {
             <Route
               path="/asignaturas"
               element={
-                <PrivateRoute>
+                <PrivateRoute tabKey="asignaturas">
                   <Asignaturas />
                 </PrivateRoute>
               }
@@ -85,7 +89,7 @@ export default function App() {
             <Route
               path="/docentes"
               element={
-                <PrivateRoute>
+                <PrivateRoute tabKey="docentes">
                   <Docentes />
                 </PrivateRoute>
               }
@@ -97,7 +101,7 @@ export default function App() {
             <Route
               path="/tutorias"
               element={
-                <PrivateRoute>
+                <PrivateRoute tabKey="tutorias">
                   <Tutorias />
                 </PrivateRoute>
               }
@@ -105,7 +109,7 @@ export default function App() {
             <Route
               path="/intervenciones"
               element={
-                <PrivateRoute>
+                <PrivateRoute tabKey="intervenciones">
                   <Intervenciones />
                 </PrivateRoute>
               }
@@ -113,7 +117,7 @@ export default function App() {
             <Route
               path="/alertas"
               element={
-                <PrivateRoute>
+                <PrivateRoute tabKey="alertas">
                   <Alertas />
                 </PrivateRoute>
               }
@@ -122,7 +126,7 @@ export default function App() {
             <Route
               path="/resumen"
               element={
-                <PrivateRoute>
+                <PrivateRoute tabKey="resumen">
                   <ResumenDatos />
                 </PrivateRoute>
               }
@@ -130,7 +134,7 @@ export default function App() {
             <Route
               path="/entregas"
               element={
-                <PrivateRoute>
+                <PrivateRoute tabKey="entregas">
                   <EntregasPendientes />
                 </PrivateRoute>
               }
@@ -138,7 +142,7 @@ export default function App() {
             <Route
               path="/about"
               element={
-                <PrivateRoute>
+                <PrivateRoute tabKey="about">
                   <About />
                 </PrivateRoute>
               }

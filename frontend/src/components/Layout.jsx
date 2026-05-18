@@ -69,7 +69,17 @@ export function Layout({ children }) {
     navigate("/login");
   };
 
-  const navItems = isAdmin ? [...NAV_ITEMS, ...ADMIN_ITEMS] : NAV_ITEMS;
+  // Filtrar sidebar según permisos del usuario
+  const allItems = isAdmin ? [...NAV_ITEMS, ...ADMIN_ITEMS] : NAV_ITEMS;
+  const navItems = user?.permissions
+    ? allItems.filter(item => {
+        // Admin tab always visible for admins
+        if (item.path === "/admin") return true;
+        // Extract tab key from path (e.g., "/dashboard" → "dashboard")
+        const tabKey = item.path.replace("/", "");
+        return user.permissions.includes(tabKey);
+      })
+    : allItems; // null permissions = full access
 
   return (
     <div className="min-h-screen bg-gray-50 flex">

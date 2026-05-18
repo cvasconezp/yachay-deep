@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: Optional[str] = None
     SMTP_FROM: Optional[str] = None
     BIENESTAR_EMAIL: Optional[str] = None  # destinatario del departamento
+    FRONTEND_URL: str = "https://yachay-deep.vercel.app"
 
     # App
     APP_NAME: str = "Yachay Deep"

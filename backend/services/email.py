@@ -218,3 +218,186 @@ def send_tutoria_notification(
     except Exception as e:
         logger.error(f"Error enviando notificación de tutoría: {e}")
         return False
+
+
+# ── Mapa de tabs a nombres legibles ──
+TAB_LABELS = {
+    "dashboard": ("Estudiantes", "Panel principal con lista de estudiantes y niveles de riesgo"),
+    "alertas": ("Alertas", "Alertas académicas agrupadas por estudiante con acciones sugeridas"),
+    "intervenciones": ("Intervenciones", "Gestión de intervenciones con seguimiento de estados"),
+    "ficha": ("Ficha Estudiante", "Búsqueda y ficha detallada de cada estudiante"),
+    "asignaturas": ("Asignaturas", "Vista de asignaturas con métricas de rendimiento"),
+    "entregas": ("Entregas", "Monitoreo de entregas y tareas por asignatura"),
+    "docentes": ("Docentes", "Métricas de efectividad docente"),
+    "tutorias": ("Tutorías", "Gestión de tutorías académicas"),
+    "resumen": ("Análisis Institucional", "Dashboard ejecutivo con KPIs y tendencias"),
+    "about": ("Sobre Yachay Deep", "Información sobre la plataforma"),
+    "admin": ("Administración", "Gestión de usuarios, ETL y configuración del sistema"),
+}
+
+# Guías por rol
+GUIAS_POR_ROL = {
+    "admin": [
+        "Comienza revisando la pestaña <strong>Estudiantes</strong> para ver el panorama general de riesgo.",
+        "Revisa las <strong>Alertas</strong> diariamente para identificar estudiantes que necesitan atención.",
+        "Usa <strong>Intervenciones</strong> para registrar las acciones tomadas con cada estudiante.",
+        "En <strong>Administración</strong> puedes gestionar usuarios, ejecutar ETL y configurar el sistema.",
+        "El <strong>Análisis Institucional</strong> te da una vista macro de KPIs y tendencias.",
+    ],
+    "monitor": [
+        "Tu trabajo principal está en <strong>Alertas</strong>: revísalas cada día para actuar a tiempo.",
+        "Usa la <strong>Ficha Estudiante</strong> para investigar el historial completo de un estudiante.",
+        "Registra cada contacto o acción en <strong>Intervenciones</strong> para mantener el seguimiento.",
+        "Consulta <strong>Entregas</strong> y <strong>Asignaturas</strong> para entender el contexto académico.",
+        "Si un caso es grave, deriva a Bienestar Estudiantil desde la intervención.",
+    ],
+}
+
+
+def send_welcome_email(
+    to_email: str,
+    nombre: str,
+    role: str,
+    password: str,
+    permissions: list[str] | None = None,
+) -> bool:
+    """
+    Envía correo de bienvenida a un nuevo usuario con sus credenciales,
+    pestañas asignadas y guía de primeros pasos.
+    """
+    if not settings.SMTP_HOST or not settings.SMTP_USER:
+        logger.warning("SMTP no configurado — email de bienvenida no enviado")
+        return False
+
+    app_url = getattr(settings, "FRONTEND_URL", None) or "https://yachay-deep.vercel.app"
+    nombre_safe = html_escape(nombre)
+    role_safe = html_escape(role)
+    email_safe = html_escape(to_email)
+    pass_safe = html_escape(password)
+
+    # Construir lista de pestañas asignadas
+    if permissions:
+        tabs_html = ""
+        for tab_key in permissions:
+            label, desc = TAB_LABELS.get(tab_key, (tab_key.capitalize(), ""))
+            tabs_html += f"""
+            <tr>
+                <td style="padding: 8px 12px; font-weight: 600; color: #1B3A6B; border-bottom: 1px solid #f0f0f0;">{html_escape(label)}</td>
+                <td style="padding: 8px 12px; color: #6b7280; font-size: 13px; border-bottom: 1px solid #f0f0f0;">{html_escape(desc)}</td>
+            </tr>"""
+    else:
+        tabs_html = """
+            <tr>
+                <td style="padding: 8px 12px; color: #6b7280;" colspan="2">Acceso completo a todas las pestañas</td>
+            </tr>"""
+
+    # Guía de primeros pasos
+    guia_items = GUIAS_POR_ROL.get(role, GUIAS_POR_ROL["monitor"])
+    guia_html = ""
+    for i, paso in enumerate(guia_items, 1):
+        guia_html += f"""
+        <div style="display: flex; align-items: flex-start; margin-bottom: 10px;">
+            <div style="min-width: 28px; height: 28px; background: #2563eb; color: white; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; font-size: 13px; margin-right: 12px;">{i}</div>
+            <p style="margin: 0; padding-top: 4px; font-size: 14px; color: #374151; line-height: 1.5;">{paso}</p>
+        </div>"""
+
+    html_body = f"""
+    <html>
+    <body style="font-family: Calibri, Arial, sans-serif; background: #f4f7fa; padding: 20px; margin: 0;">
+        <div style="max-width: 620px; margin: auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,0.08);">
+
+            <!-- Header -->
+            <div style="background: linear-gradient(135deg, #0F2444, #1B3A6B); color: white; padding: 28px 24px; text-align: center;">
+                <h1 style="margin: 0; font-size: 22px; font-weight: 700;">Bienvenido/a a Yachay Deep</h1>
+                <p style="margin: 6px 0 0; opacity: 0.8; font-size: 14px;">Sistema de Monitoreo Académico y Alerta Temprana</p>
+            </div>
+
+            <div style="padding: 28px 24px;">
+
+                <!-- Saludo -->
+                <p style="font-size: 15px; color: #333; margin-bottom: 4px;">Hola <strong>{nombre_safe}</strong>,</p>
+                <p style="font-size: 14px; color: #555; line-height: 1.6;">
+                    Se ha creado tu cuenta en <strong>Yachay Deep</strong>, la plataforma de monitoreo académico
+                    que permite identificar estudiantes en riesgo y coordinar intervenciones oportunas.
+                </p>
+
+                <!-- Credenciales -->
+                <div style="background: #f0f7ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 18px; margin: 20px 0;">
+                    <h3 style="margin: 0 0 12px; font-size: 14px; color: #1e40af;">Tus credenciales de acceso</h3>
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <tr>
+                            <td style="padding: 4px 0; font-weight: 600; color: #374151; width: 120px;">URL:</td>
+                            <td style="padding: 4px 0;"><a href="{app_url}" style="color: #2563eb; text-decoration: none;">{app_url}</a></td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 4px 0; font-weight: 600; color: #374151;">Email:</td>
+                            <td style="padding: 4px 0;">{email_safe}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 4px 0; font-weight: 600; color: #374151;">Contraseña:</td>
+                            <td style="padding: 4px 0; font-family: monospace; background: #e0e7ff; padding: 3px 8px; border-radius: 4px; display: inline-block;">{pass_safe}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 4px 0; font-weight: 600; color: #374151;">Rol:</td>
+                            <td style="padding: 4px 0;"><span style="background: #dbeafe; color: #1e40af; padding: 2px 10px; border-radius: 12px; font-size: 13px; font-weight: 600; text-transform: capitalize;">{role_safe}</span></td>
+                        </tr>
+                    </table>
+                </div>
+
+                <!-- Pestañas asignadas -->
+                <h3 style="font-size: 15px; color: #1B3A6B; margin: 24px 0 10px; border-bottom: 2px solid #2563eb; padding-bottom: 6px;">
+                    Módulos disponibles para ti
+                </h3>
+                <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+                    {tabs_html}
+                </table>
+
+                <!-- Guía de primeros pasos -->
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 18px; margin: 20px 0;">
+                    <h3 style="margin: 0 0 14px; font-size: 15px; color: #1B3A6B;">Primeros pasos</h3>
+                    {guia_html}
+                </div>
+
+                <!-- CTA -->
+                <div style="text-align: center; margin: 28px 0 12px;">
+                    <a href="{app_url}/login" style="display: inline-block; background: linear-gradient(135deg, #1B3A6B, #2563eb); color: white; text-decoration: none; padding: 12px 36px; border-radius: 8px; font-weight: 600; font-size: 15px;">
+                        Ingresar a Yachay Deep
+                    </a>
+                </div>
+
+                <p style="font-size: 12px; color: #9ca3af; text-align: center; margin-top: 20px;">
+                    Te recomendamos cambiar tu contraseña después del primer inicio de sesión.<br>
+                    Si tienes dudas, contacta al administrador del sistema.
+                </p>
+            </div>
+
+            <!-- Footer -->
+            <div style="background: #f9fafb; padding: 16px 24px; border-top: 1px solid #e5e7eb; text-align: center;">
+                <p style="margin: 0; font-size: 12px; color: #9ca3af;">
+                    Yachay Deep — Sistema de Monitoreo Académico<br>
+                    Este correo fue generado automáticamente. Por favor no responder.
+                </p>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "Bienvenido/a a Yachay Deep — Tus credenciales de acceso"
+        msg["From"] = settings.SMTP_FROM or settings.SMTP_USER
+        msg["To"] = to_email
+        msg.attach(MIMEText(html_body, "html", "utf-8"))
+
+        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15) as server:
+            server.starttls()
+            if settings.SMTP_USER and settings.SMTP_PASSWORD:
+                server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+            server.sendmail(msg["From"], [to_email], msg.as_string())
+
+        logger.info(f"Email de bienvenida enviado a {to_email}")
+        return True
+    except Exception as e:
+        logger.error(f"Error enviando email de bienvenida: {e}")
+        return False

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum, JSON
 from sqlalchemy.sql import func
 import enum
 from ..database import Base
@@ -20,3 +20,4 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     last_login = Column(DateTime(timezone=True), nullable=True)
+    permissions = Column(JSON, nullable=True, default=None, comment="Lista de tabs permitidos, ej: ['dashboard','alertas','ficha']")

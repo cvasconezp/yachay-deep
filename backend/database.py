@@ -39,6 +39,9 @@ def upgrade_tables():
     # Aquí solo gestionamos ALTER TABLE para columnas nuevas en tablas existentes.
 
     new_columns: dict[str, list[tuple[str, str]]] = {
+        "users": [
+            ("permissions", "JSON"),
+        ],
         "institutions": [],  # new table, created by create_all()
     "students": [
             ("whatsapp",       "VARCHAR"),

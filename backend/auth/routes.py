@@ -36,6 +36,8 @@ class UserCreate(BaseModel):
     nombre: str
     password: str = Field(..., min_length=8, max_length=128)
     role: UserRole = UserRole.monitor
+    permissions: Optional[list[str]] = None  # tabs permitidos: ["dashboard","alertas",...]
+    send_welcome_email: bool = True
 
 
 class UserUpdate(BaseModel):
@@ -43,6 +45,7 @@ class UserUpdate(BaseModel):
     role: Optional[UserRole] = None
     nombre: Optional[str] = None
     password: Optional[str] = Field(None, min_length=8)
+    permissions: Optional[list[str]] = None
 
 
 class UserResponse(BaseModel):
@@ -52,6 +55,7 @@ class UserResponse(BaseModel):
     role: str
     is_active: bool
     created_at: Optional[datetime]
+    permissions: Optional[list[str]] = None
 
     class Config:
         from_attributes = True
@@ -81,7 +85,7 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db
     response = JSONResponse(content={
         "access_token": token,
         "token_type": "bearer",
-        "user": {"id": user.id, "email": user.email, "nombre": user.nombre, "role": user.role},
+        "user": {"id": user.id, "email": user.email, "nombre": user.nombre, "role": user.role, "permissions": user.permissions},
     })
     response.set_cookie(
         key=COOKIE_NAME,
@@ -118,10 +122,26 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db)):
         nombre=payload.nombre,
         hashed_password=hash_password(payload.password),
         role=payload.role,
+        permissions=payload.permissions,
     )
     db.add(user)
     db.commit()
     db.refresh(user)
+
+    # Enviar email de bienvenida
+    if payload.send_welcome_email:
+        try:
+            from ..services.email import send_welcome_email
+            send_welcome_email(
+                to_email=user.email,
+                nombre=user.nombre,
+                role=user.role,
+                password=payload.password,
+                permissions=user.permissions,
+            )
+        except Exception as e:
+            logger.warning(f"No se pudo enviar email de bienvenida: {e}")
+
     return user
 
 
@@ -144,6 +164,8 @@ def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)
         user.nombre = updates["nombre"]
     if "password" in updates:
         user.hashed_password = hash_password(updates["password"])
+    if "permissions" in updates:
+        user.permissions = updates["permissions"]
     db.commit()
     db.refresh(user)
     return user
