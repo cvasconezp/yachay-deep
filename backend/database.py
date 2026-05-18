@@ -38,14 +38,6 @@ def upgrade_tables():
     # automáticamente por create_tables() ya que están registradas en models/__init__.py.
     # Aquí solo gestionamos ALTER TABLE para columnas nuevas en tablas existentes.
 
-    # ── Migrate enum values for UserRole ──
-    for val in ("coordinador", "docente"):
-        try:
-            conn.execute(text(f"ALTER TYPE userrole ADD VALUE IF NOT EXISTS '{val}'"))
-            conn.commit()
-        except Exception:
-            conn.rollback()
-
     new_columns: dict[str, list[tuple[str, str]]] = {
         "users": [
             ("permissions", "JSON"),
