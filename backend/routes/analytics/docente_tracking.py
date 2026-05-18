@@ -2,9 +2,10 @@
 Módulo: Seguimiento de Calificaciones Docentes.
 Fuente: task_submissions + course_config (en vez de tabla DocenteTracking vacía).
 Muestra qué docentes tienen actividades pendientes por calificar,
-cuántas pendientes tienen y qué estudiantes faltan.
+cuántas pendientes tienen y qué estudiantes faltan — desglosado por actividad.
 """
 from typing import Optional
+from collections import defaultdict
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case, or_
@@ -28,6 +29,15 @@ class EstudiantePendiente(BaseModel):
     tareas_entregadas_sin_calificar: int
     ultima_entrega: Optional[str] = None
 
+class ActividadPendiente(BaseModel):
+    """Desglose de una actividad (unidad) dentro de un curso."""
+    actividad: str                # "Actividad 1", "Actividad 2", etc.
+    unidad: str                   # "1", "2", "3", "4"
+    total: int                    # total entregas en esta actividad
+    calificadas: int
+    pendientes: int
+    estudiantes_pendientes: list[EstudiantePendiente] = []
+
 class CursoPendiente(BaseModel):
     codigo_curso: str
     asignatura: str
@@ -35,6 +45,8 @@ class CursoPendiente(BaseModel):
     total_tareas: int
     calificadas: int
     pendientes: int
+    actividades: list[ActividadPendiente] = []
+    # Keep flat student list for backwards compat
     estudiantes_pendientes: list[EstudiantePendiente] = []
 
 class DocenteTrackingStats(BaseModel):
@@ -112,13 +124,11 @@ def get_docente_tracking(
     if not cursos:
         return []
 
-    # Map codigo_avac -> course info
     curso_map = {}
     for c in cursos:
         if c.codigo_avac:
             curso_map[c.codigo_avac] = c
 
-    # Group courses by docente
     docente_cursos = {}
     for c in cursos:
         doc = c.docente.strip()
@@ -126,12 +136,10 @@ def get_docente_tracking(
             docente_cursos[doc] = {"correo": c.correo_docente, "cursos": []}
         docente_cursos[doc]["cursos"].append(c)
 
-    # Query task_submissions for all relevant courses
     codigos = list(curso_map.keys())
     if not codigos:
         return []
 
-    # Get latest snapshot per course
     latest_snap = db.query(
         TaskSubmission.codigo_curso,
         func.max(TaskSubmission.snapshot_date).label("max_snap"),
@@ -180,13 +188,7 @@ def get_docente_tracking(
             continue
 
         pct = round((calificadas / max(total_tareas, 1)) * 100, 1)
-
-        if pct < 50:
-            alerta = "critico"
-        elif pct < 80:
-            alerta = "atencion"
-        else:
-            alerta = "ok"
+        alerta = "critico" if pct < 50 else ("atencion" if pct < 80 else "ok")
 
         output.append(DocenteTrackingStats(
             docente=docente_name,
@@ -239,14 +241,12 @@ def get_docente_tracking_detalle(
 ):
     """
     Detalle por curso: para cada curso del docente, muestra tareas pendientes
-    y los estudiantes que aún no han sido calificados.
-    Cada codigo_avac es un grupo distinto (misma asignatura, diferente grupo).
+    desglosadas por actividad (unidad 1-4) y estudiantes sin calificar.
     """
     semconfig, pf, periodo_variants = _get_periodo_variants(db)
     if not pf:
         return []
 
-    # Get courses for this docente
     cursos = db.query(CourseConfig).filter(
         CourseConfig.docente == docente_name,
         CourseConfig.codigo_avac.isnot(None),
@@ -259,7 +259,6 @@ def get_docente_tracking_detalle(
     for curso in cursos:
         cod = curso.codigo_avac
 
-        # Latest snapshot
         snap = db.query(func.max(TaskSubmission.snapshot_date)).filter(
             TaskSubmission.codigo_curso == cod,
             _periodo_filter(periodo_variants),
@@ -268,7 +267,6 @@ def get_docente_tracking_detalle(
         if not snap:
             continue
 
-        # Get all submissions for this course at latest snapshot
         subs = db.query(TaskSubmission).filter(
             TaskSubmission.codigo_curso == cod,
             TaskSubmission.snapshot_date == snap,
@@ -278,34 +276,81 @@ def get_docente_tracking_detalle(
         if not subs:
             continue
 
+        # Collect all student IDs for name lookup
+        all_student_ids = list(set(s.student_id for s in subs if s.student_id))
+        student_names = {}
+        if all_student_ids:
+            students = db.query(Student.id, Student.nombre).filter(
+                Student.id.in_(all_student_ids)
+            ).all()
+            student_names = {s.id: s.nombre for s in students}
+
         total = len(subs)
         cal = sum(1 for s in subs if s.calificada)
         pend_subs = [s for s in subs if s.entregada and not s.calificada]
 
-        # Group pending by student
-        student_ids = list(set(s.student_id for s in pend_subs if s.student_id))
-        student_names = {}
-        if student_ids:
-            students = db.query(Student.id, Student.nombre).filter(Student.id.in_(student_ids)).all()
-            student_names = {s.id: s.nombre for s in students}
+        # ── Group by unidad (actividad) ──
+        by_unidad = defaultdict(list)
+        all_by_unidad = defaultdict(list)
+        for s in subs:
+            u = s.unidad or "?"
+            all_by_unidad[u].append(s)
+            if s.entregada and not s.calificada:
+                by_unidad[u].append(s)
 
-        # Build student pending list
-        student_pend_map = {}
+        actividades = []
+        for u in sorted(all_by_unidad.keys(), key=lambda x: (x if x != "?" else "z")):
+            u_subs = all_by_unidad[u]
+            u_pend = by_unidad.get(u, [])
+            u_total = len(u_subs)
+            u_cal = sum(1 for s in u_subs if s.calificada)
+
+            # Build student list for this activity
+            student_pend_map = {}
+            for s in u_pend:
+                sid = s.student_id
+                if sid not in student_pend_map:
+                    student_pend_map[sid] = {"count": 0, "last_entrega": None}
+                student_pend_map[sid]["count"] += 1
+                if s.fecha_entrega:
+                    curr = student_pend_map[sid]["last_entrega"]
+                    if curr is None or s.fecha_entrega > curr:
+                        student_pend_map[sid]["last_entrega"] = s.fecha_entrega
+
+            est_list = []
+            for sid, info in sorted(student_pend_map.items(), key=lambda x: -x[1]["count"]):
+                est_list.append(EstudiantePendiente(
+                    student_id=sid,
+                    nombre=student_names.get(sid, f"ID {sid}"),
+                    tareas_pendientes=info["count"],
+                    tareas_entregadas_sin_calificar=info["count"],
+                    ultima_entrega=info["last_entrega"].isoformat() if info["last_entrega"] else None,
+                ))
+
+            actividades.append(ActividadPendiente(
+                actividad=f"Actividad {u}" if u != "?" else "Sin clasificar",
+                unidad=u,
+                total=u_total,
+                calificadas=u_cal,
+                pendientes=len(u_pend),
+                estudiantes_pendientes=est_list,
+            ))
+
+        # Flat student list (all activities combined) for backwards compat
+        all_pend_map = {}
         for s in pend_subs:
-            if s.student_id not in student_pend_map:
-                student_pend_map[s.student_id] = {
-                    "count": 0,
-                    "last_entrega": None,
-                }
-            student_pend_map[s.student_id]["count"] += 1
+            sid = s.student_id
+            if sid not in all_pend_map:
+                all_pend_map[sid] = {"count": 0, "last_entrega": None}
+            all_pend_map[sid]["count"] += 1
             if s.fecha_entrega:
-                curr = student_pend_map[s.student_id]["last_entrega"]
+                curr = all_pend_map[sid]["last_entrega"]
                 if curr is None or s.fecha_entrega > curr:
-                    student_pend_map[s.student_id]["last_entrega"] = s.fecha_entrega
+                    all_pend_map[sid]["last_entrega"] = s.fecha_entrega
 
-        estudiantes_pend = []
-        for sid, info in sorted(student_pend_map.items(), key=lambda x: -x[1]["count"]):
-            estudiantes_pend.append(EstudiantePendiente(
+        flat_students = []
+        for sid, info in sorted(all_pend_map.items(), key=lambda x: -x[1]["count"]):
+            flat_students.append(EstudiantePendiente(
                 student_id=sid,
                 nombre=student_names.get(sid, f"ID {sid}"),
                 tareas_pendientes=info["count"],
@@ -320,9 +365,9 @@ def get_docente_tracking_detalle(
             total_tareas=total,
             calificadas=cal,
             pendientes=len(pend_subs),
-            estudiantes_pendientes=estudiantes_pend,
+            actividades=actividades,
+            estudiantes_pendientes=flat_students,
         ))
 
-    # Sort: most pending first
     result.sort(key=lambda x: -x.pendientes)
     return result

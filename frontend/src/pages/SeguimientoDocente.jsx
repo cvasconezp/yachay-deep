@@ -14,32 +14,59 @@ const TRACKING_EXPORT_COLS = [
   { key: "alerta", label: "Estado" },
 ];
 
-/* ── Helper: genera mensaje de correo para un docente ── */
+/* ── Helper: genera mensaje formal de correo ── */
 function buildEmailMessage(docenteName, cursos) {
   if (!cursos || cursos.length === 0) return "";
-
   const pendientes = cursos.filter(c => c.pendientes > 0);
   if (pendientes.length === 0) return "";
 
-  // Capitalize first name properly
-  const parts = docenteName.split(" ");
-  const firstName = parts.map(p => p.charAt(0) + p.slice(1).toLowerCase()).join(" ");
+  // Capitalize name nicely
+  const nombre = docenteName.split(" ").map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(" ");
 
-  let lines = [`Estimado/a ${firstName},\n`];
+  let lines = [];
+  lines.push(`Estimada ${nombre},`);
+  lines.push("");
+  lines.push("Reciba un cordial saludo.");
+  lines.push("");
 
-  pendientes.forEach(c => {
+  if (pendientes.length === 1) {
+    const c = pendientes[0];
     const grupoLabel = c.grupo ? ` del grupo ${c.grupo}` : "";
-    const nEstudiantes = c.estudiantes_pendientes?.length || 0;
-    const plural = nEstudiantes === 1 ? "estudiante" : "estudiantes";
-    lines.push(
-      `En la asignatura ${c.asignatura} ${nEstudiantes === 1 ? "queda" : "quedan"} pendiente${nEstudiantes === 1 ? "" : "s"} por calificar a ${nEstudiantes} ${plural}${grupoLabel}.`
-    );
-  });
+    lines.push(`Por medio del presente, me permito informar que en la asignatura ${c.asignatura} aún se registran actividades pendientes de calificación${grupoLabel}:`);
+  } else {
+    lines.push("Por medio del presente, me permito informar que aún se registran actividades pendientes de calificación en las siguientes asignaturas:");
+  }
+  lines.push("");
 
-  lines.push(
-    "\nPor favor, es importante contar con la calificación y retroalimentación para que el estudiante pueda reaprender de tu feedback y tomar las medidas del caso para mejorar la siguiente tarea."
-  );
-  lines.push("\nSaludos cordiales.");
+  for (const c of pendientes) {
+    const grupoLabel = c.grupo ? `Grupo ${c.grupo}` : null;
+    const acts = (c.actividades || []).filter(a => a.pendientes > 0);
+
+    if (pendientes.length > 1) {
+      lines.push(`En la asignatura ${c.asignatura}${grupoLabel ? ` (${grupoLabel})` : ""}:`);
+    }
+
+    if (acts.length > 0) {
+      if (grupoLabel && pendientes.length === 1) {
+        lines.push(`${grupoLabel}:`);
+      }
+      for (const a of acts) {
+        const nEst = a.estudiantes_pendientes?.length || 0;
+        const plural = nEst === 1 ? "estudiante pendiente" : "estudiantes pendientes";
+        lines.push(`  - ${nEst} ${plural} de la ${a.actividad}.`);
+      }
+    } else {
+      // Fallback without activity detail
+      const nEst = c.estudiantes_pendientes?.length || 0;
+      const plural = nEst === 1 ? "estudiante pendiente" : "estudiantes pendientes";
+      lines.push(`  - ${nEst} ${plural} de calificación${grupoLabel ? ` (${grupoLabel})` : ""}.`);
+    }
+    lines.push("");
+  }
+
+  lines.push("Quedamos atentos y agradecemos de antemano su colaboración.");
+  lines.push("");
+  lines.push("Saludos cordiales.");
 
   return lines.join("\n");
 }
@@ -56,6 +83,7 @@ export default function SeguimientoDocente({ embedded = false }) {
   const [detalleData, setDetalleData] = useState(null);
   const [search, setSearch] = useState("");
   const [copied, setCopied] = useState(false);
+  const [expandedActs, setExpandedActs] = useState({});
   const navigate = useNavigate();
 
   const loadData = useCallback(async () => {
@@ -106,6 +134,7 @@ export default function SeguimientoDocente({ embedded = false }) {
     setLoadingDetalle(true);
     setDetalleData(null);
     setCopied(false);
+    setExpandedActs({});
     try {
       const detail = await api.getDocenteTrackingDetalle(docente);
       setDetalleData(detail);
@@ -127,13 +156,15 @@ export default function SeguimientoDocente({ embedded = false }) {
     }
   };
 
+  const toggleAct = (key) => {
+    setExpandedActs(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
   const SortIcon = ({ field }) => (
     <span className="ml-1 text-xs opacity-40">
       {sortField === field ? (sortOrder === "asc" ? "▲" : "▼") : "⇅"}
     </span>
   );
-
-  const Wrap = embedded ? "div" : "div";
 
   return (
     <div className={embedded ? "" : "p-6 space-y-6 max-w-[1400px] mx-auto"}>
@@ -260,7 +291,7 @@ export default function SeguimientoDocente({ embedded = false }) {
         )}
       </div>
 
-      {/* ── Modal detalle: cursos por grupo + estudiantes pendientes ── */}
+      {/* ── Modal detalle: cursos → actividades → estudiantes ── */}
       {detalleDocente && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setDetalleDocente(null)}>
           <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[85vh] overflow-auto" onClick={e => e.stopPropagation()}>
@@ -268,10 +299,9 @@ export default function SeguimientoDocente({ embedded = false }) {
               <div className="flex justify-between items-start">
                 <div>
                   <h2 className="text-xl font-bold text-gray-900">{detalleDocente}</h2>
-                  <p className="text-sm text-gray-500 mt-1">Pendientes por calificar — desglose por curso/grupo y estudiante</p>
+                  <p className="text-sm text-gray-500 mt-1">Pendientes por calificar — desglose por curso, grupo y actividad</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  {/* Botón copiar mensaje */}
                   {detalleData?.some(c => c.pendientes > 0) && (
                     <button
                       onClick={copyMessage}
@@ -304,9 +334,9 @@ export default function SeguimientoDocente({ embedded = false }) {
               {loadingDetalle ? (
                 <div className="text-center py-8 text-gray-400">Cargando detalles...</div>
               ) : detalleData?.length > 0 ? (
-                detalleData.map((curso, idx) => (
-                  <div key={idx} className="border border-gray-200 rounded-xl overflow-hidden">
-                    {/* Cabecera del curso con grupo */}
+                detalleData.map((curso, cidx) => (
+                  <div key={cidx} className="border border-gray-200 rounded-xl overflow-hidden">
+                    {/* Cabecera del curso */}
                     <div className={`px-4 py-3 flex items-center justify-between ${
                       curso.pendientes > 0 ? "bg-red-50" : "bg-green-50"
                     }`}>
@@ -317,7 +347,7 @@ export default function SeguimientoDocente({ embedded = false }) {
                         )}
                         <span className="text-xs text-gray-400 bg-white px-2 py-0.5 rounded">{curso.codigo_curso}</span>
                       </div>
-                      <div className="flex items-center gap-3 text-sm">
+                      <div className="text-sm">
                         {curso.pendientes > 0 ? (
                           <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full font-bold">
                             ({curso.pendientes}/{curso.total_tareas}) por calificar
@@ -330,40 +360,83 @@ export default function SeguimientoDocente({ embedded = false }) {
                       </div>
                     </div>
 
-                    {/* Estudiantes pendientes */}
-                    {curso.estudiantes_pendientes?.length > 0 ? (
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b border-gray-100 bg-white">
-                            <th className="text-left px-4 py-2 text-xs font-medium text-gray-500">Estudiante</th>
-                            <th className="text-center px-4 py-2 text-xs font-medium text-gray-500">Tareas sin calificar</th>
-                            <th className="text-center px-4 py-2 text-xs font-medium text-gray-500">Última entrega</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {curso.estudiantes_pendientes.map((est) => (
-                            <tr
-                              key={est.student_id}
-                              onClick={(e) => { e.stopPropagation(); navigate(`/ficha/${est.student_id}`); }}
-                              className="border-b border-gray-50 cursor-pointer hover:bg-blue-50"
-                            >
-                              <td className="px-4 py-2 text-gray-800">{est.nombre}</td>
-                              <td className="px-4 py-2 text-center">
-                                <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-full text-xs font-bold">
-                                  {est.tareas_pendientes}
-                                </span>
-                              </td>
-                              <td className="px-4 py-2 text-center text-xs text-gray-500">
-                                {est.ultima_entrega
-                                  ? new Date(est.ultima_entrega).toLocaleDateString("es-EC", { day: "2-digit", month: "short", year: "numeric" })
-                                  : "—"}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                    {/* Actividades */}
+                    {curso.actividades?.length > 0 ? (
+                      <div className="divide-y divide-gray-100">
+                        {curso.actividades.map((act, aidx) => {
+                          const actKey = `${cidx}-${aidx}`;
+                          const isExpanded = expandedActs[actKey];
+                          const hasPend = act.pendientes > 0;
+
+                          return (
+                            <div key={aidx}>
+                              {/* Activity header */}
+                              <div
+                                className={`px-4 py-2.5 flex items-center justify-between cursor-pointer hover:bg-gray-50 ${
+                                  hasPend ? "" : "opacity-60"
+                                }`}
+                                onClick={() => hasPend && toggleAct(actKey)}
+                              >
+                                <div className="flex items-center gap-3">
+                                  {hasPend && (
+                                    <svg className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                    </svg>
+                                  )}
+                                  <span className={`text-sm font-medium ${hasPend ? "text-gray-800" : "text-gray-500"}`}>
+                                    {act.actividad}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  {hasPend ? (
+                                    <span className="text-xs font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full">
+                                      {act.estudiantes_pendientes?.length || 0} estudiante{(act.estudiantes_pendientes?.length || 0) !== 1 ? "s" : ""} pendiente{(act.estudiantes_pendientes?.length || 0) !== 1 ? "s" : ""}
+                                    </span>
+                                  ) : (
+                                    <span className="text-xs text-green-600">Calificado ({act.calificadas}/{act.total})</span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Student list for this activity */}
+                              {isExpanded && act.estudiantes_pendientes?.length > 0 && (
+                                <table className="w-full text-sm bg-gray-50/50">
+                                  <thead>
+                                    <tr className="border-b border-gray-100">
+                                      <th className="text-left pl-12 pr-4 py-2 text-xs font-medium text-gray-500">Estudiante</th>
+                                      <th className="text-center px-4 py-2 text-xs font-medium text-gray-500">Sin calificar</th>
+                                      <th className="text-center px-4 py-2 text-xs font-medium text-gray-500">Última entrega</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {act.estudiantes_pendientes.map((est) => (
+                                      <tr
+                                        key={est.student_id}
+                                        onClick={(e) => { e.stopPropagation(); navigate(`/ficha/${est.student_id}`); }}
+                                        className="border-b border-gray-50 cursor-pointer hover:bg-blue-50"
+                                      >
+                                        <td className="pl-12 pr-4 py-2 text-gray-800">{est.nombre}</td>
+                                        <td className="px-4 py-2 text-center">
+                                          <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-full text-xs font-bold">
+                                            {est.tareas_pendientes}
+                                          </span>
+                                        </td>
+                                        <td className="px-4 py-2 text-center text-xs text-gray-500">
+                                          {est.ultima_entrega
+                                            ? new Date(est.ultima_entrega).toLocaleDateString("es-EC", { day: "2-digit", month: "short", year: "numeric" })
+                                            : "—"}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     ) : curso.pendientes > 0 ? (
-                      <div className="px-4 py-3 text-sm text-gray-500 italic">Hay pendientes pero los estudiantes no pudieron ser identificados</div>
+                      <div className="px-4 py-3 text-sm text-gray-500 italic">Hay pendientes pero no se identificaron actividades</div>
                     ) : (
                       <div className="px-4 py-3 text-sm text-green-600">Todas las entregas han sido calificadas</div>
                     )}
