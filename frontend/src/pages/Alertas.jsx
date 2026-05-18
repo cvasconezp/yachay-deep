@@ -98,7 +98,6 @@ export default function Alertas() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [generatingAlerts, setGeneratingAlerts] = useState(false);
   const [filterSeverity, setFilterSeverity] = useState("all");
   const [filterTipo, setFilterTipo] = useState("all");
   const [filterCarrera, setFilterCarrera] = useState("");
@@ -252,25 +251,7 @@ export default function Alertas() {
     }
   };
 
-  const handleGenerateAlerts = async () => {
-    if (!window.confirm("¿Regenerar alertas? Se eliminarán las alertas pendientes actuales y se crearán nuevas basadas en los datos más recientes.")) return;
-    setGeneratingAlerts(true);
-    setError("");
-    try {
-      const result = await api.generateAlerts();
-      const parts = [];
-      if (result.cleaned) parts.push(`${result.cleaned} anteriores eliminadas`);
-      parts.push(`${result.created || 0} nuevas generadas`);
-      if (result.detail) parts.push(result.detail);
-      setSuccess(parts.join(" · "));
-      setTimeout(() => setSuccess(""), 8000);
-      loadAlerts();
-    } catch (e) {
-      setError("Error al generar alertas: " + (e.message || "Intenta de nuevo"));
-    } finally {
-      setGeneratingAlerts(false);
-    }
-  };
+
 
   const toggleExpand = (sid) => {
     setExpandedStudents(prev => {
@@ -327,7 +308,7 @@ export default function Alertas() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Alertas Académicas</h1>
           <p className="text-gray-500 text-sm">Alertas agrupadas por estudiante — el nivel de riesgo refleja la alerta más grave</p>
-          <p className="text-amber-600 text-xs mt-0.5">Basadas en el último scraping de AVAC disponible</p>
+          <p className="text-amber-600 text-xs mt-0.5">Se actualizan automáticamente con cada ejecución del ETL</p>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -336,19 +317,6 @@ export default function Alertas() {
           >
             Entregas pendientes
           </button>
-          {user?.role === "admin" && (
-          <button
-            onClick={handleGenerateAlerts}
-            disabled={generatingAlerts}
-            className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-4 py-2.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 shadow-sm"
-          >
-            {generatingAlerts ? (
-              <><span className="animate-spin">⟳</span> Analizando...</>
-            ) : (
-              <><span>⚡</span> Generar alertas</>
-            )}
-          </button>
-          )}
         </div>
       </div>
 

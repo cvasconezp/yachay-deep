@@ -89,8 +89,10 @@ def generate_alerts_batch(db: Session) -> dict:
 
     Retorna dict con: created, cleaned, timestamp, detail
     """
-    # ── Limpiar alertas stale: eliminar no leídas antes de regenerar ──
-    stale_deleted = db.query(AlertEvent).filter(AlertEvent.leido == False).delete()
+    # ── Full-refresh: eliminar TODAS las alertas auto-generadas antes de regenerar ──
+    # Esto evita duplicados cuando el mismo estudiante tiene la misma condición
+    # en múltiples ejecuciones. Las alertas se regeneran si la condición persiste.
+    stale_deleted = db.query(AlertEvent).delete()
     db.flush()
 
     # Obtener configuración del semestre activo
@@ -270,13 +272,9 @@ def generate_alerts_batch(db: Session) -> dict:
     ).all())
     all_rep_sids = set(rep_enroll_counts.keys()) | set(rep_grade_counts.keys())
 
-    # Dedup
-    threshold_date = now - timedelta(days=7)
+    # Dedup: evitar duplicados dentro de la misma ejecución
+    # (No necesitamos ventana temporal ya que hacemos full-refresh)
     existing_alerts = set()
-    for sid, tipo, cc in db.query(
-        AlertEvent.student_id, AlertEvent.tipo, AlertEvent.codigo_curso
-    ).filter(AlertEvent.created_at >= threshold_date).all():
-        existing_alerts.add((sid, tipo, cc))
 
     created = 0
 
