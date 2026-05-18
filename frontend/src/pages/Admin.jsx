@@ -1251,9 +1251,16 @@ function TabSemestre() {
                     )}
                     {s.calendario_academico && parseCalendario(s.calendario_academico).length > 0 && (
                       <div className="flex flex-wrap gap-2 text-[11px] text-gray-400">
-                        {parseCalendario(s.calendario_academico).map((e, i) => (
-                          <span key={i} className="bg-gray-100 px-2 py-0.5 rounded">
-                            {e.label || e.tipo}: {e.fecha}
+                        {[...parseCalendario(s.calendario_academico)]
+                          .sort((a, b) => (a.fecha || "").localeCompare(b.fecha || ""))
+                          .map((e, i) => (
+                          <span key={i} className={`px-2 py-0.5 rounded ${
+                            e.tipo === "paso_notas" ? "bg-amber-100 text-amber-700 font-medium" :
+                            e.tipo === "examen" ? "bg-purple-100 text-purple-700" :
+                            e.tipo === "recuperacion" ? "bg-red-100 text-red-600" :
+                            "bg-blue-50 text-blue-600"
+                          }`}>
+                            {e.fecha?.split("-").reverse().join("/")} · {e.label || e.tipo}
                           </span>
                         ))}
                       </div>
@@ -1300,40 +1307,59 @@ function TabSemestre() {
                       <p className="text-[11px] text-gray-400 mb-2">
                         Las alertas de "nota cero" solo se generan 7 días después de la primera fecha de entrega.
                       </p>
-                      {editCalendario.map((entry, i) => (
-                        <div key={i} className="flex gap-2 items-center mb-2">
-                          <input type="date" value={entry.fecha || ""}
-                            onChange={e => {
-                              const arr = [...editCalendario];
-                              arr[i] = { ...arr[i], fecha: e.target.value };
-                              setEditCalendario(arr);
-                            }}
-                            className="border border-gray-300 rounded-lg px-2 py-1 text-sm w-40" />
-                          <select value={entry.tipo || "entrega"}
-                            onChange={e => {
-                              const arr = [...editCalendario];
-                              arr[i] = { ...arr[i], tipo: e.target.value };
-                              setEditCalendario(arr);
-                            }}
-                            className="border border-gray-300 rounded-lg px-2 py-1 text-sm">
-                            <option value="entrega">Entrega</option>
-                            <option value="examen">Examen</option>
-                            <option value="paso_notas">Paso de notas</option>
-                            <option value="recuperacion">Recuperación</option>
-                          </select>
-                          <input type="text" value={entry.label || ""} placeholder="Descripción"
-                            onChange={e => {
-                              const arr = [...editCalendario];
-                              arr[i] = { ...arr[i], label: e.target.value };
-                              setEditCalendario(arr);
-                            }}
-                            className="flex-1 border border-gray-300 rounded-lg px-2 py-1 text-sm" />
-                          <button onClick={() => setEditCalendario(arr => arr.filter((_, j) => j !== i))}
-                            className="text-red-400 hover:text-red-600 text-sm px-1">✕</button>
-                        </div>
-                      ))}
+                      <div className="space-y-1">
+                        {[...editCalendario]
+                          .map((entry, origIdx) => ({ ...entry, origIdx }))
+                          .sort((a, b) => (a.fecha || "9999").localeCompare(b.fecha || "9999"))
+                          .map(({ origIdx: i, ...entry }) => {
+                            const isPasoNotas = entry.tipo === "paso_notas";
+                            const isExamen = entry.tipo === "examen";
+                            const isRecup = entry.tipo === "recuperacion";
+                            const rowBg = isPasoNotas ? "bg-amber-50 border-amber-200" :
+                                          isExamen ? "bg-purple-50 border-purple-200" :
+                                          isRecup ? "bg-red-50 border-red-200" :
+                                          "bg-white border-gray-200";
+                            return (
+                              <div key={i} className={`flex gap-2 items-center p-2 rounded-lg border ${rowBg}`}>
+                                <input type="date" value={entry.fecha || ""}
+                                  onChange={e => {
+                                    const arr = [...editCalendario];
+                                    arr[i] = { ...arr[i], fecha: e.target.value };
+                                    setEditCalendario(arr);
+                                  }}
+                                  className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm w-40 bg-white" />
+                                <select value={entry.tipo || "entrega"}
+                                  onChange={e => {
+                                    const arr = [...editCalendario];
+                                    arr[i] = { ...arr[i], tipo: e.target.value };
+                                    setEditCalendario(arr);
+                                  }}
+                                  className={`border rounded-lg px-2 py-1.5 text-sm font-medium ${
+                                    isPasoNotas ? "border-amber-300 text-amber-700 bg-amber-50" :
+                                    isExamen ? "border-purple-300 text-purple-700 bg-purple-50" :
+                                    isRecup ? "border-red-300 text-red-600 bg-red-50" :
+                                    "border-gray-300 text-gray-700 bg-white"
+                                  }`}>
+                                  <option value="entrega">Entrega</option>
+                                  <option value="examen">Examen</option>
+                                  <option value="paso_notas">Paso de notas</option>
+                                  <option value="recuperacion">Recuperación</option>
+                                </select>
+                                <input type="text" value={entry.label || ""} placeholder="Descripción"
+                                  onChange={e => {
+                                    const arr = [...editCalendario];
+                                    arr[i] = { ...arr[i], label: e.target.value };
+                                    setEditCalendario(arr);
+                                  }}
+                                  className="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white" />
+                                <button onClick={() => setEditCalendario(arr => arr.filter((_, j) => j !== i))}
+                                  className="text-red-400 hover:text-red-600 text-lg px-2 hover:bg-red-50 rounded">✕</button>
+                              </div>
+                            );
+                          })}
+                      </div>
                       <button onClick={() => setEditCalendario(arr => [...arr, { fecha: "", tipo: "entrega", label: "" }])}
-                        className="text-xs text-blue-600 hover:text-blue-800 font-medium">
+                        className="text-xs text-blue-600 hover:text-blue-800 font-medium mt-2 inline-block">
                         + Agregar fecha
                       </button>
                     </div>
