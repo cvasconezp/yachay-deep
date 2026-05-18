@@ -18,6 +18,7 @@ const NAV_ITEMS = [
   { path: "/tutorias",       label: "Tutorías",               icon: "📋" },
   // ── Institucional ──
   { path: "/resumen",        label: "Análisis Institucional", icon: "📊" },
+  { path: "/about",          label: "Sobre Yachay Deep",      icon: "ℹ️" },
 ];
 
 const ADMIN_ITEMS = [
