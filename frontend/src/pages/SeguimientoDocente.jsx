@@ -7,7 +7,7 @@ import ExportExcelButton from "../components/ExportExcelButton";
 const TRACKING_EXPORT_COLS = [
   { key: "docente", label: "Docente" },
   { key: "total_cursos", label: "Cursos" },
-  { key: "total_tareas", label: "Total Tareas" },
+  { key: "total_tareas", label: "Total Entregas" },
   { key: "actividades_calificadas", label: "Calificadas" },
   { key: "actividades_pendientes", label: "Pendientes" },
   { key: "porcentaje_calificacion", label: "% Calificación" },
@@ -84,25 +84,17 @@ export default function SeguimientoDocente({ embedded = false }) {
     }
   };
 
-  const getEstadoBadge = (estado) => {
-    if (estado === "critico") return { bg: "bg-red-100 text-red-700 border-red-200", label: "Crítico" };
-    if (estado === "atencion") return { bg: "bg-yellow-100 text-yellow-700 border-yellow-200", label: "Atención" };
-    return { bg: "bg-green-100 text-green-700 border-green-200", label: "Ok" };
-  };
-
   const SortIcon = ({ field }) => {
-    if (sortField !== field) return <span className="text-gray-300 ml-1">↕</span>;
-    return <span className="ml-1">{sortOrder === "asc" ? "▲" : "▼"}</span>;
+    if (sortField !== field) return <span className="text-gray-300 ml-0.5 text-[10px]">↕</span>;
+    return <span className="ml-0.5 text-[10px]">{sortOrder === "asc" ? "▲" : "▼"}</span>;
   };
 
   return (
     <div>
       {!embedded && (
-        <div className="flex items-center justify-between mb-1">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Seguimiento Docente</h1>
-            <p className="text-gray-500 text-sm">Pendientes por calificar por docente</p>
-          </div>
+        <div className="mb-1">
+          <h1 className="text-2xl font-bold text-gray-900">Seguimiento Docente</h1>
+          <p className="text-gray-500 text-sm">Pendientes por calificar por docente</p>
         </div>
       )}
 
@@ -112,7 +104,7 @@ export default function SeguimientoDocente({ embedded = false }) {
 
       {/* KPI Cards */}
       {!loading && resumen && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
           <SummaryCard label="Docentes" value={resumen.total_docentes || 0} color="blue" />
           <SummaryCard label="Total Pendientes" value={resumen.total_pendientes || 0} color="red" />
           <SummaryCard label="Prom. Calificación" value={`${(resumen.promedio_general_calificacion || 0).toFixed(0)}%`} color="green" />
@@ -121,20 +113,22 @@ export default function SeguimientoDocente({ embedded = false }) {
         </div>
       )}
 
-      {/* Search + Export */}
-      <div className="flex items-center gap-3 mb-4">
-        <input
-          type="text"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Buscar docente o asignatura..."
-          className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
+      {/* Búsqueda + Export */}
+      <div className="bg-white rounded-xl border border-gray-200 p-3 mb-4 flex flex-wrap gap-3 items-center">
+        <div className="flex-1 min-w-[200px]">
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar por docente o asignatura..."
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
         <ExportExcelButton data={filteredData} columns={TRACKING_EXPORT_COLS} filename="seguimiento_docentes" />
         <span className="text-sm text-gray-500">{filteredData.length} docentes</span>
       </div>
 
-      {/* Table */}
+      {/* Tabla */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-20 text-gray-400">Cargando...</div>
@@ -142,7 +136,7 @@ export default function SeguimientoDocente({ embedded = false }) {
           <div className="text-center py-20 text-gray-400">
             <div className="text-4xl mb-3">📝</div>
             <div className="font-medium text-gray-500 mb-1">No hay datos de seguimiento</div>
-            <div className="text-xs text-gray-400">Los datos se generan después del scraping de tareas AVAC</div>
+            <div className="text-xs text-gray-400">Los datos se generan después del scraping de tareas AVAC.<br/>Verifica que CourseConfig tenga docentes asignados.</div>
           </div>
         ) : (
           <table className="w-full text-sm">
@@ -151,74 +145,70 @@ export default function SeguimientoDocente({ embedded = false }) {
                 <th className="text-left px-4 py-3 font-semibold text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort("docente")}>
                   Docente <SortIcon field="docente" />
                 </th>
-                <th className="text-center px-4 py-3 font-semibold text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort("total_cursos")}>
-                  Cursos <SortIcon field="total_cursos" />
-                </th>
-                <th className="text-center px-4 py-3 font-semibold text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort("total_tareas")}>
-                  Total <SortIcon field="total_tareas" />
-                </th>
-                <th className="text-center px-4 py-3 font-semibold text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort("actividades_calificadas")}>
-                  Calificadas <SortIcon field="actividades_calificadas" />
-                </th>
+                <th className="text-left px-4 py-3 font-semibold text-gray-700">Asignaturas</th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort("actividades_pendientes")}>
-                  Pendientes <SortIcon field="actividades_pendientes" />
+                  Por calificar <SortIcon field="actividades_pendientes" />
                 </th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort("porcentaje_calificacion")}>
-                  % Calif. <SortIcon field="porcentaje_calificacion" />
+                  Progreso <SortIcon field="porcentaje_calificacion" />
                 </th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-700">Estado</th>
               </tr>
             </thead>
             <tbody>
               {sortedData.map((d, i) => {
-                const badge = getEstadoBadge(d.alerta);
+                const pend = d.actividades_pendientes || 0;
+                const total = d.total_tareas || 0;
+                const cal = d.actividades_calificadas || 0;
+                const pct = d.porcentaje_calificacion || 0;
                 return (
                   <tr
                     key={`${d.docente}-${i}`}
                     onClick={() => openDetalle(d.docente)}
                     className={`border-b border-gray-100 cursor-pointer hover:bg-blue-50 transition-colors ${
-                      d.alerta === "critico" ? "bg-red-50/40" : d.alerta === "atencion" ? "bg-yellow-50/40" : ""
+                      d.alerta === "critico" ? "bg-red-50/50" : d.alerta === "atencion" ? "bg-yellow-50/40" : ""
                     }`}
                   >
                     <td className="px-4 py-3">
                       <div className="font-medium text-gray-900">{d.docente}</div>
-                      <div className="text-xs text-gray-400 truncate max-w-[250px]">{d.cursos?.join(", ")}</div>
                     </td>
-                    <td className="px-4 py-3 text-center font-semibold">{d.total_cursos}</td>
-                    <td className="px-4 py-3 text-center text-gray-600">{d.total_tareas}</td>
-                    <td className="px-4 py-3 text-center font-semibold text-green-600">{d.actividades_calificadas}</td>
+                    <td className="px-4 py-3">
+                      <div className="text-xs text-gray-500 truncate max-w-[300px]">{d.cursos?.join(", ") || "—"}</div>
+                    </td>
                     <td className="px-4 py-3 text-center">
-                      {d.actividades_pendientes > 0 ? (
-                        <span className={`font-bold px-2 py-0.5 rounded-full text-xs ${
-                          d.actividades_pendientes > 20 ? "bg-red-100 text-red-700" :
-                          d.actividades_pendientes > 5 ? "bg-yellow-100 text-yellow-700" :
-                          "bg-orange-100 text-orange-700"
-                        }`}>{d.actividades_pendientes}</span>
+                      {pend > 0 ? (
+                        <span className={`font-bold text-sm ${pend > 20 ? "text-red-600" : pend > 5 ? "text-yellow-600" : "text-orange-600"}`}>
+                          ({pend}/{total})
+                        </span>
+                      ) : total > 0 ? (
+                        <span className="text-green-600 font-semibold text-sm">✓ ({cal}/{total})</span>
                       ) : (
-                        <span className="text-green-500 text-xs">✓</span>
+                        <span className="text-gray-300">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-center">
+                    <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-2">
-                        <div className="w-16 h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="w-20 h-2.5 bg-gray-100 rounded-full overflow-hidden">
                           <div
-                            className={`h-full rounded-full ${
-                              d.porcentaje_calificacion >= 80 ? "bg-green-500" :
-                              d.porcentaje_calificacion >= 60 ? "bg-yellow-500" : "bg-red-500"
+                            className={`h-full rounded-full transition-all ${
+                              pct >= 80 ? "bg-green-500" : pct >= 60 ? "bg-yellow-500" : "bg-red-500"
                             }`}
-                            style={{ width: `${d.porcentaje_calificacion}%` }}
+                            style={{ width: `${pct}%` }}
                           />
                         </div>
-                        <span className={`font-mono font-semibold text-xs ${
-                          d.porcentaje_calificacion >= 80 ? "text-green-600" :
-                          d.porcentaje_calificacion >= 60 ? "text-yellow-600" : "text-red-600"
-                        }`}>{d.porcentaje_calificacion}%</span>
+                        <span className={`font-mono text-xs font-semibold w-10 text-right ${
+                          pct >= 80 ? "text-green-600" : pct >= 60 ? "text-yellow-600" : "text-red-600"
+                        }`}>{pct}%</span>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <span className={`text-xs font-semibold px-2 py-1 rounded-full border ${badge.bg}`}>
-                        {badge.label}
-                      </span>
+                      {d.alerta === "critico" ? (
+                        <span className="text-xs font-semibold px-2 py-1 rounded-full bg-red-100 text-red-700 border border-red-200">Crítico</span>
+                      ) : d.alerta === "atencion" ? (
+                        <span className="text-xs font-semibold px-2 py-1 rounded-full bg-yellow-100 text-yellow-700 border border-yellow-200">Atención</span>
+                      ) : (
+                        <span className="text-xs font-semibold px-2 py-1 rounded-full bg-green-100 text-green-700 border border-green-200">Ok</span>
+                      )}
                     </td>
                   </tr>
                 );
@@ -228,7 +218,7 @@ export default function SeguimientoDocente({ embedded = false }) {
         )}
       </div>
 
-      {/* Modal detalle por curso */}
+      {/* ── Modal detalle: cursos + estudiantes pendientes ── */}
       {detalleDocente && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setDetalleDocente(null)}>
           <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[85vh] overflow-auto" onClick={e => e.stopPropagation()}>
@@ -236,45 +226,51 @@ export default function SeguimientoDocente({ embedded = false }) {
               <div className="flex justify-between items-start">
                 <div>
                   <h2 className="text-xl font-bold text-gray-900">{detalleDocente}</h2>
-                  <p className="text-sm text-gray-500 mt-1">Pendientes por calificar, desglosado por curso y estudiante</p>
+                  <p className="text-sm text-gray-500 mt-1">Pendientes por calificar — desglose por curso y estudiante</p>
                 </div>
                 <button onClick={() => setDetalleDocente(null)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
               </div>
             </div>
 
-            <div className="p-6 space-y-6">
+            <div className="p-6 space-y-5">
               {loadingDetalle ? (
                 <div className="text-center py-8 text-gray-400">Cargando detalles...</div>
               ) : detalleData?.length > 0 ? (
                 detalleData.map((curso, idx) => (
                   <div key={idx} className="border border-gray-200 rounded-xl overflow-hidden">
-                    <div className="bg-gray-50 px-4 py-3 flex items-center justify-between">
+                    {/* Cabecera del curso */}
+                    <div className={`px-4 py-3 flex items-center justify-between ${
+                      curso.pendientes > 0 ? "bg-red-50" : "bg-green-50"
+                    }`}>
                       <div className="flex items-center gap-3">
                         <span className="font-semibold text-gray-800">{curso.asignatura}</span>
-                        <span className="text-xs text-gray-400">{curso.codigo_curso}</span>
+                        <span className="text-xs text-gray-400 bg-white px-2 py-0.5 rounded">{curso.codigo_curso}</span>
                       </div>
-                      <div className="flex items-center gap-4 text-xs">
-                        <span className="text-green-600 font-semibold">{curso.calificadas} calificadas</span>
-                        {curso.pendientes > 0 && (
-                          <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-bold">
-                            {curso.pendientes} pendientes
+                      <div className="flex items-center gap-3 text-sm">
+                        {curso.pendientes > 0 ? (
+                          <span className="bg-red-100 text-red-700 px-3 py-1 rounded-full font-bold">
+                            ({curso.pendientes}/{curso.total_tareas}) por calificar
+                          </span>
+                        ) : (
+                          <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full font-semibold">
+                            ✓ Todo calificado ({curso.calificadas}/{curso.total_tareas})
                           </span>
                         )}
-                        <span className="text-gray-500">{curso.total_tareas} total</span>
                       </div>
                     </div>
 
+                    {/* Estudiantes pendientes */}
                     {curso.estudiantes_pendientes?.length > 0 ? (
                       <table className="w-full text-sm">
                         <thead>
-                          <tr className="border-b border-gray-100">
+                          <tr className="border-b border-gray-100 bg-white">
                             <th className="text-left px-4 py-2 text-xs font-medium text-gray-500">Estudiante</th>
-                            <th className="text-center px-4 py-2 text-xs font-medium text-gray-500">Tareas Pendientes</th>
-                            <th className="text-center px-4 py-2 text-xs font-medium text-gray-500">Última Entrega</th>
+                            <th className="text-center px-4 py-2 text-xs font-medium text-gray-500">Tareas sin calificar</th>
+                            <th className="text-center px-4 py-2 text-xs font-medium text-gray-500">Última entrega</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {curso.estudiantes_pendientes.map((est, ei) => (
+                          {curso.estudiantes_pendientes.map((est) => (
                             <tr
                               key={est.student_id}
                               onClick={(e) => { e.stopPropagation(); navigate(`/ficha/${est.student_id}`); }}
@@ -288,20 +284,26 @@ export default function SeguimientoDocente({ embedded = false }) {
                               </td>
                               <td className="px-4 py-2 text-center text-xs text-gray-500">
                                 {est.ultima_entrega
-                                  ? new Date(est.ultima_entrega).toLocaleDateString("es-EC", { day: "2-digit", month: "short" })
+                                  ? new Date(est.ultima_entrega).toLocaleDateString("es-EC", { day: "2-digit", month: "short", year: "numeric" })
                                   : "—"}
                               </td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
+                    ) : curso.pendientes > 0 ? (
+                      <div className="px-4 py-3 text-sm text-gray-500 italic">Hay pendientes pero los estudiantes no pudieron ser identificados</div>
                     ) : (
-                      <div className="px-4 py-3 text-sm text-green-600">✓ Todas las entregas calificadas</div>
+                      <div className="px-4 py-3 text-sm text-green-600">✓ Todas las entregas han sido calificadas</div>
                     )}
                   </div>
                 ))
               ) : (
-                <div className="text-center py-8 text-gray-400">No hay datos disponibles para este docente</div>
+                <div className="text-center py-8 text-gray-400">
+                  <div className="text-3xl mb-2">📭</div>
+                  <div>No hay datos de tareas para los cursos de este docente</div>
+                  <div className="text-xs mt-1">Verifica que los cursos tengan código AVAC asignado en CourseConfig</div>
+                </div>
               )}
             </div>
           </div>
