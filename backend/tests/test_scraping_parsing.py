@@ -328,3 +328,102 @@ class TestColumnasEstandar:
         assert "autoevaluacion" in PALABRAS_EXCLUIDAS
         assert "cuestionario" in PALABRAS_EXCLUIDAS
         assert len(PALABRAS_EXCLUIDAS) >= 4
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Tests para _extraer_pendientes y mejoras de cursos especiales
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestExtraerPendientes:
+    """Tests para la función _extraer_pendientes."""
+
+    def test_extraer_pendientes_html(self):
+        """Extrae pendientes desde HTML de resumen de actividad."""
+        from backend.scraping.estado_tareas import _extraer_pendientes
+
+        # Mock session que retorna HTML con tabla de resumen
+        class MockResponse:
+            text = """
+            <html><body>
+            <table>
+                <tr><th>Participantes</th><td>35</td></tr>
+                <tr><th>Enviados</th><td>30</td></tr>
+                <tr><th>Pendientes por calificar</th><td>5</td></tr>
+            </table>
+            </body></html>
+            """
+        class MockSession:
+            def get(self, url, timeout=30):
+                return MockResponse()
+
+        result = _extraer_pendientes(MockSession(), "http://test", "123", "1")
+        assert result.get("Pendientes Actividad 1") == "5"
+        assert result.get("Participantes Actividad 1") == "35"
+        assert result.get("Enviados Actividad 1") == "30"
+
+    def test_extraer_pendientes_no_data(self):
+        """Retorna dict vacío si no hay tabla de resumen."""
+        from backend.scraping.estado_tareas import _extraer_pendientes
+
+        class MockResponse:
+            text = "<html><body><p>No summary</p></body></html>"
+        class MockSession:
+            def get(self, url, timeout=30):
+                return MockResponse()
+
+        result = _extraer_pendientes(MockSession(), "http://test", "123", "2")
+        assert result == {}
+
+
+class TestExpandirResumenPendientes:
+    """Tests para _expandir_resumen_pendientes del transformer."""
+
+    def test_expande_pendientes_a_filas(self):
+        """Formato resumen con pendientes se expande a filas por actividad."""
+        import pandas as pd
+        from backend.etl.transformers import _expandir_resumen_pendientes
+
+        df = pd.DataFrame([{
+            "código": "395484",
+            "fecha": "2026-05-18",
+            "especial": "No",
+            "alumnos": 35,
+            "pendientes_actividad_1": "5",
+            "pendientes_actividad_2": "0",
+            "_fuente": "Resumen_General.csv",
+        }])
+        result = _expandir_resumen_pendientes(df)
+        assert len(result) == 2
+        row1 = result[result["actividad"] == "Actividad Unidad 1"].iloc[0]
+        assert row1["pendientes"] == 5
+        assert row1["calificada"] == "No"
+        row2 = result[result["actividad"] == "Actividad Unidad 2"].iloc[0]
+        assert row2["pendientes"] == 0
+        assert row2["calificada"] == "Sí"
+
+    def test_no_pendientes_returns_original(self):
+        """Sin columnas de pendientes retorna el df original."""
+        import pandas as pd
+        from backend.etl.transformers import _expandir_resumen_pendientes
+
+        df = pd.DataFrame([{
+            "código": "395484",
+            "fecha": "2026-05-18",
+            "_fuente": "Resumen_General.csv",
+        }])
+        result = _expandir_resumen_pendientes(df)
+        assert len(result) == 1
+        assert "código" in result.columns
+
+
+class TestParseEstadoTareaFinalizado:
+    """Tests para parse_estado_tarea con estado 'Finalizado'."""
+
+    def test_finalizado_total_counts_as_delivered_and_graded(self):
+        """Estado 'Finalizado (Total)' de cursos especiales cuenta como entregada y calificada."""
+        from backend.etl.transformers import parse_estado_tarea
+
+        entregada, calificada, retrasada = parse_estado_tarea("Finalizado (Total)")
+        assert entregada is True
+        assert calificada is True
+        assert retrasada is False

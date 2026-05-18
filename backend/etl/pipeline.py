@@ -426,8 +426,12 @@ class ETLPipeline:
                 logger.error("Error en migración P67: %s", e, exc_info=True)
 
             # 2d. Procesar Resumen_General (seguimiento de calificación docente)
+            #     Buscar en Reportes/ y en Tareas/ (el scraping genera Resumen_General en Tareas/)
             try:
                 df_resumen = transform_resumen_general(settings.DATA_PATH_REPORTE)
+                df_resumen_tareas = transform_resumen_general(settings.DATA_PATH_TAREAS)
+                if not df_resumen_tareas.empty:
+                    df_resumen = pd.concat([df_resumen, df_resumen_tareas], ignore_index=True) if not df_resumen.empty else df_resumen_tareas
                 if not df_resumen.empty:
                     logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Procesando Resumen_General ({len(df_resumen)} registros)...")
                     n_resumen = self._upsert_resumen_general(df_resumen)

@@ -33,6 +33,7 @@ class CourseConfig(Base):
 
     # Control de activación
     activo = Column(Boolean, default=True, nullable=False)      # false = no scrapar este semestre
+    es_especial = Column(Boolean, default=False, nullable=False) # True = curso sin actividades individuales (solo totales por unidad)
     notas = Column(Text, nullable=True)                         # observaciones del admin
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())

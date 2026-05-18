@@ -134,10 +134,48 @@ def _procesar_reporte_general(soup, es_especial=False):
 # SCRAPING PRINCIPAL
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _extraer_pendientes(session, base_url: str, id_tarea: str, unidad: str) -> dict:
+    """
+    Visita mod/assign/view.php?id={id_tarea} (sin action=grading) para extraer
+    el resumen de la actividad: Participantes, Enviados, Pendientes por calificar.
+    Retorna dict con las métricas encontradas.
+    """
+    resumen = {}
+    try:
+        url_view = f"{base_url}/mod/assign/view.php?id={id_tarea}"
+        resp = session.get(url_view, timeout=30)
+        soup = BeautifulSoup(resp.text, "html.parser")
+
+        # Buscar "Pendientes por calificar" en la tabla resumen
+        th_pend = soup.find(string=re.compile("Pendientes por calificar", re.IGNORECASE))
+        if th_pend:
+            td = th_pend.find_parent().find_next_sibling("td")
+            if td:
+                resumen[f"Pendientes Actividad {unidad}"] = _limpiar(td.get_text())
+
+        # También capturar Participantes y Enviados si existen
+        for label in ["Participantes", "Enviados"]:
+            th = soup.find(string=re.compile(label, re.IGNORECASE))
+            if th:
+                td = th.find_parent().find_next_sibling("td")
+                if td:
+                    resumen[f"{label} Actividad {unidad}"] = _limpiar(td.get_text())
+
+    except Exception as e:
+        logger.debug(f"No se pudieron extraer pendientes de tarea {id_tarea}: {e}")
+
+    return resumen
+
+
 def scrape_tareas(output_dir: str, codigos=None, base_url: str = None, db=None):
     """
     Scraping de estado de tareas para cada curso activo.
     Prioridad de autenticación: cookie → Selenium → error.
+
+    Mejoras sobre versión anterior:
+    - Soporte para cursos especiales (sin actividades individuales, solo totales por unidad)
+    - Extracción de "Pendientes por calificar" por actividad
+    - Generación de Resumen_General.csv para DocenteTracking
 
     Args:
         output_dir: carpeta donde guardar los CSVs estado_*.csv
@@ -159,6 +197,21 @@ def scrape_tareas(output_dir: str, codigos=None, base_url: str = None, db=None):
     if not codigos:
         logger.warning("No hay códigos de cursos activos para scrapear tareas.")
         return {"codigos_procesados": 0, "errores": []}
+
+    # Cargar mapa de cursos especiales desde CourseConfig
+    cursos_especiales = set()
+    if db:
+        try:
+            from ..models.course_config import CourseConfig
+            especiales = db.query(CourseConfig.codigo_avac).filter(
+                CourseConfig.es_especial == True,
+                CourseConfig.activo == True
+            ).all()
+            cursos_especiales = {c.codigo_avac for c in especiales}
+            if cursos_especiales:
+                logger.info(f"📋 {len(cursos_especiales)} cursos especiales configurados")
+        except Exception as e:
+            logger.warning(f"No se pudo cargar cursos especiales: {e}")
 
     # Autenticación: cookie → Selenium → error
     session_cookie = _settings.AVAC_SESSION_COOKIE
@@ -192,13 +245,20 @@ def scrape_tareas(output_dir: str, codigos=None, base_url: str = None, db=None):
         logger.error("No se pudo autenticar en AVAC para tareas (ni cookie ni Selenium).")
         return {"codigos_procesados": 0, "errores": ["Autenticación fallida"]}
 
-    logger.info(f"Procesando tareas de {len(codigos)} cursos...")
+    logger.info(f"Procesando tareas de {len(codigos)} cursos ({len(cursos_especiales)} especiales)...")
     errores = []
     procesados = 0
+    resumenes = []  # Para Resumen_General.csv
 
     for codigo_curso in codigos:
         try:
             start_time = time.time()
+            es_especial = codigo_curso in cursos_especiales
+            resumen_curso = {
+                "Código": codigo_curso,
+                "Fecha": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+                "Especial": "Sí" if es_especial else "No",
+            }
 
             # A. Buscar ID del curso (formato Moodle 4.x)
             resp = session.get(
@@ -223,67 +283,75 @@ def scrape_tareas(output_dir: str, codigos=None, base_url: str = None, db=None):
             url_calif = f"{base_url}/grade/report/index.php?id={id_curso}"
             resp_calif = session.get(url_calif, timeout=30)
             soup_calif = BeautifulSoup(resp_calif.content, "html.parser", from_encoding="utf-8")
-            datos_estudiantes = _procesar_reporte_general(soup_calif, es_especial=False)
-            logger.info(f"  {codigo_curso}: {len(datos_estudiantes)} alumnos en tabla general")
+            datos_estudiantes = _procesar_reporte_general(soup_calif, es_especial=es_especial)
+            logger.info(f"  {codigo_curso}: {len(datos_estudiantes)} alumnos en tabla general" +
+                        (" (ESPECIAL)" if es_especial else ""))
 
-            # C. Detalles de tareas por unidad
-            links_tareas = soup_calif.select("th a[href*='/mod/assign/view.php?id=']")
+            # C. Detalles de tareas por unidad (solo cursos normales)
+            if not es_especial:
+                links_tareas = soup_calif.select("th a[href*='/mod/assign/view.php?id=']")
 
-            tareas_ids_vistos = set()
-            for link in links_tareas:
-                titulo = link.get_text(strip=True)
-                href = link["href"]
-                id_tarea = parse_qs(urlparse(href).query).get("id", [None])[0]
+                tareas_ids_vistos = set()
+                for link in links_tareas:
+                    titulo = link.get_text(strip=True)
+                    href = link["href"]
+                    id_tarea = parse_qs(urlparse(href).query).get("id", [None])[0]
 
-                if id_tarea in tareas_ids_vistos:
-                    continue
-
-                tit_norm = _normalizar(titulo)
-                if any(ex in tit_norm for ex in PALABRAS_EXCLUIDAS):
-                    continue
-
-                # Detectar unidad (1-4)
-                unidad_detectada = None
-                for u, keys in EQUIVALENCIA_UNIDADES.items():
-                    if re.search(r"\b(" + "|".join(keys) + r")\b", tit_norm):
-                        unidad_detectada = u
-                        break
-                if not unidad_detectada:
-                    continue
-
-                tareas_ids_vistos.add(id_tarea)
-                logger.debug(f"    Tarea U{unidad_detectada}: {titulo}")
-
-                # Detalles por alumno desde tabla de grading
-                url_g = f"{base_url}/mod/assign/view.php?id={id_tarea}&action=grading&perpage=5000"
-                s_grad = BeautifulSoup(session.get(url_g, timeout=60).text, "html.parser")
-
-                for fila in s_grad.select("table.generaltable tbody tr"):
-                    if "@" not in fila.get_text():
+                    if id_tarea in tareas_ids_vistos:
                         continue
 
-                    def gv(cls_num):
-                        c = fila.select_one(f".c{cls_num}")
-                        return _limpiar(c.get_text(" ", strip=True)) if c else ""
-
-                    email = gv(1).lower()
-                    if not email or "@" not in email:
+                    tit_norm = _normalizar(titulo)
+                    if any(ex in tit_norm for ex in PALABRAS_EXCLUIDAS):
                         continue
 
-                    if email not in datos_estudiantes:
-                        datos_estudiantes[email] = {"Nombre": gv(0), "Correo": email}
+                    # Detectar unidad (1-4)
+                    unidad_detectada = None
+                    for u, keys in EQUIVALENCIA_UNIDADES.items():
+                        if re.search(r"\b(" + "|".join(keys) + r")\b", tit_norm):
+                            unidad_detectada = u
+                            break
+                    if not unidad_detectada:
+                        continue
 
-                    d = datos_estudiantes[email]
-                    u = unidad_detectada
-                    d[f"Estado {u}"] = gv(2)
-                    d[f"Calificación {u}"] = gv(3)
-                    d[f"Última modificación (entrega) {u}"] = gv(4)
-                    d[f"Archivos enviados {u}"] = gv(5)
-                    d[f"Última modificación (calificación) {u}"] = gv(6)
-                    d[f"Comentarios de retroalimentación {u}"] = gv(7)
-                    d[f"Anotar PDF {u}"] = gv(8)
-                    d[f"Archivos de retroalimentación {u}"] = gv(9)
-                    d[f"Calificación final {u}"] = gv(10)
+                    tareas_ids_vistos.add(id_tarea)
+                    logger.debug(f"    Tarea U{unidad_detectada}: {titulo}")
+
+                    # Extraer pendientes por calificar desde la página resumen de la actividad
+                    pendientes_data = _extraer_pendientes(session, base_url, id_tarea, unidad_detectada)
+                    resumen_curso.update(pendientes_data)
+
+                    # Detalles por alumno desde tabla de grading
+                    url_g = f"{base_url}/mod/assign/view.php?id={id_tarea}&action=grading&perpage=5000"
+                    s_grad = BeautifulSoup(session.get(url_g, timeout=60).text, "html.parser")
+
+                    for fila in s_grad.select("table.generaltable tbody tr"):
+                        if "@" not in fila.get_text():
+                            continue
+
+                        def gv(cls_num):
+                            c = fila.select_one(f".c{cls_num}")
+                            return _limpiar(c.get_text(" ", strip=True)) if c else ""
+
+                        email = gv(1).lower()
+                        if not email or "@" not in email:
+                            continue
+
+                        if email not in datos_estudiantes:
+                            datos_estudiantes[email] = {"Nombre": gv(0), "Correo": email}
+
+                        d = datos_estudiantes[email]
+                        u = unidad_detectada
+                        d[f"Estado {u}"] = gv(2)
+                        d[f"Calificación {u}"] = gv(3)
+                        d[f"Última modificación (entrega) {u}"] = gv(4)
+                        d[f"Archivos enviados {u}"] = gv(5)
+                        d[f"Última modificación (calificación) {u}"] = gv(6)
+                        d[f"Comentarios de retroalimentación {u}"] = gv(7)
+                        d[f"Anotar PDF {u}"] = gv(8)
+                        d[f"Archivos de retroalimentación {u}"] = gv(9)
+                        d[f"Calificación final {u}"] = gv(10)
+            else:
+                logger.info(f"  {codigo_curso}: curso especial — usando totales de reporte general")
 
             # D. Calcular totales y guardar CSV
             filas_csv = []
@@ -292,9 +360,11 @@ def scrape_tareas(output_dir: str, codigos=None, base_url: str = None, db=None):
                 entregadas = calificadas = 0
                 for u in ["1", "2", "3", "4"]:
                     est = str(row.get(f"Estado {u}", "")).lower()
-                    if "enviado" in est or "calificado" in est:
+                    calif = str(row.get(f"Calificación {u}", ""))
+                    # Cursos especiales: si hay calificación y no es "-", cuenta como entregada/calificada
+                    if "enviado" in est or "calificado" in est or (es_especial and calif and calif != "-"):
                         entregadas += 1
-                    if "calificado" in est:
+                    if "calificado" in est or (es_especial and calif and calif != "-"):
                         calificadas += 1
                 row["Total Entregas"] = entregadas
                 row["Total Calificadas"] = calificadas
@@ -312,9 +382,23 @@ def scrape_tareas(output_dir: str, codigos=None, base_url: str = None, db=None):
             logger.info(f"  {codigo_curso}: guardado en {elapsed}s ({len(filas_csv)} filas)")
             procesados += 1
 
+            # Agregar conteos al resumen
+            resumen_curso["Alumnos"] = len(filas_csv)
+            resumenes.append(resumen_curso)
+
         except Exception as e:
             logger.error(f"Error en curso {codigo_curso}: {e}")
             errores.append({"codigo": codigo_curso, "error": str(e)})
 
+    # Generar Resumen_General.csv para DocenteTracking
+    if resumenes:
+        try:
+            df_resumen = pd.DataFrame(resumenes)
+            resumen_path = output_path / "Resumen_General.csv"
+            df_resumen.to_csv(resumen_path, index=False, encoding="utf-8-sig", sep=";")
+            logger.info(f"📊 Resumen_General.csv generado con {len(resumenes)} cursos")
+        except Exception as e:
+            logger.warning(f"Error generando Resumen_General.csv: {e}")
+
     logger.info(f"Tareas scraping: {procesados}/{len(codigos)} procesados, {len(errores)} errores")
-    return {"codigos_procesados": procesados, "errores": errores}
+    return {"codigos_procesados": procesados, "errores": errores, "resumenes": resumenes}

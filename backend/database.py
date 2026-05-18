@@ -64,6 +64,7 @@ def upgrade_tables():
         "course_configs": [
             ("nivel", "INTEGER"),
             ("correo_docente", "VARCHAR"),
+            ("es_especial", "BOOLEAN DEFAULT false"),
         ],
         "grades": [
             ("periodo", "VARCHAR"),

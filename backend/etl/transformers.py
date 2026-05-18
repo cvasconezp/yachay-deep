@@ -87,8 +87,8 @@ def parse_estado_tarea(estado: Optional[str]) -> tuple[bool, bool, bool]:
     if not estado or pd.isna(estado):
         return False, False, False
     estado_lower = str(estado).lower()
-    entregada = "enviado" in estado_lower or "calificado" in estado_lower
-    calificada = "calificado" in estado_lower
+    entregada = "enviado" in estado_lower or "calificado" in estado_lower or "finalizado" in estado_lower
+    calificada = "calificado" in estado_lower or "finalizado" in estado_lower
     retrasada = "retrasada" in estado_lower or "retraso" in estado_lower
     return entregada, calificada, retrasada
 
@@ -877,9 +877,12 @@ def transform_resumen_general(carpeta_o_archivos) -> pd.DataFrame:
     Lee archivos Resumen_General*.csv del scraping AVAC.
     Retorna DataFrame con estado de calificación por actividad y curso.
 
-    Columnas esperadas del CSV (pueden variar por versión del scraping):
-        codigo_curso, nombre_curso, actividad, tipo_actividad,
-        calificada (Sí/No), fecha_limite, fecha_calificacion, docente
+    Soporta dos formatos:
+    1. Formato detallado (original): codigo_curso, nombre_curso, actividad,
+       tipo_actividad, calificada (Sí/No), fecha_limite, fecha_calificacion, docente
+    2. Formato resumen (nuevo scraping): Código, Fecha, Especial, Alumnos,
+       Pendientes Actividad 1, Pendientes Actividad 2, etc.
+       Este formato se expande a una fila por actividad con las pendientes.
     """
     archivos: list[Path] = []
     if isinstance(carpeta_o_archivos, (str, Path)):
@@ -899,9 +902,18 @@ def transform_resumen_general(carpeta_o_archivos) -> pd.DataFrame:
     dfs = []
     for archivo in archivos:
         try:
-            df = pd.read_csv(archivo, encoding="utf-8-sig")
+            # Intentar ambos separadores
+            try:
+                df = pd.read_csv(archivo, encoding="utf-8-sig", sep=";")
+            except Exception:
+                df = pd.read_csv(archivo, encoding="utf-8-sig")
             df.columns = [c.strip().lower().replace(" ", "_") for c in df.columns]
             df["_fuente"] = archivo.name
+
+            # Detectar formato: si tiene columna "código" es formato resumen del scraping
+            if "código" in df.columns or "codigo" in df.columns:
+                df = _expandir_resumen_pendientes(df)
+
             dfs.append(df)
             logger.info(f"  Resumen_General leído: {archivo.name} ({len(df)} filas)")
         except Exception as e:
@@ -913,6 +925,48 @@ def transform_resumen_general(carpeta_o_archivos) -> pd.DataFrame:
     df = pd.concat(dfs, ignore_index=True)
     logger.info(f"transform_resumen_general: {len(df)} registros de calificación docente")
     return df
+
+
+def _expandir_resumen_pendientes(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Expande el formato resumen del scraping (una fila por curso con columnas
+    Pendientes Actividad 1..4) a filas individuales por actividad.
+    """
+    registros = []
+    for _, row in df.iterrows():
+        codigo = str(row.get("código", row.get("codigo", ""))).strip()
+        fecha = str(row.get("fecha", "")).strip()
+        fuente = str(row.get("_fuente", "")).strip()
+
+        for u in ["1", "2", "3", "4"]:
+            col_pend = f"pendientes_actividad_{u}"
+            col_part = f"participantes_actividad_{u}"
+            col_env = f"enviados_actividad_{u}"
+
+            pendientes = row.get(col_pend)
+            if pendientes is not None and pd.notna(pendientes):
+                try:
+                    pend_val = int(float(str(pendientes).strip()))
+                except (ValueError, TypeError):
+                    pend_val = 0
+
+                calificada = pend_val == 0
+
+                registros.append({
+                    "codigo_curso": codigo,
+                    "actividad": f"Actividad Unidad {u}",
+                    "tipo_actividad": "tarea",
+                    "calificada": "Sí" if calificada else "No",
+                    "pendientes": pend_val,
+                    "participantes": row.get(col_part, None),
+                    "enviados": row.get(col_env, None),
+                    "_fuente": fuente,
+                })
+
+    if not registros:
+        return df  # Retornar original si no hay pendientes que expandir
+
+    return pd.DataFrame(registros)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
