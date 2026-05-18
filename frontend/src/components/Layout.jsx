@@ -196,14 +196,6 @@ export function Layout({ children }) {
                 <span className={sidebarOpen ? "" : "text-lg"}>{item.icon}</span>
                 {sidebarOpen && item.label}
               </Link>
-              {/* Alert badge for Alertas item */}
-              {item.path === "/alertas" && alertCount > 0 && (
-                <div className={`absolute ${sidebarOpen ? "top-1 right-2" : "top-0 right-0"} w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold ${
-                  alertAltoCount > 0 ? "bg-red-600" : "bg-orange-500"
-                }`}>
-                  {alertCount}
-                </div>
-              )}
             </div>
           ))}
         </nav>
