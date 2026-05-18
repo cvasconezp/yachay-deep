@@ -228,15 +228,17 @@ def generate_alerts_batch(db: Session) -> dict:
         Grade.periodo == periodo_variants[1],
     )
 
-    # Nota cero
-    nota_cero_map = {}
+    # Nota cero o sin calificación (NULL)
+    nota_cero_map = {}  # student_id -> list of asignaturas
     if hay_notas_esperadas:
-        nota_cero_q = db.query(Grade).filter(Grade.nota_final == 0, grade_periodo_cond)
+        nota_cero_q = db.query(Grade).filter(
+            or_(Grade.nota_final == 0, Grade.nota_final.is_(None)),
+            grade_periodo_cond,
+        )
         if included_asignaturas:
             nota_cero_q = nota_cero_q.filter(Grade.asignatura.in_(included_asignaturas))
         for g in nota_cero_q.all():
-            if g.student_id not in nota_cero_map:
-                nota_cero_map[g.student_id] = g.asignatura
+            nota_cero_map.setdefault(g.student_id, []).append(g.asignatura or "Sin asignatura")
 
     # Tareas
     task_q = db.query(TaskSubmission.student_id).filter(
@@ -364,10 +366,15 @@ def generate_alerts_batch(db: Session) -> dict:
                 _add_alert_fast(student.id, "compromiso_bajo", "medio",
                                 f"Índice de compromiso bajo: {student.indice_compromiso:.2f}")
 
-        # Nota Cero
+        # Nota Cero / Sin calificación
         if hay_notas_esperadas and student.id in nota_cero_map:
-            _add_alert_fast(student.id, "nota_cero", "alto",
-                            f"Calificación de 0 en {nota_cero_map[student.id]}")
+            asigs = nota_cero_map[student.id]
+            if len(asigs) == 1:
+                _add_alert_fast(student.id, "nota_cero", "alto",
+                                f"Sin calificación en {asigs[0]}")
+            else:
+                _add_alert_fast(student.id, "nota_cero", "alto",
+                                f"Sin calificación en {len(asigs)} asignaturas: {', '.join(asigs[:3])}{'...' if len(asigs) > 3 else ''}")
 
         # Tareas Bajas
         if in_bloque and student.porcentaje_tareas is not None and student.porcentaje_tareas < umbral_tareas:
