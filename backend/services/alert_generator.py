@@ -246,6 +246,32 @@ def generate_alerts_batch(db: Session) -> dict:
         task_q = task_q.filter(TaskSubmission.codigo_curso.in_(included_course_codes))
     task_sids = set(r[0] for r in task_q.distinct().all())
 
+    # Pre-load: calificaciones bajas en tareas (promedio por estudiante)
+    # Umbral: menos del 47% del máximo (equivale a <7 de 15 puntos)
+    UMBRAL_NOTA_TAREA_PCT = 0.47
+    task_cal_q = db.query(
+        TaskSubmission.student_id,
+        func.avg(TaskSubmission.calificacion).label("avg_cal"),
+        func.avg(TaskSubmission.calificacion_maxima).label("avg_max"),
+        func.count(TaskSubmission.id).label("n_tareas"),
+    ).filter(
+        or_(TaskSubmission.periodo == periodo_variants[0], TaskSubmission.periodo == periodo_variants[1]),
+        TaskSubmission.calificada == True,
+        TaskSubmission.calificacion.isnot(None),
+        TaskSubmission.calificacion_maxima.isnot(None),
+        TaskSubmission.calificacion_maxima > 0,
+    )
+    if included_course_codes:
+        task_cal_q = task_cal_q.filter(TaskSubmission.codigo_curso.in_(included_course_codes))
+    task_cal_q = task_cal_q.group_by(TaskSubmission.student_id)
+
+    notas_bajas_map = {}  # student_id -> (avg_cal, avg_max, n_tareas)
+    for sid, avg_cal, avg_max, n_tareas in task_cal_q.all():
+        if avg_max and avg_max > 0 and n_tareas >= 2:  # Al menos 2 tareas calificadas
+            pct = float(avg_cal) / float(avg_max)
+            if pct < UMBRAL_NOTA_TAREA_PCT:
+                notas_bajas_map[sid] = (round(float(avg_cal), 1), round(float(avg_max), 1), int(n_tareas))
+
     # Segunda matrícula (enrollments)
     rep_enroll_counts = defaultdict(int)
     for sid, in db.query(Enrollment.student_id).filter(
@@ -358,6 +384,13 @@ def generate_alerts_batch(db: Session) -> dict:
             if student.id in avac_por_curso:
                 _add_alert_fast(student.id, "tareas_bajas", "medio",
                                 "Sin datos de entregas de tareas en el período actual")
+
+        # Notas bajas en tareas calificadas
+        if student.id in notas_bajas_map:
+            avg_cal, avg_max, n_tareas = notas_bajas_map[student.id]
+            pct = round(avg_cal / avg_max * 100, 0) if avg_max > 0 else 0
+            _add_alert_fast(student.id, "notas_bajas_tareas", "medio",
+                            f"Promedio bajo en tareas calificadas: {avg_cal}/{avg_max} ({pct:.0f}%) en {n_tareas} tareas")
 
         # Segunda Matrícula
         if not student.es_tercera_matricula:

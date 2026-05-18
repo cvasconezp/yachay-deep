@@ -15,6 +15,7 @@ const TIPO_LABELS = {
   segunda_matricula: "2da Matrícula",
   tercera_matricula: "Condicionados",
   deterioro_progresivo: "Deterioro Progresivo",
+  notas_bajas_tareas: "Notas Bajas en Tareas",
 };
 
 const TIPO_ICONS = {
@@ -26,6 +27,7 @@ const TIPO_ICONS = {
   segunda_matricula: "🔄",
   tercera_matricula: "⚠️",
   deterioro_progresivo: "📊",
+  notas_bajas_tareas: "📕",
 };
 
 
