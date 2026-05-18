@@ -360,3 +360,186 @@ def preview_digest(
     data = build_digest_data(db)
     html = build_digest_html(data)
     return HTMLResponse(content=html)
+
+
+@router.get("/debug/conditions")
+def debug_alert_conditions(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Diagnóstico: muestra el estado de cada condición que activa cada tipo de alerta.
+    Solo accesible por admins.
+    """
+    import json
+    from ..models import TaskSubmission
+
+    result = {}
+
+    # Semestre activo
+    semconfig = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
+    if not semconfig:
+        return {"error": "No hay semestre activo"}
+
+    pf = semconfig.semestre.strip() if semconfig.semestre else ""
+    if pf.startswith("P"):
+        periodo_variants = (pf, pf[1:])
+    else:
+        periodo_variants = (pf, f"P{pf}")
+
+    result["semestre"] = pf
+    result["bloque_actual"] = semconfig.bloque_actual
+
+    # Calendario y fecha de notas
+    calendario = []
+    if semconfig.calendario_academico:
+        try:
+            calendario = json.loads(semconfig.calendario_academico)
+        except Exception:
+            pass
+
+    from ..services.alert_generator import _primera_fecha_notas
+    fecha_notas = _primera_fecha_notas(calendario)
+    now = datetime.now(timezone.utc)
+    hay_notas_esperadas = fecha_notas is not None and now >= fecha_notas.replace(tzinfo=timezone.utc)
+
+    result["nota_cero"] = {
+        "hay_notas_esperadas": hay_notas_esperadas,
+        "primera_fecha_notas": fecha_notas.isoformat() if fecha_notas else None,
+        "calendario_entries": [e for e in calendario if e.get("tipo") in ("entrega", "paso_notas")],
+        "calendario_total_entries": len(calendario),
+    }
+
+    # Grades con nota 0 o NULL
+    grade_periodo_cond = or_(
+        Grade.periodo == periodo_variants[0],
+        Grade.periodo == periodo_variants[1],
+    )
+    total_grades = db.query(func.count(Grade.id)).filter(grade_periodo_cond).scalar()
+    null_grades = db.query(func.count(Grade.id)).filter(
+        grade_periodo_cond, Grade.nota_final.is_(None)
+    ).scalar()
+    zero_grades = db.query(func.count(Grade.id)).filter(
+        grade_periodo_cond, Grade.nota_final == 0
+    ).scalar()
+    result["nota_cero"]["total_grades_periodo"] = total_grades
+    result["nota_cero"]["grades_null"] = null_grades
+    result["nota_cero"]["grades_zero"] = zero_grades
+
+    # Included asignaturas (bloque filter)
+    included_course_codes = set()
+    if semconfig:
+        from sqlalchemy import or_ as or2
+        included_cc = db.query(CourseConfig.codigo_avac).filter(
+            or2(CourseConfig.bloque == semconfig.bloque_actual,
+                CourseConfig.bloque == "ambos",
+                CourseConfig.bloque.is_(None)),
+        ).all()
+        included_course_codes = {r[0] for r in included_cc}
+
+    included_asignaturas = set()
+    if included_course_codes:
+        for cc in db.query(CourseConfig.asignatura).filter(
+            CourseConfig.codigo_avac.in_(included_course_codes),
+            CourseConfig.asignatura.isnot(None),
+        ).distinct().all():
+            included_asignaturas.add(cc[0])
+
+    result["nota_cero"]["included_asignaturas"] = sorted(included_asignaturas)[:20]
+
+    # Filter grades by included_asignaturas
+    if included_asignaturas:
+        filtered_null = db.query(func.count(Grade.id)).filter(
+            grade_periodo_cond, Grade.nota_final.is_(None),
+            Grade.asignatura.in_(included_asignaturas)
+        ).scalar()
+        filtered_zero = db.query(func.count(Grade.id)).filter(
+            grade_periodo_cond, Grade.nota_final == 0,
+            Grade.asignatura.in_(included_asignaturas)
+        ).scalar()
+        result["nota_cero"]["filtered_null_in_bloque"] = filtered_null
+        result["nota_cero"]["filtered_zero_in_bloque"] = filtered_zero
+
+    # TaskSubmissions
+    task_total = db.query(func.count(TaskSubmission.id)).filter(
+        or_(TaskSubmission.periodo == periodo_variants[0],
+            TaskSubmission.periodo == periodo_variants[1]),
+    ).scalar()
+    task_calificada = db.query(func.count(TaskSubmission.id)).filter(
+        or_(TaskSubmission.periodo == periodo_variants[0],
+            TaskSubmission.periodo == periodo_variants[1]),
+        TaskSubmission.calificada == True,
+        TaskSubmission.calificacion.isnot(None),
+        TaskSubmission.calificacion_maxima.isnot(None),
+        TaskSubmission.calificacion_maxima > 0,
+    ).scalar()
+
+    UMBRAL = 0.47
+    # Students with low task grades
+    task_cal_q = db.query(
+        TaskSubmission.student_id,
+        func.avg(TaskSubmission.calificacion).label("avg_cal"),
+        func.avg(TaskSubmission.calificacion_maxima).label("avg_max"),
+        func.count(TaskSubmission.id).label("n"),
+    ).filter(
+        or_(TaskSubmission.periodo == periodo_variants[0],
+            TaskSubmission.periodo == periodo_variants[1]),
+        TaskSubmission.calificada == True,
+        TaskSubmission.calificacion.isnot(None),
+        TaskSubmission.calificacion_maxima.isnot(None),
+        TaskSubmission.calificacion_maxima > 0,
+    )
+    if included_course_codes:
+        task_cal_q = task_cal_q.filter(TaskSubmission.codigo_curso.in_(included_course_codes))
+    task_cal_q = task_cal_q.group_by(TaskSubmission.student_id)
+
+    low_count = 0
+    sample_low = []
+    for sid, avg_cal, avg_max, n in task_cal_q.all():
+        if avg_max and avg_max > 0 and n >= 2:
+            pct = float(avg_cal) / float(avg_max)
+            if pct < UMBRAL:
+                low_count += 1
+                if len(sample_low) < 3:
+                    sample_low.append({
+                        "student_id": sid,
+                        "avg_cal": round(float(avg_cal), 2),
+                        "avg_max": round(float(avg_max), 2),
+                        "pct": round(pct * 100, 1),
+                        "n_tareas": int(n),
+                    })
+
+    result["notas_bajas_tareas"] = {
+        "total_task_submissions": task_total,
+        "calificadas_con_nota": task_calificada,
+        "students_below_threshold": low_count,
+        "threshold_pct": UMBRAL * 100,
+        "sample": sample_low,
+    }
+
+    # Segunda/Tercera matrícula
+    periodo_cond = or_(
+        Enrollment.periodo == periodo_variants[0],
+        Enrollment.periodo == periodo_variants[1],
+    )
+    segunda = db.query(func.count(func.distinct(Enrollment.student_id))).filter(
+        Enrollment.numero_repitencias > 1, Enrollment.es_tercera_matricula == False, periodo_cond
+    ).scalar()
+    tercera = db.query(func.count(func.distinct(Enrollment.student_id))).filter(
+        Enrollment.es_tercera_matricula == True
+    ).scalar()
+    tercera_flag = db.query(func.count(Student.id)).filter(Student.es_tercera_matricula == True).scalar()
+
+    result["segunda_matricula"] = {"students": segunda}
+    result["tercera_matricula"] = {
+        "enrollment_count": tercera,
+        "student_flag_count": tercera_flag,
+    }
+
+    # Current alert counts by type
+    alert_counts = dict(db.query(
+        AlertEvent.tipo, func.count(AlertEvent.id)
+    ).group_by(AlertEvent.tipo).all())
+    result["current_alerts_by_type"] = alert_counts
+
+    return result
