@@ -344,11 +344,20 @@ def generate_alerts_batch(db: Session) -> dict:
                             f"Calificación de 0 en {nota_cero_map[student.id]}")
 
         # Tareas Bajas
-        if (in_bloque and student.porcentaje_tareas is not None
-                and student.porcentaje_tareas < umbral_tareas
-                and student.id in task_sids):
-            _add_alert_fast(student.id, "tareas_bajas", "medio",
-                            f"Porcentaje de tareas entregadas bajo: {student.porcentaje_tareas:.1f}% (umbral: {umbral_tareas}%)")
+        if in_bloque and student.porcentaje_tareas is not None and student.porcentaje_tareas < umbral_tareas:
+            if student.porcentaje_tareas == 0:
+                _add_alert_fast(student.id, "tareas_bajas", "alto",
+                                f"No ha entregado ninguna tarea (0%)")
+            else:
+                _add_alert_fast(student.id, "tareas_bajas", "medio",
+                                f"Porcentaje de tareas entregadas bajo: {student.porcentaje_tareas:.1f}% (umbral: {umbral_tareas}%)")
+
+        # Sin datos de tareas: estudiante inscrito pero sin registros de task_submissions
+        elif in_bloque and student.porcentaje_tareas is None and student.id in period_sids and student.id not in task_sids:
+            # Solo alertar si el estudiante tiene accesos AVAC (es decir, está activo en la plataforma)
+            if student.id in avac_por_curso:
+                _add_alert_fast(student.id, "tareas_bajas", "medio",
+                                "Sin datos de entregas de tareas en el período actual")
 
         # Segunda Matrícula
         if not student.es_tercera_matricula:
