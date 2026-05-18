@@ -1166,6 +1166,8 @@ export default function ResumenDatos() {
                   )}
                 </>
               )}
+            </div>
+          )}
 
           {/* ═══ TAB: EFECTIVIDAD DE INTERVENCIONES ═══ */}
           {activeTab === "efectividad" && (
