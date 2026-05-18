@@ -441,7 +441,6 @@ export default function Intervenciones() {
                   <SortHeader field="medio" className="text-left">Medio</SortHeader>
                   <SortHeader field="resultado" className="text-left">Resultado</SortHeader>
                   <th className="text-center px-3 py-2.5 font-semibold text-gray-600 text-xs uppercase tracking-wider">Seg.</th>
-                  <th className="text-center px-3 py-2.5 font-semibold text-gray-600 text-xs uppercase tracking-wider">Bienestar</th>
                   <SortHeader field="monitor" className="text-left">Monitor</SortHeader>
                   <SortHeader field="fecha" className="text-left">Fecha</SortHeader>
                   <th className="text-center px-3 py-2.5 font-semibold text-gray-600 text-xs uppercase tracking-wider">Acción</th>
@@ -498,16 +497,7 @@ export default function Intervenciones() {
                         <span className="text-gray-300 text-xs">—</span>
                       )}
                     </td>
-                    <td className="px-3 py-2.5 text-center">
-                      {inv.derivar_bienestar ? (
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${inv.email_enviado ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}
-                          title={inv.tipo_evento_critico || ""}>
-                          {inv.email_enviado ? "Enviado" : "Derivado"}
-                        </span>
-                      ) : (
-                        <span className="text-gray-300 text-xs">—</span>
-                      )}
-                    </td>
+
                     <td className="px-3 py-2.5 text-xs text-gray-500 whitespace-nowrap">
                       {inv.monitor_nombre || "—"}
                     </td>
