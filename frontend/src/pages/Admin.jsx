@@ -21,6 +21,7 @@ function TabSistema() {
   const [scrapingLoading, setScrapingLoading] = useState(false);
   const [scrapingMsg, setScrapingMsg] = useState("");
   const [scrapingMode, setScrapingMode] = useState("full");
+  const [scrapingProgress, setScrapingProgress] = useState(null);
 
   const loadMlStatus = () => api.getPredictionStatus().then(setMlStatus).catch(() => {});
 
@@ -62,6 +63,24 @@ function TabSistema() {
       setScrapingLoading(false);
     }
   };
+
+  // Polling de progreso del scraping cada 15s
+  useEffect(() => {
+    let interval;
+    const checkProgress = async () => {
+      try {
+        const prog = await api.getScrapingProgress();
+        setScrapingProgress(prog);
+        if (!prog.running && interval) {
+          clearInterval(interval);
+          interval = null;
+        }
+      } catch { /* ignore */ }
+    };
+    checkProgress();
+    interval = setInterval(checkProgress, 15000);
+    return () => { if (interval) clearInterval(interval); };
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -141,6 +160,67 @@ function TabSistema() {
           {scrapingMsg && (
             <div className={`text-sm mt-3 px-4 py-2 rounded-lg ${scrapingMsg.startsWith("Error") ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
               {scrapingMsg}
+            </div>
+          )}
+
+          {/* Barra de progreso del scraping */}
+          {scrapingProgress?.running && (
+            <div className="mt-4 bg-indigo-50 border border-indigo-200 rounded-xl p-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-2.5 h-2.5 bg-indigo-500 rounded-full animate-pulse"></div>
+                  <span className="text-sm font-semibold text-indigo-800">Scraping en progreso</span>
+                </div>
+                {scrapingProgress.progress && (
+                  <span className="text-sm font-bold text-indigo-700">
+                    {scrapingProgress.progress.percent}%
+                  </span>
+                )}
+              </div>
+              {scrapingProgress.progress && (
+                <>
+                  <div className="w-full bg-indigo-100 rounded-full h-3 overflow-hidden">
+                    <div
+                      className="bg-indigo-500 h-full rounded-full transition-all duration-500"
+                      style={{ width: `${scrapingProgress.progress.percent}%` }}
+                    ></div>
+                  </div>
+                  <div className="flex items-center justify-between mt-2 text-xs text-indigo-600">
+                    <span>
+                      Paso {scrapingProgress.progress.completed_steps}/{scrapingProgress.progress.total_steps}
+                      {scrapingProgress.progress.current_step && (
+                        <span className="ml-1 text-indigo-500">— {scrapingProgress.progress.current_step}</span>
+                      )}
+                    </span>
+                    {scrapingProgress.started_at && (
+                      <span className="text-indigo-400">
+                        Iniciado: {new Date(scrapingProgress.started_at).toLocaleTimeString("es-EC", { hour: "2-digit", minute: "2-digit" })}
+                      </span>
+                    )}
+                  </div>
+                </>
+              )}
+              {scrapingProgress.html_url && (
+                <a href={scrapingProgress.html_url} target="_blank" rel="noopener noreferrer"
+                  className="inline-block mt-2 text-xs text-indigo-500 hover:text-indigo-700 underline">
+                  Ver logs en GitHub Actions →
+                </a>
+              )}
+            </div>
+          )}
+
+          {/* Último scraping completado */}
+          {scrapingProgress && !scrapingProgress.running && scrapingProgress.status === "completed" && (
+            <div className={`mt-4 text-xs px-3 py-2 rounded-lg ${scrapingProgress.conclusion === "success" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>
+              Último scraping: {scrapingProgress.conclusion === "success" ? "✅ completado" : "❌ " + (scrapingProgress.conclusion || "error")}
+              {scrapingProgress.updated_at && (
+                <span className="ml-2 text-gray-400">
+                  {new Date(scrapingProgress.updated_at).toLocaleString("es-EC", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                </span>
+              )}
+              {scrapingProgress.html_url && (
+                <a href={scrapingProgress.html_url} target="_blank" rel="noopener noreferrer" className="ml-2 underline">ver logs</a>
+              )}
             </div>
           )}
         </div>
@@ -1811,6 +1891,24 @@ function EditUserModal({ user, onClose, onSaved, onError }) {
 // ─────────────────────────────────────────────────────────────────────────────
 export default function Admin() {
   const [activeTab, setActiveTab] = useState("Sistema");
+
+  // Polling de progreso del scraping cada 15s
+  useEffect(() => {
+    let interval;
+    const checkProgress = async () => {
+      try {
+        const prog = await api.getScrapingProgress();
+        setScrapingProgress(prog);
+        if (!prog.running && interval) {
+          clearInterval(interval);
+          interval = null;
+        }
+      } catch { /* ignore */ }
+    };
+    checkProgress();
+    interval = setInterval(checkProgress, 15000);
+    return () => { if (interval) clearInterval(interval); };
+  }, []);
 
   return (
     <div className="space-y-6">

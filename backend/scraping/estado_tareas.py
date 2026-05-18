@@ -260,7 +260,8 @@ def scrape_tareas(output_dir: str, codigos=None, base_url: str = None, db=None):
     procesados = 0
     resumenes = []  # Para Resumen_General.csv
 
-    for codigo_curso in codigos:
+    total_cursos = len(codigos)
+    for idx_curso, codigo_curso in enumerate(codigos, 1):
         try:
             start_time = time.time()
             es_especial = codigo_curso in cursos_especiales
@@ -294,7 +295,7 @@ def scrape_tareas(output_dir: str, codigos=None, base_url: str = None, db=None):
             resp_calif = session.get(url_calif, timeout=30)
             soup_calif = BeautifulSoup(resp_calif.content, "html.parser", from_encoding="utf-8")
             datos_estudiantes = _procesar_reporte_general(soup_calif, es_especial=es_especial)
-            logger.info(f"  {codigo_curso}: {len(datos_estudiantes)} alumnos en tabla general" +
+            logger.info(f"  [{idx_curso}/{total_cursos}] {codigo_curso}: {len(datos_estudiantes)} alumnos en tabla general" +
                         (" (ESPECIAL)" if es_especial else ""))
 
             # C. Detalles de tareas por unidad (solo cursos normales)
@@ -361,7 +362,7 @@ def scrape_tareas(output_dir: str, codigos=None, base_url: str = None, db=None):
                         d[f"Archivos de retroalimentación {u}"] = gv(9)
                         d[f"Calificación final {u}"] = gv(10)
             else:
-                logger.info(f"  {codigo_curso}: curso especial — usando totales de reporte general")
+                logger.info(f"  [{idx_curso}/{total_cursos}] {codigo_curso}: curso especial — usando totales de reporte general")
 
             # D. Calcular totales y guardar CSV
             filas_csv = []
@@ -389,7 +390,7 @@ def scrape_tareas(output_dir: str, codigos=None, base_url: str = None, db=None):
             df_final.to_csv(archivo, index=False, encoding="utf-8-sig", sep=";")
 
             elapsed = round(time.time() - start_time, 2)
-            logger.info(f"  {codigo_curso}: guardado en {elapsed}s ({len(filas_csv)} filas)")
+            logger.info(f"  [{idx_curso}/{total_cursos}] ✅ {codigo_curso}: guardado en {elapsed}s ({len(filas_csv)} filas)")
             procesados += 1
 
             # Agregar conteos al resumen

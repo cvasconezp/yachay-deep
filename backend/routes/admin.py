@@ -562,6 +562,91 @@ async def trigger_scraping(
         )
 
 
+
+
+@router.get("/etl/scraping-progress")
+async def get_scraping_progress(
+    current_user: User = Depends(require_admin),
+):
+    """
+    Consulta el estado del workflow de scraping más reciente en GitHub Actions.
+    Retorna: status, started_at, elapsed, steps con su estado.
+    """
+    import httpx
+    from ..config import settings
+
+    if not settings.GITHUB_TOKEN:
+        return {"running": False, "error": "GITHUB_TOKEN no configurado"}
+
+    headers = {
+        "Authorization": f"Bearer {settings.GITHUB_TOKEN}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            # Get most recent workflow runs
+            resp = await client.get(
+                f"https://api.github.com/repos/{settings.GITHUB_REPO}/actions/workflows/{settings.GITHUB_WORKFLOW}/runs?per_page=1",
+                headers=headers,
+            )
+            if resp.status_code != 200:
+                return {"running": False, "error": f"GitHub API: {resp.status_code}"}
+
+            data = resp.json()
+            runs = data.get("workflow_runs", [])
+            if not runs:
+                return {"running": False, "message": "No hay ejecuciones recientes"}
+
+            run = runs[0]
+            run_status = run.get("status")  # queued, in_progress, completed
+            run_conclusion = run.get("conclusion")  # success, failure, cancelled, null
+            run_started = run.get("run_started_at")
+            run_updated = run.get("updated_at")
+
+            result = {
+                "running": run_status in ("queued", "in_progress"),
+                "status": run_status,
+                "conclusion": run_conclusion,
+                "started_at": run_started,
+                "updated_at": run_updated,
+                "html_url": run.get("html_url"),
+                "run_id": run.get("id"),
+            }
+
+            # If running, get jobs for step-level progress
+            if run_status in ("queued", "in_progress"):
+                jobs_resp = await client.get(
+                    f"https://api.github.com/repos/{settings.GITHUB_REPO}/actions/runs/{run['id']}/jobs",
+                    headers=headers,
+                )
+                if jobs_resp.status_code == 200:
+                    jobs_data = jobs_resp.json()
+                    jobs = jobs_data.get("jobs", [])
+                    if jobs:
+                        job = jobs[0]
+                        steps = job.get("steps", [])
+                        total_steps = len(steps)
+                        completed_steps = sum(1 for s in steps if s.get("status") == "completed")
+                        current_step = None
+                        for s in steps:
+                            if s.get("status") == "in_progress":
+                                current_step = s.get("name")
+                                break
+                        result["progress"] = {
+                            "total_steps": total_steps,
+                            "completed_steps": completed_steps,
+                            "percent": round(completed_steps / total_steps * 100) if total_steps > 0 else 0,
+                            "current_step": current_step,
+                        }
+
+            return result
+
+    except Exception as e:
+        return {"running": False, "error": str(e)}
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # AVAC SESSION COOKIE MANAGEMENT
 # ─────────────────────────────────────────────────────────────────────────────
