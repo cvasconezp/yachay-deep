@@ -4,7 +4,6 @@ import { useAuth } from "../hooks/useAuth";
 import { api } from "../services/api";
 import { PeriodSelector } from "../components/PeriodSelector";
 import BulkInterventionModal from "../components/BulkInterventionModal";
-import { useStudentListModal } from "../components/StudentListModal";
 
 const TIPO_LABELS = {
   inactividad: "Inactividad AVAC",
@@ -105,6 +104,8 @@ export default function Alertas() {
   const [filterCarrera, setFilterCarrera] = useState("");
   const [filterAsignatura, setFilterAsignatura] = useState("");
   const [filterPeriodo, setFilterPeriodo] = useState("");
+  const [filterCondicion, setFilterCondicion] = useState("");
+  const [condicionStudentIds, setCondicionStudentIds] = useState(null);
   const [selectedStudentIds, setSelectedStudentIds] = useState(new Set());
   const [expandedStudents, setExpandedStudents] = useState(new Set());
   const [showBulkModal, setShowBulkModal] = useState(false);
@@ -112,10 +113,7 @@ export default function Alertas() {
   const [asignaturas, setAsignaturas] = useState([]);
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { openStudentList, StudentListModalEl } = useStudentListModal({
-    periodo: filterPeriodo,
-    carrera: filterCarrera,
-  });
+
 
   useEffect(() => {
     api.getCarreras().then(data => setCarreras(data || [])).catch(() => {});
@@ -127,6 +125,23 @@ export default function Alertas() {
       .then(data => setAsignaturas(data || []))
       .catch(() => setAsignaturas([]));
   }, [filterCarrera]);
+
+  // Load condicion especial student IDs when filter changes
+  useEffect(() => {
+    if (!filterCondicion) {
+      setCondicionStudentIds(null);
+      return;
+    }
+    const params = { tipo: filterCondicion };
+    if (filterPeriodo) params.periodo = filterPeriodo;
+    if (filterCarrera) params.carrera = filterCarrera;
+    api.getEstudiantesListado(params)
+      .then(res => {
+        const ids = new Set((res.estudiantes || []).map(e => e.id));
+        setCondicionStudentIds(ids);
+      })
+      .catch(() => setCondicionStudentIds(new Set()));
+  }, [filterCondicion, filterPeriodo, filterCarrera]);
 
   const loadAlerts = useCallback(async () => {
     setLoading(true);
@@ -162,6 +177,7 @@ export default function Alertas() {
     const filtered = alerts.filter(a => {
       if (filterSeverity !== "all" && a.severidad !== filterSeverity) return false;
       if (filterTipo !== "all" && a.tipo !== filterTipo) return false;
+      if (condicionStudentIds !== null && !condicionStudentIds.has(a.student_id)) return false;
       return true;
     });
 
@@ -196,7 +212,7 @@ export default function Alertas() {
     });
 
     return groups;
-  }, [alerts, filterSeverity, filterTipo]);
+  }, [alerts, filterSeverity, filterTipo, condicionStudentIds]);
 
   // Group studentGroups by severity for section headers
   const groupedBySeverity = useMemo(() => {
@@ -408,13 +424,13 @@ export default function Alertas() {
         <div>
           <label className="text-xs font-medium text-gray-500 block mb-1">Condición Especial</label>
           <select
-            value=""
-            onChange={e => { if (e.target.value) { openStudentList(e.target.value); e.target.value = ""; } }}
-            className="border border-purple-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 bg-purple-50 text-purple-700"
+            value={filterCondicion}
+            onChange={e => setFilterCondicion(e.target.value)}
+            className={`border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 ${filterCondicion ? "border-purple-400 bg-purple-50 text-purple-700 font-medium" : "border-gray-300"}`}
           >
-            <option value="">Seleccionar...</option>
-            <option value="repitentes">🔄 Repitentes (2da matrícula)</option>
-            <option value="condicionados">⚠️ Condicionados (3ra matrícula)</option>
+            <option value="">Todos</option>
+            <option value="repitentes">Repitentes (2da matrícula)</option>
+            <option value="condicionados">Condicionados (3ra matrícula)</option>
           </select>
         </div>
         <div className="ml-auto text-sm text-gray-500">
@@ -588,7 +604,6 @@ export default function Alertas() {
           onSaved={handleBulkSaved}
         />
       )}
-      {StudentListModalEl}
     </div>
   );
 }
