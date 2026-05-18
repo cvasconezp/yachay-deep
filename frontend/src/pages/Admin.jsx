@@ -1250,19 +1250,32 @@ function TabSemestre() {
                       </div>
                     )}
                     {s.calendario_academico && parseCalendario(s.calendario_academico).length > 0 && (
-                      <div className="flex flex-wrap gap-2 text-[11px] text-gray-400">
-                        {[...parseCalendario(s.calendario_academico)]
-                          .sort((a, b) => (a.fecha || "").localeCompare(b.fecha || ""))
-                          .map((e, i) => (
-                          <span key={i} className={`px-2 py-0.5 rounded ${
-                            e.tipo === "paso_notas" ? "bg-amber-100 text-amber-700 font-medium" :
-                            e.tipo === "examen" ? "bg-purple-100 text-purple-700" :
-                            e.tipo === "recuperacion" ? "bg-red-100 text-red-600" :
-                            "bg-blue-50 text-blue-600"
-                          }`}>
-                            {e.fecha?.split("-").reverse().join("/")} · {e.label || e.tipo}
-                          </span>
-                        ))}
+                      <div className="mt-2">
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Calendario</span>
+                          <span className="text-[10px] text-gray-300">({parseCalendario(s.calendario_academico).length} fechas)</span>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {[...parseCalendario(s.calendario_academico)]
+                            .sort((a, b) => (a.fecha || "").localeCompare(b.fecha || ""))
+                            .map((e, i) => {
+                              const tipoIcon = e.tipo === "paso_notas" ? "📊" :
+                                               e.tipo === "examen" ? "📝" :
+                                               e.tipo === "recuperacion" ? "🔄" : "📘";
+                              const tipoBg = e.tipo === "paso_notas" ? "bg-amber-100 text-amber-800 border-amber-200" :
+                                             e.tipo === "examen" ? "bg-purple-100 text-purple-800 border-purple-200" :
+                                             e.tipo === "recuperacion" ? "bg-red-100 text-red-700 border-red-200" :
+                                             "bg-blue-50 text-blue-700 border-blue-200";
+                              return (
+                                <span key={i} className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg border text-[11px] ${tipoBg}`}>
+                                  <span>{tipoIcon}</span>
+                                  <span className="font-semibold">{e.fecha?.split("-").reverse().join("/")}</span>
+                                  <span className="text-gray-500">·</span>
+                                  <span>{e.label || e.tipo}</span>
+                                </span>
+                              );
+                            })}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1300,68 +1313,102 @@ function TabSemestre() {
                     </div>
 
                     {/* Calendario académico */}
-                    <div className="mt-4 border-t border-gray-200 pt-3">
-                      <p className="text-xs text-gray-600 font-medium mb-2">
-                        Calendario académico (fechas de entrega y paso de notas)
-                      </p>
-                      <p className="text-[11px] text-gray-400 mb-2">
-                        Las alertas de "nota cero" solo se generan 7 días después de la primera fecha de entrega.
-                      </p>
-                      <div className="space-y-1">
-                        {[...editCalendario]
-                          .map((entry, origIdx) => ({ ...entry, origIdx }))
-                          .sort((a, b) => (a.fecha || "9999").localeCompare(b.fecha || "9999"))
-                          .map(({ origIdx: i, ...entry }) => {
-                            const isPasoNotas = entry.tipo === "paso_notas";
-                            const isExamen = entry.tipo === "examen";
-                            const isRecup = entry.tipo === "recuperacion";
-                            const rowBg = isPasoNotas ? "bg-amber-50 border-amber-200" :
-                                          isExamen ? "bg-purple-50 border-purple-200" :
-                                          isRecup ? "bg-red-50 border-red-200" :
-                                          "bg-white border-gray-200";
-                            return (
-                              <div key={i} className={`flex gap-2 items-center p-2 rounded-lg border ${rowBg}`}>
-                                <input type="date" value={entry.fecha || ""}
-                                  onChange={e => {
-                                    const arr = [...editCalendario];
-                                    arr[i] = { ...arr[i], fecha: e.target.value };
-                                    setEditCalendario(arr);
-                                  }}
-                                  className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm w-40 bg-white" />
-                                <select value={entry.tipo || "entrega"}
-                                  onChange={e => {
-                                    const arr = [...editCalendario];
-                                    arr[i] = { ...arr[i], tipo: e.target.value };
-                                    setEditCalendario(arr);
-                                  }}
-                                  className={`border rounded-lg px-2 py-1.5 text-sm font-medium ${
-                                    isPasoNotas ? "border-amber-300 text-amber-700 bg-amber-50" :
-                                    isExamen ? "border-purple-300 text-purple-700 bg-purple-50" :
-                                    isRecup ? "border-red-300 text-red-600 bg-red-50" :
-                                    "border-gray-300 text-gray-700 bg-white"
-                                  }`}>
-                                  <option value="entrega">Entrega</option>
-                                  <option value="examen">Examen</option>
-                                  <option value="paso_notas">Paso de notas</option>
-                                  <option value="recuperacion">Recuperación</option>
-                                </select>
-                                <input type="text" value={entry.label || ""} placeholder="Descripción"
-                                  onChange={e => {
-                                    const arr = [...editCalendario];
-                                    arr[i] = { ...arr[i], label: e.target.value };
-                                    setEditCalendario(arr);
-                                  }}
-                                  className="flex-1 border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white" />
-                                <button onClick={() => setEditCalendario(arr => arr.filter((_, j) => j !== i))}
-                                  className="text-red-400 hover:text-red-600 text-lg px-2 hover:bg-red-50 rounded">✕</button>
-                              </div>
-                            );
-                          })}
+                    <div className="mt-4 border-t border-gray-200 pt-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <p className="text-sm text-gray-700 font-semibold flex items-center gap-2">
+                            <span className="text-base">📅</span> Calendario Académico
+                          </p>
+                          <p className="text-[11px] text-gray-400 mt-0.5">
+                            Fechas clave del semestre — las alertas de "nota cero" inician 7 días después de la primera entrega
+                          </p>
+                        </div>
+                        <button onClick={() => setEditCalendario(arr => [...arr, { fecha: "", tipo: "entrega", label: "" }])}
+                          className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors flex items-center gap-1">
+                          + Nueva fecha
+                        </button>
                       </div>
-                      <button onClick={() => setEditCalendario(arr => [...arr, { fecha: "", tipo: "entrega", label: "" }])}
-                        className="text-xs text-blue-600 hover:text-blue-800 font-medium mt-2 inline-block">
-                        + Agregar fecha
-                      </button>
+
+                      {/* Leyenda de tipos */}
+                      <div className="flex flex-wrap gap-3 mb-3 px-1">
+                        <span className="inline-flex items-center gap-1 text-[10px]"><span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block"></span> Entrega</span>
+                        <span className="inline-flex items-center gap-1 text-[10px]"><span className="w-2.5 h-2.5 rounded-full bg-purple-500 inline-block"></span> Examen</span>
+                        <span className="inline-flex items-center gap-1 text-[10px]"><span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block"></span> Paso de notas</span>
+                        <span className="inline-flex items-center gap-1 text-[10px]"><span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block"></span> Recuperación</span>
+                      </div>
+
+                      {editCalendario.length === 0 ? (
+                        <div className="text-center py-6 text-gray-400 text-sm border-2 border-dashed border-gray-200 rounded-xl">
+                          No hay fechas configuradas. Haz clic en "+ Nueva fecha" para agregar.
+                        </div>
+                      ) : (
+                        <div className="space-y-0">
+                          {/* Header row */}
+                          <div className="grid grid-cols-[40px_150px_160px_1fr_40px] gap-2 px-3 py-2 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                            <span>#</span>
+                            <span>Fecha</span>
+                            <span>Tipo</span>
+                            <span>Descripción</span>
+                            <span></span>
+                          </div>
+
+                          {[...editCalendario]
+                            .map((entry, origIdx) => ({ ...entry, origIdx }))
+                            .sort((a, b) => (a.fecha || "9999").localeCompare(b.fecha || "9999"))
+                            .map(({ origIdx: i, ...entry }, sortedIdx) => {
+                              const isPasoNotas = entry.tipo === "paso_notas";
+                              const isExamen = entry.tipo === "examen";
+                              const isRecup = entry.tipo === "recuperacion";
+                              const colorDot = isPasoNotas ? "bg-amber-500" :
+                                               isExamen ? "bg-purple-500" :
+                                               isRecup ? "bg-red-500" :
+                                               "bg-blue-500";
+                              const rowBg = isPasoNotas ? "bg-amber-50/60 hover:bg-amber-50" :
+                                            isExamen ? "bg-purple-50/60 hover:bg-purple-50" :
+                                            isRecup ? "bg-red-50/60 hover:bg-red-50" :
+                                            "bg-white hover:bg-blue-50/40";
+                              const borderLeft = isPasoNotas ? "border-l-amber-400" :
+                                                 isExamen ? "border-l-purple-400" :
+                                                 isRecup ? "border-l-red-400" :
+                                                 "border-l-blue-400";
+                              return (
+                                <div key={i} className={`grid grid-cols-[40px_150px_160px_1fr_40px] gap-2 items-center px-3 py-2.5 rounded-lg border-l-[3px] ${borderLeft} ${rowBg} transition-colors ${sortedIdx > 0 ? "mt-1.5" : ""}`}>
+                                  <span className={`w-6 h-6 rounded-full ${colorDot} text-white text-[10px] font-bold flex items-center justify-center`}>
+                                    {sortedIdx + 1}
+                                  </span>
+                                  <input type="date" value={entry.fecha || ""}
+                                    onChange={e => {
+                                      const arr = [...editCalendario];
+                                      arr[i] = { ...arr[i], fecha: e.target.value };
+                                      setEditCalendario(arr);
+                                    }}
+                                    className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:ring-2 focus:ring-blue-400 focus:border-transparent outline-none" />
+                                  <select value={entry.tipo || "entrega"}
+                                    onChange={e => {
+                                      const arr = [...editCalendario];
+                                      arr[i] = { ...arr[i], tipo: e.target.value };
+                                      setEditCalendario(arr);
+                                    }}
+                                    className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:ring-2 focus:ring-blue-400 focus:border-transparent outline-none font-medium">
+                                    <option value="entrega">📘 Entrega</option>
+                                    <option value="examen">📝 Examen</option>
+                                    <option value="paso_notas">📊 Paso de notas</option>
+                                    <option value="recuperacion">🔄 Recuperación</option>
+                                  </select>
+                                  <input type="text" value={entry.label || ""} placeholder="Ej: Entrega Unidad 1, Examen parcial..."
+                                    onChange={e => {
+                                      const arr = [...editCalendario];
+                                      arr[i] = { ...arr[i], label: e.target.value };
+                                      setEditCalendario(arr);
+                                    }}
+                                    className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm bg-white focus:ring-2 focus:ring-blue-400 focus:border-transparent outline-none" />
+                                  <button onClick={() => setEditCalendario(arr => arr.filter((_, j) => j !== i))}
+                                    className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors text-sm">✕</button>
+                                </div>
+                              );
+                            })}
+                        </div>
+                      )}
                     </div>
 
                     <button onClick={handleSaveDates}
