@@ -135,6 +135,10 @@ def generate_alerts_batch(db: Session) -> dict:
     calendario = _get_calendario(semconfig)
     fecha_notas = _primera_fecha_notas(calendario)
     hay_notas_esperadas = fecha_notas is not None and now >= fecha_notas.replace(tzinfo=timezone.utc)
+    # Fallback: si no hay calendario configurado pero ya pasaron 3+ semanas del bloque, activar
+    if not hay_notas_esperadas and max_dias_periodo is not None and max_dias_periodo >= 21:
+        hay_notas_esperadas = True
+        logger.info(f"nota_cero activada por fallback: {max_dias_periodo} días desde inicio de bloque (>= 21)")
 
     # Period format normalization
     if pf.startswith("P"):
@@ -235,10 +239,11 @@ def generate_alerts_batch(db: Session) -> dict:
             or_(Grade.nota_final == 0, Grade.nota_final.is_(None)),
             grade_periodo_cond,
         )
-        if included_asignaturas:
-            nota_cero_q = nota_cero_q.filter(Grade.asignatura.in_(included_asignaturas))
+        # No filtrar por included_asignaturas: un estudiante sin nota en CUALQUIER
+        # asignatura del periodo es preocupante, aunque no esté en CourseConfig
         for g in nota_cero_q.all():
             nota_cero_map.setdefault(g.student_id, []).append(g.asignatura or "Sin asignatura")
+        logger.info(f"nota_cero: {len(nota_cero_map)} estudiantes con nota 0 o NULL (hay_notas_esperadas={hay_notas_esperadas})")
 
     # Tareas
     task_q = db.query(TaskSubmission.student_id).filter(
@@ -269,10 +274,12 @@ def generate_alerts_batch(db: Session) -> dict:
 
     notas_bajas_map = {}  # student_id -> (avg_cal, avg_max, n_tareas)
     for sid, avg_cal, avg_max, n_tareas in task_cal_q.all():
-        if avg_max and avg_max > 0 and n_tareas >= 2:  # Al menos 2 tareas calificadas
+        if avg_max and avg_max > 0 and n_tareas >= 1:  # Al menos 1 tarea calificada
             pct = float(avg_cal) / float(avg_max)
             if pct < UMBRAL_NOTA_TAREA_PCT:
                 notas_bajas_map[sid] = (round(float(avg_cal), 1), round(float(avg_max), 1), int(n_tareas))
+
+    logger.info(f"notas_bajas_tareas: {len(notas_bajas_map)} estudiantes con promedio bajo (umbral <{UMBRAL_NOTA_TAREA_PCT*100}%)")
 
     # Segunda matrícula (enrollments)
     rep_enroll_counts = defaultdict(int)
@@ -436,6 +443,7 @@ def generate_alerts_batch(db: Session) -> dict:
     detail_parts = [
         f"Umbrales: inactividad>{umbral_dias_inactividad}d, compromiso<{umbral_compromiso}, tareas<{umbral_tareas}%",
         f"Estudiantes analizados: {len(all_students)}",
+        f"nota_cero_candidatos: {len(nota_cero_map)}, notas_bajas: {len(notas_bajas_map)}, 2da_mat: {len(all_rep_sids)}, 3ra_mat: {len(all_tm_sids)}",
     ]
     if excluded_course_codes:
         detail_parts.append(f"Bloque {semconfig.bloque_actual}: {len(excluded_course_codes)} cursos del otro bloque excluidos")
