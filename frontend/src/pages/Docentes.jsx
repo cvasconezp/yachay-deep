@@ -142,8 +142,8 @@ export default function Docentes() {
             color="red"
           />
           <SummaryCard
-            label="Intervenciones"
-            value={docentes.reduce((s, d) => s + d.total_intervenciones, 0)}
+            label="Tareas pendientes"
+            value={docentes.reduce((s, d) => s + (d.tareas_pendientes || 0), 0)}
             color="yellow"
           />
         </div>
@@ -197,6 +197,7 @@ export default function Docentes() {
                 <th className="text-center px-4 py-3 font-semibold text-gray-700 cursor-help" title="Estudiantes clasificados en riesgo alto: nota promedio < 60, materias reprobadas o inactividad prolongada en AVAC">Riesgo Alto</th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-700 cursor-help" title="Estudiantes en riesgo moderado: rendimiento entre 60-69 o señales tempranas de dificultad académica">Riesgo Medio</th>
                 <th className="px-4 py-3 font-semibold text-gray-700 w-28 cursor-help" title="Promedio del índice de compromiso de los estudiantes del docente. Mide: acceso AVAC (30%), tareas (30%), rendimiento (25%), matrícula (15%)">Compromiso prom.</th>
+                <th className="text-center px-4 py-3 font-semibold text-gray-700 cursor-help" title="Tareas de estudiantes pendientes por calificar en AVAC. Rojo = más de 10 pendientes, amarillo = 1-10, verde = 0">Pendientes</th>
                 <th className="text-center px-4 py-3 font-semibold text-gray-700">Intervenciones</th>
               </tr>
             </thead>
@@ -239,6 +240,19 @@ export default function Docentes() {
                     ) : <span className="text-gray-400 text-xs">0</span>}
                   </td>
                   <td className="px-4 py-3"><CompromisoBar valor={d.promedio_compromiso} /></td>
+                  <td className="px-4 py-3 text-center">
+                    {d.tareas_pendientes > 0 ? (
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${
+                        d.tareas_pendientes > 10 ? "bg-red-100 text-red-700" : "bg-yellow-100 text-yellow-700"
+                      }`} title={`${d.tareas_calificadas}/${d.tareas_total} calificadas (${d.pct_calificadas ?? 0}%)`}>
+                        {d.tareas_pendientes}
+                      </span>
+                    ) : d.tareas_total > 0 ? (
+                      <span className="text-green-500 text-xs" title="Todas las tareas calificadas">✓</span>
+                    ) : (
+                      <span className="text-gray-300 text-xs">—</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-center">
                     <span className={`font-semibold ${d.total_intervenciones === 0 ? "text-gray-400" : "text-blue-600"}`}>
                       {d.total_intervenciones}

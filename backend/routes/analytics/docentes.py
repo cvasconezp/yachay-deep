@@ -8,12 +8,12 @@ Enrollment como fallback (inicio de semestre sin AVAC).
 from typing import Optional
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from sqlalchemy import func, distinct
+from sqlalchemy import func, distinct, or_
 from pydantic import BaseModel
 
 from ...database import get_db
-from ...models import Student, Grade, Intervention, Enrollment
-from ...models.course_config import CourseConfig
+from ...models import Student, Grade, Intervention, Enrollment, TaskSubmission
+from ...models.course_config import CourseConfig, SemesterConfig
 from ...auth.jwt import get_current_user
 from ...models.user import User
 from ._helpers import apply_periodo_filter, get_umbrales, build_risk_map
@@ -36,6 +36,11 @@ class DocenteAnalytics(BaseModel):
     promedio_compromiso: Optional[float] = None
     total_intervenciones: int = 0
     asignaturas: list[str] = []
+    # Pendientes por calificar (desde TaskSubmission)
+    tareas_total: int = 0
+    tareas_calificadas: int = 0
+    tareas_pendientes: int = 0
+    pct_calificadas: Optional[float] = None
 
     class Config:
         from_attributes = True
@@ -91,6 +96,78 @@ def _docentes_from_enrollment(db: Session, periodo: Optional[str], carrera: Opti
     return output
 
 
+
+def _get_grading_stats_by_docente(db: Session, periodo: Optional[str] = None) -> dict:
+    """Calcula tareas pendientes por calificar agrupadas por docente.
+    
+    Usa TaskSubmission + CourseConfig para mapear codigo_curso → docente.
+    Returns: {docente_name: {total, calificadas, pendientes, pct}}
+    """
+    from collections import defaultdict
+    
+    # Determinar periodo activo
+    active_sem = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
+    active_periodo = active_sem.semestre if active_sem else None
+    req_p = periodo if periodo else active_periodo
+    if not req_p:
+        return {}
+    
+    raw_p = req_p[1:] if req_p.startswith("P") else req_p
+    
+    # Último snapshot
+    latest_snap = (
+        db.query(func.max(TaskSubmission.snapshot_date))
+        .filter(or_(TaskSubmission.periodo == req_p, TaskSubmission.periodo == raw_p))
+        .scalar()
+    )
+    if not latest_snap:
+        return {}
+    
+    snap_filter = or_(
+        TaskSubmission.snapshot_date == latest_snap,
+        TaskSubmission.snapshot_date.is_(None)
+    )
+    
+    # Todas las tareas del periodo
+    tareas = (
+        db.query(TaskSubmission)
+        .filter(
+            or_(TaskSubmission.periodo == req_p, TaskSubmission.periodo == raw_p),
+            snap_filter,
+        )
+        .all()
+    )
+    
+    if not tareas:
+        return {}
+    
+    # Mapear codigo_curso → docente desde CourseConfig
+    codigos = list(set(t.codigo_curso for t in tareas if t.codigo_curso))
+    cc_map = {}
+    if codigos:
+        ccs = db.query(CourseConfig).filter(CourseConfig.codigo_avac.in_(codigos)).all()
+        for cc in ccs:
+            if cc.docente:
+                cc_map[cc.codigo_avac] = cc.docente
+    
+    # Agrupar por docente
+    stats = defaultdict(lambda: {"total": 0, "calificadas": 0, "pendientes": 0})
+    for t in tareas:
+        docente = cc_map.get(t.codigo_curso)
+        if not docente:
+            continue
+        stats[docente]["total"] += 1
+        if t.calificada:
+            stats[docente]["calificadas"] += 1
+        else:
+            stats[docente]["pendientes"] += 1
+    
+    # Calcular porcentaje
+    for d, s in stats.items():
+        s["pct"] = round(s["calificadas"] / max(s["total"], 1) * 100, 1)
+    
+    return dict(stats)
+
 @router.get("/docentes", response_model=list[DocenteAnalytics])
 def get_docentes_analytics(
     carrera: Optional[str] = None,
@@ -125,6 +202,9 @@ def get_docentes_analytics(
     umbrales = get_umbrales(db)
     nota_aprob = umbrales["nota_aprobacion"]
 
+    # Calcular pendientes por calificar
+    grading_stats = _get_grading_stats_by_docente(db, periodo)
+
     output = []
     for docente_name in docentes:
         grades_q = db.query(Grade).filter(Grade.docente == docente_name)
@@ -156,6 +236,7 @@ def get_docentes_analytics(
         total_interv = db.query(func.count(Intervention.id)).filter(
             Intervention.docente == docente_name).scalar() or 0
 
+        gs = grading_stats.get(docente_name, {})
         output.append(DocenteAnalytics(
             docente=docente_name, total_asignaturas=len(asignaturas),
             total_estudiantes=len(student_ids), carreras=carreras_set,
@@ -166,6 +247,10 @@ def get_docentes_analytics(
             estudiantes_riesgo_bajo=risk_map.get("Bajo", 0),
             promedio_compromiso=round(avg_comp, 2) if avg_comp else None,
             total_intervenciones=total_interv, asignaturas=sorted(asignaturas),
+            tareas_total=gs.get("total", 0),
+            tareas_calificadas=gs.get("calificadas", 0),
+            tareas_pendientes=gs.get("pendientes", 0),
+            pct_calificadas=gs.get("pct"),
         ))
 
     output.sort(key=lambda x: x.estudiantes_riesgo_alto, reverse=True)

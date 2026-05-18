@@ -875,9 +875,53 @@ class ETLPipeline:
     # UPSERTS
     # ─────────────────────────────────────────────────────────────────────────
 
-    def _get_or_create_student(self, correo: str) -> Optional[Student]:
-        """Busca estudiante por correo institucional."""
-        return self.db.query(Student).filter(Student.correo_institucional == correo).first()
+    def _get_or_create_student(self, correo: str, nombre: str = None, auto_create: bool = False) -> Optional[Student]:
+        """Busca estudiante por correo institucional con fallbacks.
+
+        Orden de búsqueda:
+        1. correo_institucional exacto
+        2. correo personal exacto
+        3. Si auto_create=True y no se encuentra, crea un registro mínimo
+
+        Args:
+            correo: correo electrónico del estudiante (del AVAC o reporte)
+            nombre: nombre del estudiante (opcional, para crear registro mínimo)
+            auto_create: si True, crea el estudiante si no existe
+        """
+        if not correo or "@" not in correo:
+            return None
+
+        correo_norm = correo.strip().lower()
+
+        # 1. Búsqueda por correo institucional (match principal)
+        student = self.db.query(Student).filter(
+            func.lower(Student.correo_institucional) == correo_norm
+        ).first()
+        if student:
+            return student
+
+        # 2. Fallback: buscar por correo personal
+        student = self.db.query(Student).filter(
+            func.lower(Student.correo) == correo_norm
+        ).first()
+        if student:
+            # Asignar correo_institucional si no tiene (para futuras búsquedas)
+            if not student.correo_institucional:
+                student.correo_institucional = correo_norm
+                self.db.flush()
+            return student
+
+        # 3. Auto-create: crear registro mínimo para no perder datos
+        if auto_create:
+            student = Student(correo_institucional=correo_norm)
+            if nombre:
+                student.nombre = nombre.strip()
+            self.db.add(student)
+            self.db.flush()
+            logger.info(f"Auto-created student: {correo_norm} (nombre={nombre})")
+            return student
+
+        return None
 
     def _seed_students_from_personales(self, df_personales: pd.DataFrame) -> int:
         """
@@ -1476,7 +1520,8 @@ class ETLPipeline:
 
         for _, row in df_ingresos.iterrows():
             correo = str(row.get("correo", "")).strip()
-            student = self._get_or_create_student(correo)
+            nombre = str(row.get("nombre", "")).strip() or None
+            student = self._get_or_create_student(correo, nombre=nombre, auto_create=True)
             if not student:
                 continue
 
@@ -1518,10 +1563,13 @@ class ETLPipeline:
         if deleted:
             logger.info(f"  Snapshot tareas {today}: eliminados {deleted} registros del mismo día")
 
+        skipped_no_match = 0
         for _, row in df_tareas.iterrows():
             correo = str(row.get("correo", "")).strip()
-            student = self._get_or_create_student(correo)
+            nombre = str(row.get("nombre", "")).strip() or None
+            student = self._get_or_create_student(correo, nombre=nombre, auto_create=True)
             if not student:
+                skipped_no_match += 1
                 continue
 
             sub = TaskSubmission(
