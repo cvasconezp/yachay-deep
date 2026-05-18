@@ -345,7 +345,7 @@ export default function SeguimientoDocente({ embedded = false }) {
                         {curso.grupo && (
                           <span className="text-xs font-bold text-white bg-gray-500 px-2 py-0.5 rounded">Grupo {curso.grupo}</span>
                         )}
-                        <span className="text-xs text-gray-400 bg-white px-2 py-0.5 rounded">{curso.codigo_curso}</span>
+                        <a href={`https://avac.ups.edu.ec/grado68/course/view.php?id=${curso.codigo_curso}`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-xs text-blue-500 hover:text-blue-700 underline bg-white px-2 py-0.5 rounded">{curso.codigo_curso}</a>
                       </div>
                       <div className="text-sm">
                         {curso.pendientes > 0 ? (
