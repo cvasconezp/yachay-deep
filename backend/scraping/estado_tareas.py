@@ -199,17 +199,27 @@ def scrape_tareas(output_dir: str, codigos=None, base_url: str = None, db=None):
         return {"codigos_procesados": 0, "errores": []}
 
     # Cargar mapa de cursos especiales desde CourseConfig
+    # Criterios de curso especial:
+    #   1. Marcado manualmente como es_especial=True
+    #   2. bloque="ambos" (duran todo el semestre, no solo un bloque)
+    #   3. Nombre contiene "lengua" (cursos de lengua indígena)
     cursos_especiales = set()
     if db:
         try:
             from ..models.course_config import CourseConfig
+            from sqlalchemy import or_, func
             especiales = db.query(CourseConfig.codigo_avac).filter(
-                CourseConfig.es_especial == True,
-                CourseConfig.activo == True
+                CourseConfig.activo == True,
+                or_(
+                    CourseConfig.es_especial == True,
+                    func.lower(CourseConfig.bloque) == "ambos",
+                    func.lower(CourseConfig.nombre).contains("lengua"),
+                )
             ).all()
             cursos_especiales = {c.codigo_avac for c in especiales}
             if cursos_especiales:
-                logger.info(f"📋 {len(cursos_especiales)} cursos especiales configurados")
+                logger.info(f"📋 {len(cursos_especiales)} cursos especiales detectados "
+                            f"(es_especial / bloque=ambos / lengua)")
         except Exception as e:
             logger.warning(f"No se pudo cargar cursos especiales: {e}")
 
