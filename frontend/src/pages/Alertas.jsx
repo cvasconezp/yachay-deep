@@ -310,10 +310,27 @@ export default function Alertas() {
     setTimeout(() => setSuccess(""), 5000);
   };
 
-  // Counts
-  const counts = { alto: alertCounts.alto || 0, medio: alertCounts.medio || 0, bajo: alertCounts.bajo || 0 };
+  // Counts — basados en agrupación por estudiante (severidad máxima)
   const totalAlerts = alertCounts.total || alerts.length;
   const totalStudents = studentGroups.length;
+
+  // Contar estudiantes por su severidad máxima (no alertas individuales)
+  const studentSevCounts = useMemo(() => {
+    const c = { alto: 0, medio: 0, bajo: 0 };
+    // Use ALL alerts (before client-side filters) to count by student max severity
+    const allMap = new Map();
+    for (const a of alerts) {
+      if (!allMap.has(a.student_id)) allMap.set(a.student_id, []);
+      allMap.get(a.student_id).push(a);
+    }
+    for (const [, studentAlerts] of allMap) {
+      const maxSev = getMaxSeverity(studentAlerts);
+      c[maxSev] = (c[maxSev] || 0) + 1;
+    }
+    return c;
+  }, [alerts]);
+
+  const counts = studentSevCounts;
   const tiposCounts = alertCounts.por_tipo || {};
   if (Object.keys(tiposCounts).length === 0) {
     alerts.forEach(a => { tiposCounts[a.tipo] = (tiposCounts[a.tipo] || 0) + 1; });
