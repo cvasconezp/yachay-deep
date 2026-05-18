@@ -240,6 +240,9 @@ function TabSistema() {
         {/* Cookie AVAC */}
         <AvacCookieManager />
 
+        {/* Herramientas de Alertas */}
+        <AlertTools />
+
         <div className="mt-4 pt-4 border-t border-gray-100">
           <label className="block text-sm font-semibold text-gray-700 mb-2">
             Subir datos y ejecutar ETL
@@ -496,6 +499,68 @@ function TabSistema() {
 // ─────────────────────────────────────────────────────────────────────────────
 // ── Subcomponente: Carga Histórica (AVAC + reporte para periodo pasado) ──
 // ─────────────────────────────────────────────────────────────────────────────
+// Herramientas de diagnóstico y regeneración de alertas
+function AlertTools() {
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  const [debugData, setDebugData] = useState(null);
+  const [showDebug, setShowDebug] = useState(false);
+
+  const regenerar = async () => {
+    if (!confirm("¿Regenerar todas las alertas? Esto eliminará las actuales y creará nuevas.")) return;
+    setLoading(true);
+    setResult(null);
+    try {
+      const res = await api.generateAlerts();
+      setResult(res);
+    } catch (e) {
+      setResult({ error: e.message });
+    }
+    setLoading(false);
+  };
+
+  const loadDebug = async () => {
+    setShowDebug(!showDebug);
+    if (!showDebug && !debugData) {
+      try {
+        const res = await api.debugAlertConditions();
+        setDebugData(res);
+      } catch (e) {
+        setDebugData({ error: e.message });
+      }
+    }
+  };
+
+  return (
+    <div className="mt-4 pt-4 border-t border-gray-100">
+      <div className="flex items-center justify-between mb-2">
+        <label className="text-sm font-semibold text-gray-700">Alertas</label>
+        <div className="flex gap-2">
+          <button onClick={loadDebug}
+            className="text-xs px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors">
+            {showDebug ? "Ocultar" : "Diagnóstico"}
+          </button>
+          <button onClick={regenerar} disabled={loading}
+            className="text-xs px-3 py-1.5 rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-700 transition-colors disabled:opacity-50">
+            {loading ? "Regenerando..." : "Regenerar Alertas"}
+          </button>
+        </div>
+      </div>
+      {result && (
+        <div className={`text-xs p-2 rounded-lg mb-2 ${result.error ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
+          {result.error ? `Error: ${result.error}` : `✅ ${result.created} alertas creadas (${result.cleaned} anteriores eliminadas)`}
+          {result.detail && <div className="mt-1 text-gray-500">{result.detail}</div>}
+        </div>
+      )}
+      {showDebug && debugData && (
+        <div className="text-xs bg-gray-50 rounded-lg p-3 max-h-64 overflow-auto font-mono whitespace-pre-wrap">
+          {JSON.stringify(debugData, null, 2)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Gestión de Cookie AVAC (MoodleSession)
 // ─────────────────────────────────────────────────────────────────────────────
 function AvacCookieManager() {

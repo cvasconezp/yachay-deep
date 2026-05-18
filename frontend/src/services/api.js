@@ -284,6 +284,7 @@ class ApiClient {
   }
   markAlertRead(id) { return this.patch(`/alerts/${id}/read`, {}); }
   generateAlerts() { return this.post("/alerts/generate", {}); }
+  debugAlertConditions() { return this.get("/alerts/debug/conditions"); }
 
   // ── Predictions / ML ──
   trainModel() { return this.post("/predictions/train", {}); }
