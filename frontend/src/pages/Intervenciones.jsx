@@ -670,7 +670,7 @@ export default function Intervenciones() {
       {/* ===== Modal de Impacto de Intervención ===== */}
       {impactData && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setImpactData(null)}>
-          <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full mx-4 p-6" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full mx-4 p-6 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
                 <span>📊</span> Impacto de la Intervención
@@ -685,13 +685,34 @@ export default function Intervenciones() {
               </div>
             ) : (
               <div className="space-y-4">
+                {/* Estudiante + fecha + tiempo transcurrido */}
                 {impactData.nombre && (
-                  <p className="text-sm text-gray-600">
-                    Estudiante: <span className="font-medium text-gray-900">{impactData.nombre}</span>
-                    {impactData.fecha_intervencion && (
-                      <span className="text-gray-400"> · {new Date(impactData.fecha_intervencion).toLocaleDateString("es-EC")}</span>
+                  <div className="text-sm text-gray-600">
+                    <p>
+                      Estudiante: <span className="font-medium text-gray-900">{impactData.nombre}</span>
+                      {impactData.fecha_intervencion && (
+                        <span className="text-gray-400"> · {new Date(impactData.fecha_intervencion).toLocaleDateString("es-EC")}</span>
+                      )}
+                    </p>
+                    {impactData.dias_transcurridos != null && (
+                      <p className="text-xs text-gray-400 mt-1">
+                        Hace {impactData.dias_transcurridos} día(s)
+                        {impactData.ultimo_etl && <span> · Último ETL: {impactData.ultimo_etl}</span>}
+                      </p>
                     )}
-                  </p>
+                  </div>
+                )}
+
+                {/* Advertencias */}
+                {impactData.advertencias?.length > 0 && (
+                  <div className="space-y-1.5">
+                    {impactData.advertencias.map((adv, i) => (
+                      <div key={i} className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700 flex items-start gap-2">
+                        <span className="mt-0.5">⚠️</span>
+                        <span>{adv}</span>
+                      </div>
+                    ))}
+                  </div>
                 )}
 
                 {/* Indicadores antes vs ahora */}
@@ -710,30 +731,46 @@ export default function Intervenciones() {
                     const antes = impactData.antes?.[key];
                     const ahora = impactData.ahora?.[key];
                     const delta = impactData.cambio?.[key];
-                    const improved = delta != null && good(delta);
+                    const detalle = impactData.detalle_indicadores?.[key];
+                    const isMejora = detalle === "mejora";
+                    const isEmpeoro = detalle === "empeoro";
+                    const isSinCambio = detalle === "sin_cambio_significativo";
                     return [
                       <div key={`${key}-label`} className="text-xs text-gray-700 font-medium text-left">{label}</div>,
                       <div key={`${key}-antes`} className="text-xs text-gray-500">{format(antes)}</div>,
-                      <div key={`${key}-ahora`} className={`text-xs font-bold ${improved ? "text-green-600" : delta != null && delta !== 0 ? "text-red-600" : "text-gray-600"}`}>
+                      <div key={`${key}-ahora`} className={`text-xs font-bold ${isMejora ? "text-green-600" : isEmpeoro ? "text-red-600" : "text-gray-600"}`}>
                         {format(ahora)}
                         {delta != null && delta !== 0 && (
-                          <span className="ml-1 text-[10px]">({improved ? "↑" : "↓"})</span>
+                          <span className="ml-1 text-[10px]">
+                            ({isMejora ? "↑" : isEmpeoro ? "↓" : "≈"})
+                          </span>
+                        )}
+                        {isSinCambio && delta != null && delta !== 0 && (
+                          <span className="ml-0.5 text-[9px] text-gray-400">(no significativo)</span>
                         )}
                       </div>,
                     ];
                   })}
                 </div>
 
-                {/* Veredicto */}
+                {/* Veredicto mejorado */}
                 <div className={`rounded-lg p-3 text-center text-sm font-medium ${
-                  impactData.mejoro === true ? "bg-green-50 text-green-700 border border-green-200" :
-                  impactData.mejoro === false ? "bg-red-50 text-red-700 border border-red-200" :
+                  impactData.veredicto === "mejora_clara" ? "bg-green-50 text-green-700 border border-green-200" :
+                  impactData.veredicto === "mejora_parcial" ? "bg-green-50 text-green-600 border border-green-200" :
+                  impactData.veredicto === "empeoro" || impactData.veredicto === "empeoro_parcial" ? "bg-red-50 text-red-700 border border-red-200" :
+                  impactData.veredicto === "sin_cambio_significativo" ? "bg-amber-50 text-amber-700 border border-amber-200" :
                   "bg-gray-50 text-gray-500 border border-gray-200"
                 }`}>
-                  {impactData.mejoro === true
-                    ? `✓ El estudiante mejoró en ${impactData.indicadores_mejorados} de ${impactData.indicadores_evaluados} indicadores`
-                    : impactData.mejoro === false
-                    ? `✗ No se detectó mejora significativa tras la intervención`
+                  {impactData.veredicto === "mejora_clara"
+                    ? `✓ Mejora significativa en ${impactData.indicadores_mejorados} de ${impactData.indicadores_evaluados} indicadores`
+                    : impactData.veredicto === "mejora_parcial"
+                    ? `↗ Mejora parcial: ${impactData.indicadores_mejorados} mejoró, ${impactData.indicadores_empeorados || 0} empeoró`
+                    : impactData.veredicto === "empeoro"
+                    ? `✗ Empeoró en ${impactData.indicadores_empeorados} de ${impactData.indicadores_evaluados} indicadores`
+                    : impactData.veredicto === "empeoro_parcial"
+                    ? `↘ Deterioro parcial: ${impactData.indicadores_empeorados} empeoró, ${impactData.indicadores_mejorados} mejoró`
+                    : impactData.veredicto === "sin_cambio_significativo"
+                    ? `≈ Sin cambios significativos — los indicadores se mantuvieron estables`
                     : "Sin datos suficientes para evaluar impacto"}
                 </div>
 
@@ -741,9 +778,13 @@ export default function Intervenciones() {
                 {(impactData.antes?.nivel_riesgo || impactData.ahora?.nivel_riesgo) && (
                   <div className="flex items-center justify-center gap-3 text-sm">
                     <span className="text-gray-500">Riesgo:</span>
-                    <span className="font-medium">{impactData.antes?.nivel_riesgo || "—"}</span>
+                    <span className="font-medium capitalize">{impactData.antes?.nivel_riesgo || "—"}</span>
                     <span className="text-gray-300">→</span>
-                    <span className="font-bold">{impactData.ahora?.nivel_riesgo || "—"}</span>
+                    <span className={`font-bold capitalize ${
+                      impactData.ahora?.nivel_riesgo === "bajo" ? "text-green-600" :
+                      impactData.ahora?.nivel_riesgo === "medio" ? "text-amber-600" :
+                      impactData.ahora?.nivel_riesgo === "alto" ? "text-red-600" : ""
+                    }`}>{impactData.ahora?.nivel_riesgo || "—"}</span>
                   </div>
                 )}
               </div>

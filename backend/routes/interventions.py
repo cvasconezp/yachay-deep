@@ -575,8 +575,12 @@ def get_intervention_impact(
     """
     [GAP-F5-01] Mide el impacto de una intervención:
     compara los indicadores snapshot (al crear) vs los actuales del estudiante.
-    Esto cierra el ciclo: detección → intervención → evaluación de impacto.
+    Incluye umbrales de significancia, tiempo transcurrido y frescura de datos.
     """
+    from datetime import datetime, timezone
+    from ..models.avac_access import AvacAccess
+    from sqlalchemy import func as sqlfunc
+
     intervention = db.query(Intervention).filter(Intervention.id == intervention_id).first()
     if not intervention:
         raise HTTPException(status_code=404, detail="Intervención no encontrada")
@@ -593,6 +597,13 @@ def get_intervention_impact(
             "mensaje": "Sin datos de snapshot — intervención creada antes de esta funcionalidad",
             "disponible": False,
         }
+
+    # ── Umbrales de cambio significativo ──
+    # Un cambio menor a estos valores no se considera mejora real
+    UMBRAL_COMPROMISO = 0.03       # 3 puntos porcentuales
+    UMBRAL_DIAS_ACCESO = 2         # 2 días
+    UMBRAL_TAREAS = 5.0            # 5 puntos porcentuales
+    UMBRAL_PROB = 0.03             # 3 puntos porcentuales en probabilidad
 
     def _delta(antes, ahora):
         if antes is None or ahora is None:
@@ -623,27 +634,86 @@ def get_intervention_impact(
         "prob_reprobacion": _delta(antes["prob_reprobacion"], ahora["prob_reprobacion"]),
     }
 
-    # Determinar si hubo mejora general
+    # ── Evaluar mejora con umbrales de significancia ──
     mejoras = 0
+    empeoramientos = 0
+    sin_cambio = 0
     total_evaluados = 0
-    if cambio["compromiso"] is not None:
-        total_evaluados += 1
-        if cambio["compromiso"] > 0:
-            mejoras += 1
-    if cambio["dias_sin_acceso"] is not None:
-        total_evaluados += 1
-        if cambio["dias_sin_acceso"] < 0:  # menos días sin acceso = mejora
-            mejoras += 1
-    if cambio["porcentaje_tareas"] is not None:
-        total_evaluados += 1
-        if cambio["porcentaje_tareas"] > 0:
-            mejoras += 1
-    if cambio["prob_desercion"] is not None:
-        total_evaluados += 1
-        if cambio["prob_desercion"] < 0:  # menor prob = mejora
-            mejoras += 1
+    detalle = {}
 
-    mejoro = mejoras > (total_evaluados / 2) if total_evaluados > 0 else None
+    def _evaluar(nombre, delta, umbral, invertir=False):
+        """invertir=True para métricas donde bajar es bueno (dias, probabilidad)"""
+        nonlocal mejoras, empeoramientos, sin_cambio, total_evaluados
+        if delta is None:
+            detalle[nombre] = "sin_datos"
+            return
+        total_evaluados += 1
+        valor = -delta if invertir else delta
+        if valor > umbral:
+            mejoras += 1
+            detalle[nombre] = "mejora"
+        elif valor < -umbral:
+            empeoramientos += 1
+            detalle[nombre] = "empeoro"
+        else:
+            sin_cambio += 1
+            detalle[nombre] = "sin_cambio_significativo"
+
+    _evaluar("compromiso", cambio["compromiso"], UMBRAL_COMPROMISO)
+    _evaluar("dias_sin_acceso", cambio["dias_sin_acceso"], UMBRAL_DIAS_ACCESO, invertir=True)
+    _evaluar("porcentaje_tareas", cambio["porcentaje_tareas"], UMBRAL_TAREAS)
+    _evaluar("prob_desercion", cambio["prob_desercion"], UMBRAL_PROB, invertir=True)
+
+    if total_evaluados == 0:
+        mejoro = None
+        veredicto = "sin_datos"
+    elif mejoras > 0 and empeoramientos == 0:
+        mejoro = True
+        veredicto = "mejora_clara"
+    elif mejoras > empeoramientos:
+        mejoro = True
+        veredicto = "mejora_parcial"
+    elif empeoramientos > 0 and mejoras == 0:
+        mejoro = False
+        veredicto = "empeoro"
+    elif empeoramientos > mejoras:
+        mejoro = False
+        veredicto = "empeoro_parcial"
+    else:
+        mejoro = None
+        veredicto = "sin_cambio_significativo"
+
+    # ── Tiempo transcurrido desde la intervención ──
+    dias_transcurridos = None
+    tiempo_suficiente = True
+    if intervention.created_at:
+        now = datetime.now(timezone.utc)
+        created = intervention.created_at
+        if created.tzinfo is None:
+            from datetime import timezone as tz
+            created = created.replace(tzinfo=tz.utc)
+        dias_transcurridos = (now - created).days
+        # Menos de 7 días es muy pronto para evaluar impacto
+        if dias_transcurridos < 7:
+            tiempo_suficiente = False
+
+    # ── Frescura de datos: último ETL ──
+    ultimo_etl = db.query(sqlfunc.max(AvacAccess.snapshot_date)).scalar()
+    datos_desactualizados = False
+    dias_desde_etl = None
+    if ultimo_etl:
+        from datetime import date
+        dias_desde_etl = (date.today() - ultimo_etl).days
+        datos_desactualizados = dias_desde_etl > 3  # más de 3 días sin ETL
+
+    # ── Advertencias contextuales ──
+    advertencias = []
+    if not tiempo_suficiente:
+        advertencias.append(f"Han pasado solo {dias_transcurridos} día(s) desde la intervención. Se recomienda evaluar después de al menos 7 días.")
+    if datos_desactualizados:
+        advertencias.append(f"Los datos del estudiante no se han actualizado en {dias_desde_etl} días. Los valores 'Ahora' podrían no reflejar la situación actual.")
+    if veredicto == "sin_cambio_significativo":
+        advertencias.append("Los cambios detectados están dentro del margen normal de variación y no se consideran significativos.")
 
     return {
         "intervention_id": intervention_id,
@@ -654,7 +724,16 @@ def get_intervention_impact(
         "ahora": ahora,
         "cambio": cambio,
         "mejoro": mejoro,
+        "veredicto": veredicto,
+        "detalle_indicadores": detalle,
         "indicadores_mejorados": mejoras,
+        "indicadores_empeorados": empeoramientos,
+        "indicadores_sin_cambio": sin_cambio,
         "indicadores_evaluados": total_evaluados,
+        "dias_transcurridos": dias_transcurridos,
+        "tiempo_suficiente": tiempo_suficiente,
+        "ultimo_etl": str(ultimo_etl) if ultimo_etl else None,
+        "datos_desactualizados": datos_desactualizados,
+        "advertencias": advertencias,
         "disponible": True,
     }

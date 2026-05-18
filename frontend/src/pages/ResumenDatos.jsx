@@ -486,6 +486,8 @@ export default function ResumenDatos() {
   const [practicasSearch, setPracticasSearch] = useState("");  // búsqueda de escuelas
   const [execData, setExecData] = useState(null);
   const [execLoading, setExecLoading] = useState(false);
+  const [effData, setEffData] = useState(null);
+  const [effLoading, setEffLoading] = useState(false);
 
   useEffect(() => {
     api.getCarreras().then(setCarreras).catch(() => {});
@@ -540,6 +542,16 @@ export default function ResumenDatos() {
       .then(d => setExecData(d))
       .catch(() => setExecData(null))
       .finally(() => setExecLoading(false));
+  }, [activeTab, filtroPeriodo]);
+
+  // Load effectiveness data when tab is active
+  useEffect(() => {
+    if (activeTab !== "efectividad") return;
+    setEffLoading(true);
+    api.getEffectiveness(filtroPeriodo)
+      .then(d => setEffData(d))
+      .catch(() => setEffData(null))
+      .finally(() => setEffLoading(false));
   }, [activeTab, filtroPeriodo]);
 
   const toggleCol = (key) => {
@@ -600,6 +612,7 @@ export default function ResumenDatos() {
     { key: "tendencias", label: "Tendencias" },
     { key: "practicas", label: "Prácticas" },
     { key: "ejecutivo", label: "Ejecutivo" },
+    { key: "efectividad", label: "Efectividad" },
   ];
 
   return (
@@ -1149,6 +1162,141 @@ export default function ResumenDatos() {
                     <div className="text-center py-16 text-gray-400">
                       <div className="text-4xl mb-3">📭</div>
                       <p className="text-sm">Sin datos ejecutivos para este período</p>
+                    </div>
+                  )}
+                </>
+              )}
+
+          {/* ═══ TAB: EFECTIVIDAD DE INTERVENCIONES ═══ */}
+          {activeTab === "efectividad" && (
+            <div className="space-y-5">
+              {effLoading ? (
+                <div className="flex items-center justify-center py-16 text-gray-400">
+                  <svg className="animate-spin h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" /></svg>
+                  Cargando análisis de efectividad...
+                </div>
+              ) : !effData || effData.total_analizadas === 0 ? (
+                <div className="text-center py-16 text-gray-400">
+                  <div className="text-4xl mb-3">📭</div>
+                  <p className="text-sm">No hay intervenciones cerradas/resueltas para analizar</p>
+                  <p className="text-xs mt-1">Cierra o resuelve intervenciones para ver su efectividad</p>
+                </div>
+              ) : (
+                <>
+                  {/* KPI Cards */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    <KPICard label="Total analizadas" value={effData.total_analizadas} icon="📋" accent={PBI.navy} />
+                    <KPICard label="Exitosas" value={effData.exitosas} sub={`${effData.tasa_exito_global}% de éxito`} icon="✅" accent={PBI.green} />
+                    <KPICard label="No exitosas" value={effData.total_analizadas - effData.exitosas} icon="⚠️" accent={PBI.coral} />
+                    <KPICard label="Tasa de éxito" value={`${effData.tasa_exito_global}%`} icon="🎯" accent={effData.tasa_exito_global >= 50 ? PBI.green : PBI.coral} />
+                  </div>
+
+                  {/* Ranking de medios más efectivos */}
+                  {effData.ranking_medios?.length > 0 && (
+                    <div className="rounded-lg p-5" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
+                      <h3 className="text-sm font-semibold mb-4" style={{ color: PBI.navy }}>Ranking de Medios de Intervención</h3>
+                      <div className="space-y-3">
+                        {effData.ranking_medios.map((m, i) => {
+                          const barColor = m.tasa_exito >= 70 ? PBI.green : m.tasa_exito >= 40 ? PBI.gold : PBI.coral;
+                          return (
+                            <div key={m.medio} className="flex items-center gap-3">
+                              <span className="w-6 text-center text-sm font-bold" style={{ color: i < 3 ? PBI.blue : PBI.slate }}>#{i + 1}</span>
+                              <div className="flex-1">
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="text-sm font-medium" style={{ color: PBI.navy }}>{m.medio}</span>
+                                  <span className="text-xs font-semibold" style={{ color: barColor }}>{m.tasa_exito}%</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <div className="flex-1 rounded-full h-3 overflow-hidden" style={{ background: "#f1f5f9" }}>
+                                    <div className="h-full rounded-full transition-all" style={{ width: `${m.tasa_exito}%`, background: barColor }} />
+                                  </div>
+                                  <span className="text-[10px] whitespace-nowrap" style={{ color: PBI.slate }}>{m.exitosas}/{m.total}</span>
+                                </div>
+                                {m.delta_compromiso_promedio !== null && (
+                                  <span className="text-[10px]" style={{ color: m.delta_compromiso_promedio > 0 ? PBI.green : m.delta_compromiso_promedio < 0 ? PBI.coral : PBI.slate }}>
+                                    Δ compromiso: {m.delta_compromiso_promedio > 0 ? "+" : ""}{(m.delta_compromiso_promedio * 100).toFixed(1)}%
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Por Motivo y Por Carrera side by side */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                    {/* Por Motivo */}
+                    {effData.por_motivo?.length > 0 && (
+                      <div className="rounded-lg p-5" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
+                        <h3 className="text-sm font-semibold mb-4" style={{ color: PBI.navy }}>Efectividad por Motivo</h3>
+                        <ResponsiveContainer width="100%" height={Math.max(200, effData.por_motivo.length * 40)}>
+                          <BarChart layout="vertical" data={effData.por_motivo.slice(0, 10).map(m => ({ name: m.motivo?.length > 25 ? m.motivo.slice(0,23) + "..." : m.motivo, tasa: m.tasa_exito, total: m.total, full: m.motivo }))}>
+                            <CartesianGrid strokeDasharray="3 3" stroke={PBI.border} />
+                            <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11 }} unit="%" />
+                            <YAxis dataKey="name" type="category" width={130} tick={{ fontSize: 11 }} />
+                            <Tooltip contentStyle={pbiTooltipStyle} formatter={(v, name, props) => [`${v}% (${props.payload.total} intervenciones)`, "Tasa éxito"]} />
+                            <Bar dataKey="tasa" fill={PBI.blue} radius={[0, 4, 4, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+
+                    {/* Por Carrera */}
+                    {effData.por_carrera?.length > 0 && (
+                      <div className="rounded-lg p-5" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
+                        <h3 className="text-sm font-semibold mb-4" style={{ color: PBI.navy }}>Efectividad por Carrera</h3>
+                        <ResponsiveContainer width="100%" height={Math.max(200, effData.por_carrera.slice(0, 10).length * 40)}>
+                          <BarChart layout="vertical" data={effData.por_carrera.slice(0, 10).map(c => ({ name: c.carrera?.length > 25 ? c.carrera.slice(0,23) + "..." : c.carrera, tasa: c.tasa_exito, total: c.total, full: c.carrera }))}>
+                            <CartesianGrid strokeDasharray="3 3" stroke={PBI.border} />
+                            <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11 }} unit="%" />
+                            <YAxis dataKey="name" type="category" width={130} tick={{ fontSize: 11 }} />
+                            <Tooltip contentStyle={pbiTooltipStyle} formatter={(v, name, props) => [`${v}% (${props.payload.total} intervenciones)`, "Tasa éxito"]} />
+                            <Bar dataKey="tasa" fill={PBI.teal} radius={[0, 4, 4, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Tabla detallada por medio */}
+                  {effData.por_medio?.length > 0 && (
+                    <div className="rounded-lg p-5" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
+                      <h3 className="text-sm font-semibold mb-4" style={{ color: PBI.navy }}>Detalle por Medio de Intervención</h3>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr style={{ background: "#f8fafc" }}>
+                              <th className="text-left px-3 py-2 font-semibold text-xs uppercase tracking-wider" style={{ color: PBI.slate }}>Medio</th>
+                              <th className="text-center px-3 py-2 font-semibold text-xs uppercase tracking-wider" style={{ color: PBI.slate }}>Total</th>
+                              <th className="text-center px-3 py-2 font-semibold text-xs uppercase tracking-wider" style={{ color: PBI.slate }}>Exitosas</th>
+                              <th className="text-center px-3 py-2 font-semibold text-xs uppercase tracking-wider" style={{ color: PBI.slate }}>Tasa</th>
+                              <th className="text-center px-3 py-2 font-semibold text-xs uppercase tracking-wider" style={{ color: PBI.slate }}>Δ Compromiso</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {effData.por_medio.map((m, i) => (
+                              <tr key={m.medio} style={{ borderBottom: `1px solid ${PBI.border}`, background: i % 2 === 0 ? "#fff" : "#fafbfc" }}>
+                                <td className="px-3 py-2 font-medium" style={{ color: PBI.navy }}>{m.medio}</td>
+                                <td className="px-3 py-2 text-center" style={{ color: PBI.slate }}>{m.total}</td>
+                                <td className="px-3 py-2 text-center font-semibold" style={{ color: PBI.green }}>{m.exitosas}</td>
+                                <td className="px-3 py-2 text-center">
+                                  <span className="inline-block px-2 py-0.5 rounded-full text-xs font-semibold" style={{
+                                    background: m.tasa_exito >= 70 ? "#f0fdf4" : m.tasa_exito >= 40 ? "#fffbeb" : "#fef2f2",
+                                    color: m.tasa_exito >= 70 ? "#166534" : m.tasa_exito >= 40 ? "#92400e" : "#b91c1c",
+                                  }}>{m.tasa_exito}%</span>
+                                </td>
+                                <td className="px-3 py-2 text-center text-xs font-medium" style={{
+                                  color: m.delta_compromiso_promedio > 0 ? PBI.green : m.delta_compromiso_promedio < 0 ? PBI.coral : PBI.slate,
+                                }}>
+                                  {m.delta_compromiso_promedio !== null ? `${m.delta_compromiso_promedio > 0 ? "+" : ""}${(m.delta_compromiso_promedio * 100).toFixed(1)}%` : "—"}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   )}
                 </>
