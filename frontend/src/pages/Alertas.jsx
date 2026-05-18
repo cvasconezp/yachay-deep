@@ -336,7 +336,8 @@ export default function Alertas() {
 
       {/* Summary Cards */}
       {!loading && alerts.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-5">
+        <>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
           <div
             className={`rounded-xl border p-4 cursor-pointer transition-all ${filterSeverity === "all" ? "bg-blue-50 border-blue-300 ring-2 ring-blue-400 shadow-md" : "bg-white border-gray-200 hover:shadow-sm"}`}
             onClick={() => setFilterSeverity("all")}
@@ -369,29 +370,10 @@ export default function Alertas() {
             <div className="text-2xl font-bold text-yellow-600 mt-1">{counts.bajo}</div>
             {filterSeverity === "bajo" && <div className="text-[9px] text-yellow-600 font-medium mt-1">✓ Filtro activo</div>}
           </div>
-          <div
-            className="bg-orange-50 rounded-xl border border-orange-200 p-4 cursor-pointer hover:ring-2 hover:ring-orange-300 hover:shadow-md transition-all"
-            onClick={() => openStudentList("repitentes")}
-            title="Ver listado de repitentes"
-          >
-            <div className="flex items-center justify-between">
-              <div className="text-xs font-medium text-orange-700 uppercase tracking-wide">Repitentes</div>
-              <span className="text-[10px] text-orange-400">▸ ver lista</span>
-            </div>
-            <div className="text-2xl font-bold text-orange-700 mt-1">📋</div>
-          </div>
-          <div
-            className="bg-purple-50 rounded-xl border border-purple-200 p-4 cursor-pointer hover:ring-2 hover:ring-purple-300 hover:shadow-md transition-all"
-            onClick={() => openStudentList("condicionados")}
-            title="Ver listado de condicionados (3ra matrícula)"
-          >
-            <div className="flex items-center justify-between">
-              <div className="text-xs font-medium text-purple-700 uppercase tracking-wide">Condicionados</div>
-              <span className="text-[10px] text-purple-400">▸ ver lista</span>
-            </div>
-            <div className="text-2xl font-bold text-purple-700 mt-1">📋</div>
-          </div>
         </div>
+
+
+        </>
       )}
 
       {/* Filters */}
@@ -421,6 +403,18 @@ export default function Alertas() {
             {Object.entries(tiposCounts).sort(([,a],[,b]) => b - a).map(([tipo, count]) => (
               <option key={tipo} value={tipo}>{TIPO_LABELS[tipo] || tipo} ({count})</option>
             ))}
+          </select>
+        </div>
+        <div>
+          <label className="text-xs font-medium text-gray-500 block mb-1">Condición Especial</label>
+          <select
+            value=""
+            onChange={e => { if (e.target.value) { openStudentList(e.target.value); e.target.value = ""; } }}
+            className="border border-purple-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 bg-purple-50 text-purple-700"
+          >
+            <option value="">Seleccionar...</option>
+            <option value="repitentes">🔄 Repitentes (2da matrícula)</option>
+            <option value="condicionados">⚠️ Condicionados (3ra matrícula)</option>
           </select>
         </div>
         <div className="ml-auto text-sm text-gray-500">
