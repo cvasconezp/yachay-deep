@@ -552,6 +552,253 @@ def get_session_manual(base_url: str) -> requests.Session:
         driver.quit()
 
 
+
+def get_session_login(username: str, password: str, base_url: str) -> requests.Session:
+    """
+    Login automático via requests (sin Selenium) — simula el flujo SSO de Microsoft.
+
+    Flujo:
+    1. GET /login/index.php → obtener logintoken
+    2. POST /login/index.php con username + password + logintoken
+       (Moodle intenta login local primero, si falla redirige a SSO)
+    3. Si hay SSO: seguir los redirects de Microsoft, POST credenciales
+    4. Obtener MoodleSession cookie al final
+
+    Para universidades con SSO Microsoft, esto funciona si:
+    - El usuario tiene "App Password" (bypass MFA)
+    - O la política de Microsoft permite login sin MFA desde IPs conocidos
+    """
+    session = requests.Session()
+    session.headers.update({
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                      "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    })
+
+    logger.info("🔐 Login automático via requests (sin Selenium)...")
+
+    # ── Paso 1: Obtener la página de login y el logintoken ──
+    login_url = f"{base_url}/login/index.php"
+    resp = session.get(login_url, timeout=30)
+    resp.raise_for_status()
+
+    # Intentar login local primero (funciona si Moodle tiene auth manual habilitado)
+    from bs4 import BeautifulSoup as BS4
+    soup = BS4(resp.text, "html.parser")
+    token_input = soup.find("input", {"name": "logintoken"})
+    logintoken = token_input["value"] if token_input else ""
+
+    logger.info("🔐 Intentando login local Moodle...")
+    login_data = {
+        "username": username,
+        "password": password,
+        "logintoken": logintoken,
+        "anchor": "",
+    }
+    resp2 = session.post(login_url, data=login_data, timeout=30, allow_redirects=True)
+
+    # Verificar si el login local funcionó
+    if "/my/" in resp2.url and "login" not in resp2.url:
+        logger.info(f"✅ Login local exitoso (URL: {resp2.url})")
+        _save_cookie_to_db(session, base_url)
+        return session
+
+    # ── Paso 2: Si login local no funciona, intentar flujo SSO Microsoft ──
+    logger.info("🔐 Login local no disponible, intentando flujo SSO Microsoft...")
+
+    # Buscar el botón/link de SSO en la página de login
+    soup2 = BS4(resp2.text, "html.parser")
+    sso_link = None
+    for a in soup2.find_all("a", href=True):
+        href = a["href"]
+        if "oauth2" in href or "microsoft" in href.lower() or "login.microsoftonline" in href:
+            sso_link = href
+            break
+    # También buscar en botones de identidad de Moodle
+    if not sso_link:
+        for a in soup2.find_all("a", href=True):
+            if "auth/oauth2" in a["href"]:
+                sso_link = a["href"]
+                break
+
+    if not sso_link:
+        # Último intento: buscar por texto "UPS" o "Microsoft"
+        for a in soup2.find_all("a"):
+            text = a.get_text(strip=True).lower()
+            if "ups" in text or "microsoft" in text or "institucional" in text:
+                sso_link = a.get("href", "")
+                break
+
+    if not sso_link:
+        raise RuntimeError(
+            "❌ No se encontró enlace SSO en la página de login. "
+            "Verifica que AVAC tenga OAuth2/Microsoft configurado."
+        )
+
+    if not sso_link.startswith("http"):
+        sso_link = f"{base_url}/{sso_link.lstrip('/')}"
+
+    logger.info(f"🔐 Siguiendo flujo SSO: {sso_link[:80]}...")
+
+    # Seguir el redirect a Microsoft
+    resp3 = session.get(sso_link, timeout=30, allow_redirects=True)
+
+    # Microsoft login page — POST email
+    if "login.microsoftonline.com" in resp3.url or "login.live.com" in resp3.url:
+        soup3 = BS4(resp3.text, "html.parser")
+
+        # Extraer config de Microsoft login
+        import re as _re
+        import json as _json
+
+        # Buscar el form de login o el config JSON de Microsoft
+        config_match = _re.search(r'\$Config=(\{.*?\});', resp3.text)
+        ctx_match = _re.search(r'"sCtx":"([^"]+)"', resp3.text)
+        flow_match = _re.search(r'"sFT":"([^"]+)"', resp3.text)
+        hpgid_match = _re.search(r'"hpgid":([0-9]+)', resp3.text)
+
+        if flow_match:
+            # Microsoft usa AJAX-based login
+            flow_token = flow_match.group(1)
+            ctx = ctx_match.group(1) if ctx_match else ""
+
+            # POST username
+            ms_post_url = resp3.url.split("?")[0]
+            logger.info("🔐 Enviando usuario a Microsoft...")
+            resp4 = session.post(
+                f"https://login.microsoftonline.com/common/GetCredentialType",
+                json={"username": username, "isOtherIdpSupported": True, "checkPhones": False,
+                      "isRemoteNGCSupported": True, "isCookieBannerShown": False,
+                      "isFidoSupported": True, "flowToken": flow_token},
+                timeout=30,
+            )
+
+            # POST password
+            logger.info("🔐 Enviando contraseña a Microsoft...")
+            login_post_data = {
+                "i13": "0",
+                "login": username,
+                "loginfmt": username,
+                "type": "11",
+                "LoginOptions": "3",
+                "lrt": "",
+                "lrtPartition": "",
+                "hisRegion": "",
+                "hisScaleUnit": "",
+                "passwd": password,
+                "ps": "2",
+                "psRNGCDefaultType": "",
+                "psRNGCEntropy": "",
+                "psRNGCSLK": "",
+                "canary": "",
+                "ctx": ctx,
+                "hpgrequestid": "",
+                "flowToken": flow_token,
+                "PPSX": "",
+                "NewUser": "1",
+                "FoundMSAs": "",
+                "fspost": "0",
+                "i21": "0",
+                "CookieDisclosure": "0",
+                "IsFidoSupported": "1",
+                "isSignupPost": "0",
+                "i19": "0",
+            }
+
+            resp5 = session.post(ms_post_url, data=login_post_data, timeout=30, allow_redirects=True)
+
+            # "Stay signed in?" page — submit YES
+            if "KmsiInterrupt" in resp5.text or "mantener" in resp5.text.lower() or "stay signed" in resp5.text.lower():
+                logger.info("🔐 Aceptando 'Mantener sesión iniciada'...")
+                soup5 = BS4(resp5.text, "html.parser")
+                form = soup5.find("form")
+                if form:
+                    action = form.get("action", resp5.url)
+                    if not action.startswith("http"):
+                        action = f"https://login.microsoftonline.com{action}"
+                    hidden_inputs = {}
+                    for inp in form.find_all("input", {"type": "hidden"}):
+                        hidden_inputs[inp.get("name", "")] = inp.get("value", "")
+                    resp5 = session.post(action, data=hidden_inputs, timeout=30, allow_redirects=True)
+
+            # Seguir redirects de vuelta a Moodle
+            # Buscar form con SAMLResponse o redirect automático
+            max_redirects = 5
+            for _ in range(max_redirects):
+                soup_r = BS4(resp5.text, "html.parser")
+                form = soup_r.find("form")
+                if form and (form.find("input", {"name": "SAMLResponse"}) or
+                             form.find("input", {"name": "code"}) or
+                             form.find("input", {"name": "state"})):
+                    action = form.get("action", "")
+                    hidden_inputs = {}
+                    for inp in form.find_all("input", {"type": "hidden"}):
+                        name = inp.get("name", "")
+                        if name:
+                            hidden_inputs[name] = inp.get("value", "")
+                    resp5 = session.post(action, data=hidden_inputs, timeout=30, allow_redirects=True)
+                else:
+                    break
+
+            # Verificar que estamos logueados en Moodle
+            if "/my/" in resp5.url or "dashboard" in resp5.url:
+                logger.info(f"✅ Login SSO exitoso (URL: {resp5.url})")
+                _save_cookie_to_db(session, base_url)
+                return session
+
+            # Intentar navegar a /my/ directamente
+            resp_final = session.get(f"{base_url}/my/", timeout=15)
+            if "login" not in resp_final.url:
+                logger.info(f"✅ Login SSO exitoso (URL: {resp_final.url})")
+                _save_cookie_to_db(session, base_url)
+                return session
+
+            raise RuntimeError(
+                f"❌ Login SSO completó pero no se logró acceder a AVAC. "
+                f"URL final: {resp5.url}. Posible MFA requerido — usa App Password."
+            )
+        else:
+            raise RuntimeError(
+                "❌ No se pudo parsear la página de login de Microsoft. "
+                "El formato puede haber cambiado."
+            )
+    else:
+        # Verificar si ya estamos logueados (redirect directo funcionó)
+        if "/my/" in resp3.url and "login" not in resp3.url:
+            logger.info(f"✅ Login SSO exitoso via redirect (URL: {resp3.url})")
+            _save_cookie_to_db(session, base_url)
+            return session
+
+        raise RuntimeError(
+            f"❌ El flujo SSO no redirigió a Microsoft. URL: {resp3.url}. "
+            "Verifica las credenciales y la configuración de AVAC."
+        )
+
+
+def _save_cookie_to_db(session: requests.Session, base_url: str):
+    """Guarda la cookie MoodleSession obtenida en la BD para reutilizarla."""
+    try:
+        domain = base_url.split("//")[1].split("/")[0]
+        cookie_val = session.cookies.get("MoodleSession", domain=domain)
+        if not cookie_val:
+            # Intentar sin dominio
+            for c in session.cookies:
+                if c.name == "MoodleSession":
+                    cookie_val = c.value
+                    break
+        if cookie_val:
+            from ..database import SessionLocal
+            from ..models.system_setting import SystemSetting
+            db = SessionLocal()
+            try:
+                SystemSetting.set(db, "avac_session_cookie", cookie_val)
+                db.commit()
+                logger.info(f"🍪 Cookie MoodleSession guardada en BD (auto-renovada)")
+            finally:
+                db.close()
+    except Exception as e:
+        logger.debug(f"No se pudo guardar cookie en BD: {e}")
+
+
 def get_session_cookie(cookie_value: str, base_url: str) -> requests.Session:
     """
     Login via MoodleSession cookie — bypasses SSO/Selenium completely.
@@ -664,10 +911,28 @@ def scrape_ingresos(output_dir: str, codigos: list = None,
 
     if session_cookie:
         logger.info("🍪 Modo cookie (MoodleSession directa — sin Selenium)")
-        session = get_session_cookie(session_cookie, base_url)
+        try:
+            session = get_session_cookie(session_cookie, base_url)
+        except RuntimeError as e:
+            logger.warning(f"Cookie expirada: {e}")
+            if username and password:
+                logger.info("🔐 Cookie expirada → intentando login automático por requests...")
+                try:
+                    session = get_session_login(username, password, base_url)
+                except Exception as e2:
+                    logger.warning(f"Login por requests falló: {e2}")
+                    logger.info("🔑 Fallback → Selenium...")
+                    session = get_session_headless(username, password, base_url, totp_secret)
+            else:
+                raise
     elif username and password:
-        logger.info("🔑 Modo Selenium (credenciales + SSO automático)")
-        session = get_session_headless(username, password, base_url, totp_secret)
+        logger.info("🔐 Intentando login automático por requests (sin Selenium)...")
+        try:
+            session = get_session_login(username, password, base_url)
+        except Exception as e:
+            logger.warning(f"Login por requests falló: {e}")
+            logger.info("🔑 Fallback → Selenium...")
+            session = get_session_headless(username, password, base_url, totp_secret)
     else:
         logger.info("👤 Modo manual — login interactivo requerido")
         session = get_session_manual(base_url)

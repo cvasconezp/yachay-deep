@@ -183,7 +183,7 @@ def scrape_tareas(output_dir: str, codigos=None, base_url: str = None, db=None):
         base_url: URL base de AVAC (default env AVAC_BASE_URL)
         db: SQLAlchemy session (para leer CourseConfig)
     """
-    from .ingresos_avac import get_active_codigos, get_session_headless, get_session_cookie
+    from .ingresos_avac import get_active_codigos, get_session_headless, get_session_cookie, get_session_login
     from ..config import settings as _settings
 
     base_url = base_url or _settings.AVAC_BASE_URL
@@ -248,8 +248,13 @@ def scrape_tareas(output_dir: str, codigos=None, base_url: str = None, db=None):
             logger.warning(f"Cookie inválida para tareas: {e}")
 
     if session is None and username and password:
-        logger.info("🔑 Tareas: modo Selenium (credenciales + SSO)")
-        session = get_session_headless(username, password, base_url, totp_secret=totp_secret)
+        logger.info("🔐 Tareas: intentando login automático por requests...")
+        try:
+            session = get_session_login(username, password, base_url)
+        except Exception as e:
+            logger.warning(f"Login por requests falló: {e}")
+            logger.info("🔑 Tareas: fallback → Selenium...")
+            session = get_session_headless(username, password, base_url, totp_secret=totp_secret)
 
     if session is None:
         logger.error("No se pudo autenticar en AVAC para tareas (ni cookie ni Selenium).")
