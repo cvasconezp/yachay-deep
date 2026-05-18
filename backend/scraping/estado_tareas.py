@@ -377,10 +377,11 @@ def scrape_tareas(output_dir: str, codigos=None, base_url: str = None, db=None):
                 for u in ["1", "2", "3", "4"]:
                     est = str(row.get(f"Estado {u}", "")).lower()
                     calif = str(row.get(f"Calificación {u}", ""))
-                    # Cursos especiales: si hay calificación y no es "-", cuenta como entregada/calificada
-                    if "enviado" in est or "calificado" in est or (es_especial and calif and calif != "-"):
+                    # Determinar si hay calificación numérica real (ej: "12,00 / 15,00")
+                    tiene_calif_numerica = bool(calif and calif.strip() not in ("-", "") and re.search(r"\d", calif))
+                    if "enviado" in est or "calificado" in est or tiene_calif_numerica:
                         entregadas += 1
-                    if "calificado" in est or (es_especial and calif and calif != "-"):
+                    if "calificado" in est or tiene_calif_numerica:
                         calificadas += 1
                 row["Total Entregas"] = entregadas
                 row["Total Calificadas"] = calificadas

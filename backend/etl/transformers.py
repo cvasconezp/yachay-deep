@@ -342,6 +342,12 @@ def transform_estado_tareas(carpeta: str, codigos_activos=None) -> pd.DataFrame:
             cal_final, _ = parse_calificacion(str(cal_final_txt))
             entregada, calificada, retrasada = parse_estado_tarea(str(estado))
 
+            # Fix: si hay calificación numérica asignada, la tarea está calificada
+            # aunque el texto del estado solo diga "Enviado para calificar"
+            if not calificada and cal is not None and cal_max is not None:
+                calificada = True
+                entregada = True
+
             # Solo guardamos si hay alguna data real para esta unidad
             if not estado and cal is None:
                 continue
