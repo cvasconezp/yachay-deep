@@ -6,6 +6,8 @@ from ..database import Base
 
 class UserRole(str, enum.Enum):
     admin = "admin"
+    coordinador = "coordinador"
+    docente = "docente"
     monitor = "monitor"
 
 

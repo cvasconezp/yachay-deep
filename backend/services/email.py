@@ -244,6 +244,19 @@ GUIAS_POR_ROL = {
         "En <strong>Administración</strong> puedes gestionar usuarios, ejecutar ETL y configurar el sistema.",
         "El <strong>Análisis Institucional</strong> te da una vista macro de KPIs y tendencias.",
     ],
+    "coordinador": [
+        "Revisa el <strong>Análisis Institucional</strong> para monitorear KPIs y tendencias por carrera.",
+        "Usa <strong>Estudiantes</strong> y <strong>Alertas</strong> para supervisar el estado de riesgo.",
+        "Consulta <strong>Docentes</strong> y <strong>Asignaturas</strong> para identificar áreas problemáticas.",
+        "Revisa las <strong>Intervenciones</strong> para dar seguimiento al trabajo de los monitores.",
+        "Usa <strong>Tutorías</strong> para coordinar el apoyo académico de tu carrera.",
+    ],
+    "docente": [
+        "Consulta <strong>Asignaturas</strong> para ver el rendimiento en tus materias.",
+        "Revisa <strong>Entregas</strong> para identificar estudiantes con tareas pendientes.",
+        "Usa la <strong>Ficha Estudiante</strong> para entender el contexto de cada alumno.",
+        "Consulta <strong>Docentes</strong> para ver tu panel de efectividad.",
+    ],
     "monitor": [
         "Tu trabajo principal está en <strong>Alertas</strong>: revísalas cada día para actuar a tiempo.",
         "Usa la <strong>Ficha Estudiante</strong> para investigar el historial completo de un estudiante.",

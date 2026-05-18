@@ -1394,6 +1394,21 @@ const PERMISSION_TABS = [
 
 const ALL_TAB_KEYS = PERMISSION_TABS.map(t => t.key);
 
+/* Permisos predefinidos por rol — se aplican al seleccionar el rol, pero se pueden personalizar */
+const ROLE_PRESETS = {
+  admin: null,  // null = acceso completo
+  coordinador: ["dashboard", "alertas", "intervenciones", "ficha", "asignaturas", "entregas", "docentes", "tutorias", "resumen"],
+  docente: ["dashboard", "ficha", "asignaturas", "entregas", "docentes"],
+  monitor: ["dashboard", "alertas", "intervenciones", "ficha", "asignaturas", "entregas", "tutorias"],
+};
+
+const ROLE_LABELS = {
+  admin: "Administrador",
+  coordinador: "Coordinador",
+  docente: "Docente",
+  monitor: "Monitor",
+};
+
 function PermissionCheckboxes({ selected, onChange, compact = false }) {
   const grouped = {};
   PERMISSION_TABS.forEach(t => {
@@ -1496,10 +1511,14 @@ function TabUsuarios() {
           <input value={newUser.password} onChange={e => setNewUser(u => ({ ...u, password: e.target.value }))}
             type="password" placeholder="Contraseña" required minLength={8}
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-          <select value={newUser.role} onChange={e => setNewUser(u => ({ ...u, role: e.target.value }))}
+          <select value={newUser.role} onChange={e => {
+              const r = e.target.value;
+              setNewUser(u => ({ ...u, role: r, permissions: ROLE_PRESETS[r] ?? null }));
+            }}
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-            <option value="monitor">Monitor</option>
-            <option value="admin">Admin</option>
+            {Object.entries(ROLE_LABELS).map(([k, v]) => (
+              <option key={k} value={k}>{v}</option>
+            ))}
           </select>
           <button type="submit"
             className="bg-brand text-white rounded-lg py-2 text-sm font-semibold hover:bg-brand-light">
@@ -1517,6 +1536,15 @@ function TabUsuarios() {
                 className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
               <span className="text-xs text-gray-500">Enviar email de bienvenida</span>
             </label>
+          </div>
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-[11px] text-gray-400">
+              Preset: <strong className="text-gray-600">{ROLE_LABELS[newUser.role]}</strong>
+            </span>
+            <button type="button" onClick={() => setNewUser(u => ({ ...u, permissions: ROLE_PRESETS[u.role] ?? null }))}
+              className="text-[11px] text-blue-500 hover:text-blue-700 underline">
+              Restaurar permisos del rol
+            </button>
           </div>
           <PermissionCheckboxes
             selected={newUser.permissions}
@@ -1544,7 +1572,7 @@ function TabUsuarios() {
               <tr key={u.id} className="border-t border-gray-100">
                 <td className="px-5 py-2.5 font-medium text-gray-800">{u.nombre}</td>
                 <td className="px-5 py-2.5 text-gray-500">{u.email}</td>
-                <td className="px-5 py-2.5 text-center capitalize text-xs font-medium text-blue-600">{u.role}</td>
+                <td className="px-5 py-2.5 text-center text-xs font-medium text-blue-600">{ROLE_LABELS[u.role] || u.role}</td>
                 <td className="px-5 py-2.5 text-center">
                   <button onClick={() => toggleUser(u)}
                     className={`px-2 py-0.5 rounded-full text-xs font-medium ${u.is_active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
@@ -1601,6 +1629,9 @@ function EditUserModal({ user, onClose, onSaved, onError }) {
       if (role !== user.role) payload.role = role;
       if (isActive !== !!user.is_active) payload.is_active = isActive;
       if (password.trim()) payload.password = password;
+      // Always send permissions if changed
+      const permChanged = JSON.stringify(permissions) !== JSON.stringify(user.permissions ?? null);
+      if (permChanged) payload.permissions = permissions;
 
       if (Object.keys(payload).length === 0) {
         onClose();
@@ -1639,10 +1670,15 @@ function EditUserModal({ user, onClose, onSaved, onError }) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-1">Rol</label>
-              <select value={role} onChange={(e) => setRole(e.target.value)}
+              <select value={role} onChange={(e) => {
+                  const r = e.target.value;
+                  setRole(r);
+                  setPermissions(ROLE_PRESETS[r] ?? null);
+                }}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <option value="monitor">Monitor</option>
-                <option value="admin">Admin</option>
+                {Object.entries(ROLE_LABELS).map(([k, v]) => (
+                  <option key={k} value={k}>{v}</option>
+                ))}
               </select>
             </div>
             <div>
@@ -1663,6 +1699,22 @@ function EditUserModal({ user, onClose, onSaved, onError }) {
               placeholder="Dejar en blanco para no cambiar" minLength={password ? 8 : undefined}
               autoComplete="new-password"
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+
+          {/* Permisos */}
+          <div className="border-t border-gray-100 pt-3">
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-xs font-medium text-gray-700">Permisos de acceso</label>
+              <button type="button" onClick={() => setPermissions(ROLE_PRESETS[role] ?? null)}
+                className="text-[11px] text-blue-500 hover:text-blue-700 underline">
+                Restaurar del rol
+              </button>
+            </div>
+            <PermissionCheckboxes
+              selected={permissions}
+              onChange={setPermissions}
+              compact
+            />
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
