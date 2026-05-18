@@ -6,16 +6,18 @@ import { YachayLogo, YachayIcon } from "./YachayLogo";
 import NotificationBell from "./NotificationBell";
 
 const NAV_ITEMS = [
-  { path: "/dashboard",      label: "Dashboard",        icon: "📊" },
-  { path: "/ficha",          label: "Ficha Estudiante",  icon: "🎓" },
-  { path: "/asignaturas",    label: "Asignaturas",       icon: "📚" },
-  { path: "/docentes",       label: "Docentes",          icon: "👨‍🏫" },
-  { path: "/tutorias",       label: "Tutorías",          icon: "📋" },
-  { path: "/intervenciones", label: "Intervenciones",     icon: "🤝" },
-  { path: "/alertas",        label: "Alertas",           icon: "🔔" },
-  { path: "/entregas",       label: "Entregas",            icon: "📝" },
-  { path: "/resumen",        label: "Resumen de Datos",   icon: "📈" },
-  { path: "/about",          label: "Sobre Yachay Deep",  icon: "ℹ️" },
+  // ── Monitoreo operativo ──
+  { path: "/dashboard",      label: "Estudiantes",            icon: "🎓" },
+  { path: "/alertas",        label: "Alertas",                icon: "🔔" },
+  { path: "/intervenciones", label: "Intervenciones",         icon: "🤝" },
+  { path: "/ficha",          label: "Ficha Estudiante",       icon: "🔍" },
+  // ── Académico ──
+  { path: "/asignaturas",    label: "Asignaturas",            icon: "📚" },
+  { path: "/entregas",       label: "Entregas",               icon: "📝" },
+  { path: "/docentes",       label: "Docentes",               icon: "👨‍🏫" },
+  { path: "/tutorias",       label: "Tutorías",               icon: "📋" },
+  // ── Institucional ──
+  { path: "/resumen",        label: "Análisis Institucional", icon: "📊" },
 ];
 
 const ADMIN_ITEMS = [
