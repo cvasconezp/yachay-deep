@@ -655,3 +655,133 @@ async def check_avac_cookie(
         }
     except Exception as e:
         return {"configured": True, "valid": False, "message": f"Error verificando: {e}"}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Debug: diagnóstico AVAC por estudiante
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/debug/student-avac/{student_id}")
+def debug_student_avac(
+    student_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Diagnóstico de datos AVAC para un estudiante específico.
+    
+    Retorna: correo, task_submissions, accesos AVAC, calificaciones,
+    y posibles problemas de matching.
+    """
+    from ..models import Student, AvacAccess, TaskSubmission, Grade, Enrollment
+    from ..models.course_config import SemesterConfig
+
+    student = db.query(Student).filter(Student.id == student_id).first()
+    if not student:
+        return {"error": f"Estudiante {student_id} no encontrado"}
+
+    # Periodo activo
+    sem = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
+    active_p = sem.semestre if sem else None
+
+    # Contar task_submissions
+    ts_total = db.query(sqlfunc.count(TaskSubmission.id)).filter(
+        TaskSubmission.student_id == student_id
+    ).scalar()
+    
+    ts_by_periodo = db.query(
+        TaskSubmission.periodo,
+        TaskSubmission.snapshot_date,
+        sqlfunc.count(TaskSubmission.id)
+    ).filter(
+        TaskSubmission.student_id == student_id
+    ).group_by(TaskSubmission.periodo, TaskSubmission.snapshot_date).all()
+
+    # Contar accesos AVAC
+    avac_total = db.query(sqlfunc.count(AvacAccess.id)).filter(
+        AvacAccess.student_id == student_id
+    ).scalar()
+
+    # Contar calificaciones
+    grades_total = db.query(sqlfunc.count(Grade.id)).filter(
+        Grade.student_id == student_id
+    ).scalar()
+    
+    grades_by_periodo = db.query(
+        Grade.periodo, sqlfunc.count(Grade.id)
+    ).filter(
+        Grade.student_id == student_id
+    ).group_by(Grade.periodo).all()
+
+    # Enrollments
+    enrollments = db.query(sqlfunc.count(Enrollment.id)).filter(
+        Enrollment.student_id == student_id
+    ).scalar()
+
+    # Buscar si existe otro estudiante con correo similar
+    posibles_duplicados = []
+    if student.correo_institucional:
+        base = student.correo_institucional.split("@")[0]
+        dupes = db.query(Student).filter(
+            Student.id != student_id,
+            Student.correo_institucional.ilike(f"%{base}%")
+        ).limit(5).all()
+        posibles_duplicados = [
+            {"id": d.id, "nombre": d.nombre, "correo_inst": d.correo_institucional}
+            for d in dupes
+        ]
+
+    return {
+        "estudiante": {
+            "id": student.id,
+            "nombre": student.nombre,
+            "correo_institucional": student.correo_institucional,
+            "correo_personal": student.correo,
+            "cedula": student.cedula,
+            "carrera": student.carrera,
+        },
+        "periodo_activo": active_p,
+        "task_submissions": {
+            "total": ts_total,
+            "por_periodo_snapshot": [
+                {"periodo": p, "snapshot": str(s) if s else None, "count": c}
+                for p, s, c in ts_by_periodo
+            ],
+        },
+        "accesos_avac": {"total": avac_total},
+        "calificaciones": {
+            "total": grades_total,
+            "por_periodo": [
+                {"periodo": p, "count": c} for p, c in grades_by_periodo
+            ],
+        },
+        "enrollments": enrollments,
+        "posibles_duplicados": posibles_duplicados,
+        "diagnostico": (
+            "✅ Tiene datos AVAC" if ts_total > 0
+            else "⚠️ SIN task_submissions — posible problema de matching correo o scraping no procesó sus cursos"
+        ),
+    }
+
+
+@router.get("/debug/student-search")
+def debug_student_search(
+    q: str = "",
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Busca estudiante por nombre/correo para diagnóstico."""
+    from ..models import Student
+    
+    if len(q) < 2:
+        return {"results": []}
+    
+    students = db.query(Student).filter(
+        sqlfunc.lower(Student.nombre).contains(q.lower())
+        | sqlfunc.lower(Student.correo_institucional).contains(q.lower())
+        | sqlfunc.lower(Student.cedula).contains(q.lower())
+    ).limit(10).all()
+    
+    return {"results": [
+        {"id": s.id, "nombre": s.nombre, "correo_inst": s.correo_institucional, "cedula": s.cedula}
+        for s in students
+    ]}
