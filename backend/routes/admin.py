@@ -570,7 +570,7 @@ async def get_scraping_progress(
 ):
     """
     Consulta el estado del workflow de scraping más reciente en GitHub Actions.
-    Retorna: status, started_at, elapsed, steps con su estado.
+    Calcula progreso basado en tiempo promedio de runs históricos.
     """
     import httpx
     from ..config import settings
@@ -586,9 +586,9 @@ async def get_scraping_progress(
 
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            # Get most recent workflow runs
+            # Get recent workflow runs (last 5 for avg calculation)
             resp = await client.get(
-                f"https://api.github.com/repos/{settings.GITHUB_REPO}/actions/workflows/{settings.GITHUB_WORKFLOW}/runs?per_page=1",
+                f"https://api.github.com/repos/{settings.GITHUB_REPO}/actions/workflows/{settings.GITHUB_WORKFLOW}/runs?per_page=5",
                 headers=headers,
             )
             if resp.status_code != 200:
@@ -605,6 +605,43 @@ async def get_scraping_progress(
             run_started = run.get("run_started_at")
             run_updated = run.get("updated_at")
 
+            # Calculate average duration from recent successful runs
+            avg_duration_secs = None
+            completed_durations = []
+            for r in runs[1:]:  # Skip current, use previous runs
+                if r.get("conclusion") == "success" and r.get("run_started_at") and r.get("updated_at"):
+                    try:
+                        from datetime import datetime as _dt
+                        started = _dt.fromisoformat(r["run_started_at"].replace("Z", "+00:00"))
+                        updated = _dt.fromisoformat(r["updated_at"].replace("Z", "+00:00"))
+                        dur = (updated - started).total_seconds()
+                        if dur > 60:  # At least 1 minute
+                            completed_durations.append(dur)
+                    except Exception:
+                        pass
+            if completed_durations:
+                avg_duration_secs = sum(completed_durations) / len(completed_durations)
+
+            # Calculate time-based progress
+            elapsed_secs = 0
+            if run_started:
+                from datetime import datetime as _dt, timezone as _tz
+                started_dt = _dt.fromisoformat(run_started.replace("Z", "+00:00"))
+                elapsed_secs = (_dt.now(_tz.utc) - started_dt).total_seconds()
+
+            time_progress = None
+            if avg_duration_secs and elapsed_secs > 0 and run_status == "in_progress":
+                pct = min(round(elapsed_secs / avg_duration_secs * 100), 99)
+                remaining_secs = max(avg_duration_secs - elapsed_secs, 0)
+                remaining_min = round(remaining_secs / 60)
+                time_progress = {
+                    "percent": pct,
+                    "elapsed_min": round(elapsed_secs / 60),
+                    "estimated_total_min": round(avg_duration_secs / 60),
+                    "remaining_min": remaining_min,
+                    "based_on_runs": len(completed_durations),
+                }
+
             result = {
                 "running": run_status in ("queued", "in_progress"),
                 "status": run_status,
@@ -613,9 +650,10 @@ async def get_scraping_progress(
                 "updated_at": run_updated,
                 "html_url": run.get("html_url"),
                 "run_id": run.get("id"),
+                "time_progress": time_progress,
             }
 
-            # If running, get jobs for step-level progress
+            # Also include step-level info if running
             if run_status in ("queued", "in_progress"):
                 jobs_resp = await client.get(
                     f"https://api.github.com/repos/{settings.GITHUB_REPO}/actions/runs/{run['id']}/jobs",
@@ -627,19 +665,12 @@ async def get_scraping_progress(
                     if jobs:
                         job = jobs[0]
                         steps = job.get("steps", [])
-                        total_steps = len(steps)
-                        completed_steps = sum(1 for s in steps if s.get("status") == "completed")
                         current_step = None
                         for s in steps:
                             if s.get("status") == "in_progress":
                                 current_step = s.get("name")
                                 break
-                        result["progress"] = {
-                            "total_steps": total_steps,
-                            "completed_steps": completed_steps,
-                            "percent": round(completed_steps / total_steps * 100) if total_steps > 0 else 0,
-                            "current_step": current_step,
-                        }
+                        result["current_step"] = current_step
 
             return result
 

@@ -165,12 +165,13 @@ function TabSistema() {
 
           {/* Barra de progreso del scraping */}
           {scrapingProgress?.running && (() => {
-            const elapsed = scrapingProgress.started_at
-              ? Math.floor((Date.now() - new Date(scrapingProgress.started_at).getTime()) / 60000)
-              : 0;
-            const elapsedStr = elapsed < 1 ? "menos de 1 minuto" : `${elapsed} minuto${elapsed !== 1 ? "s" : ""}`;
-            const stepName = scrapingProgress.progress?.current_step || "";
-            const isLongStep = stepName.toLowerCase().includes("scraping") || stepName.toLowerCase().includes("etl");
+            const tp = scrapingProgress.time_progress;
+            const elapsed = tp?.elapsed_min ?? (scrapingProgress.started_at
+              ? Math.floor((Date.now() - new Date(scrapingProgress.started_at).getTime()) / 60000) : 0);
+            const elapsedStr = elapsed < 1 ? "menos de 1 min" : `${elapsed} min`;
+            const pct = tp?.percent ?? 0;
+            const remaining = tp?.remaining_min;
+            const stepName = scrapingProgress.current_step || "";
             return (
             <div className="mt-4 bg-indigo-50 border border-indigo-200 rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
@@ -180,40 +181,35 @@ function TabSistema() {
                 </div>
                 <span className="text-sm font-bold text-indigo-700">
                   {elapsedStr}
+                  {remaining != null && remaining > 0 && (
+                    <span className="text-indigo-400 font-normal ml-1">· ~{remaining} min restantes</span>
+                  )}
                 </span>
               </div>
-              {scrapingProgress.progress && (
-                <>
-                  <div className="w-full bg-indigo-100 rounded-full h-3 overflow-hidden">
-                    <div
-                      className="bg-indigo-500 h-full rounded-full transition-all duration-500 relative overflow-hidden"
-                      style={{ width: `${scrapingProgress.progress.percent}%` }}
-                    >
-                      {isLongStep && (
-                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent"
-                          style={{ animation: "shimmer 2s infinite linear", backgroundSize: "200% 100%" }}></div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between mt-2 text-xs text-indigo-600">
-                    <span>
-                      Paso {scrapingProgress.progress.completed_steps}/{scrapingProgress.progress.total_steps}
-                      {stepName && (
-                        <span className="ml-1 text-indigo-500">— {stepName}</span>
-                      )}
-                    </span>
-                    {scrapingProgress.started_at && (
-                      <span className="text-indigo-400">
-                        Iniciado: {new Date(scrapingProgress.started_at).toLocaleTimeString("es-EC", { hour: "2-digit", minute: "2-digit" })}
-                      </span>
-                    )}
-                  </div>
-                  {isLongStep && (
-                    <div className="mt-1.5 text-[11px] text-indigo-400 italic">
-                      Este paso procesa todos los cursos y puede tardar 30–40 minutos. El porcentaje avanzará cuando pase al siguiente paso.
-                    </div>
-                  )}
-                </>
+              <div className="w-full bg-indigo-100 rounded-full h-3 overflow-hidden">
+                <div
+                  className="bg-indigo-500 h-full rounded-full transition-all duration-500 relative overflow-hidden"
+                  style={{ width: `${pct}%` }}
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent"
+                    style={{ animation: "shimmer 2s infinite linear", backgroundSize: "200% 100%" }}></div>
+                </div>
+              </div>
+              <div className="flex items-center justify-between mt-2 text-xs text-indigo-600">
+                <span>
+                  {pct}%
+                  {stepName && <span className="ml-1 text-indigo-500">— {stepName}</span>}
+                </span>
+                {scrapingProgress.started_at && (
+                  <span className="text-indigo-400">
+                    Iniciado: {new Date(scrapingProgress.started_at).toLocaleTimeString("es-EC", { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                )}
+              </div>
+              {tp && (
+                <div className="mt-1.5 text-[11px] text-indigo-400 italic">
+                  Estimación basada en {tp.based_on_runs} ejecución{tp.based_on_runs !== 1 ? "es" : ""} anterior{tp.based_on_runs !== 1 ? "es" : ""} (~{tp.estimated_total_min} min promedio)
+                </div>
               )}
               {scrapingProgress.html_url && (
                 <a href={scrapingProgress.html_url} target="_blank" rel="noopener noreferrer"
