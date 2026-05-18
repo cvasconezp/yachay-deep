@@ -31,6 +31,7 @@ class EstudiantePendiente(BaseModel):
 class CursoPendiente(BaseModel):
     codigo_curso: str
     asignatura: str
+    grupo: Optional[str] = None
     total_tareas: int
     calificadas: int
     pendientes: int
@@ -69,6 +70,16 @@ def _get_periodo_variants(db: Session):
     if pf.startswith("P"):
         return sem, pf, (pf, pf[1:])
     return sem, pf, (pf, f"P{pf}")
+
+
+def _periodo_filter(periodo_variants):
+    """Helper to build OR filter for periodo variants."""
+    if len(periodo_variants) == 2:
+        return or_(
+            TaskSubmission.periodo == periodo_variants[0],
+            TaskSubmission.periodo == periodo_variants[1],
+        )
+    return TaskSubmission.periodo == periodo_variants[0]
 
 
 def _get_bloque_courses(db: Session, semconfig):
@@ -125,9 +136,7 @@ def get_docente_tracking(
         TaskSubmission.codigo_curso,
         func.max(TaskSubmission.snapshot_date).label("max_snap"),
     ).filter(
-        or_(TaskSubmission.periodo == periodo_variants[0],
-            TaskSubmission.periodo == periodo_variants[1]) if len(periodo_variants) == 2
-            else TaskSubmission.periodo == periodo_variants[0],
+        _periodo_filter(periodo_variants),
         TaskSubmission.codigo_curso.in_(codigos),
     ).group_by(TaskSubmission.codigo_curso).all()
 
@@ -146,7 +155,6 @@ def get_docente_tracking(
             if not snap:
                 continue
 
-            # Count tasks for this course at latest snapshot
             stats = db.query(
                 func.count(TaskSubmission.id).label("total"),
                 func.sum(case((TaskSubmission.calificada == True, 1), else_=0)).label("cal"),
@@ -156,17 +164,17 @@ def get_docente_tracking(
             ).filter(
                 TaskSubmission.codigo_curso == cod,
                 TaskSubmission.snapshot_date == snap,
-                or_(TaskSubmission.periodo == periodo_variants[0],
-                    TaskSubmission.periodo == periodo_variants[1]) if len(periodo_variants) == 2
-                    else TaskSubmission.periodo == periodo_variants[0],
+                _periodo_filter(periodo_variants),
             ).first()
 
             if stats and stats.total:
                 total_tareas += stats.total
                 calificadas += (stats.cal or 0)
                 pendientes += (stats.pend or 0)
-                if curso.asignatura:
-                    asignaturas.append(curso.asignatura)
+                label = curso.asignatura or cod
+                if curso.grupo:
+                    label = f"{label} (G{curso.grupo})"
+                asignaturas.append(label)
 
         if total_tareas == 0:
             continue
@@ -232,6 +240,7 @@ def get_docente_tracking_detalle(
     """
     Detalle por curso: para cada curso del docente, muestra tareas pendientes
     y los estudiantes que aún no han sido calificados.
+    Cada codigo_avac es un grupo distinto (misma asignatura, diferente grupo).
     """
     semconfig, pf, periodo_variants = _get_periodo_variants(db)
     if not pf:
@@ -253,9 +262,7 @@ def get_docente_tracking_detalle(
         # Latest snapshot
         snap = db.query(func.max(TaskSubmission.snapshot_date)).filter(
             TaskSubmission.codigo_curso == cod,
-            or_(TaskSubmission.periodo == periodo_variants[0],
-                TaskSubmission.periodo == periodo_variants[1]) if len(periodo_variants) == 2
-                else TaskSubmission.periodo == periodo_variants[0],
+            _periodo_filter(periodo_variants),
         ).scalar()
 
         if not snap:
@@ -265,9 +272,7 @@ def get_docente_tracking_detalle(
         subs = db.query(TaskSubmission).filter(
             TaskSubmission.codigo_curso == cod,
             TaskSubmission.snapshot_date == snap,
-            or_(TaskSubmission.periodo == periodo_variants[0],
-                TaskSubmission.periodo == periodo_variants[1]) if len(periodo_variants) == 2
-                else TaskSubmission.periodo == periodo_variants[0],
+            _periodo_filter(periodo_variants),
         ).all()
 
         if not subs:
@@ -311,6 +316,7 @@ def get_docente_tracking_detalle(
         result.append(CursoPendiente(
             codigo_curso=cod,
             asignatura=curso.asignatura or cod,
+            grupo=curso.grupo,
             total_tareas=total,
             calificadas=cal,
             pendientes=len(pend_subs),

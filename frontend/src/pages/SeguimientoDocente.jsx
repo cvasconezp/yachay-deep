@@ -14,6 +14,36 @@ const TRACKING_EXPORT_COLS = [
   { key: "alerta", label: "Estado" },
 ];
 
+/* ── Helper: genera mensaje de correo para un docente ── */
+function buildEmailMessage(docenteName, cursos) {
+  if (!cursos || cursos.length === 0) return "";
+
+  const pendientes = cursos.filter(c => c.pendientes > 0);
+  if (pendientes.length === 0) return "";
+
+  // Capitalize first name properly
+  const parts = docenteName.split(" ");
+  const firstName = parts.map(p => p.charAt(0) + p.slice(1).toLowerCase()).join(" ");
+
+  let lines = [`Estimado/a ${firstName},\n`];
+
+  pendientes.forEach(c => {
+    const grupoLabel = c.grupo ? ` del grupo ${c.grupo}` : "";
+    const nEstudiantes = c.estudiantes_pendientes?.length || 0;
+    const plural = nEstudiantes === 1 ? "estudiante" : "estudiantes";
+    lines.push(
+      `En la asignatura ${c.asignatura} ${nEstudiantes === 1 ? "queda" : "quedan"} pendiente${nEstudiantes === 1 ? "" : "s"} por calificar a ${nEstudiantes} ${plural}${grupoLabel}.`
+    );
+  });
+
+  lines.push(
+    "\nPor favor, es importante contar con la calificación y retroalimentación para que el estudiante pueda reaprender de tu feedback y tomar las medidas del caso para mejorar la siguiente tarea."
+  );
+  lines.push("\nSaludos cordiales.");
+
+  return lines.join("\n");
+}
+
 export default function SeguimientoDocente({ embedded = false }) {
   const [data, setData] = useState([]);
   const [resumen, setResumen] = useState(null);
@@ -25,6 +55,7 @@ export default function SeguimientoDocente({ embedded = false }) {
   const [loadingDetalle, setLoadingDetalle] = useState(false);
   const [detalleData, setDetalleData] = useState(null);
   const [search, setSearch] = useState("");
+  const [copied, setCopied] = useState(false);
   const navigate = useNavigate();
 
   const loadData = useCallback(async () => {
@@ -74,121 +105,132 @@ export default function SeguimientoDocente({ embedded = false }) {
     setDetalleDocente(docente);
     setLoadingDetalle(true);
     setDetalleData(null);
+    setCopied(false);
     try {
       const detail = await api.getDocenteTrackingDetalle(docente);
       setDetalleData(detail);
     } catch (e) {
-      console.error(e);
+      console.error("Error cargando detalle:", e);
+      setDetalleData([]);
     } finally {
       setLoadingDetalle(false);
     }
   };
 
-  const SortIcon = ({ field }) => {
-    if (sortField !== field) return <span className="text-gray-300 ml-0.5 text-[10px]">↕</span>;
-    return <span className="ml-0.5 text-[10px]">{sortOrder === "asc" ? "▲" : "▼"}</span>;
+  const copyMessage = () => {
+    const msg = buildEmailMessage(detalleDocente, detalleData);
+    if (msg) {
+      navigator.clipboard.writeText(msg).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2500);
+      });
+    }
   };
 
-  return (
-    <div>
-      {!embedded && (
-        <div className="mb-1">
-          <h1 className="text-2xl font-bold text-gray-900">Seguimiento Docente</h1>
-          <p className="text-gray-500 text-sm">Pendientes por calificar por docente</p>
-        </div>
-      )}
+  const SortIcon = ({ field }) => (
+    <span className="ml-1 text-xs opacity-40">
+      {sortField === field ? (sortOrder === "asc" ? "▲" : "▼") : "⇅"}
+    </span>
+  );
 
-      {error && (
-        <div className="bg-red-50 text-red-700 border border-red-200 rounded-lg px-4 py-3 text-sm mb-4">{error}</div>
+  const Wrap = embedded ? "div" : "div";
+
+  return (
+    <div className={embedded ? "" : "p-6 space-y-6 max-w-[1400px] mx-auto"}>
+      {!embedded && (
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Seguimiento de Calificaciones</h1>
+            <p className="text-sm text-gray-500 mt-1">Estado de calificación por docente — basado en entregas de tareas AVAC</p>
+          </div>
+          <ExportExcelButton data={data} columns={TRACKING_EXPORT_COLS} filename="seguimiento_docente" />
+        </div>
       )}
 
       {/* KPI Cards */}
-      {!loading && resumen && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
-          <SummaryCard label="Docentes" value={resumen.total_docentes || 0} color="blue" />
-          <SummaryCard label="Total Pendientes" value={resumen.total_pendientes || 0} color="red" />
-          <SummaryCard label="Prom. Calificación" value={`${(resumen.promedio_general_calificacion || 0).toFixed(0)}%`} color="green" />
-          <SummaryCard label="En Atención" value={resumen.docentes_en_atencion || 0} color="yellow" />
-          <SummaryCard label="Críticos" value={resumen.docentes_criticos || 0} color="red" />
+      {resumen && (
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <SummaryCard title="Docentes" value={resumen.total_docentes} />
+          <SummaryCard title="Pendientes totales" value={resumen.total_pendientes} color={resumen.total_pendientes > 0 ? "red" : "green"} />
+          <SummaryCard title="Promedio calif." value={`${resumen.promedio_general_calificacion}%`} />
+          <SummaryCard title="Críticos" value={resumen.docentes_criticos} color={resumen.docentes_criticos > 0 ? "red" : "green"} />
+          <SummaryCard title="Atención" value={resumen.docentes_en_atencion} color={resumen.docentes_en_atencion > 0 ? "yellow" : "green"} />
         </div>
       )}
 
-      {/* Búsqueda + Export */}
-      <div className="bg-white rounded-xl border border-gray-200 p-3 mb-4 flex flex-wrap gap-3 items-center">
-        <div className="flex-1 min-w-[200px]">
+      {/* Search */}
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1 max-w-md">
           <input
             type="text"
+            placeholder="Buscar docente o asignatura..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Buscar por docente o asignatura..."
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 bg-white"
           />
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
         </div>
-        <ExportExcelButton data={filteredData} columns={TRACKING_EXPORT_COLS} filename="seguimiento_docentes" />
-        <span className="text-sm text-gray-500">{filteredData.length} docentes</span>
+        <span className="text-xs text-gray-400">{filteredData.length} docentes</span>
       </div>
 
-      {/* Tabla */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      {/* Main Table */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center py-20 text-gray-400">Cargando...</div>
+          <div className="text-center py-12 text-gray-400">Cargando seguimiento docente...</div>
+        ) : error ? (
+          <div className="text-center py-12 text-red-500">{error}</div>
         ) : sortedData.length === 0 ? (
-          <div className="text-center py-20 text-gray-400">
-            <div className="text-4xl mb-3">📝</div>
-            <div className="font-medium text-gray-500 mb-1">No hay datos de seguimiento</div>
-            <div className="text-xs text-gray-400">Los datos se generan después del scraping de tareas AVAC.<br/>Verifica que CourseConfig tenga docentes asignados.</div>
+          <div className="text-center py-12 text-gray-400">
+            {search ? "No hay docentes que coincidan con la búsqueda" : "No hay datos de seguimiento docente disponibles"}
           </div>
         ) : (
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="text-left px-4 py-3 font-semibold text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort("docente")}>
-                  Docente <SortIcon field="docente" />
+            <thead>
+              <tr className="border-b border-gray-100 bg-gray-50/60">
+                <th className="text-left px-4 py-3 font-medium text-gray-600 cursor-pointer select-none" onClick={() => handleSort("docente")}>
+                  Docente<SortIcon field="docente" />
                 </th>
-                <th className="text-left px-4 py-3 font-semibold text-gray-700">Asignaturas</th>
-                <th className="text-center px-4 py-3 font-semibold text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort("actividades_pendientes")}>
-                  Por calificar <SortIcon field="actividades_pendientes" />
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Asignaturas</th>
+                <th className="text-center px-4 py-3 font-medium text-gray-600 cursor-pointer select-none" onClick={() => handleSort("actividades_pendientes")}>
+                  Por calificar<SortIcon field="actividades_pendientes" />
                 </th>
-                <th className="text-center px-4 py-3 font-semibold text-gray-700 cursor-pointer hover:bg-gray-100" onClick={() => handleSort("porcentaje_calificacion")}>
-                  Progreso <SortIcon field="porcentaje_calificacion" />
+                <th className="text-center px-4 py-3 font-medium text-gray-600 cursor-pointer select-none w-48" onClick={() => handleSort("porcentaje_calificacion")}>
+                  Progreso<SortIcon field="porcentaje_calificacion" />
                 </th>
-                <th className="text-center px-4 py-3 font-semibold text-gray-700">Estado</th>
+                <th className="text-center px-4 py-3 font-medium text-gray-600">Estado</th>
               </tr>
             </thead>
             <tbody>
-              {sortedData.map((d, i) => {
-                const pend = d.actividades_pendientes || 0;
-                const total = d.total_tareas || 0;
-                const cal = d.actividades_calificadas || 0;
+              {sortedData.map((d) => {
                 const pct = d.porcentaje_calificacion || 0;
                 return (
                   <tr
-                    key={`${d.docente}-${i}`}
+                    key={d.docente}
+                    className="border-b border-gray-50 hover:bg-blue-50/40 cursor-pointer transition-colors"
                     onClick={() => openDetalle(d.docente)}
-                    className={`border-b border-gray-100 cursor-pointer hover:bg-blue-50 transition-colors ${
-                      d.alerta === "critico" ? "bg-red-50/50" : d.alerta === "atencion" ? "bg-yellow-50/40" : ""
-                    }`}
                   >
                     <td className="px-4 py-3">
                       <div className="font-medium text-gray-900">{d.docente}</div>
+                      {d.correo_docente && <div className="text-xs text-gray-400">{d.correo_docente}</div>}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="text-xs text-gray-500 truncate max-w-[300px]">{d.cursos?.join(", ") || "—"}</div>
+                      <div className="flex flex-wrap gap-1">
+                        {d.cursos?.slice(0, 3).map((c, i) => (
+                          <span key={i} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{c}</span>
+                        ))}
+                        {d.cursos?.length > 3 && <span className="text-xs text-gray-400">+{d.cursos.length - 3}</span>}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-center">
-                      {pend > 0 ? (
-                        <span className={`font-bold text-sm ${pend > 20 ? "text-red-600" : pend > 5 ? "text-yellow-600" : "text-orange-600"}`}>
-                          ({pend}/{total})
-                        </span>
-                      ) : total > 0 ? (
-                        <span className="text-green-600 font-semibold text-sm">✓ ({cal}/{total})</span>
-                      ) : (
-                        <span className="text-gray-300">—</span>
-                      )}
+                      <span className={`font-bold text-sm ${d.actividades_pendientes > 0 ? "text-red-600" : "text-green-600"}`}>
+                        ({d.actividades_pendientes}/{d.total_tareas})
+                      </span>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center justify-center gap-2">
-                        <div className="w-20 h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
                           <div
                             className={`h-full rounded-full transition-all ${
                               pct >= 80 ? "bg-green-500" : pct >= 60 ? "bg-yellow-500" : "bg-red-500"
@@ -218,7 +260,7 @@ export default function SeguimientoDocente({ embedded = false }) {
         )}
       </div>
 
-      {/* ── Modal detalle: cursos + estudiantes pendientes ── */}
+      {/* ── Modal detalle: cursos por grupo + estudiantes pendientes ── */}
       {detalleDocente && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setDetalleDocente(null)}>
           <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[85vh] overflow-auto" onClick={e => e.stopPropagation()}>
@@ -226,9 +268,35 @@ export default function SeguimientoDocente({ embedded = false }) {
               <div className="flex justify-between items-start">
                 <div>
                   <h2 className="text-xl font-bold text-gray-900">{detalleDocente}</h2>
-                  <p className="text-sm text-gray-500 mt-1">Pendientes por calificar — desglose por curso y estudiante</p>
+                  <p className="text-sm text-gray-500 mt-1">Pendientes por calificar — desglose por curso/grupo y estudiante</p>
                 </div>
-                <button onClick={() => setDetalleDocente(null)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+                <div className="flex items-center gap-2">
+                  {/* Botón copiar mensaje */}
+                  {detalleData?.some(c => c.pendientes > 0) && (
+                    <button
+                      onClick={copyMessage}
+                      className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                        copied
+                          ? "bg-green-100 text-green-700 border border-green-200"
+                          : "bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100"
+                      }`}
+                      title="Copiar mensaje para enviar por correo"
+                    >
+                      {copied ? (
+                        <>
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                          Copiado
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>
+                          Copiar mensaje
+                        </>
+                      )}
+                    </button>
+                  )}
+                  <button onClick={() => setDetalleDocente(null)} className="text-gray-400 hover:text-gray-600 text-2xl leading-none ml-2">&times;</button>
+                </div>
               </div>
             </div>
 
@@ -238,12 +306,15 @@ export default function SeguimientoDocente({ embedded = false }) {
               ) : detalleData?.length > 0 ? (
                 detalleData.map((curso, idx) => (
                   <div key={idx} className="border border-gray-200 rounded-xl overflow-hidden">
-                    {/* Cabecera del curso */}
+                    {/* Cabecera del curso con grupo */}
                     <div className={`px-4 py-3 flex items-center justify-between ${
                       curso.pendientes > 0 ? "bg-red-50" : "bg-green-50"
                     }`}>
                       <div className="flex items-center gap-3">
                         <span className="font-semibold text-gray-800">{curso.asignatura}</span>
+                        {curso.grupo && (
+                          <span className="text-xs font-bold text-white bg-gray-500 px-2 py-0.5 rounded">Grupo {curso.grupo}</span>
+                        )}
                         <span className="text-xs text-gray-400 bg-white px-2 py-0.5 rounded">{curso.codigo_curso}</span>
                       </div>
                       <div className="flex items-center gap-3 text-sm">
@@ -253,7 +324,7 @@ export default function SeguimientoDocente({ embedded = false }) {
                           </span>
                         ) : (
                           <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full font-semibold">
-                            ✓ Todo calificado ({curso.calificadas}/{curso.total_tareas})
+                            Todo calificado ({curso.calificadas}/{curso.total_tareas})
                           </span>
                         )}
                       </div>
@@ -294,7 +365,7 @@ export default function SeguimientoDocente({ embedded = false }) {
                     ) : curso.pendientes > 0 ? (
                       <div className="px-4 py-3 text-sm text-gray-500 italic">Hay pendientes pero los estudiantes no pudieron ser identificados</div>
                     ) : (
-                      <div className="px-4 py-3 text-sm text-green-600">✓ Todas las entregas han sido calificadas</div>
+                      <div className="px-4 py-3 text-sm text-green-600">Todas las entregas han sido calificadas</div>
                     )}
                   </div>
                 ))
