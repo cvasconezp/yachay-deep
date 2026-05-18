@@ -1,7 +1,7 @@
 """
 AlertEvent — eventos de alerta generados automáticamente basados en umbrales.
 Tipos: inactividad, compromiso_bajo, nota_cero, tareas_bajas, calificacion_docente_pendiente
-Severidad: critico, alto, medio
+Severidad: alto, medio, bajo
 """
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean, Text
 from sqlalchemy.orm import relationship
@@ -28,7 +28,7 @@ class AlertEvent(Base):
     mensaje = Column(Text, nullable=True)
 
     # Severidad del evento
-    severidad = Column(String, nullable=False)  # critico, alto, medio
+    severidad = Column(String, nullable=False)  # alto, medio, bajo
 
     # Estado de lectura
     leido = Column(Boolean, nullable=False, default=False, index=True)

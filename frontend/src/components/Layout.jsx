@@ -28,7 +28,6 @@ export function Layout({ children }) {
   const location = useLocation();
   const navigate = useNavigate();
   const [alertCount, setAlertCount] = useState(null);
-  const [alertCriticoCount, setAlertCriticoCount] = useState(0);
   const [alertAltoCount, setAlertAltoCount] = useState(0);
 
   // Sidebar open/closed con persistencia en localStorage
@@ -42,9 +41,9 @@ export function Layout({ children }) {
     const loadAlertCount = async () => {
       try {
         const data = await api.getAlertCount();
-        setAlertCriticoCount(data.critico || 0);
+        
         setAlertAltoCount(data.alto || 0);
-        setAlertCount((data.critico || 0) + (data.alto || 0));
+        setAlertCount((data.alto || 0) + (data.medio || 0));
       } catch (e) {
         console.error("Error loading alert count:", e);
       }
@@ -117,7 +116,7 @@ export function Layout({ children }) {
               {/* Alert badge for Alertas item */}
               {item.path === "/alertas" && alertCount > 0 && (
                 <div className={`absolute ${sidebarOpen ? "top-1 right-2" : "top-0 right-0"} w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold ${
-                  alertCriticoCount > 0 ? "bg-red-600" : "bg-orange-500"
+                  alertAltoCount > 0 ? "bg-red-600" : "bg-orange-500"
                 }`}>
                   {alertCount}
                 </div>
@@ -130,10 +129,10 @@ export function Layout({ children }) {
         <div className={`border-t border-white/10 ${sidebarOpen ? "p-4" : "p-2 flex flex-col items-center"}`}>
           {/* Campana de notificaciones (Épica 2.2) */}
           <div className={`mb-2 ${sidebarOpen ? "flex items-center justify-between" : "flex justify-center"}`}>
-            <NotificationBell alertCount={alertCount} criticoCount={alertCriticoCount} />
+            <NotificationBell alertCount={alertCount} altoCount={alertAltoCount} />
             {sidebarOpen && alertCount > 0 && (
               <span className="text-[10px] text-blue-300">
-                {alertCriticoCount > 0 ? `${alertCriticoCount} críticas` : `${alertCount} alertas`}
+                {alertAltoCount > 0 ? `${alertAltoCount} alto riesgo` : `${alertCount} alertas`}
               </span>
             )}
           </div>

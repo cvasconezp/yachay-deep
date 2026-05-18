@@ -109,10 +109,10 @@ def generate_alerts_batch(db: Session) -> dict:
     # Cargar umbrales configurables
     umbrales = _get_umbrales(db)
     umbral_dias_inactividad = umbrales["dias_inactividad"]
-    umbral_dias_inactividad_critico = umbral_dias_inactividad + 7
+    umbral_dias_inactividad_alto = umbral_dias_inactividad + 7
     umbral_tareas = umbrales["tareas_minimo"]
     umbral_compromiso = umbrales["compromiso_minimo"]
-    umbral_compromiso_critico = umbral_compromiso * 0.6
+    umbral_compromiso_alto = umbral_compromiso * 0.6
 
     # Determinar inicio del bloque actual
     bloque_inicio = None
@@ -323,33 +323,33 @@ def generate_alerts_batch(db: Session) -> dict:
                 msg = f"Inactivo {int(worst_dias)} días en {worst_asig}"
             else:
                 msg = f"Inactivo en {n_materias} materias (peor: {int(worst_dias)} días en {worst_asig})"
-            if worst_dias > umbral_dias_inactividad_critico:
-                _add_alert_fast(student.id, "inactividad", "critico",
+            if worst_dias > umbral_dias_inactividad_alto:
+                _add_alert_fast(student.id, "inactividad", "alto",
                                 msg + " (CRÍTICO)", codigo_curso=worst_codigo)
             else:
-                _add_alert_fast(student.id, "inactividad", "alto",
+                _add_alert_fast(student.id, "inactividad", "medio",
                                 msg, codigo_curso=worst_codigo)
 
         # Compromiso Bajo
         in_bloque = not bloque_actual_sids or student.id in bloque_actual_sids
         if in_bloque and student.indice_compromiso is not None:
-            if student.indice_compromiso < umbral_compromiso_critico:
-                _add_alert_fast(student.id, "compromiso_bajo", "critico",
+            if student.indice_compromiso < umbral_compromiso_alto:
+                _add_alert_fast(student.id, "compromiso_bajo", "alto",
                                 f"Índice de compromiso muy bajo: {student.indice_compromiso:.2f}")
             elif student.indice_compromiso < umbral_compromiso:
-                _add_alert_fast(student.id, "compromiso_bajo", "alto",
+                _add_alert_fast(student.id, "compromiso_bajo", "medio",
                                 f"Índice de compromiso bajo: {student.indice_compromiso:.2f}")
 
         # Nota Cero
         if hay_notas_esperadas and student.id in nota_cero_map:
-            _add_alert_fast(student.id, "nota_cero", "critico",
+            _add_alert_fast(student.id, "nota_cero", "alto",
                             f"Calificación de 0 en {nota_cero_map[student.id]}")
 
         # Tareas Bajas
         if (in_bloque and student.porcentaje_tareas is not None
                 and student.porcentaje_tareas < umbral_tareas
                 and student.id in task_sids):
-            _add_alert_fast(student.id, "tareas_bajas", "alto",
+            _add_alert_fast(student.id, "tareas_bajas", "medio",
                             f"Porcentaje de tareas entregadas bajo: {student.porcentaje_tareas:.1f}% (umbral: {umbral_tareas}%)")
 
         # Segunda Matrícula
@@ -358,14 +358,14 @@ def generate_alerts_batch(db: Session) -> dict:
             if n_asig_2m == 0:
                 n_asig_2m = rep_grade_counts.get(student.id, 0)
             if n_asig_2m > 0:
-                _add_alert_fast(student.id, "segunda_matricula", "alto",
+                _add_alert_fast(student.id, "segunda_matricula", "medio",
                                 f"Estudiante con {n_asig_2m} asignatura(s) en segunda matrícula")
 
         # Tercera Matrícula
         if student.es_tercera_matricula:
             n_asig_tm = tm_enroll_counts.get(student.id, 0)
             if n_asig_tm > 0:
-                _add_alert_fast(student.id, "tercera_matricula", "critico",
+                _add_alert_fast(student.id, "tercera_matricula", "alto",
                                 f"Estudiante con {n_asig_tm} asignatura(s) en tercera matrícula (oyente condicionado)")
 
     # ─── Deterioro Progresivo [Épica 1.3] ───

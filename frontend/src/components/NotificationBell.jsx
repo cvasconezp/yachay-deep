@@ -11,9 +11,9 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../services/api";
 
 const SEVERITY_STYLES = {
-  critico: { bg: "bg-red-50", border: "border-red-200", dot: "bg-red-500", text: "text-red-700", label: "Crítico" },
-  alto:    { bg: "bg-orange-50", border: "border-orange-200", dot: "bg-orange-500", text: "text-orange-700", label: "Alto" },
-  medio:   { bg: "bg-yellow-50", border: "border-yellow-200", dot: "bg-yellow-500", text: "text-yellow-700", label: "Medio" },
+  alto:  { bg: "bg-red-50", border: "border-red-200", dot: "bg-red-500", text: "text-red-700", label: "Alto" },
+  medio: { bg: "bg-orange-50", border: "border-orange-200", dot: "bg-orange-500", text: "text-orange-700", label: "Medio" },
+  bajo:  { bg: "bg-yellow-50", border: "border-yellow-200", dot: "bg-yellow-500", text: "text-yellow-700", label: "Bajo" },
 };
 
 const TIPO_ICONS = {
@@ -38,7 +38,7 @@ function timeAgo(dateStr) {
   return `hace ${days}d`;
 }
 
-export default function NotificationBell({ alertCount, criticoCount }) {
+export default function NotificationBell({ alertCount, altoCount }) {
   const [open, setOpen] = useState(false);
   const [alerts, setAlerts] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -204,7 +204,7 @@ export default function NotificationBell({ alertCount, criticoCount }) {
         {/* Badge */}
         {total > 0 && (
           <span className={`absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] rounded-full flex items-center justify-center text-[10px] font-bold text-white px-1 ${
-            criticoCount > 0 ? "bg-red-500 animate-pulse" : "bg-orange-500"
+            altoCount > 0 ? "bg-red-500 animate-pulse" : "bg-orange-500"
           }`}>
             {total > 99 ? "99+" : total}
           </span>

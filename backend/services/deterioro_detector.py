@@ -122,11 +122,11 @@ def detectar_deterioro_progresivo(db: Session) -> list[dict]:
                 n_snapshots = len(historia)
 
                 if dias_actual > 21:
-                    severidad = "critico"
-                elif dias_actual > 14:
                     severidad = "alto"
-                else:
+                elif dias_actual > 14:
                     severidad = "medio"
+                else:
+                    severidad = "bajo"
 
                 alertas.append({
                     "student_id": sid,
@@ -175,7 +175,7 @@ def detectar_deterioro_progresivo(db: Session) -> list[dict]:
                     alertas.append({
                         "student_id": student.id,
                         "tipo": "deterioro_progresivo",
-                        "severidad": "alto",
+                        "severidad": "medio",
                         "mensaje": (
                             f"Caída de compromiso con aumento de inactividad: "
                             f"compromiso={student.indice_compromiso:.2f}, "
@@ -207,7 +207,7 @@ def detectar_deterioro_progresivo(db: Session) -> list[dict]:
             alertas.append({
                 "student_id": student.id,
                 "tipo": "deterioro_progresivo",
-                "severidad": "critico",
+                "severidad": "alto",
                 "mensaje": (
                     f"Combinación crítica: tareas={student.porcentaje_tareas:.1f}% "
                     f"con prob. deserción={student.prob_desercion:.0%}. "

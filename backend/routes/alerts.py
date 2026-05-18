@@ -93,9 +93,9 @@ class AlertEventResponse(BaseModel):
 
 class AlertCountResponse(BaseModel):
     total: int = 0
-    critico: int = 0
     alto: int = 0
     medio: int = 0
+    bajo: int = 0
     por_tipo: dict = {}
 
 
@@ -206,7 +206,7 @@ def get_alert_count(
     Acepta filtros opcionales de carrera y asignatura.
     Solo cuenta alertas de estudiantes del periodo activo."""
     if not _active_period_has_data(db):
-        return AlertCountResponse(total=0, critico=0, alto=0, medio=0, por_tipo={})
+        return AlertCountResponse(total=0, alto=0, medio=0, bajo=0, por_tipo={})
 
     period_sids = _active_period_student_ids(db)
 
@@ -232,7 +232,7 @@ def get_alert_count(
         if asig_codes:
             base_filters.append(AlertEvent.codigo_curso.in_(asig_codes))
         else:
-            return AlertCountResponse(total=0, critico=0, alto=0, medio=0, por_tipo={})
+            return AlertCountResponse(total=0, alto=0, medio=0, bajo=0, por_tipo={})
 
     def _count(extra_filter=None):
         q = db.query(func.count(AlertEvent.id))
@@ -243,9 +243,9 @@ def get_alert_count(
         return q.scalar() or 0
 
     total = _count()
-    critico = _count(AlertEvent.severidad == "critico")
     alto = _count(AlertEvent.severidad == "alto")
     medio = _count(AlertEvent.severidad == "medio")
+    bajo = _count(AlertEvent.severidad == "bajo")
 
     # Per-type counts
     tipo_q = db.query(AlertEvent.tipo, func.count(AlertEvent.id))
@@ -256,9 +256,9 @@ def get_alert_count(
 
     return AlertCountResponse(
         total=total,
-        critico=critico,
         alto=alto,
         medio=medio,
+        bajo=bajo,
         por_tipo=por_tipo,
     )
 

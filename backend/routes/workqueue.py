@@ -31,7 +31,7 @@ router = APIRouter(prefix="/workqueue", tags=["workqueue"])
 class WorkItem(BaseModel):
     """Ítem individual en la bandeja de trabajo."""
     id: int
-    tipo: str                          # "alerta_critica", "alerta_alta", "deterioro", "seguimiento"
+    tipo: str                          # "alerta_alta", "alerta_media", "alerta_baja", "deterioro", "seguimiento"
     prioridad: int                     # 1=máxima, 2=alta, 3=media
     student_id: int
     student_nombre: Optional[str] = None
@@ -77,7 +77,7 @@ def get_workqueue(
 ):
     """
     Retorna la bandeja de trabajo priorizada del monitor.
-    Ordena por: severidad (critico > alto > medio), luego por fecha.
+    Ordena por: severidad (alto > medio > bajo), luego por fecha.
     """
     # Base query: alertas no leídas con datos del estudiante
     q = (
@@ -92,8 +92,8 @@ def get_workqueue(
 
     # Ordenar por severidad y fecha
     severity_order = case(
-        (AlertEvent.severidad == "critico", 1),
-        (AlertEvent.severidad == "alto", 2),
+        (AlertEvent.severidad == "alto", 1),
+        (AlertEvent.severidad == "medio", 2),
         else_=3,
     )
     q = q.order_by(severity_order, AlertEvent.created_at.desc())
@@ -111,15 +111,15 @@ def get_workqueue(
     items = []
     for alert, nombre, student_carrera in rows:
         # Determinar prioridad
-        if alert.severidad == "critico":
+        if alert.severidad == "alto":
             prioridad = 1
-            tipo = "alerta_critica"
-        elif alert.severidad == "alto":
-            prioridad = 2
             tipo = "alerta_alta"
+        elif alert.severidad == "medio":
+            prioridad = 2
+            tipo = "alerta_media"
         else:
             prioridad = 3
-            tipo = "alerta_media"
+            tipo = "alerta_baja"
 
         # Override para deterioro progresivo (siempre prioridad alta)
         if alert.tipo == "deterioro_progresivo":

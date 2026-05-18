@@ -14,6 +14,7 @@ const TIPO_LABELS = {
   calificacion_docente_pendiente: "Calificación Pendiente",
   segunda_matricula: "2da Matrícula",
   tercera_matricula: "Condicionados",
+  deterioro_progresivo: "Deterioro Progresivo",
 };
 
 const TIPO_ICONS = {
@@ -24,29 +25,39 @@ const TIPO_ICONS = {
   calificacion_docente_pendiente: "⏳",
   segunda_matricula: "🔄",
   tercera_matricula: "⚠️",
+  deterioro_progresivo: "📊",
 };
 
 const SEVERITY_CONFIG = {
-  critico: {
-    label: "CRÍTICO",
+  alto: {
+    label: "ALTO",
     card: "border-l-4 border-l-red-500 bg-gradient-to-r from-red-50 to-white",
     badge: "bg-red-600 text-white",
     icon: "🔴",
     headerBg: "bg-red-100 text-red-800",
+    alertBg: "bg-red-50 border-red-200",
+    alertText: "text-red-700",
+    order: 0,
   },
-  alto: {
-    label: "ALTO",
+  medio: {
+    label: "MEDIO",
     card: "border-l-4 border-l-orange-400 bg-gradient-to-r from-orange-50 to-white",
     badge: "bg-orange-500 text-white",
     icon: "🟠",
     headerBg: "bg-orange-100 text-orange-800",
+    alertBg: "bg-orange-50 border-orange-200",
+    alertText: "text-orange-700",
+    order: 1,
   },
-  medio: {
-    label: "MEDIO",
+  bajo: {
+    label: "BAJO",
     card: "border-l-4 border-l-yellow-400 bg-gradient-to-r from-yellow-50 to-white",
     badge: "bg-yellow-500 text-white",
     icon: "🟡",
     headerBg: "bg-yellow-100 text-yellow-800",
+    alertBg: "bg-yellow-50 border-yellow-200",
+    alertText: "text-yellow-700",
+    order: 2,
   },
 };
 
@@ -60,9 +71,19 @@ function formatDate(isoStr) {
   }
 }
 
+/** Determina el nivel de riesgo del estudiante = máxima severidad entre sus alertas */
+function getMaxSeverity(alertList) {
+  const order = { alto: 0, medio: 1, bajo: 2 };
+  let best = "bajo";
+  for (const a of alertList) {
+    if ((order[a.severidad] ?? 9) < (order[best] ?? 9)) best = a.severidad;
+  }
+  return best;
+}
+
 export default function Alertas() {
   const [alerts, setAlerts] = useState([]);
-  const [alertCounts, setAlertCounts] = useState({ total: 0, critico: 0, alto: 0, medio: 0, por_tipo: {} });
+  const [alertCounts, setAlertCounts] = useState({ total: 0, alto: 0, medio: 0, bajo: 0, por_tipo: {} });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -72,7 +93,8 @@ export default function Alertas() {
   const [filterCarrera, setFilterCarrera] = useState("");
   const [filterAsignatura, setFilterAsignatura] = useState("");
   const [filterPeriodo, setFilterPeriodo] = useState("");
-  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [selectedStudentIds, setSelectedStudentIds] = useState(new Set());
+  const [expandedStudents, setExpandedStudents] = useState(new Set());
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [carreras, setCarreras] = useState([]);
   const [asignaturas, setAsignaturas] = useState([]);
@@ -83,12 +105,10 @@ export default function Alertas() {
     carrera: filterCarrera,
   });
 
-  // Load carreras on mount
   useEffect(() => {
     api.getCarreras().then(data => setCarreras(data || [])).catch(() => {});
   }, []);
 
-  // Load asignaturas when carrera changes
   useEffect(() => {
     setFilterAsignatura("");
     api.getAsignaturas(filterCarrera || undefined)
@@ -112,8 +132,8 @@ export default function Alertas() {
         api.getAlertCount(countParams),
       ]);
       setAlerts(data || []);
-      setAlertCounts(counts || { total: 0, critico: 0, alto: 0, medio: 0, por_tipo: {} });
-      setSelectedIds(new Set());
+      setAlertCounts(counts || { total: 0, alto: 0, medio: 0, bajo: 0, por_tipo: {} });
+      setSelectedStudentIds(new Set());
     } catch (e) {
       setError("No se pudieron cargar las alertas.");
       console.error(e);
@@ -122,21 +142,87 @@ export default function Alertas() {
     }
   }, [filterCarrera, filterAsignatura, filterPeriodo]);
 
-  useEffect(() => {
-    loadAlerts();
-  }, [loadAlerts]);
+  useEffect(() => { loadAlerts(); }, [loadAlerts]);
+
+  // ── Agrupar alertas por estudiante ──
+  const studentGroups = useMemo(() => {
+    // Apply client-side filters
+    const filtered = alerts.filter(a => {
+      if (filterSeverity !== "all" && a.severidad !== filterSeverity) return false;
+      if (filterTipo !== "all" && a.tipo !== filterTipo) return false;
+      return true;
+    });
+
+    // Group by student
+    const map = new Map();
+    for (const alert of filtered) {
+      const sid = alert.student_id;
+      if (!map.has(sid)) {
+        map.set(sid, {
+          student_id: sid,
+          student_nombre: alert.student_nombre || "Estudiante desconocido",
+          student_carrera: alert.student_carrera || "",
+          alerts: [],
+        });
+      }
+      map.get(sid).alerts.push(alert);
+    }
+
+    // Compute max severity per student and sort
+    const groups = [...map.values()].map(g => ({
+      ...g,
+      maxSeverity: getMaxSeverity(g.alerts),
+      alertCount: g.alerts.length,
+    }));
+
+    const sevOrder = { alto: 0, medio: 1, bajo: 2 };
+    groups.sort((a, b) => {
+      const sa = sevOrder[a.maxSeverity] ?? 9;
+      const sb = sevOrder[b.maxSeverity] ?? 9;
+      if (sa !== sb) return sa - sb;
+      return b.alertCount - a.alertCount;
+    });
+
+    return groups;
+  }, [alerts, filterSeverity, filterTipo]);
+
+  // Group studentGroups by severity for section headers
+  const groupedBySeverity = useMemo(() => {
+    const grouped = {};
+    for (const sg of studentGroups) {
+      const sev = sg.maxSeverity;
+      if (!grouped[sev]) grouped[sev] = [];
+      grouped[sev].push(sg);
+    }
+    return grouped;
+  }, [studentGroups]);
+
+  const sortedSeverities = ["alto", "medio", "bajo"].filter(s => groupedBySeverity[s]?.length > 0);
 
   const handleMarkAsRead = async (id, e) => {
-    e.stopPropagation();
+    e?.stopPropagation();
     try {
       await api.markAlertRead(id);
       setAlerts(prev => prev.filter(a => a.id !== id));
-      setSelectedIds(prev => { const next = new Set(prev); next.delete(id); return next; });
       setSuccess("Alerta marcada como leída");
       setTimeout(() => setSuccess(""), 3000);
     } catch (e) {
       setError("No se pudo marcar la alerta como leída.");
-      console.error(e);
+    }
+  };
+
+  const handleMarkStudentRead = async (studentAlerts) => {
+    if (!window.confirm(`¿Marcar ${studentAlerts.length} alertas de este estudiante como leídas?`)) return;
+    try {
+      for (const a of studentAlerts) {
+        await api.markAlertRead(a.id);
+      }
+      const ids = new Set(studentAlerts.map(a => a.id));
+      setAlerts(prev => prev.filter(a => !ids.has(a.id)));
+      setSuccess(`${studentAlerts.length} alertas marcadas como leídas`);
+      setTimeout(() => setSuccess(""), 3000);
+    } catch {
+      setError("Error al marcar alertas.");
     }
   };
 
@@ -150,7 +236,7 @@ export default function Alertas() {
       setAlerts(prev => prev.filter(a => a.severidad !== severity));
       setSuccess(`${toMark.length} alertas marcadas como leídas`);
       setTimeout(() => setSuccess(""), 3000);
-    } catch (e) {
+    } catch {
       setError("Error al marcar alertas.");
     }
   };
@@ -170,81 +256,58 @@ export default function Alertas() {
       loadAlerts();
     } catch (e) {
       setError("Error al generar alertas: " + (e.message || "Intenta de nuevo"));
-      console.error(e);
     } finally {
       setGeneratingAlerts(false);
     }
   };
 
-  // Apply client-side filters (severity + tipo)
-  const filteredAlerts = alerts.filter(a => {
-    if (filterSeverity !== "all" && a.severidad !== filterSeverity) return false;
-    if (filterTipo !== "all" && a.tipo !== filterTipo) return false;
-    return true;
-  });
-
-  // Group by severity
-  const severityOrder = { critico: 0, alto: 1, medio: 2 };
-  const groupedAlerts = {};
-  filteredAlerts.forEach(alert => {
-    const severity = alert.severidad || "medio";
-    if (!groupedAlerts[severity]) groupedAlerts[severity] = [];
-    groupedAlerts[severity].push(alert);
-  });
-  const sortedSeverities = Object.keys(groupedAlerts).sort((a, b) => (severityOrder[a] ?? 9) - (severityOrder[b] ?? 9));
-
-  // Summary counts — use backend totals (accurate, not limited by fetch)
-  const counts = {
-    critico: alertCounts.critico || 0,
-    alto: alertCounts.alto || 0,
-    medio: alertCounts.medio || 0,
-  };
-  const totalAlerts = alertCounts.total || alerts.length;
-  const tiposCounts = alertCounts.por_tipo || {};
-  // Fallback: if por_tipo is empty, count from fetched alerts
-  if (Object.keys(tiposCounts).length === 0) {
-    alerts.forEach(a => { tiposCounts[a.tipo] = (tiposCounts[a.tipo] || 0) + 1; });
-  }
-
-  // carreras loaded from /dashboard/carreras on mount (all system carreras)
-
-  // Selection handlers
-  const toggleSelect = (alertObj, e) => {
-    e.stopPropagation();
-    setSelectedIds(prev => {
+  const toggleExpand = (sid) => {
+    setExpandedStudents(prev => {
       const next = new Set(prev);
-      if (next.has(alertObj.id)) next.delete(alertObj.id); else next.add(alertObj.id);
+      if (next.has(sid)) next.delete(sid); else next.add(sid);
+      return next;
+    });
+  };
+
+  const toggleSelectStudent = (sid) => {
+    setSelectedStudentIds(prev => {
+      const next = new Set(prev);
+      if (next.has(sid)) next.delete(sid); else next.add(sid);
       return next;
     });
   };
 
   const toggleSelectSeverity = (severity) => {
-    const idsInGroup = (groupedAlerts[severity] || []).map(a => a.id);
-    const allSelected = idsInGroup.every(id => selectedIds.has(id));
-    setSelectedIds(prev => {
+    const sids = (groupedBySeverity[severity] || []).map(g => g.student_id);
+    const allSelected = sids.every(id => selectedStudentIds.has(id));
+    setSelectedStudentIds(prev => {
       const next = new Set(prev);
-      idsInGroup.forEach(id => { if (allSelected) next.delete(id); else next.add(id); });
+      sids.forEach(id => { if (allSelected) next.delete(id); else next.add(id); });
       return next;
     });
   };
 
-  // Get unique student objects from selected alerts
   const selectedStudents = useMemo(() => {
-    const map = new Map();
-    alerts.filter(a => selectedIds.has(a.id)).forEach(a => {
-      if (!map.has(a.student_id)) {
-        map.set(a.student_id, { id: a.student_id, nombre: a.student_nombre, carrera: a.student_carrera });
-      }
-    });
-    return [...map.values()];
-  }, [alerts, selectedIds]);
+    return studentGroups
+      .filter(g => selectedStudentIds.has(g.student_id))
+      .map(g => ({ id: g.student_id, nombre: g.student_nombre, carrera: g.student_carrera }));
+  }, [studentGroups, selectedStudentIds]);
 
   const handleBulkSaved = (result) => {
     setShowBulkModal(false);
-    setSelectedIds(new Set());
+    setSelectedStudentIds(new Set());
     setSuccess(`${result.created} intervención${result.created !== 1 ? "es" : ""} registrada${result.created !== 1 ? "s" : ""}`);
     setTimeout(() => setSuccess(""), 5000);
   };
+
+  // Counts
+  const counts = { alto: alertCounts.alto || 0, medio: alertCounts.medio || 0, bajo: alertCounts.bajo || 0 };
+  const totalAlerts = alertCounts.total || alerts.length;
+  const totalStudents = studentGroups.length;
+  const tiposCounts = alertCounts.por_tipo || {};
+  if (Object.keys(tiposCounts).length === 0) {
+    alerts.forEach(a => { tiposCounts[a.tipo] = (tiposCounts[a.tipo] || 0) + 1; });
+  }
 
   return (
     <div>
@@ -252,8 +315,8 @@ export default function Alertas() {
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Alertas Académicas</h1>
-          <p className="text-gray-500 text-sm">Alertas automáticas basadas en indicadores de riesgo estudiantil</p>
-          <p className="text-amber-600 text-xs mt-0.5">Las alertas se basan en el último scraping de AVAC disponible</p>
+          <p className="text-gray-500 text-sm">Alertas agrupadas por estudiante — el nivel de riesgo refleja la alerta más grave</p>
+          <p className="text-amber-600 text-xs mt-0.5">Basadas en el último scraping de AVAC disponible</p>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -295,141 +358,109 @@ export default function Alertas() {
         <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-5">
           <div
             className={`rounded-xl border p-4 cursor-pointer transition-all ${filterSeverity === "all" ? "bg-blue-50 border-blue-300 ring-2 ring-blue-400 shadow-md" : "bg-white border-gray-200 hover:shadow-sm"}`}
-            onClick={() => setFilterSeverity(filterSeverity === "all" ? "all" : "all")}
-            title={filterSeverity !== "all" ? "Clic para quitar filtro" : ""}
+            onClick={() => setFilterSeverity("all")}
           >
-            <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Total Pendientes</div>
-            <div className="text-2xl font-bold text-gray-900 mt-1">{totalAlerts}</div>
-            {filterSeverity !== "all" && <div className="text-[9px] text-gray-400 mt-1">Clic para ver todas</div>}
+            <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">Estudiantes</div>
+            <div className="text-2xl font-bold text-gray-900 mt-1">{totalStudents}</div>
+            <div className="text-[10px] text-gray-400 mt-0.5">{totalAlerts} alertas</div>
           </div>
           <div
-            className={`rounded-xl border p-4 cursor-pointer transition-all ${filterSeverity === "critico" ? "bg-red-50 border-red-300 ring-2 ring-red-400 shadow-md scale-[1.02]" : "bg-white border-red-200 hover:shadow-sm"}`}
-            onClick={() => setFilterSeverity(filterSeverity === "critico" ? "all" : "critico")}
-            title={filterSeverity === "critico" ? "Clic para quitar filtro" : "Clic para filtrar críticas"}
-          >
-            <div className="text-xs font-medium text-red-600 uppercase tracking-wide">Críticas</div>
-            <div className="text-2xl font-bold text-red-700 mt-1">{counts.critico}</div>
-            {filterSeverity === "critico" && <div className="text-[9px] text-red-500 font-medium mt-1">✓ Filtro activo</div>}
-          </div>
-          <div
-            className={`rounded-xl border p-4 cursor-pointer transition-all ${filterSeverity === "alto" ? "bg-orange-50 border-orange-300 ring-2 ring-orange-400 shadow-md scale-[1.02]" : "bg-white border-orange-200 hover:shadow-sm"}`}
+            className={`rounded-xl border p-4 cursor-pointer transition-all ${filterSeverity === "alto" ? "bg-red-50 border-red-300 ring-2 ring-red-400 shadow-md scale-[1.02]" : "bg-white border-red-200 hover:shadow-sm"}`}
             onClick={() => setFilterSeverity(filterSeverity === "alto" ? "all" : "alto")}
-            title={filterSeverity === "alto" ? "Clic para quitar filtro" : "Clic para filtrar altas"}
           >
-            <div className="text-xs font-medium text-orange-600 uppercase tracking-wide">Altas</div>
-            <div className="text-2xl font-bold text-orange-600 mt-1">{counts.alto}</div>
-            {filterSeverity === "alto" && <div className="text-[9px] text-orange-500 font-medium mt-1">✓ Filtro activo</div>}
+            <div className="text-xs font-medium text-red-600 uppercase tracking-wide">Riesgo Alto</div>
+            <div className="text-2xl font-bold text-red-700 mt-1">{counts.alto}</div>
+            {filterSeverity === "alto" && <div className="text-[9px] text-red-500 font-medium mt-1">✓ Filtro activo</div>}
           </div>
           <div
-            className={`rounded-xl border p-4 cursor-pointer transition-all ${filterSeverity === "medio" ? "bg-yellow-50 border-yellow-300 ring-2 ring-yellow-400 shadow-md scale-[1.02]" : "bg-white border-yellow-200 hover:shadow-sm"}`}
+            className={`rounded-xl border p-4 cursor-pointer transition-all ${filterSeverity === "medio" ? "bg-orange-50 border-orange-300 ring-2 ring-orange-400 shadow-md scale-[1.02]" : "bg-white border-orange-200 hover:shadow-sm"}`}
             onClick={() => setFilterSeverity(filterSeverity === "medio" ? "all" : "medio")}
-            title={filterSeverity === "medio" ? "Clic para quitar filtro" : "Clic para filtrar medias"}
           >
-            <div className="text-xs font-medium text-yellow-600 uppercase tracking-wide">Medias</div>
-            <div className="text-2xl font-bold text-yellow-600 mt-1">{counts.medio}</div>
-            {filterSeverity === "medio" && <div className="text-[9px] text-yellow-600 font-medium mt-1">✓ Filtro activo</div>}
+            <div className="text-xs font-medium text-orange-600 uppercase tracking-wide">Riesgo Medio</div>
+            <div className="text-2xl font-bold text-orange-600 mt-1">{counts.medio}</div>
+            {filterSeverity === "medio" && <div className="text-[9px] text-orange-500 font-medium mt-1">✓ Filtro activo</div>}
+          </div>
+          <div
+            className={`rounded-xl border p-4 cursor-pointer transition-all ${filterSeverity === "bajo" ? "bg-yellow-50 border-yellow-300 ring-2 ring-yellow-400 shadow-md scale-[1.02]" : "bg-white border-yellow-200 hover:shadow-sm"}`}
+            onClick={() => setFilterSeverity(filterSeverity === "bajo" ? "all" : "bajo")}
+          >
+            <div className="text-xs font-medium text-yellow-600 uppercase tracking-wide">Riesgo Bajo</div>
+            <div className="text-2xl font-bold text-yellow-600 mt-1">{counts.bajo}</div>
+            {filterSeverity === "bajo" && <div className="text-[9px] text-yellow-600 font-medium mt-1">✓ Filtro activo</div>}
           </div>
           <div
             className="bg-orange-50 rounded-xl border border-orange-200 p-4 cursor-pointer hover:ring-2 hover:ring-orange-300 hover:shadow-md transition-all"
             onClick={() => openStudentList("repitentes")}
-            title="Clic para ver listado de repitentes"
+            title="Ver listado de repitentes"
           >
             <div className="flex items-center justify-between">
               <div className="text-xs font-medium text-orange-700 uppercase tracking-wide">Repitentes</div>
               <span className="text-[10px] text-orange-400">▸ ver lista</span>
             </div>
-            <div className="text-2xl font-bold text-orange-700 mt-1">{"📋"}</div>
+            <div className="text-2xl font-bold text-orange-700 mt-1">📋</div>
           </div>
           <div
             className="bg-purple-50 rounded-xl border border-purple-200 p-4 cursor-pointer hover:ring-2 hover:ring-purple-300 hover:shadow-md transition-all"
             onClick={() => openStudentList("condicionados")}
-            title="Clic para ver listado de condicionados (3ra matrícula)"
+            title="Ver listado de condicionados (3ra matrícula)"
           >
             <div className="flex items-center justify-between">
               <div className="text-xs font-medium text-purple-700 uppercase tracking-wide">Condicionados</div>
               <span className="text-[10px] text-purple-400">▸ ver lista</span>
             </div>
-            <div className="text-2xl font-bold text-purple-700 mt-1">{"📋"}</div>
+            <div className="text-2xl font-bold text-purple-700 mt-1">📋</div>
           </div>
         </div>
       )}
 
       {/* Filters */}
       <div className="bg-white rounded-xl border border-gray-200 p-3 mb-4 flex flex-wrap gap-3 items-end">
-        <PeriodSelector
-          value={filterPeriodo}
-          onChange={v => setFilterPeriodo(v)}
-        />
-
+        <PeriodSelector value={filterPeriodo} onChange={v => setFilterPeriodo(v)} />
         <div>
           <label className="text-xs font-medium text-gray-500 block mb-1">Carrera</label>
-          <select
-            value={filterCarrera}
-            onChange={e => setFilterCarrera(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
+          <select value={filterCarrera} onChange={e => setFilterCarrera(e.target.value)}
+            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
             <option value="">Todas las carreras</option>
-            {carreras.map(c => (
-              <option key={c} value={c}>{c}</option>
-            ))}
+            {carreras.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
-
         <div>
           <label className="text-xs font-medium text-gray-500 block mb-1">Asignatura</label>
-          <select
-            value={filterAsignatura}
-            onChange={e => setFilterAsignatura(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
+          <select value={filterAsignatura} onChange={e => setFilterAsignatura(e.target.value)}
+            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
             <option value="">Todas las asignaturas</option>
-            {asignaturas.map(a => (
-              <option key={a} value={a}>{a}</option>
-            ))}
+            {asignaturas.map(a => <option key={a} value={a}>{a}</option>)}
           </select>
         </div>
-
         <div>
           <label className="text-xs font-medium text-gray-500 block mb-1">Tipo de Alerta</label>
-          <select
-            value={filterTipo}
-            onChange={e => setFilterTipo(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
+          <select value={filterTipo} onChange={e => setFilterTipo(e.target.value)}
+            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
             <option value="all">Todos los tipos</option>
-            {Object.entries(tiposCounts)
-              .sort(([, a], [, b]) => b - a)
-              .map(([tipo, count]) => (
+            {Object.entries(tiposCounts).sort(([,a],[,b]) => b - a).map(([tipo, count]) => (
               <option key={tipo} value={tipo}>{TIPO_LABELS[tipo] || tipo} ({count})</option>
             ))}
           </select>
         </div>
-
         <div className="ml-auto text-sm text-gray-500">
-          {filteredAlerts.length} de {totalAlerts} alertas
-          {alerts.length < totalAlerts && <span className="text-xs text-gray-400 ml-1">(mostrando {alerts.length})</span>}
+          {totalStudents} estudiante{totalStudents !== 1 ? "s" : ""} · {alerts.length} alertas
         </div>
       </div>
 
       {/* Selection bar */}
-      {selectedIds.size > 0 && (
+      {selectedStudentIds.size > 0 && (
         <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 mb-4 flex items-center justify-between">
           <span className="text-sm text-blue-800 font-medium">
-            {selectedIds.size} alerta{selectedIds.size !== 1 ? "s" : ""} seleccionada{selectedIds.size !== 1 ? "s" : ""}
-            {" "}({selectedStudents.length} estudiante{selectedStudents.length !== 1 ? "s" : ""} único{selectedStudents.length !== 1 ? "s" : ""})
+            {selectedStudentIds.size} estudiante{selectedStudentIds.size !== 1 ? "s" : ""} seleccionado{selectedStudentIds.size !== 1 ? "s" : ""}
           </span>
           <div className="flex gap-2">
-            <button
-              onClick={() => setSelectedIds(new Set())}
-              className="text-xs px-3 py-1.5 border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"
-            >
+            <button onClick={() => setSelectedStudentIds(new Set())}
+              className="text-xs px-3 py-1.5 border border-blue-300 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors">
               Deseleccionar
             </button>
-            <button
-              onClick={() => setShowBulkModal(true)}
-              className="text-xs px-4 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
-            >
-              Registrar Intervención ({selectedStudents.length})
+            <button onClick={() => setShowBulkModal(true)}
+              className="text-xs px-4 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium">
+              Registrar Intervención ({selectedStudentIds.size})
             </button>
           </div>
         </div>
@@ -447,113 +478,120 @@ export default function Alertas() {
       ) : (
         <div className="space-y-6">
           {sortedSeverities.map(severity => {
-            const config = SEVERITY_CONFIG[severity] || SEVERITY_CONFIG.medio;
-            const alertsInGroup = groupedAlerts[severity];
-            const allGroupSelected = alertsInGroup.every(a => selectedIds.has(a.id));
+            const config = SEVERITY_CONFIG[severity];
+            const studentsInGroup = groupedBySeverity[severity] || [];
+            const allGroupSelected = studentsInGroup.every(g => selectedStudentIds.has(g.student_id));
 
             return (
               <div key={severity}>
                 {/* Severity group header */}
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={allGroupSelected}
-                      onChange={() => toggleSelectSeverity(severity)}
-                      className="rounded"
-                      title={`Seleccionar todas las alertas ${config.label}`}
-                    />
+                    <input type="checkbox" checked={allGroupSelected}
+                      onChange={() => toggleSelectSeverity(severity)} className="rounded"
+                      title={`Seleccionar todos los de riesgo ${config.label}`} />
                     <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${config.badge}`}>
-                      {config.icon} {config.label}
+                      {config.icon} RIESGO {config.label}
                     </span>
-                    <span className="text-sm text-gray-500">{alertsInGroup.length} alertas</span>
+                    <span className="text-sm text-gray-500">{studentsInGroup.length} estudiante{studentsInGroup.length !== 1 ? "s" : ""}</span>
                   </div>
-                  {alertsInGroup.length > 1 && (
-                    <button
-                      onClick={() => handleMarkAllRead(severity)}
-                      className="text-xs text-gray-500 hover:text-gray-700 transition-colors"
-                    >
-                      Marcar todas como leídas
-                    </button>
-                  )}
+                  <button onClick={() => handleMarkAllRead(severity)}
+                    className="text-xs text-gray-500 hover:text-gray-700 transition-colors">
+                    Marcar todo como leído
+                  </button>
                 </div>
 
-                {/* Alert cards */}
+                {/* Student cards */}
                 <div className="space-y-3">
-                  {alertsInGroup.map(alert => (
-                    <div
-                      key={alert.id}
-                      className={`rounded-xl border ${selectedIds.has(alert.id) ? "border-blue-300 ring-1 ring-blue-200" : "border-gray-200"} ${config.card} hover:shadow-md transition-all duration-200 overflow-hidden`}
-                    >
-                      <div className="p-4">
-                        {/* Top row: checkbox + student name + date */}
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex items-center gap-3">
-                            <input
-                              type="checkbox"
-                              checked={selectedIds.has(alert.id)}
-                              onChange={e => toggleSelect(alert, e)}
-                              className="rounded mt-1 flex-shrink-0"
-                            />
-                            <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-lg font-bold text-gray-600 flex-shrink-0">
-                              {alert.student_nombre?.charAt(0)?.toUpperCase() || "?"}
+                  {studentsInGroup.map(group => {
+                    const isExpanded = expandedStudents.has(group.student_id);
+                    const isSelected = selectedStudentIds.has(group.student_id);
+
+                    return (
+                      <div key={group.student_id}
+                        className={`rounded-xl border ${isSelected ? "border-blue-300 ring-1 ring-blue-200" : "border-gray-200"} ${config.card} hover:shadow-md transition-all duration-200 overflow-hidden`}>
+
+                        {/* Student header — always visible */}
+                        <div className="p-4 cursor-pointer" onClick={() => toggleExpand(group.student_id)}>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <input type="checkbox" checked={isSelected}
+                                onChange={(e) => { e.stopPropagation(); toggleSelectStudent(group.student_id); }}
+                                className="rounded flex-shrink-0" />
+                              <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-lg font-bold text-gray-600 flex-shrink-0">
+                                {group.student_nombre?.charAt(0)?.toUpperCase() || "?"}
+                              </div>
+                              <div>
+                                <button onClick={(e) => { e.stopPropagation(); navigate(`/ficha/${group.student_id}`); }}
+                                  className="font-semibold text-gray-900 hover:text-blue-600 transition-colors text-left">
+                                  {group.student_nombre}
+                                </button>
+                                {group.student_carrera && (
+                                  <div className="text-xs text-gray-500 mt-0.5">{group.student_carrera}</div>
+                                )}
+                              </div>
                             </div>
-                            <div>
-                              <button
-                                onClick={() => navigate(`/ficha/${alert.student_id}`)}
-                                className="font-semibold text-gray-900 hover:text-blue-600 transition-colors text-left"
-                              >
-                                {alert.student_nombre || "Estudiante desconocido"}
+                            <div className="flex items-center gap-3">
+                              {/* Alert type pills summary */}
+                              <div className="flex flex-wrap gap-1.5 justify-end">
+                                {group.alerts.map(a => (
+                                  <span key={a.id} className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border ${SEVERITY_CONFIG[a.severidad]?.alertBg || "bg-gray-50 border-gray-200"} ${SEVERITY_CONFIG[a.severidad]?.alertText || "text-gray-600"}`}>
+                                    {TIPO_ICONS[a.tipo] || "⚠️"} {TIPO_LABELS[a.tipo] || a.tipo}
+                                  </span>
+                                ))}
+                              </div>
+                              <span className={`text-lg transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}>▾</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Expanded: alert details */}
+                        {isExpanded && (
+                          <div className="border-t border-gray-100 bg-white/60 px-4 pb-4 pt-3 space-y-2">
+                            {group.alerts.map(alert => (
+                              <div key={alert.id} className={`flex items-start gap-3 p-3 rounded-lg border ${SEVERITY_CONFIG[alert.severidad]?.alertBg || "bg-gray-50 border-gray-200"}`}>
+                                <span className="text-lg flex-shrink-0 mt-0.5">{TIPO_ICONS[alert.tipo] || "⚠️"}</span>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-0.5">
+                                    <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
+                                      {TIPO_LABELS[alert.tipo] || alert.tipo}
+                                    </span>
+                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${SEVERITY_CONFIG[alert.severidad]?.badge || "bg-gray-400 text-white"}`}>
+                                      {SEVERITY_CONFIG[alert.severidad]?.label || alert.severidad}
+                                    </span>
+                                    {alert.asignatura && (
+                                      <span className="text-xs text-gray-500">· {alert.asignatura}</span>
+                                    )}
+                                    {!alert.asignatura && alert.codigo_curso && (
+                                      <span className="text-xs text-gray-400 font-mono">· {alert.codigo_curso}</span>
+                                    )}
+                                  </div>
+                                  <div className="text-sm text-gray-700 leading-relaxed">{alert.mensaje || "Sin detalle"}</div>
+                                  <div className="text-[10px] text-gray-400 mt-1">{formatDate(alert.created_at)}</div>
+                                </div>
+                                <button onClick={(e) => handleMarkAsRead(alert.id, e)}
+                                  className="text-xs px-2 py-1 bg-white border border-gray-300 hover:bg-gray-50 text-gray-500 rounded-lg transition-colors flex-shrink-0">
+                                  ✓ Leída
+                                </button>
+                              </div>
+                            ))}
+
+                            {/* Student actions */}
+                            <div className="flex gap-2 justify-end pt-2">
+                              <button onClick={() => handleMarkStudentRead(group.alerts)}
+                                className="text-xs px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-600 rounded-lg transition-colors">
+                                ✓ Marcar todas como leídas
                               </button>
-                              {alert.student_carrera && (
-                                <div className="text-xs text-gray-500 mt-0.5">{alert.student_carrera}</div>
-                              )}
+                              <button onClick={() => navigate(`/ficha/${group.student_id}`)}
+                                className="text-xs px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
+                                Ver ficha →
+                              </button>
                             </div>
                           </div>
-                          <div className="text-xs text-gray-400 whitespace-nowrap ml-2">
-                            {formatDate(alert.created_at)}
-                          </div>
-                        </div>
-
-                        {/* Alert type badge + message */}
-                        <div className="flex items-start gap-2 mb-3 ml-9">
-                          <span className="text-lg flex-shrink-0">{TIPO_ICONS[alert.tipo] || "⚠️"}</span>
-                          <div className="flex-1">
-                            <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-0.5">
-                              {TIPO_LABELS[alert.tipo] || alert.tipo || "Alerta"}
-                              {alert.asignatura && (
-                                <span className="ml-2 font-normal normal-case text-gray-500">· {alert.asignatura}</span>
-                              )}
-                              {!alert.asignatura && alert.codigo_curso && (
-                                <span className="ml-2 font-normal normal-case text-gray-400 font-mono">· {alert.codigo_curso}</span>
-                              )}
-                            </div>
-                            <div className="text-sm text-gray-700 leading-relaxed">
-                              {alert.mensaje || "Sin detalle disponible"}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Actions */}
-                        <div className="flex gap-2 justify-end pt-2 border-t border-gray-100">
-                          <button
-                            onClick={(e) => handleMarkAsRead(alert.id, e)}
-                            className="text-xs px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-600 rounded-lg transition-colors"
-                          >
-                            ✓ Leída
-                          </button>
-                          {alert.student_id && (
-                            <button
-                              onClick={() => navigate(`/ficha/${alert.student_id}`)}
-                              className="text-xs px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-                            >
-                              Ver ficha →
-                            </button>
-                          )}
-                        </div>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             );
@@ -561,7 +599,6 @@ export default function Alertas() {
         </div>
       )}
 
-      {/* Bulk intervention modal */}
       {showBulkModal && (
         <BulkInterventionModal
           selectedStudents={selectedStudents}
@@ -570,8 +607,6 @@ export default function Alertas() {
           onSaved={handleBulkSaved}
         />
       )}
-
-      {/* Student list modal (repitentes) */}
       {StudentListModalEl}
     </div>
   );

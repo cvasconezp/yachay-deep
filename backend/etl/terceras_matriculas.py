@@ -259,7 +259,7 @@ def load_terceras_matriculas(db: Session, carpeta: str) -> dict:
                 Enrollment.pagado.in_(["NO", "no", ""]),
             ).count()
 
-            severidad = "critico"  # tercera matrícula siempre es crítico
+            severidad = "alto"  # tercera matrícula siempre es alto
             msg_parts = [f"Estudiante con {n_asig} asignatura(s) en tercera matrícula"]
             if sin_pago:
                 msg_parts.append(f"{sin_pago} sin pago registrado")

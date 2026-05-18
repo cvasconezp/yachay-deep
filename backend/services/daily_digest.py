@@ -46,7 +46,7 @@ def build_digest_data(db: Session) -> dict:
 
     # Alertas no leídas por severidad
     alertas_criticas = db.query(func.count(AlertEvent.id)).filter(
-        AlertEvent.leido == False, AlertEvent.severidad == "critico"
+        AlertEvent.leido == False, AlertEvent.severidad == "alto"
     ).scalar() or 0
     alertas_altas = db.query(func.count(AlertEvent.id)).filter(
         AlertEvent.leido == False, AlertEvent.severidad == "alto"
