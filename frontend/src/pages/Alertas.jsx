@@ -40,6 +40,79 @@ const ACCIONES_SUGERIDAS = {
   deterioro_progresivo: "Intervención inmediata: contactar estudiante + docente + coordinador",
 };
 
+const MOTIVO_ESTUDIANTE = {
+  inactividad: "no has ingresado al Aula Virtual (AVAC) en varios días",
+  compromiso_bajo: "tu nivel de participación en las actividades del aula virtual ha disminuido",
+  nota_cero: "se registra una calificación de cero en una o más actividades evaluadas",
+  tareas_bajas: "tienes actividades o tareas pendientes de entrega",
+  notas_bajas_tareas: "las calificaciones obtenidas en las tareas están por debajo del promedio esperado",
+  segunda_matricula: "te encuentras cursando esta asignatura por segunda ocasión",
+  tercera_matricula: "te encuentras en condición de tercera matrícula, lo cual requiere atención prioritaria",
+  deterioro_progresivo: "se ha identificado un descenso sostenido en tus indicadores académicos",
+};
+
+function buildStudentMessage(group) {
+  const nombre = group.student_nombre
+    .split(" ")
+    .map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())
+    .join(" ");
+
+  // Collect unique motivos from alerts
+  const tipos = [...new Set(group.alerts.map(a => a.tipo))];
+  const motivos = tipos
+    .map(t => MOTIVO_ESTUDIANTE[t])
+    .filter(Boolean);
+
+  // Build context details
+  const detalles = [];
+  if (group.dias_sin_acceso != null && group.dias_sin_acceso > 0)
+    detalles.push("Último acceso al AVAC: hace " + group.dias_sin_acceso + " días.");
+  if (group.porcentaje_tareas != null)
+    detalles.push("Porcentaje de tareas entregadas: " + Math.round(group.porcentaje_tareas) + "%.");
+  if (group.indice_compromiso != null)
+    detalles.push("Índice de compromiso académico: " + Math.round(group.indice_compromiso * 100) + "%.");
+
+  // Collect asignaturas from alerts
+  const asignaturas = [...new Set(group.alerts.map(a => a.asignatura).filter(Boolean))];
+
+  let lines = [];
+  lines.push("Estimado/a " + nombre + ",");
+  lines.push("");
+  lines.push("Reciba un cordial saludo de parte de la Coordinación Académica.");
+  lines.push("");
+  lines.push("Por medio del presente nos permitimos comunicarte que, de acuerdo con el seguimiento académico que realizamos, se han identificado las siguientes situaciones que requieren tu atención:");
+  lines.push("");
+
+  motivos.forEach((m, i) => {
+    lines.push("  " + (i + 1) + ". " + m.charAt(0).toUpperCase() + m.slice(1) + ".");
+  });
+
+  if (asignaturas.length > 0) {
+    lines.push("");
+    lines.push("Asignatura(s) involucrada(s): " + asignaturas.join(", ") + ".");
+  }
+
+  if (detalles.length > 0) {
+    lines.push("");
+    detalles.forEach(d => lines.push("  - " + d));
+  }
+
+  lines.push("");
+  lines.push("Es importante que tomes acción a la brevedad posible. Te invitamos a:");
+  lines.push("  - Revisar y completar las actividades pendientes en el AVAC.");
+  lines.push("  - Comunicarte con tu docente para aclarar cualquier duda.");
+  lines.push("  - Acercarte a la Coordinación o a Bienestar Estudiantil si necesitas apoyo adicional.");
+  lines.push("");
+  lines.push("Nuestro objetivo es acompañarte en tu proceso académico y ayudarte a culminar el periodo con éxito.");
+  lines.push("");
+  lines.push("Quedamos atentos a cualquier inquietud.");
+  lines.push("");
+  lines.push("Saludos cordiales,");
+  lines.push("Coordinación Académica");
+
+  return lines.join("\n");
+}
+
 const SEVERITY_CONFIG = {
   alto: {
     label: "ALTO",
@@ -108,6 +181,7 @@ export default function Alertas() {
   const [condicionStudentIds, setCondicionStudentIds] = useState(null);
   const [selectedStudentIds, setSelectedStudentIds] = useState(new Set());
   const [expandedStudents, setExpandedStudents] = useState(new Set());
+  const [copiedStudentId, setCopiedStudentId] = useState(null);
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [carreras, setCarreras] = useState([]);
   const [asignaturas, setAsignaturas] = useState([]);
@@ -643,7 +717,28 @@ export default function Alertas() {
                             ))}
 
                             {/* Student actions */}
-                            <div className="flex gap-2 justify-end pt-2">
+                            <div className="flex gap-2 justify-end pt-2 flex-wrap">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const msg = buildStudentMessage(group);
+                                  navigator.clipboard.writeText(msg).then(() => {
+                                    setCopiedStudentId(group.student_id);
+                                    setTimeout(() => setCopiedStudentId(null), 2500);
+                                  });
+                                }}
+                                className={`text-xs px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 ${
+                                  copiedStudentId === group.student_id
+                                    ? "bg-green-100 text-green-700 border border-green-300"
+                                    : "bg-amber-50 text-amber-700 border border-amber-300 hover:bg-amber-100"
+                                }`}
+                              >
+                                {copiedStudentId === group.student_id ? (
+                                  <><svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg> Copiado</>
+                                ) : (
+                                  <><svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg> Copiar mensaje</>
+                                )}
+                              </button>
                               <button onClick={() => handleMarkStudentRead(group.alerts)}
                                 className="text-xs px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-600 rounded-lg transition-colors">
                                 ✓ Marcar todas como leídas
