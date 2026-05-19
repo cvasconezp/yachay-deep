@@ -247,6 +247,11 @@ class ETLPipeline:
                     codigos_activos=codigos_activos,
                 )
                 logs.append(f"  → {len(df_tareas)} registros de tareas")
+                if df_tareas.empty and semestre_vigente:
+                    logs.append("  ⚠️ ADVERTENCIA: 0 registros de tareas con semestre vigente. "
+                                "El scraping de tareas probablemente falló (revisar autenticación AVAC). "
+                                "Los datos de calificaciones docentes estarán desactualizados.")
+                    errores.append("Scraping de tareas posiblemente fallido: 0 registros")
             else:
                 logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] ⏸ Semestre finalizado — omitiendo lectura de IngresosAVAC y Tareas")
                 df_ingresos = pd.DataFrame()

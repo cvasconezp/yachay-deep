@@ -196,6 +196,19 @@ export default function SeguimientoDocente({ embedded = false }) {
         </div>
       )}
 
+      {/* Stale data warning */}
+      {resumen?.dias_desde_snapshot > 2 && (
+        <div className="bg-amber-50 border border-amber-300 rounded-lg px-4 py-3 flex items-center gap-2 text-amber-800 text-sm">
+          <span className="text-lg">⚠️</span>
+          <span>
+            <strong>Datos desactualizados:</strong> el último scraping de tareas fue el{" "}
+            <strong>{resumen.snapshot_date}</strong> (hace {resumen.dias_desde_snapshot} días).
+            Los datos de calificaciones pueden no reflejar el estado actual en AVAC.
+            Verifique que el scraping diario esté funcionando correctamente.
+          </span>
+        </div>
+      )}
+
       {/* Search */}
       <div className="flex items-center gap-3">
         <div className="relative flex-1 max-w-md">

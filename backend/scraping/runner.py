@@ -43,6 +43,19 @@ def run_scraping(mode: str = "full"):
     finally:
         db.close()
 
+    # Validar que el scraping produjo resultados
+    for step, result in results.items():
+        if isinstance(result, dict):
+            procesados = result.get("codigos_procesados", 0)
+            errores = result.get("errores", [])
+            if procesados == 0:
+                logger.error(
+                    f"⚠️ SCRAPING {step.upper()} FALLÓ: 0 cursos procesados. "
+                    f"Errores: {errores or 'posible fallo de autenticación'}"
+                )
+            else:
+                logger.info(f"✅ {step}: {procesados} cursos procesados, {len(errores)} errores")
+
     return results
 
 

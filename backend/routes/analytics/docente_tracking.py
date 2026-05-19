@@ -72,6 +72,8 @@ class ResumenDocenteTracking(BaseModel):
     docentes_en_atencion: int = 0
     docentes_criticos: int = 0
     total_pendientes: int = 0
+    snapshot_date: Optional[str] = None
+    dias_desde_snapshot: Optional[int] = None
 
 
 def _get_periodo_variants(db: Session):
@@ -242,8 +244,18 @@ def get_docente_tracking_resumen(
 ):
     """Resumen general de seguimiento docente."""
     all_stats = get_docente_tracking(db=db, current_user=current_user)
+
+    # Obtener fecha del snapshot más reciente de task_submissions
+    from datetime import date as date_type
+    latest_snap = db.query(func.max(TaskSubmission.snapshot_date)).scalar()
+    snap_str = str(latest_snap) if latest_snap else None
+    dias_stale = (date_type.today() - latest_snap).days if latest_snap else None
+
     if not all_stats:
-        return ResumenDocenteTracking()
+        return ResumenDocenteTracking(
+            snapshot_date=snap_str,
+            dias_desde_snapshot=dias_stale,
+        )
 
     total_pend = sum(d.actividades_pendientes for d in all_stats)
     pcts = [d.porcentaje_calificacion for d in all_stats]
@@ -256,6 +268,8 @@ def get_docente_tracking_resumen(
         docentes_en_atencion=atencion,
         docentes_criticos=criticos,
         total_pendientes=total_pend,
+        snapshot_date=snap_str,
+        dias_desde_snapshot=dias_stale,
     )
 
 
