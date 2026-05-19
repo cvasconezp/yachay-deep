@@ -181,7 +181,7 @@ export default function Alertas() {
       return true;
     });
 
-    // Group by student
+    // Group by student — enrich with context from first alert
     const map = new Map();
     for (const alert of filtered) {
       const sid = alert.student_id;
@@ -190,25 +190,40 @@ export default function Alertas() {
           student_id: sid,
           student_nombre: alert.student_nombre || "Estudiante desconocido",
           student_carrera: alert.student_carrera || "",
+          dias_sin_acceso: alert.dias_sin_acceso,
+          porcentaje_tareas: alert.porcentaje_tareas,
+          indice_compromiso: alert.indice_compromiso,
+          nivel_riesgo: alert.nivel_riesgo,
+          score_recuperabilidad: alert.score_recuperabilidad,
+          tiene_intervencion: alert.tiene_intervencion,
           alerts: [],
         });
       }
       map.get(sid).alerts.push(alert);
     }
 
-    // Compute max severity per student and sort
-    const groups = [...map.values()].map(g => ({
-      ...g,
-      maxSeverity: getMaxSeverity(g.alerts),
-      alertCount: g.alerts.length,
-    }));
+    // Compute max severity + urgency score per student
+    const sevScore = { alto: 30, medio: 15, bajo: 5 };
+    const riesgoScore = { Alto: 25, Medio: 10, Bajo: 0 };
+
+    const groups = [...map.values()].map(g => {
+      const maxSev = getMaxSeverity(g.alerts);
+      // Urgency = severity weight + alert count + inactivity + low tasks + low recovery
+      let urgency = (sevScore[maxSev] || 0) + Math.min(g.alerts.length * 3, 15);
+      if (g.dias_sin_acceso != null) urgency += Math.min(g.dias_sin_acceso, 30);
+      if (g.porcentaje_tareas != null) urgency += Math.round((100 - g.porcentaje_tareas) * 0.2);
+      if (g.score_recuperabilidad != null) urgency += Math.round((100 - g.score_recuperabilidad) * 0.15);
+      urgency += (riesgoScore[g.nivel_riesgo] || 0);
+      if (!g.tiene_intervencion) urgency += 10; // no one is attending yet
+      return { ...g, maxSeverity: maxSev, alertCount: g.alerts.length, urgency: Math.round(urgency) };
+    });
 
     const sevOrder = { alto: 0, medio: 1, bajo: 2 };
     groups.sort((a, b) => {
       const sa = sevOrder[a.maxSeverity] ?? 9;
       const sb = sevOrder[b.maxSeverity] ?? 9;
       if (sa !== sb) return sa - sb;
-      return b.alertCount - a.alertCount;
+      return b.urgency - a.urgency; // within same severity, sort by urgency
     });
 
     return groups;
@@ -521,27 +536,64 @@ export default function Alertas() {
 
                         {/* Student header — always visible */}
                         <div className="p-4 cursor-pointer" onClick={() => toggleExpand(group.student_id)}>
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-start gap-3 min-w-0">
                               <input type="checkbox" checked={isSelected}
                                 onChange={(e) => { e.stopPropagation(); toggleSelectStudent(group.student_id); }}
-                                className="rounded flex-shrink-0" />
+                                className="rounded flex-shrink-0 mt-1" />
                               <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-lg font-bold text-gray-600 flex-shrink-0">
                                 {group.student_nombre?.charAt(0)?.toUpperCase() || "?"}
                               </div>
-                              <div>
-                                <button onClick={(e) => { e.stopPropagation(); navigate(`/ficha/${group.student_id}`); }}
-                                  className="font-semibold text-gray-900 hover:text-blue-600 transition-colors text-left">
-                                  {group.student_nombre}
-                                </button>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <button onClick={(e) => { e.stopPropagation(); navigate(`/ficha/${group.student_id}`); }}
+                                    className="font-semibold text-gray-900 hover:text-blue-600 transition-colors text-left">
+                                    {group.student_nombre}
+                                  </button>
+                                  {group.tiene_intervencion ? (
+                                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 border border-blue-200">EN INTERVENCIÓN</span>
+                                  ) : (
+                                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 border border-gray-200">SIN ATENDER</span>
+                                  )}
+                                  {group.nivel_riesgo && (
+                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                                      group.nivel_riesgo === "Alto" ? "bg-red-100 text-red-700" :
+                                      group.nivel_riesgo === "Medio" ? "bg-orange-100 text-orange-700" :
+                                      "bg-green-100 text-green-700"
+                                    }`}>ML: {group.nivel_riesgo}</span>
+                                  )}
+                                </div>
                                 {group.student_carrera && (
                                   <div className="text-xs text-gray-500 mt-0.5">{group.student_carrera}</div>
                                 )}
+                                {/* Context metrics bar */}
+                                <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5">
+                                  {group.dias_sin_acceso != null && (
+                                    <span className={`text-[11px] ${group.dias_sin_acceso > 14 ? "text-red-600 font-semibold" : group.dias_sin_acceso > 7 ? "text-orange-600" : "text-gray-500"}`}>
+                                      {group.dias_sin_acceso === 0 ? "Activo hoy" : `${group.dias_sin_acceso}d sin acceso`}
+                                    </span>
+                                  )}
+                                  {group.porcentaje_tareas != null && (
+                                    <span className={`text-[11px] ${group.porcentaje_tareas < 30 ? "text-red-600 font-semibold" : group.porcentaje_tareas < 60 ? "text-orange-600" : "text-gray-500"}`}>
+                                      Tareas: {Math.round(group.porcentaje_tareas)}%
+                                    </span>
+                                  )}
+                                  {group.indice_compromiso != null && (
+                                    <span className={`text-[11px] ${group.indice_compromiso < 0.3 ? "text-red-600 font-semibold" : group.indice_compromiso < 0.6 ? "text-orange-600" : "text-gray-500"}`}>
+                                      Compromiso: {Math.round(group.indice_compromiso * 100)}%
+                                    </span>
+                                  )}
+                                  {group.score_recuperabilidad != null && (
+                                    <span className={`text-[11px] ${group.score_recuperabilidad < 30 ? "text-red-600 font-semibold" : group.score_recuperabilidad < 60 ? "text-orange-600" : "text-gray-500"}`}>
+                                      Recuperab: {Math.round(group.score_recuperabilidad)}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-start gap-3 flex-shrink-0">
                               {/* Alert type pills summary */}
-                              <div className="flex flex-wrap gap-1.5 justify-end">
+                              <div className="flex flex-wrap gap-1.5 justify-end max-w-xs">
                                 {group.alerts.map(a => (
                                   <span key={a.id} className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border ${SEVERITY_CONFIG[a.severidad]?.alertBg || "bg-gray-50 border-gray-200"} ${SEVERITY_CONFIG[a.severidad]?.alertText || "text-gray-600"}`}>
                                     {TIPO_ICONS[a.tipo] || "⚠️"} {TIPO_LABELS[a.tipo] || a.tipo}

@@ -14,6 +14,7 @@ from ..models import Student, Grade, AvacAccess
 from ..models.enrollment import Enrollment
 from ..models.alert_event import AlertEvent
 from ..models.course_config import SemesterConfig, CourseConfig
+from ..models.intervention import Intervention
 from ..auth.jwt import get_current_user
 from ..models.user import User
 from .analytics._helpers import get_umbrales
@@ -86,6 +87,13 @@ class AlertEventResponse(BaseModel):
     leido_por: Optional[str] = None
     leido_at: Optional[str] = None
     created_at: str
+    # Contexto del estudiante para priorización
+    dias_sin_acceso: Optional[int] = None
+    porcentaje_tareas: Optional[float] = None
+    indice_compromiso: Optional[float] = None
+    nivel_riesgo: Optional[str] = None
+    score_recuperabilidad: Optional[float] = None
+    tiene_intervencion: Optional[bool] = None
 
     class Config:
         from_attributes = True
@@ -175,6 +183,28 @@ def get_pending_alerts(
         for cc in db.query(CourseConfig).filter(CourseConfig.codigo_avac.in_(curso_codes)).all():
             asignatura_map[cc.codigo_avac] = cc.asignatura
 
+    # Pre-load student context (metrics + intervention status)
+    student_ids = list({alert.student_id for alert, _, _ in rows})
+    student_context = {}
+    if student_ids:
+        for s in db.query(Student).filter(Student.id.in_(student_ids)).all():
+            student_context[s.id] = {
+                "dias_sin_acceso": s.dias_sin_acceso,
+                "porcentaje_tareas": s.porcentaje_tareas,
+                "indice_compromiso": s.indice_compromiso,
+                "nivel_riesgo": s.nivel_riesgo,
+                "score_recuperabilidad": s.score_recuperabilidad,
+            }
+        # Check active interventions
+        active_states = ("pendiente", "en_progreso", "contactado")
+        interv_ids = {r[0] for r in db.query(Intervention.student_id).filter(
+            Intervention.student_id.in_(student_ids),
+            Intervention.estado_workflow.in_(active_states),
+        ).distinct().all()}
+        for sid in student_ids:
+            if sid in student_context:
+                student_context[sid]["tiene_intervencion"] = sid in interv_ids
+
     return [
         AlertEventResponse(
             id=alert.id,
@@ -190,6 +220,7 @@ def get_pending_alerts(
             leido_por=alert.leido_por,
             leido_at=alert.leido_at.isoformat() if alert.leido_at else None,
             created_at=alert.created_at.isoformat() if alert.created_at else None,
+            **(student_context.get(alert.student_id, {})),
         )
         for alert, nombre, student_carrera in rows
     ]
