@@ -1001,3 +1001,93 @@ def debug_bloque_filter(
         "dias_calculated_for_alerts": dias_calculated,
         "avac_records": avac_list,
     }
+
+
+@router.get("/debug/task-submissions/{codigo_curso}")
+def debug_task_submissions(
+    codigo_curso: str,
+    unidad: str = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Diagnóstico: muestra task_submissions para un curso dado.
+    Útil para investigar discrepancias entre AVAC y Yachay.
+    """
+    from ..models import TaskSubmission, Student
+    from ..models.course_config import SemesterConfig
+    from sqlalchemy import func as sqf, or_
+
+    sem = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
+    if not sem:
+        return {"error": "No hay semestre activo"}
+
+    pf = sem.semestre.strip()
+    periodo_variants = (pf, pf[1:]) if pf.startswith("P") else (pf, f"P{pf}")
+
+    # Latest snapshot
+    snap = db.query(sqf.max(TaskSubmission.snapshot_date)).filter(
+        TaskSubmission.codigo_curso == codigo_curso,
+        or_(TaskSubmission.periodo == periodo_variants[0], TaskSubmission.periodo == periodo_variants[1]),
+    ).scalar()
+
+    if not snap:
+        return {"error": f"No hay snapshots para curso {codigo_curso}", "periodo_variants": periodo_variants}
+
+    q = db.query(TaskSubmission).filter(
+        TaskSubmission.codigo_curso == codigo_curso,
+        TaskSubmission.snapshot_date == snap,
+        or_(TaskSubmission.periodo == periodo_variants[0], TaskSubmission.periodo == periodo_variants[1]),
+    )
+    if unidad:
+        q = q.filter(TaskSubmission.unidad == unidad)
+
+    subs = q.all()
+
+    # Get student names
+    student_ids = list(set(s.student_id for s in subs if s.student_id))
+    names = {}
+    if student_ids:
+        rows = db.query(Student.id, Student.nombre).filter(Student.id.in_(student_ids)).all()
+        names = {r.id: r.nombre for r in rows}
+
+    records = []
+    for s in subs:
+        records.append({
+            "id": s.id,
+            "student": names.get(s.student_id, f"ID {s.student_id}"),
+            "unidad": s.unidad,
+            "estado": s.estado,
+            "entregada": s.entregada,
+            "calificada": s.calificada,
+            "calificacion": s.calificacion,
+            "calificacion_maxima": s.calificacion_maxima,
+            "calificacion_final": s.calificacion_final,
+            "calificacion_texto": s.calificacion_texto,
+            "fecha_entrega": s.fecha_entrega.isoformat() if s.fecha_entrega else None,
+            "fecha_calificacion": s.fecha_calificacion.isoformat() if s.fecha_calificacion else None,
+            "snapshot_date": str(s.snapshot_date),
+        })
+
+    # Summary
+    by_unidad = {}
+    for r in records:
+        u = r["unidad"] or "?"
+        if u not in by_unidad:
+            by_unidad[u] = {"total": 0, "entregada": 0, "calificada": 0, "not_calificada_but_entregada": 0}
+        by_unidad[u]["total"] += 1
+        if r["entregada"]:
+            by_unidad[u]["entregada"] += 1
+        if r["calificada"]:
+            by_unidad[u]["calificada"] += 1
+        if r["entregada"] and not r["calificada"]:
+            by_unidad[u]["not_calificada_but_entregada"] += 1
+
+    return {
+        "codigo_curso": codigo_curso,
+        "snapshot_date": str(snap),
+        "periodo_variants": periodo_variants,
+        "total_records": len(records),
+        "summary_by_unidad": by_unidad,
+        "records": records,
+    }
