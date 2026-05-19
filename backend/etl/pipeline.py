@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Optional, List
 import pandas as pd
 from sqlalchemy.orm import Session
-from sqlalchemy import func, text as sa_text
+from sqlalchemy import func, text as sa_text, or_
 
 from .transformers import (
     transform_ingresos_avac,
@@ -176,8 +176,9 @@ class ETLPipeline:
         )
 
         if bloque:
+            other_bloque = "2" if bloque == "1" else "1"
             query = query.filter(
-                (CourseConfig.bloque == bloque) | (CourseConfig.bloque == "ambos")
+                or_(CourseConfig.bloque != other_bloque, CourseConfig.bloque.is_(None))
             )
 
         codigos = [row[0] for row in query.all()]

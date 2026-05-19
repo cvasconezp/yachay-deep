@@ -238,12 +238,10 @@ def generate_alerts_batch(db: Session) -> dict:
             CourseConfig.bloque == other_bloque,
         ).all()
         excluded_course_codes = {r[0] for r in excluded_cc}
-        included_cc = db.query(CourseConfig.codigo_avac).filter(
-            or_(CourseConfig.bloque == semconfig.bloque_actual,
-                CourseConfig.bloque == "ambos",
-                CourseConfig.bloque.is_(None)),
+        all_cc = db.query(CourseConfig.codigo_avac).filter(
+            CourseConfig.codigo_avac.isnot(None),
         ).all()
-        included_course_codes = {r[0] for r in included_cc}
+        included_course_codes = {r[0] for r in all_cc if r[0]} - excluded_course_codes
 
     included_asignaturas = set()
     if included_course_codes:

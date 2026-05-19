@@ -193,14 +193,15 @@ def get_pending_alerts(
         semconfig_q = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
         bloque_course_codes = set()
         if semconfig_q and semconfig_q.bloque_actual:
-            bloque_cc = db.query(CourseConfig.codigo_avac).filter(
-                or_(
-                    CourseConfig.bloque == semconfig_q.bloque_actual,
-                    CourseConfig.bloque == "ambos",
-                    CourseConfig.bloque.is_(None),
-                ),
+            other_bloque = "2" if semconfig_q.bloque_actual == "1" else "1"
+            excluded_cc = db.query(CourseConfig.codigo_avac).filter(
+                CourseConfig.bloque == other_bloque,
             ).all()
-            bloque_course_codes = {r[0] for r in bloque_cc if r[0]}
+            excluded_codes = {r[0] for r in excluded_cc if r[0]}
+            all_cc = db.query(CourseConfig.codigo_avac).filter(
+                CourseConfig.codigo_avac.isnot(None),
+            ).all()
+            bloque_course_codes = {r[0] for r in all_cc if r[0]} - excluded_codes
 
         if student_ids and bloque_course_codes:
             latest_snap = db.query(func.max(AvacAccess.snapshot_date)).filter(
@@ -502,13 +503,15 @@ def debug_alert_conditions(
     # Included asignaturas (bloque filter)
     included_course_codes = set()
     if semconfig:
-        from sqlalchemy import or_ as or2
-        included_cc = db.query(CourseConfig.codigo_avac).filter(
-            or2(CourseConfig.bloque == semconfig.bloque_actual,
-                CourseConfig.bloque == "ambos",
-                CourseConfig.bloque.is_(None)),
+        other_bloque = "2" if semconfig.bloque_actual == "1" else "1"
+        excluded_cc = db.query(CourseConfig.codigo_avac).filter(
+            CourseConfig.bloque == other_bloque,
         ).all()
-        included_course_codes = {r[0] for r in included_cc}
+        excluded_codes = {r[0] for r in excluded_cc if r[0]}
+        all_cc = db.query(CourseConfig.codigo_avac).filter(
+            CourseConfig.codigo_avac.isnot(None),
+        ).all()
+        included_course_codes = {r[0] for r in all_cc if r[0]} - excluded_codes
 
     included_asignaturas = set()
     if included_course_codes:
