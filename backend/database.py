@@ -3,11 +3,17 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from .config import settings
 
+_is_sqlite = "sqlite" in settings.DATABASE_URL
+
 engine = create_engine(
     settings.DATABASE_URL,
     pool_pre_ping=True,
-    # For SQLite (dev), use connect_args
-    connect_args={"check_same_thread": False} if "sqlite" in settings.DATABASE_URL else {}
+    # Pool más robusto para Railway PostgreSQL (límite de conexiones bajo)
+    pool_size=3 if not _is_sqlite else 0,
+    max_overflow=5 if not _is_sqlite else 0,
+    pool_recycle=300,        # reciclar conexiones cada 5 min
+    pool_timeout=20,         # timeout más corto para detectar problemas
+    connect_args={"check_same_thread": False} if _is_sqlite else {},
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
