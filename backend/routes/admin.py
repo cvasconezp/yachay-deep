@@ -901,3 +901,88 @@ def debug_student_search(
         {"id": s.id, "nombre": s.nombre, "correo_inst": s.correo_institucional, "cedula": s.cedula}
         for s in students
     ]}
+
+
+@router.get("/debug/bloque-filter/{student_id}")
+def debug_bloque_filter(
+    student_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Diagnóstico del filtro de bloque para un estudiante específico."""
+    from ..models import Student, AvacAccess
+    from ..models.course_config import CourseConfig, SemesterConfig
+    from sqlalchemy import func as sqf, or_
+
+    student = db.query(Student).get(student_id)
+    if not student:
+        return {"error": "Student not found"}
+
+    semconfig = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
+    bloque_actual = semconfig.bloque_actual if semconfig else None
+
+    # All CourseConfig entries
+    all_cc = db.query(CourseConfig.codigo_avac, CourseConfig.bloque, CourseConfig.asignatura).filter(
+        CourseConfig.codigo_avac.isnot(None),
+    ).all()
+    all_courses = {r[0]: {"bloque": r[1], "asignatura": r[2]} for r in all_cc}
+
+    # Exclusion logic
+    excluded_codes = set()
+    if bloque_actual:
+        other_bloque = "2" if bloque_actual == "1" else "1"
+        excluded_cc = db.query(CourseConfig.codigo_avac).filter(
+            CourseConfig.bloque == other_bloque,
+        ).all()
+        excluded_codes = {r[0] for r in excluded_cc if r[0]}
+
+    included_codes = {r[0] for r in all_cc if r[0]} - excluded_codes
+
+    # Student's AvacAccess records
+    avac_records = db.query(
+        AvacAccess.codigo_curso, AvacAccess.dias_sin_acceso, AvacAccess.snapshot_date,
+    ).filter(
+        AvacAccess.student_id == student_id,
+        AvacAccess.dias_sin_acceso.isnot(None),
+    ).order_by(AvacAccess.snapshot_date.desc()).limit(20).all()
+
+    avac_list = []
+    for r in avac_records:
+        cc_info = all_courses.get(r[0], {})
+        avac_list.append({
+            "codigo_curso": r[0],
+            "dias_sin_acceso": r[1],
+            "snapshot_date": str(r[2]) if r[2] else None,
+            "bloque": cc_info.get("bloque"),
+            "asignatura": cc_info.get("asignatura"),
+            "included": r[0] in included_codes,
+            "in_courseconfig": r[0] in all_courses,
+        })
+
+    # What the alerts endpoint would calculate
+    bloque_course_codes = included_codes
+    dias_calculated = None
+    if bloque_course_codes:
+        latest_snap = db.query(sqf.max(AvacAccess.snapshot_date)).filter(
+            AvacAccess.student_id == student_id,
+            AvacAccess.dias_sin_acceso.isnot(None),
+            AvacAccess.codigo_curso.in_(bloque_course_codes),
+        ).scalar()
+        if latest_snap:
+            max_dias = db.query(sqf.max(AvacAccess.dias_sin_acceso)).filter(
+                AvacAccess.student_id == student_id,
+                AvacAccess.dias_sin_acceso.isnot(None),
+                AvacAccess.codigo_curso.in_(bloque_course_codes),
+                AvacAccess.snapshot_date == latest_snap,
+            ).scalar()
+            dias_calculated = int(max_dias) if max_dias is not None else None
+
+    return {
+        "student": {"id": student.id, "nombre": student.nombre, "dias_sin_acceso_stored": student.dias_sin_acceso},
+        "bloque_actual": bloque_actual,
+        "total_courses_in_config": len(all_courses),
+        "excluded_codes_count": len(excluded_codes),
+        "included_codes_count": len(included_codes),
+        "dias_calculated_for_alerts": dias_calculated,
+        "avac_records": avac_list,
+    }
