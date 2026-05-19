@@ -357,8 +357,10 @@ def scrape_tareas(output_dir: str, codigos=None, base_url: str = None, db=None):
 
                         d = datos_estudiantes[email]
                         u = unidad_detectada
-                        d[f"Estado {u}"] = gv(2)
-                        d[f"Calificación {u}"] = gv(3)
+                        estado_raw = gv(2)
+                        calif_raw = gv(3)
+                        d[f"Estado {u}"] = estado_raw
+                        d[f"Calificación {u}"] = calif_raw
                         d[f"Última modificación (entrega) {u}"] = gv(4)
                         d[f"Archivos enviados {u}"] = gv(5)
                         d[f"Última modificación (calificación) {u}"] = gv(6)
@@ -366,6 +368,18 @@ def scrape_tareas(output_dir: str, codigos=None, base_url: str = None, db=None):
                         d[f"Anotar PDF {u}"] = gv(8)
                         d[f"Archivos de retroalimentación {u}"] = gv(9)
                         d[f"Calificación final {u}"] = gv(10)
+
+                        # Fix: Moodle muestra "Enviado para calificar" en el estado de envío
+                        # incluso si ya fue calificado. Detectar calificación por:
+                        # 1. Columna calificación tiene valor numérico (e.g., "12,00 / 15,00")
+                        # 2. Columna "Última modificación (calificación)" tiene fecha
+                        # 3. Columna "Calificación final" tiene valor
+                        if "enviado" in estado_raw.lower() and "calificado" not in estado_raw.lower():
+                            tiene_calif = bool(calif_raw and calif_raw.strip() not in ("-", "") and re.search(r"\d", calif_raw))
+                            tiene_fecha_cal = bool(gv(6) and gv(6).strip() not in ("-", ""))
+                            tiene_cal_final = bool(gv(10) and gv(10).strip() not in ("-", "") and re.search(r"\d", gv(10)))
+                            if tiene_calif or tiene_fecha_cal or tiene_cal_final:
+                                d[f"Estado {u}"] = "Calificado"
             else:
                 logger.info(f"  [{idx_curso}/{total_cursos}] {codigo_curso}: curso especial — usando totales de reporte general")
 

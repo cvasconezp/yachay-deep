@@ -186,10 +186,46 @@ def get_pending_alerts(
     # Pre-load student context (metrics + intervention status)
     student_ids = list({alert.student_id for alert, _, _ in rows})
     student_context = {}
+
+    # ── Calcular dias_sin_acceso filtrado por bloque actual ──
+    from ..models.course_config import CourseConfig, SemesterConfig
+    from ..models.avac_access import AvacAccess
+    from sqlalchemy import func as sqlfunc, or_ as sql_or
+    semconfig_q = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
+    bloque_course_codes = set()
+    if semconfig_q and semconfig_q.bloque_actual:
+        bloque_cc = db.query(CourseConfig.codigo_avac).filter(
+            sql_or(
+                CourseConfig.bloque == semconfig_q.bloque_actual,
+                CourseConfig.bloque == "ambos",
+                CourseConfig.bloque.is_(None),
+            ),
+        ).all()
+        bloque_course_codes = {r[0] for r in bloque_cc if r[0]}
+
+    # Get latest snapshot filtered by bloque courses
+    dias_por_estudiante = {}
+    if student_ids and bloque_course_codes:
+        avac_filter = [
+            AvacAccess.student_id.in_(student_ids),
+            AvacAccess.dias_sin_acceso.isnot(None),
+            AvacAccess.codigo_curso.in_(bloque_course_codes),
+        ]
+        latest_snap = db.query(sqlfunc.max(AvacAccess.snapshot_date)).filter(*avac_filter).scalar()
+        if latest_snap:
+            avac_filter.append(AvacAccess.snapshot_date == latest_snap)
+            for sid, dias in db.query(
+                AvacAccess.student_id,
+                sqlfunc.max(AvacAccess.dias_sin_acceso),
+            ).filter(*avac_filter).group_by(AvacAccess.student_id).all():
+                dias_por_estudiante[sid] = int(dias) if dias is not None else None
+
     if student_ids:
         for s in db.query(Student).filter(Student.id.in_(student_ids)).all():
+            # Use bloque-filtered dias_sin_acceso if available, fallback to stored value
+            dias = dias_por_estudiante.get(s.id, s.dias_sin_acceso)
             student_context[s.id] = {
-                "dias_sin_acceso": s.dias_sin_acceso,
+                "dias_sin_acceso": dias,
                 "porcentaje_tareas": s.porcentaje_tareas,
                 "indice_compromiso": s.indice_compromiso,
                 "nivel_riesgo": s.nivel_riesgo,
