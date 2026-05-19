@@ -672,6 +672,25 @@ def get_student_tasks_detail(
             pass
     unidades_ok = _unidades_vencidas(calendario)
 
+    # ── Filtrar cursos por bloque activo ──
+    bloque_course_codes = None
+    if sem and sem.bloque_actual:
+        other_bloque = "2" if sem.bloque_actual == "1" else "1"
+        excluded_cc = db.query(CourseConfig.codigo_avac).filter(
+            CourseConfig.bloque == other_bloque,
+        ).all()
+        excluded_codes = {r[0] for r in excluded_cc if r[0]}
+        other_bloque_int = int(other_bloque)
+        excluded_enroll = db.query(Enrollment.codigo_grupo).filter(
+            Enrollment.codigo_grupo.isnot(None),
+            Enrollment.bloque == other_bloque_int,
+        ).distinct().all()
+        excluded_codes |= {r[0] for r in excluded_enroll if r[0]}
+        all_cc = db.query(CourseConfig.codigo_avac).filter(
+            CourseConfig.codigo_avac.isnot(None),
+        ).all()
+        bloque_course_codes = {r[0] for r in all_cc if r[0]} - excluded_codes
+
     # Build periodo filter
     if len(periodo_variants) == 2:
         pf_filter = or_(
@@ -682,13 +701,17 @@ def get_student_tasks_detail(
         pf_filter = TaskSubmission.periodo == periodo_variants[0]
 
     # Get latest snapshot per course for this student
-    snaps = db.query(
+    snap_q = db.query(
         TaskSubmission.codigo_curso,
         func.max(TaskSubmission.snapshot_date).label("max_snap"),
     ).filter(
         TaskSubmission.student_id == student_id,
         pf_filter,
-    ).group_by(TaskSubmission.codigo_curso).all()
+    )
+    # Excluir cursos del otro bloque
+    if bloque_course_codes is not None:
+        snap_q = snap_q.filter(TaskSubmission.codigo_curso.in_(bloque_course_codes))
+    snaps = snap_q.group_by(TaskSubmission.codigo_curso).all()
 
     if not snaps:
         return []

@@ -182,6 +182,132 @@ function buildStudentMessage(group, userName, tasksDetail) {
   return lines.join("\n");
 }
 
+function buildStudentEmailMessage(group, userName, tasksDetail) {
+  const nombre = group.student_nombre
+    .split(" ")
+    .map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())
+    .join(" ");
+
+  const remitente = userName || "Coordinación Académica";
+
+  const tipos = [...new Set(group.alerts.map(a => a.tipo))];
+  const esTerceraMatricula = tipos.includes("tercera_matricula");
+  const esSegundaMatricula = tipos.includes("segunda_matricula");
+  const esCondicionEspecial = esTerceraMatricula || esSegundaMatricula;
+
+  const motivos = tipos
+    .map(t => MOTIVO_ESTUDIANTE[t])
+    .filter(Boolean);
+
+  const detalles = [];
+  if (group.dias_sin_acceso != null && group.dias_sin_acceso > 0)
+    detalles.push("Último acceso al AVAC: hace " + group.dias_sin_acceso + " días");
+  if (group.porcentaje_tareas != null)
+    detalles.push("Tareas entregadas: " + Math.round(group.porcentaje_tareas) + "%");
+  if (group.indice_compromiso != null)
+    detalles.push("Compromiso académico: " + Math.round(group.indice_compromiso * 100) + "%");
+
+  let lines = [];
+
+  if (esCondicionEspecial) {
+    lines.push("Estimado/a " + nombre + ",");
+    lines.push("");
+    lines.push("Reciba un cordial saludo de parte de " + remitente + ".");
+    lines.push("");
+
+    if (esTerceraMatricula) {
+      lines.push("AVISO IMPORTANTE — TERCERA MATRÍCULA (OYENTE CONDICIONADO)");
+      lines.push("");
+      lines.push("Nos comunicamos con usted porque se encuentra en condición de tercera matrícula, lo cual implica que esta es su última oportunidad para aprobar la(s) asignatura(s) correspondiente(s).");
+      lines.push("");
+      lines.push("De acuerdo con la normativa institucional, la reprobación en tercera matrícula conlleva la separación definitiva de la carrera. Por esta razón, es urgente e indispensable que tome las acciones necesarias de manera inmediata.");
+    } else {
+      lines.push("AVISO IMPORTANTE — SEGUNDA MATRÍCULA");
+      lines.push("");
+      lines.push("Nos comunicamos con usted porque se encuentra cursando asignatura(s) en segunda matrícula. Esto significa que ya no aprobó esta(s) materia(s) en una ocasión anterior.");
+      lines.push("");
+      lines.push("Es muy importante que preste especial atención a su rendimiento académico en esta oportunidad. De no aprobar, pasaría a tercera matrícula (oyente condicionado), con las implicaciones reglamentarias que esto conlleva.");
+    }
+  } else {
+    lines.push("Estimado/a " + nombre + ",");
+    lines.push("");
+    lines.push("Reciba un cordial saludo de parte de " + remitente + ".");
+    lines.push("");
+    lines.push("Por medio del presente nos permitimos comunicarle que, de acuerdo con el seguimiento académico que realizamos, se han identificado las siguientes situaciones que requieren su atención:");
+  }
+
+  const motivosFiltrados = esCondicionEspecial
+    ? motivos.filter(m => !m.includes("segunda ocasión") && !m.includes("tercera matrícula"))
+    : motivos;
+
+  if (motivosFiltrados.length > 0) {
+    lines.push("");
+    if (esCondicionEspecial) {
+      lines.push("Adicionalmente, se han detectado las siguientes situaciones:");
+      lines.push("");
+    }
+    motivosFiltrados.forEach((m, i) => {
+      lines.push("   " + (i + 1) + ". " + m.charAt(0).toUpperCase() + m.slice(1) + ".");
+    });
+  }
+
+  if (tasksDetail && tasksDetail.length > 0) {
+    lines.push("");
+    lines.push("Detalle por asignatura:");
+    lines.push("");
+    tasksDetail.forEach(td => {
+      const asig = td.grupo ? td.asignatura + " (Grupo " + td.grupo + ")" : td.asignatura;
+      if (td.detalles && td.detalles.length > 0) {
+        td.detalles.forEach(d => {
+          lines.push("   - " + asig + ": " + d);
+        });
+      } else {
+        lines.push("   - " + asig + ": tareas pendientes");
+      }
+    });
+  } else {
+    const asignaturas = [...new Set(group.alerts.map(a => a.asignatura).filter(Boolean))];
+    if (asignaturas.length > 0) {
+      lines.push("");
+      lines.push("Asignatura(s): " + asignaturas.join(", "));
+    }
+  }
+
+  if (detalles.length > 0) {
+    lines.push("");
+    lines.push("Indicadores actuales:");
+    detalles.forEach(d => lines.push("   - " + d));
+  }
+
+  lines.push("");
+
+  if (esCondicionEspecial) {
+    lines.push("Acciones que debe tomar de manera inmediata:");
+    lines.push("   1. Revisar y completar todas las actividades pendientes en el AVAC.");
+    lines.push("   2. Comunicarse con su(s) docente(s) para aclarar cualquier duda.");
+    lines.push("   3. Organizar un plan de estudio para las evaluaciones restantes.");
+    if (esTerceraMatricula) {
+      lines.push("   4. Acercarse a Bienestar Estudiantil si necesita apoyo adicional.");
+    }
+    lines.push("");
+    lines.push("Su situación académica requiere atención prioritaria. Estamos aquí para acompañarle, pero necesitamos que tome acción de forma inmediata.");
+  } else {
+    lines.push("Le invitamos a:");
+    lines.push("   1. Revisar y completar las actividades pendientes en el AVAC.");
+    lines.push("   2. Comunicarse con su docente para aclarar cualquier duda.");
+    lines.push("");
+    lines.push("Nuestro objetivo es acompañarle en su proceso académico y ayudarle a culminar el periodo con éxito.");
+  }
+
+  lines.push("");
+  lines.push("Quedamos atentos a cualquier inquietud.");
+  lines.push("");
+  lines.push("Saludos cordiales,");
+  lines.push(remitente);
+
+  return lines.join("\n");
+}
+
 
 const SEVERITY_CONFIG = {
   alto: {
@@ -253,6 +379,8 @@ export default function Alertas() {
   const [expandedStudents, setExpandedStudents] = useState(new Set());
   const [copiedStudentId, setCopiedStudentId] = useState(null);
   const [copyingStudentId, setCopyingStudentId] = useState(null);
+  const [copiedEmailId, setCopiedEmailId] = useState(null);
+  const [copyingEmailId, setCopyingEmailId] = useState(null);
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [carreras, setCarreras] = useState([]);
   const [asignaturas, setAsignaturas] = useState([]);
@@ -820,7 +948,41 @@ export default function Alertas() {
                                 ) : copyingStudentId === group.student_id ? (
                                   <><svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg> Cargando...</>
                                 ) : (
-                                  <><svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg> Copiar mensaje</>
+                                  <><svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg> WhatsApp</>
+                                )}
+                              </button>
+                              <button
+                                disabled={copyingEmailId === group.student_id}
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  try {
+                                    setCopyingEmailId(group.student_id);
+                                    let tasksDetail = [];
+                                    try {
+                                      tasksDetail = await api.getStudentTasksDetail(group.student_id);
+                                    } catch (_) { /* fallback sin detalle */ }
+                                    const msg = buildStudentEmailMessage(group, user?.nombre, tasksDetail);
+                                    await navigator.clipboard.writeText(msg);
+                                    setCopiedEmailId(group.student_id);
+                                    setTimeout(() => setCopiedEmailId(null), 2500);
+                                  } finally {
+                                    setCopyingEmailId(null);
+                                  }
+                                }}
+                                className={`text-xs px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 ${
+                                  copiedEmailId === group.student_id
+                                    ? "bg-green-100 text-green-700 border border-green-300"
+                                    : copyingEmailId === group.student_id
+                                      ? "bg-gray-100 text-gray-500 border border-gray-300 cursor-wait"
+                                      : "bg-blue-50 text-blue-700 border border-blue-300 hover:bg-blue-100"
+                                }`}
+                              >
+                                {copiedEmailId === group.student_id ? (
+                                  <><svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg> Copiado</>
+                                ) : copyingEmailId === group.student_id ? (
+                                  <><svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg> Cargando...</>
+                                ) : (
+                                  <><svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg> Correo</>
                                 )}
                               </button>
                               <button onClick={() => handleMarkStudentRead(group.alerts)}
