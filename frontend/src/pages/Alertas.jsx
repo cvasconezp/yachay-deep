@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import { useUrlFilters } from "../hooks/useUrlFilters";
 import { api } from "../services/api";
 import { PeriodSelector } from "../components/PeriodSelector";
 import BulkInterventionModal from "../components/BulkInterventionModal";
@@ -368,12 +369,26 @@ export default function Alertas() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [filterSeverity, setFilterSeverity] = useState("all");
-  const [filterTipo, setFilterTipo] = useState("all");
-  const [filterCarrera, setFilterCarrera] = useState("");
-  const [filterAsignatura, setFilterAsignatura] = useState("");
-  const [filterPeriodo, setFilterPeriodo] = useState("");
-  const [filterCondicion, setFilterCondicion] = useState("");
+  const { filters: urlFilters, updateFilter } = useUrlFilters({
+    severity: "all",
+    tipo: "all",
+    carrera: "",
+    asignatura: "",
+    periodo: "",
+    condicion: "",
+  });
+  const filterSeverity = urlFilters.severity || "all";
+  const filterTipo = urlFilters.tipo || "all";
+  const filterCarrera = urlFilters.carrera;
+  const filterAsignatura = urlFilters.asignatura;
+  const filterPeriodo = urlFilters.periodo;
+  const filterCondicion = urlFilters.condicion;
+  const setFilterSeverity = (v) => updateFilter("severity", v === "all" ? "" : v);
+  const setFilterTipo = (v) => updateFilter("tipo", v === "all" ? "" : v);
+  const setFilterCarrera = (v) => updateFilter("carrera", v);
+  const setFilterAsignatura = (v) => updateFilter("asignatura", v);
+  const setFilterPeriodo = (v) => updateFilter("periodo", v);
+  const setFilterCondicion = (v) => updateFilter("condicion", v);
   const [condicionStudentIds, setCondicionStudentIds] = useState(null);
   const [selectedStudentIds, setSelectedStudentIds] = useState(new Set());
   const [expandedStudents, setExpandedStudents] = useState(new Set());
