@@ -110,6 +110,19 @@ def _get_bloque_courses(db: Session, semconfig):
     ).all()
 
 
+def _get_unidades_vencidas(semconfig) -> set:
+    """Retorna set de unidades cuya fecha de entrega ya pasó según calendario."""
+    import json
+    from ...services.alert_generator import _unidades_vencidas
+    calendario = []
+    if semconfig and semconfig.calendario_academico:
+        try:
+            calendario = json.loads(semconfig.calendario_academico)
+        except Exception:
+            pass
+    return _unidades_vencidas(calendario)
+
+
 @router.get("/docente-tracking", response_model=list[DocenteTrackingStats])
 def get_docente_tracking(
     db: Session = Depends(get_db),
@@ -123,6 +136,8 @@ def get_docente_tracking(
     cursos = _get_bloque_courses(db, semconfig)
     if not cursos:
         return []
+
+    unidades_vencidas = _get_unidades_vencidas(semconfig)
 
     curso_map = {}
     for c in cursos:
@@ -163,7 +178,7 @@ def get_docente_tracking(
             if not snap:
                 continue
 
-            stats = db.query(
+            stats_q = db.query(
                 func.count(TaskSubmission.id).label("total"),
                 func.sum(case((TaskSubmission.calificada == True, 1), else_=0)).label("cal"),
                 func.sum(case((
@@ -173,7 +188,11 @@ def get_docente_tracking(
                 TaskSubmission.codigo_curso == cod,
                 TaskSubmission.snapshot_date == snap,
                 _periodo_filter(periodo_variants),
-            ).first()
+            )
+            # Solo contar actividades cuya fecha de entrega ya pasó
+            if unidades_vencidas and unidades_vencidas != {"1", "2", "3", "4"}:
+                stats_q = stats_q.filter(TaskSubmission.unidad.in_(unidades_vencidas))
+            stats = stats_q.first()
 
             if stats and stats.total:
                 total_tareas += stats.total
@@ -247,6 +266,8 @@ def get_docente_tracking_detalle(
     if not pf:
         return []
 
+    unidades_vencidas = _get_unidades_vencidas(semconfig)
+
     cursos = db.query(CourseConfig).filter(
         CourseConfig.docente == docente_name,
         CourseConfig.codigo_avac.isnot(None),
@@ -275,6 +296,12 @@ def get_docente_tracking_detalle(
 
         if not subs:
             continue
+
+        # Filtrar solo actividades cuya fecha de entrega ya pasó
+        if unidades_vencidas and unidades_vencidas != {"1", "2", "3", "4"}:
+            subs = [s for s in subs if s.unidad in unidades_vencidas]
+            if not subs:
+                continue
 
         # Collect all student IDs for name lookup
         all_student_ids = list(set(s.student_id for s in subs if s.student_id))

@@ -79,6 +79,77 @@ def _primera_fecha_notas(calendario: list[dict]) -> Optional[datetime]:
     return min(fechas) if fechas else None
 
 
+def _unidades_vencidas(calendario: list[dict], now: datetime = None) -> set:
+    """
+    Determina qué unidades/actividades ya vencieron según el calendario académico.
+    
+    Busca entradas de tipo "entrega" cuyo label contenga un número de unidad/actividad
+    (ej: "Entrega Unidad 1", "Entrega act. 2", "Actividad 3") y cuya fecha ya pasó.
+    
+    Retorna set de strings: {"1", "2"} si solo Actividad 1 y 2 han vencido.
+    Si no hay calendario configurado o no se pueden mapear unidades, retorna {"1","2","3","4"}
+    (asume todas vencidas para no bloquear alertas).
+    """
+    import re
+    if now is None:
+        now = datetime.now(timezone.utc)
+    
+    if not calendario:
+        return {"1", "2", "3", "4"}  # sin calendario → no filtrar
+    
+    entregas = [e for e in calendario if e.get("tipo") == "entrega"]
+    if not entregas:
+        return {"1", "2", "3", "4"}  # sin entregas configuradas → no filtrar
+    
+    # Intentar mapear cada entrada a una unidad por su label
+    mapped = {}  # unidad_str -> fecha
+    for entry in entregas:
+        label = (entry.get("label") or "").lower()
+        fecha_str = entry.get("fecha", "")
+        if not fecha_str:
+            continue
+        
+        # Buscar número de unidad/actividad en el label
+        m = re.search(r'(?:unidad|actividad|act\.?)\s*(\d)', label)
+        if m:
+            unidad = m.group(1)
+            if unidad in ("1", "2", "3", "4"):
+                try:
+                    fecha = datetime.strptime(fecha_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                    if unidad not in mapped or fecha < mapped[unidad]:
+                        mapped[unidad] = fecha  # usar la más temprana si hay duplicados
+                except ValueError:
+                    continue
+    
+    if not mapped:
+        # Hay entregas pero no pudimos mapearlas a unidades → fallback cronológico
+        # Ordenar por fecha y asumir que van en orden: 1, 2, 3, 4
+        fechas_ordenadas = []
+        for entry in entregas:
+            try:
+                f = datetime.strptime(entry["fecha"], "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                fechas_ordenadas.append(f)
+            except (ValueError, KeyError):
+                continue
+        fechas_ordenadas.sort()
+        
+        for i, fecha in enumerate(fechas_ordenadas):
+            unidad = str(i + 1)
+            if unidad in ("1", "2", "3", "4"):
+                mapped[unidad] = fecha
+    
+    if not mapped:
+        return {"1", "2", "3", "4"}  # no se pudo parsear → no filtrar
+    
+    # Retornar solo las unidades cuya fecha ya pasó
+    vencidas = set()
+    for unidad, fecha in mapped.items():
+        if now >= fecha:
+            vencidas.add(unidad)
+    
+    return vencidas
+
+
 def generate_alerts_batch(db: Session) -> dict:
     """
     Genera alertas barriendo todos los estudiantes por umbrales.
@@ -139,6 +210,10 @@ def generate_alerts_batch(db: Session) -> dict:
     if not hay_notas_esperadas and max_dias_periodo is not None and max_dias_periodo >= 21:
         hay_notas_esperadas = True
         logger.info(f"nota_cero activada por fallback: {max_dias_periodo} días desde inicio de bloque (>= 21)")
+
+    # Determinar qué unidades/actividades ya vencieron según calendario
+    unidades_vencidas = _unidades_vencidas(calendario, now)
+    logger.info(f"Unidades vencidas según calendario: {sorted(unidades_vencidas)}")
 
     # Period format normalization
     if pf.startswith("P"):
@@ -245,12 +320,14 @@ def generate_alerts_batch(db: Session) -> dict:
             nota_cero_map.setdefault(g.student_id, []).append(g.asignatura or "Sin asignatura")
         logger.info(f"nota_cero: {len(nota_cero_map)} estudiantes con nota 0 o NULL (hay_notas_esperadas={hay_notas_esperadas})")
 
-    # Tareas
+    # Tareas — solo considerar unidades/actividades cuya fecha de entrega ya pasó
     task_q = db.query(TaskSubmission.student_id).filter(
         or_(TaskSubmission.periodo == periodo_variants[0], TaskSubmission.periodo == periodo_variants[1]),
     )
     if included_course_codes:
         task_q = task_q.filter(TaskSubmission.codigo_curso.in_(included_course_codes))
+    if unidades_vencidas and unidades_vencidas != {"1", "2", "3", "4"}:
+        task_q = task_q.filter(TaskSubmission.unidad.in_(unidades_vencidas))
     task_sids = set(r[0] for r in task_q.distinct().all())
 
     # Pre-load: calificaciones bajas en tareas (promedio por estudiante)
@@ -270,6 +347,8 @@ def generate_alerts_batch(db: Session) -> dict:
     )
     if included_course_codes:
         task_cal_q = task_cal_q.filter(TaskSubmission.codigo_curso.in_(included_course_codes))
+    if unidades_vencidas and unidades_vencidas != {"1", "2", "3", "4"}:
+        task_cal_q = task_cal_q.filter(TaskSubmission.unidad.in_(unidades_vencidas))
     task_cal_q = task_cal_q.group_by(TaskSubmission.student_id)
 
     notas_bajas_map = {}  # student_id -> (avg_cal, avg_max, n_tareas)
@@ -447,6 +526,8 @@ def generate_alerts_batch(db: Session) -> dict:
     ]
     if excluded_course_codes:
         detail_parts.append(f"Bloque {semconfig.bloque_actual}: {len(excluded_course_codes)} cursos del otro bloque excluidos")
+    if unidades_vencidas != {"1", "2", "3", "4"}:
+        detail_parts.append(f"Unidades vencidas: {sorted(unidades_vencidas)} (calendario académico)")
     if not hay_notas_esperadas:
         detail_parts.append(f"Alertas de nota_cero desactivadas (primera fecha esperada: {fecha_notas.strftime('%d/%m/%Y') if fecha_notas else 'no configurada'})")
     if max_dias_periodo is not None:

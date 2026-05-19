@@ -602,6 +602,17 @@ def get_student_tasks_detail(
     if not pf:
         return []
 
+    # Determinar unidades vencidas según calendario académico
+    import json as _json
+    from ..services.alert_generator import _unidades_vencidas
+    calendario = []
+    if sem and sem.calendario_academico:
+        try:
+            calendario = _json.loads(sem.calendario_academico)
+        except Exception:
+            pass
+    unidades_ok = _unidades_vencidas(calendario)
+
     # Build periodo filter
     if len(periodo_variants) == 2:
         pf_filter = or_(
@@ -636,12 +647,13 @@ def get_student_tasks_detail(
             pf_filter,
         ).all()
 
-        # Find unidades where not entregada
-        no_entregadas = [s.unidad for s in subs if not s.entregada and s.unidad]
-        # Find unidades with nota cero or very low
+        # Find unidades where not entregada (solo actividades vencidas según calendario)
+        no_entregadas = [s.unidad for s in subs if not s.entregada and s.unidad and s.unidad in unidades_ok]
+        # Find unidades with nota cero or very low (solo actividades vencidas)
         notas_bajas = [s.unidad for s in subs if s.calificada and s.calificacion is not None
                        and s.calificacion_maxima and s.calificacion_maxima > 0
-                       and (s.calificacion / s.calificacion_maxima) < 0.47 and s.unidad]
+                       and (s.calificacion / s.calificacion_maxima) < 0.47 and s.unidad
+                       and s.unidad in unidades_ok]
 
         if not no_entregadas and not notas_bajas:
             continue
