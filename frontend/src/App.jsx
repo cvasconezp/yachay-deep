@@ -3,8 +3,10 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./hooks/useAuth";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Layout } from "./components/Layout";
-import { RotateOverlay } from "./components/RotateOverlay";      // ← NUEVO
-import { useLandscapeEnforcer } from "./hooks/useLandscapeEnforcer"; // ← NUEVO
+import { RotateOverlay } from "./components/RotateOverlay";
+import { useLandscapeEnforcer } from "./hooks/useLandscapeEnforcer";
+import { useIdleTimer } from "./hooks/useIdleTimer";
+import IdleLockScreen from "./components/IdleLockScreen";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
@@ -33,16 +35,40 @@ function PrivateRoute({ children, adminOnly = false, tabKey = null }) {
     );
   if (!user) return <Navigate to="/login" />;
   if (adminOnly && user.role !== "admin") return <Navigate to="/dashboard" />;
-  // Verificar permisos granulares por pestaña
   if (tabKey && user.permissions && !user.permissions.includes(tabKey)) {
     return <Navigate to="/dashboard" />;
   }
 
   return (
     <>
-      {showOverlay && <RotateOverlay />}  {/* ← NUEVO: overlay de rotación */}
+      {showOverlay && <RotateOverlay />}
       <Layout>{children}</Layout>
     </>
+  );
+}
+
+/**
+ * [SEC-03] Componente que maneja el idle lock a nivel de aplicación.
+ * Solo activo cuando el usuario tiene PIN configurado (has_pin: true).
+ */
+function IdleLockManager() {
+  const { user, locked, lock, unlock, logout } = useAuth();
+
+  // Solo activar idle timer si el usuario tiene PIN configurado
+  useIdleTimer({
+    timeoutMs: 5 * 60 * 1000, // 5 minutos
+    onIdle: lock,
+    enabled: !!user && !!user.has_pin && !locked,
+  });
+
+  if (!locked || !user) return null;
+
+  return (
+    <IdleLockScreen
+      onUnlock={unlock}
+      onLogout={logout}
+      userName={user.nombre}
+    />
   );
 }
 
@@ -51,6 +77,7 @@ export default function App() {
     <ErrorBoundary>
       <AuthProvider>
         <BrowserRouter>
+          <IdleLockManager />
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/login" element={<Login />} />

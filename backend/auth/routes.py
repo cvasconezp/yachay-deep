@@ -56,6 +56,7 @@ class UserResponse(BaseModel):
     is_active: bool
     created_at: Optional[datetime]
     permissions: Optional[list[str]] = None
+    has_pin: bool = False
 
     class Config:
         from_attributes = True
@@ -85,7 +86,7 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db
     response = JSONResponse(content={
         "access_token": token,
         "token_type": "bearer",
-        "user": {"id": user.id, "email": user.email, "nombre": user.nombre, "role": user.role, "permissions": user.permissions},
+        "user": {"id": user.id, "email": user.email, "nombre": user.nombre, "role": user.role, "permissions": user.permissions, "has_pin": user.pin_hash is not None},
     })
     response.set_cookie(
         key=COOKIE_NAME,
@@ -110,7 +111,17 @@ def logout():
 
 @router.get("/me", response_model=UserResponse)
 def me(current_user: User = Depends(get_current_user)):
-    return current_user
+    # Build response with computed has_pin field
+    return UserResponse(
+        id=current_user.id,
+        email=current_user.email,
+        nombre=current_user.nombre,
+        role=current_user.role,
+        is_active=current_user.is_active,
+        created_at=current_user.created_at,
+        permissions=current_user.permissions,
+        has_pin=current_user.pin_hash is not None,
+    )
 
 
 @router.post("/users", response_model=UserResponse, dependencies=[Depends(require_admin)])
@@ -169,3 +180,58 @@ def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)
     db.commit()
     db.refresh(user)
     return user
+
+
+# ── PIN de desbloqueo rápido ─────────────────────────────────────────────
+
+class PinSetRequest(BaseModel):
+    pin: str = Field(..., min_length=6, max_length=6, pattern=r"^\d{6}$")
+    password: str  # requiere contraseña actual para configurar PIN
+
+
+class PinVerifyRequest(BaseModel):
+    pin: str = Field(..., min_length=6, max_length=6, pattern=r"^\d{6}$")
+
+
+@router.post("/set-pin")
+def set_pin(
+    payload: PinSetRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Configura o actualiza el PIN de desbloqueo. Requiere contraseña actual."""
+    if not verify_password(payload.password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="Contraseña incorrecta")
+
+    current_user.pin_hash = hash_password(payload.pin)
+    db.commit()
+    return {"detail": "PIN configurado correctamente"}
+
+
+@router.post("/verify-pin")
+@limiter.limit("5/minute")
+def verify_pin(
+    request: Request,
+    payload: PinVerifyRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Verifica el PIN para desbloqueo rápido. Rate limited a 5/min."""
+    if not current_user.pin_hash:
+        raise HTTPException(status_code=400, detail="PIN no configurado")
+
+    if not verify_password(payload.pin, current_user.pin_hash):
+        raise HTTPException(status_code=401, detail="PIN incorrecto")
+
+    return {"detail": "PIN verificado", "valid": True}
+
+
+@router.delete("/pin")
+def remove_pin(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Elimina el PIN configurado."""
+    current_user.pin_hash = None
+    db.commit()
+    return {"detail": "PIN eliminado"}

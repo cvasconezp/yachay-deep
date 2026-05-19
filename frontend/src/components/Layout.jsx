@@ -5,6 +5,7 @@ import { api } from "../services/api";
 import { YachayLogo, YachayIcon } from "./YachayLogo";
 import NotificationBell from "./NotificationBell";
 
+import PinSetupModal from "./PinSetupModal";
 const NAV_ITEMS = [
   // ── Monitoreo operativo ──
   { path: "/dashboard",      label: "Estudiantes",            icon: "🎓" },
@@ -31,6 +32,7 @@ export function Layout({ children }) {
   const navigate = useNavigate();
   const [alertCount, setAlertCount] = useState(null);
   const [alertAltoCount, setAlertAltoCount] = useState(0);
+  const [pinModalOpen, setPinModalOpen] = useState(false);
   const [scrapingProgress, setScrapingProgress] = useState(null);
 
   // Polling de progreso del scraping (cada 15s)
@@ -217,6 +219,15 @@ export function Layout({ children }) {
                 <div className="font-medium text-white truncate">{user?.nombre}</div>
                 <div className="text-xs capitalize text-brand-ice">{user?.role}</div>
               </div>
+              <div className="flex items-center gap-2 mb-1">
+                <button
+                  onClick={() => setPinModalOpen(true)}
+                  className="flex items-center gap-1 text-xs text-blue-400 hover:text-white transition-colors"
+                  title={user?.has_pin ? "PIN configurado — clic para gestionar" : "Configurar PIN de bloqueo"}
+                >
+                  {user?.has_pin ? "🔒" : "🔓"} {user?.has_pin ? "PIN activo" : "Configurar PIN"}
+                </button>
+              </div>
               <button
                 onClick={handleLogout}
                 className="w-full text-left text-xs text-blue-400 hover:text-white transition-colors"
@@ -225,14 +236,24 @@ export function Layout({ children }) {
               </button>
             </>
           ) : (
-            <button
-              onClick={handleLogout}
-              title={`${user?.nombre || "Usuario"} — Cerrar sesión`}
-              className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-sm font-bold text-blue-200 hover:bg-white/20 hover:text-white transition-colors"
-            >
-              {user?.nombre?.charAt(0)?.toUpperCase() || "U"}
-            </button>
+            <div className="flex flex-col items-center gap-2">
+              <button
+                onClick={() => setPinModalOpen(true)}
+                title={user?.has_pin ? "PIN activo — clic para gestionar" : "Configurar PIN de bloqueo"}
+                className="text-lg hover:scale-110 transition-transform"
+              >
+                {user?.has_pin ? "🔒" : "🔓"}
+              </button>
+              <button
+                onClick={handleLogout}
+                title={`${user?.nombre || "Usuario"} — Cerrar sesión`}
+                className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-sm font-bold text-blue-200 hover:bg-white/20 hover:text-white transition-colors"
+              >
+                {user?.nombre?.charAt(0)?.toUpperCase() || "U"}
+              </button>
+            </div>
           )}
+          <PinSetupModal open={pinModalOpen} onClose={() => setPinModalOpen(false)} />
         </div>
       </aside>
 

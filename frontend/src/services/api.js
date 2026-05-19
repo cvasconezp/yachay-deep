@@ -99,6 +99,11 @@ class ApiClient {
   }
   logout() { return this.request("/auth/logout", { method: "POST" }); }
   me() { return this.get("/auth/me"); }
+
+  // PIN de desbloqueo
+  setPin(pin, password) { return this.request("/auth/set-pin", { method: "POST", body: JSON.stringify({ pin, password }) }); }
+  verifyPin(pin) { return this.request("/auth/verify-pin", { method: "POST", body: JSON.stringify({ pin }) }); }
+  removePin() { return this.request("/auth/pin", { method: "DELETE" }); }
   createUser(data) { return this.post("/auth/users", data); }
   listUsers() { return this.get("/auth/users"); }
   updateUser(id, data) { return this.patch(`/auth/users/${id}`, data); }
