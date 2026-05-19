@@ -224,8 +224,12 @@ def get_pending_alerts(
 
     if student_ids:
         for s in db.query(Student).filter(Student.id.in_(student_ids)).all():
-            # Use bloque-filtered dias_sin_acceso if available, fallback to stored value
-            dias = dias_por_estudiante.get(s.id, s.dias_sin_acceso)
+            # Use bloque-filtered dias_sin_acceso; if student has no courses
+            # in the current bloque, show None instead of stale data from other bloque
+            if bloque_course_codes:
+                dias = dias_por_estudiante.get(s.id)  # None if no bloque courses
+            else:
+                dias = s.dias_sin_acceso  # No bloque filter → use stored value
             student_context[s.id] = {
                 "dias_sin_acceso": dias,
                 "porcentaje_tareas": s.porcentaje_tareas,
