@@ -27,7 +27,7 @@ const ADMIN_ITEMS = [
 ];
 
 export function Layout({ children }) {
-  const { user, logout, isAdmin } = useAuth();
+  const { user, logout, isAdmin, lock } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [alertCount, setAlertCount] = useState(null);
@@ -227,6 +227,15 @@ export function Layout({ children }) {
                 >
                   {user?.has_pin ? "🔒" : "🔓"} {user?.has_pin ? "PIN activo" : "Configurar PIN"}
                 </button>
+                {user?.has_pin && (
+                  <button
+                    onClick={lock}
+                    className="text-xs text-blue-400 hover:text-white transition-colors ml-auto"
+                    title="Bloquear pantalla ahora"
+                  >
+                    💤 Bloquear
+                  </button>
+                )}
               </div>
               <button
                 onClick={handleLogout}
@@ -244,6 +253,15 @@ export function Layout({ children }) {
               >
                 {user?.has_pin ? "🔒" : "🔓"}
               </button>
+              {user?.has_pin && (
+                <button
+                  onClick={lock}
+                  title="Bloquear pantalla"
+                  className="text-lg hover:scale-110 transition-transform"
+                >
+                  💤
+                </button>
+              )}
               <button
                 onClick={handleLogout}
                 title={`${user?.nombre || "Usuario"} — Cerrar sesión`}
