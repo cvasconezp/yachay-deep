@@ -57,10 +57,14 @@ function buildStudentMessage(group, userName, tasksDetail) {
     .map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())
     .join(" ");
 
-  const remitente = userName || "la Coordinación Académica";
+  const remitente = userName || "Coordinación Académica";
 
-  // Collect unique motivos from alerts
+  // Detect condición especial
   const tipos = [...new Set(group.alerts.map(a => a.tipo))];
+  const esTerceraMatricula = tipos.includes("tercera_matricula");
+  const esSegundaMatricula = tipos.includes("segunda_matricula");
+  const esCondicionEspecial = esTerceraMatricula || esSegundaMatricula;
+
   const motivos = tipos
     .map(t => MOTIVO_ESTUDIANTE[t])
     .filter(Boolean);
@@ -68,66 +72,116 @@ function buildStudentMessage(group, userName, tasksDetail) {
   // Build context details
   const detalles = [];
   if (group.dias_sin_acceso != null && group.dias_sin_acceso > 0)
-    detalles.push("Último acceso al AVAC: hace " + group.dias_sin_acceso + " días.");
+    detalles.push("Último acceso al AVAC: hace " + group.dias_sin_acceso + " días");
   if (group.porcentaje_tareas != null)
-    detalles.push("Porcentaje de tareas entregadas: " + Math.round(group.porcentaje_tareas) + "%.");
+    detalles.push("Tareas entregadas: " + Math.round(group.porcentaje_tareas) + "%");
   if (group.indice_compromiso != null)
-    detalles.push("Índice de compromiso académico: " + Math.round(group.indice_compromiso * 100) + "%.");
+    detalles.push("Compromiso académico: " + Math.round(group.indice_compromiso * 100) + "%");
 
   let lines = [];
-  lines.push("Estimado/a " + nombre + ",");
-  lines.push("");
-  lines.push("Reciba un cordial saludo de parte de " + remitente + ".");
-  lines.push("");
-  lines.push("Por medio del presente nos permitimos comunicarte que, de acuerdo con el seguimiento académico que realizamos, se han identificado las siguientes situaciones que requieren tu atención:");
-  lines.push("");
 
-  motivos.forEach((m, i) => {
-    lines.push("  " + (i + 1) + ". " + m.charAt(0).toUpperCase() + m.slice(1) + ".");
-  });
+  if (esCondicionEspecial) {
+    // ── MENSAJE CONTUNDENTE para 2da/3ra matrícula ──
+    lines.push("Estimado/a *" + nombre + "*,");
+    lines.push("");
+    lines.push("Reciba un cordial saludo de parte de *" + remitente + "*.");
+    lines.push("");
+
+    if (esTerceraMatricula) {
+      lines.push("⚠️ *AVISO IMPORTANTE — TERCERA MATRÍCULA (OYENTE CONDICIONADO)* ⚠️");
+      lines.push("");
+      lines.push("Nos comunicamos contigo porque te encuentras en *condición de tercera matrícula*, lo cual implica que esta es tu *última oportunidad* para aprobar la(s) asignatura(s) correspondiente(s).");
+      lines.push("");
+      lines.push("De acuerdo con la normativa institucional, *la reprobación en tercera matrícula conlleva la separación definitiva de la carrera*. Por esta razón, es *urgente e indispensable* que tomes las acciones necesarias de manera inmediata.");
+    } else {
+      lines.push("⚠️ *AVISO IMPORTANTE — SEGUNDA MATRÍCULA* ⚠️");
+      lines.push("");
+      lines.push("Nos comunicamos contigo porque te encuentras cursando asignatura(s) en *segunda matrícula*. Esto significa que ya no aprobaste esta(s) materia(s) en una ocasión anterior.");
+      lines.push("");
+      lines.push("Es *muy importante* que prestes especial atención a tu rendimiento académico en esta oportunidad. De no aprobar, pasarías a *tercera matrícula (oyente condicionado)*, con las implicaciones reglamentarias que esto conlleva.");
+    }
+  } else {
+    // ── MENSAJE ESTÁNDAR ──
+    lines.push("Estimado/a *" + nombre + "*,");
+    lines.push("");
+    lines.push("Reciba un cordial saludo de parte de *" + remitente + "*.");
+    lines.push("");
+    lines.push("Por medio del presente nos permitimos comunicarte que, de acuerdo con el seguimiento académico que realizamos, se han identificado las siguientes situaciones que requieren tu atención:");
+  }
+
+  // Motivos (excluding matrícula ones for condición especial since already stated)
+  const motivosFiltrados = esCondicionEspecial
+    ? motivos.filter(m => !m.includes("segunda ocasión") && !m.includes("tercera matrícula"))
+    : motivos;
+
+  if (motivosFiltrados.length > 0) {
+    lines.push("");
+    if (esCondicionEspecial) {
+      lines.push("Adicionalmente, se han detectado las siguientes situaciones:");
+      lines.push("");
+    }
+    motivosFiltrados.forEach((m, i) => {
+      lines.push("" + (i + 1) + ". " + m.charAt(0).toUpperCase() + m.slice(1) + ".");
+    });
+  }
 
   // Detalle por asignatura con actividades específicas
   if (tasksDetail && tasksDetail.length > 0) {
     lines.push("");
-    lines.push("Detalle por asignatura:");
+    lines.push("*Detalle por asignatura:*");
     tasksDetail.forEach(td => {
       const asig = td.grupo ? td.asignatura + " (Grupo " + td.grupo + ")" : td.asignatura;
       if (td.detalles && td.detalles.length > 0) {
         td.detalles.forEach(d => {
-          lines.push("  * " + asig + ": " + d);
+          lines.push("• *" + asig + "*: " + d);
         });
       } else {
-        lines.push("  * " + asig + ": tareas pendientes");
+        lines.push("• *" + asig + "*: tareas pendientes");
       }
     });
   } else {
-    // Fallback: list asignaturas from alerts
     const asignaturas = [...new Set(group.alerts.map(a => a.asignatura).filter(Boolean))];
     if (asignaturas.length > 0) {
       lines.push("");
-      lines.push("Asignatura(s) involucrada(s): " + asignaturas.join(", ") + ".");
+      lines.push("*Asignatura(s):* " + asignaturas.join(", "));
     }
   }
 
   if (detalles.length > 0) {
     lines.push("");
-    detalles.forEach(d => lines.push("  - " + d));
+    lines.push("_Indicadores actuales:_");
+    detalles.forEach(d => lines.push("• " + d));
   }
 
   lines.push("");
-  lines.push("Es importante que tomes acción a la brevedad posible. Te invitamos a:");
-  lines.push("  - Revisar y completar las actividades pendientes en el AVAC.");
-  lines.push("  - Comunicarte con tu docente para aclarar cualquier duda.");
-  lines.push("");
-  lines.push("Nuestro objetivo es acompañarte en tu proceso académico y ayudarte a culminar el periodo con éxito.");
+
+  if (esCondicionEspecial) {
+    lines.push("*Acciones que debes tomar de manera inmediata:*");
+    lines.push("✅ Revisar y completar *todas* las actividades pendientes en el AVAC");
+    lines.push("✅ Comunicarte con tu(s) docente(s) para aclarar cualquier duda");
+    lines.push("✅ Organizar un plan de estudio para las evaluaciones restantes");
+    if (esTerceraMatricula) {
+      lines.push("✅ Acercarte a Bienestar Estudiantil si necesitas apoyo adicional");
+    }
+    lines.push("");
+    lines.push("_Tu situación académica requiere atención prioritaria. Estamos aquí para acompañarte, pero necesitamos que tomes acción de forma inmediata._");
+  } else {
+    lines.push("Te invitamos a:");
+    lines.push("✅ Revisar y completar las actividades pendientes en el AVAC");
+    lines.push("✅ Comunicarte con tu docente para aclarar cualquier duda");
+    lines.push("");
+    lines.push("_Nuestro objetivo es acompañarte en tu proceso académico y ayudarte a culminar el periodo con éxito._");
+  }
+
   lines.push("");
   lines.push("Quedamos atentos a cualquier inquietud.");
   lines.push("");
   lines.push("Saludos cordiales,");
-  lines.push(remitente);
+  lines.push("*" + remitente + "*");
 
   return lines.join("\n");
 }
+
 
 const SEVERITY_CONFIG = {
   alto: {

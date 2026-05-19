@@ -24,7 +24,7 @@ function buildEmailMessage(docenteName, cursos) {
   const nombre = docenteName.split(" ").map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(" ");
 
   let lines = [];
-  lines.push(`Estimada ${nombre},`);
+  lines.push(`Estimada *${nombre}*,`);
   lines.push("");
   lines.push("Reciba un cordial saludo.");
   lines.push("");
@@ -32,7 +32,7 @@ function buildEmailMessage(docenteName, cursos) {
   if (pendientes.length === 1) {
     const c = pendientes[0];
     const grupoLabel = c.grupo ? ` del grupo ${c.grupo}` : "";
-    lines.push(`Por medio del presente, me permito informar que en la asignatura ${c.asignatura} aún se registran actividades pendientes de calificación${grupoLabel}:`);
+    lines.push(`Por medio del presente, me permito informar que en la asignatura *${c.asignatura}* aún se registran actividades pendientes de calificación${grupoLabel}:`);
   } else {
     lines.push("Por medio del presente, me permito informar que aún se registran actividades pendientes de calificación en las siguientes asignaturas:");
   }
@@ -43,23 +43,22 @@ function buildEmailMessage(docenteName, cursos) {
     const acts = (c.actividades || []).filter(a => a.pendientes > 0);
 
     if (pendientes.length > 1) {
-      lines.push(`En la asignatura ${c.asignatura}${grupoLabel ? ` (${grupoLabel})` : ""}:`);
+      lines.push(`*${c.asignatura}*${grupoLabel ? ` _(${grupoLabel})_` : ""}:`);
     }
 
     if (acts.length > 0) {
       if (grupoLabel && pendientes.length === 1) {
-        lines.push(`${grupoLabel}:`);
+        lines.push(`_${grupoLabel}:_`);
       }
       for (const a of acts) {
         const nEst = a.estudiantes_pendientes?.length || 0;
         const plural = nEst === 1 ? "estudiante pendiente" : "estudiantes pendientes";
-        lines.push(`  - ${nEst} ${plural} de la ${a.actividad}.`);
+        lines.push(`• ${nEst} ${plural} de la *${a.actividad}*`);
       }
     } else {
-      // Fallback without activity detail
       const nEst = c.estudiantes_pendientes?.length || 0;
       const plural = nEst === 1 ? "estudiante pendiente" : "estudiantes pendientes";
-      lines.push(`  - ${nEst} ${plural} de calificación${grupoLabel ? ` (${grupoLabel})` : ""}.`);
+      lines.push(`• ${nEst} ${plural} de calificación${grupoLabel ? ` _(${grupoLabel})_` : ""}`);
     }
     lines.push("");
   }

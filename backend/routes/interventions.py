@@ -5,10 +5,11 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field, field_validator
-from datetime import datetime
+from datetime import datetime, timezone
 
 from ..database import get_db
 from ..models import Intervention, Student, Grade
+from ..models.alert_event import AlertEvent
 from ..models.enrollment import Enrollment
 from ..models.user import User
 from ..auth.jwt import get_current_user
@@ -183,6 +184,19 @@ def create_intervention(
         snapshot_nivel_riesgo=student.nivel_riesgo,
     )
     db.add(intervention)
+    db.flush()
+
+    # Auto-marcar alertas no leídas del estudiante como leídas
+    unread_alerts = db.query(AlertEvent).filter(
+        AlertEvent.student_id == payload.student_id,
+        AlertEvent.leido == False,
+    ).all()
+    if unread_alerts:
+        for alert in unread_alerts:
+            alert.leido = True
+            alert.leido_por = current_user.email
+            alert.leido_at = datetime.now(timezone.utc)
+
     db.commit()
     db.refresh(intervention)
 
@@ -272,6 +286,16 @@ def bulk_create_interventions(
             )
             db.add(intervention)
             db.flush()
+
+            # Auto-marcar alertas no leídas del estudiante como leídas
+            unread_alerts = db.query(AlertEvent).filter(
+                AlertEvent.student_id == student_id,
+                AlertEvent.leido == False,
+            ).all()
+            for alert in unread_alerts:
+                alert.leido = True
+                alert.leido_por = current_user.email
+                alert.leido_at = datetime.now(timezone.utc)
 
             # Enviar correo a Bienestar si se solicitó derivación
             if payload.derivar_bienestar:
