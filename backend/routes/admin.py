@@ -912,6 +912,7 @@ def debug_bloque_filter(
     """Diagnóstico del filtro de bloque para un estudiante específico."""
     from ..models import Student, AvacAccess
     from ..models.course_config import CourseConfig, SemesterConfig
+    from ..models.enrollment import Enrollment
     from sqlalchemy import func as sqf, or_
 
     student = db.query(Student).get(student_id)
@@ -935,6 +936,19 @@ def debug_bloque_filter(
             CourseConfig.bloque == other_bloque,
         ).all()
         excluded_codes = {r[0] for r in excluded_cc if r[0]}
+        other_bloque_int = int(other_bloque)
+        excluded_enroll = db.query(Enrollment.codigo_grupo).filter(
+            Enrollment.codigo_grupo.isnot(None),
+            Enrollment.bloque == other_bloque_int,
+        ).distinct().all()
+        excluded_codes |= {r[0] for r in excluded_enroll if r[0]}
+
+    # Build enrollment bloque map
+    enroll_bloque_map = {}
+    for eg, eb in db.query(Enrollment.codigo_grupo, Enrollment.bloque).filter(
+        Enrollment.codigo_grupo.isnot(None), Enrollment.bloque.isnot(None)
+    ).distinct().all():
+        enroll_bloque_map[eg] = eb
 
     included_codes = {r[0] for r in all_cc if r[0]} - excluded_codes
 
@@ -957,6 +971,7 @@ def debug_bloque_filter(
             "asignatura": cc_info.get("asignatura"),
             "included": r[0] in included_codes,
             "in_courseconfig": r[0] in all_courses,
+            "enrollment_bloque": enroll_bloque_map.get(r[0]),
         })
 
     # What the alerts endpoint would calculate

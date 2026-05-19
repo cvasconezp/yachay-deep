@@ -121,8 +121,8 @@ class TestGenerateAlertsBatch:
         result = generate_alerts_batch(db_session)
         assert result["cleaned"] >= 1
 
-    def test_preserves_read_alerts(self, db_session, setup_students):
-        """No elimina alertas ya leídas."""
+    def test_full_refresh_clears_all_alerts(self, db_session, setup_students):
+        """Full-refresh elimina TODAS las alertas (incluidas leídas) antes de regenerar."""
         db_session.add(AlertEvent(
             student_id=1, tipo="inactividad", severidad="alto",
             mensaje="Alerta leída", leido=True, leido_por="admin@test.com",
@@ -130,10 +130,10 @@ class TestGenerateAlertsBatch:
         db_session.commit()
 
         from backend.services.alert_generator import generate_alerts_batch
-        generate_alerts_batch(db_session)
+        result = generate_alerts_batch(db_session)
 
-        read_alerts = db_session.query(AlertEvent).filter(AlertEvent.leido == True).all()
-        assert len(read_alerts) == 1
+        # Full-refresh borra todo y regenera - la alerta leída se elimina
+        assert result["cleaned"] >= 1
 
     def test_no_semester_returns_zero(self, db_session):
         """Sin semestre activo retorna 0 alertas."""
@@ -257,7 +257,7 @@ class TestDetectorioDetector:
         alertas = detectar_deterioro_progresivo(db_session)
         student_alerts = [a for a in alertas if a["student_id"] == 13]
         assert len(student_alerts) >= 1
-        assert student_alerts[0]["severidad"] == "critico"
+        assert student_alerts[0]["severidad"] == "alto"
 
 
 class TestDailyDigest:

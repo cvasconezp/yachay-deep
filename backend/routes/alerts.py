@@ -194,10 +194,18 @@ def get_pending_alerts(
         bloque_course_codes = set()
         if semconfig_q and semconfig_q.bloque_actual:
             other_bloque = "2" if semconfig_q.bloque_actual == "1" else "1"
+            # Excluir por CourseConfig.bloque
             excluded_cc = db.query(CourseConfig.codigo_avac).filter(
                 CourseConfig.bloque == other_bloque,
             ).all()
             excluded_codes = {r[0] for r in excluded_cc if r[0]}
+            # También excluir por Enrollment.bloque (fuente más completa)
+            other_bloque_int = int(other_bloque)
+            excluded_enroll = db.query(Enrollment.codigo_grupo).filter(
+                Enrollment.codigo_grupo.isnot(None),
+                Enrollment.bloque == other_bloque_int,
+            ).distinct().all()
+            excluded_codes |= {r[0] for r in excluded_enroll if r[0]}
             all_cc = db.query(CourseConfig.codigo_avac).filter(
                 CourseConfig.codigo_avac.isnot(None),
             ).all()
@@ -508,6 +516,12 @@ def debug_alert_conditions(
             CourseConfig.bloque == other_bloque,
         ).all()
         excluded_codes = {r[0] for r in excluded_cc if r[0]}
+        other_bloque_int = int(other_bloque)
+        excluded_enroll = db.query(Enrollment.codigo_grupo).filter(
+            Enrollment.codigo_grupo.isnot(None),
+            Enrollment.bloque == other_bloque_int,
+        ).distinct().all()
+        excluded_codes |= {r[0] for r in excluded_enroll if r[0]}
         all_cc = db.query(CourseConfig.codigo_avac).filter(
             CourseConfig.codigo_avac.isnot(None),
         ).all()

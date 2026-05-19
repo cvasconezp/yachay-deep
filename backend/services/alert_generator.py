@@ -238,6 +238,13 @@ def generate_alerts_batch(db: Session) -> dict:
             CourseConfig.bloque == other_bloque,
         ).all()
         excluded_course_codes = {r[0] for r in excluded_cc}
+        # También excluir por Enrollment.bloque (más completo que CourseConfig)
+        other_bloque_int = int(other_bloque)
+        excluded_enroll = db.query(Enrollment.codigo_grupo).filter(
+            Enrollment.codigo_grupo.isnot(None),
+            Enrollment.bloque == other_bloque_int,
+        ).distinct().all()
+        excluded_course_codes |= {r[0] for r in excluded_enroll if r[0]}
         all_cc = db.query(CourseConfig.codigo_avac).filter(
             CourseConfig.codigo_avac.isnot(None),
         ).all()
