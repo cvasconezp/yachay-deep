@@ -201,7 +201,7 @@ export default function PinSetupModal({ open, onClose }) {
 /** Overlay backdrop */
 function Overlay({ children, onClose }) {
   return (
-    <div className="fixed inset-0 z-[9990] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-[9990] flex items-center justify-center bg-black/60 backdrop-blur-md" onClick={onClose}>
       <div
         className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6 relative animate-in"
         onClick={(e) => e.stopPropagation()}

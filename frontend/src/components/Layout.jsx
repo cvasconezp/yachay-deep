@@ -253,7 +253,6 @@ export function Layout({ children }) {
               </button>
             </div>
           )}
-          <PinSetupModal open={pinModalOpen} onClose={() => setPinModalOpen(false)} />
         </div>
       </aside>
 
@@ -275,6 +274,7 @@ export function Layout({ children }) {
           {children}
         </div>
       </main>
+      <PinSetupModal open={pinModalOpen} onClose={() => setPinModalOpen(false)} />
     </div>
   );
 }
