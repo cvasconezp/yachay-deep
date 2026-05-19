@@ -574,3 +574,94 @@ def debug_alert_conditions(
     result["current_alerts_by_type"] = alert_counts
 
     return result
+
+
+@router.get("/student-tasks-detail/{student_id}")
+def get_student_tasks_detail(
+    student_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Retorna detalle de tareas pendientes de un estudiante agrupadas por asignatura.
+    Usado para generar mensaje personalizado de seguimiento.
+    Formato: [{ asignatura, grupo, tareas_pendientes: ["Actividad 1", "Actividad 3"] }]
+    """
+    from ..models import TaskSubmission
+    from ..models.course_config import CourseConfig
+
+    semconfig, pf, periodo_variants = None, None, ()
+    sem = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
+    if sem and sem.semestre:
+        pf = sem.semestre.strip()
+        if pf.startswith("P"):
+            periodo_variants = (pf, pf[1:])
+        else:
+            periodo_variants = (pf, f"P{pf}")
+
+    if not pf:
+        return []
+
+    # Build periodo filter
+    if len(periodo_variants) == 2:
+        pf_filter = or_(
+            TaskSubmission.periodo == periodo_variants[0],
+            TaskSubmission.periodo == periodo_variants[1],
+        )
+    else:
+        pf_filter = TaskSubmission.periodo == periodo_variants[0]
+
+    # Get latest snapshot per course for this student
+    snaps = db.query(
+        TaskSubmission.codigo_curso,
+        func.max(TaskSubmission.snapshot_date).label("max_snap"),
+    ).filter(
+        TaskSubmission.student_id == student_id,
+        pf_filter,
+    ).group_by(TaskSubmission.codigo_curso).all()
+
+    if not snaps:
+        return []
+
+    # Get all pending tasks (entregada but not calificada, OR not entregada at all)
+    result = []
+    for snap_row in snaps:
+        cod = snap_row.codigo_curso
+        snap = snap_row.max_snap
+
+        subs = db.query(TaskSubmission).filter(
+            TaskSubmission.student_id == student_id,
+            TaskSubmission.codigo_curso == cod,
+            TaskSubmission.snapshot_date == snap,
+            pf_filter,
+        ).all()
+
+        # Find unidades where not entregada
+        no_entregadas = [s.unidad for s in subs if not s.entregada and s.unidad]
+        # Find unidades with nota cero or very low
+        notas_bajas = [s.unidad for s in subs if s.calificada and s.calificacion is not None
+                       and s.calificacion_maxima and s.calificacion_maxima > 0
+                       and (s.calificacion / s.calificacion_maxima) < 0.47 and s.unidad]
+
+        if not no_entregadas and not notas_bajas:
+            continue
+
+        # Get asignatura info
+        cc = db.query(CourseConfig).filter(CourseConfig.codigo_avac == cod).first()
+        asignatura = cc.asignatura if cc else cod
+        grupo = cc.grupo if cc else None
+
+        entry = {"asignatura": asignatura, "grupo": grupo, "detalles": []}
+
+        if no_entregadas:
+            tareas_txt = " y ".join([f"Actividad {u}" for u in sorted(no_entregadas)])
+            entry["detalles"].append(f"{tareas_txt} sin entrega")
+
+        if notas_bajas:
+            tareas_txt = " y ".join([f"Actividad {u}" for u in sorted(notas_bajas)])
+            entry["detalles"].append(f"{tareas_txt} con calificación baja")
+
+        result.append(entry)
+
+    result.sort(key=lambda x: x["asignatura"])
+    return result

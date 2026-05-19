@@ -51,11 +51,13 @@ const MOTIVO_ESTUDIANTE = {
   deterioro_progresivo: "se ha identificado un descenso sostenido en tus indicadores académicos",
 };
 
-function buildStudentMessage(group) {
+function buildStudentMessage(group, userName, tasksDetail) {
   const nombre = group.student_nombre
     .split(" ")
     .map(p => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())
     .join(" ");
+
+  const remitente = userName || "la Coordinación Académica";
 
   // Collect unique motivos from alerts
   const tipos = [...new Set(group.alerts.map(a => a.tipo))];
@@ -72,13 +74,10 @@ function buildStudentMessage(group) {
   if (group.indice_compromiso != null)
     detalles.push("Índice de compromiso académico: " + Math.round(group.indice_compromiso * 100) + "%.");
 
-  // Collect asignaturas from alerts
-  const asignaturas = [...new Set(group.alerts.map(a => a.asignatura).filter(Boolean))];
-
   let lines = [];
   lines.push("Estimado/a " + nombre + ",");
   lines.push("");
-  lines.push("Reciba un cordial saludo de parte de la Coordinación Académica.");
+  lines.push("Reciba un cordial saludo de parte de " + remitente + ".");
   lines.push("");
   lines.push("Por medio del presente nos permitimos comunicarte que, de acuerdo con el seguimiento académico que realizamos, se han identificado las siguientes situaciones que requieren tu atención:");
   lines.push("");
@@ -87,9 +86,27 @@ function buildStudentMessage(group) {
     lines.push("  " + (i + 1) + ". " + m.charAt(0).toUpperCase() + m.slice(1) + ".");
   });
 
-  if (asignaturas.length > 0) {
+  // Detalle por asignatura con actividades específicas
+  if (tasksDetail && tasksDetail.length > 0) {
     lines.push("");
-    lines.push("Asignatura(s) involucrada(s): " + asignaturas.join(", ") + ".");
+    lines.push("Detalle por asignatura:");
+    tasksDetail.forEach(td => {
+      const asig = td.grupo ? td.asignatura + " (Grupo " + td.grupo + ")" : td.asignatura;
+      if (td.detalles && td.detalles.length > 0) {
+        td.detalles.forEach(d => {
+          lines.push("  * " + asig + ": " + d);
+        });
+      } else {
+        lines.push("  * " + asig + ": tareas pendientes");
+      }
+    });
+  } else {
+    // Fallback: list asignaturas from alerts
+    const asignaturas = [...new Set(group.alerts.map(a => a.asignatura).filter(Boolean))];
+    if (asignaturas.length > 0) {
+      lines.push("");
+      lines.push("Asignatura(s) involucrada(s): " + asignaturas.join(", ") + ".");
+    }
   }
 
   if (detalles.length > 0) {
@@ -101,14 +118,13 @@ function buildStudentMessage(group) {
   lines.push("Es importante que tomes acción a la brevedad posible. Te invitamos a:");
   lines.push("  - Revisar y completar las actividades pendientes en el AVAC.");
   lines.push("  - Comunicarte con tu docente para aclarar cualquier duda.");
-  lines.push("  - Acercarte a la Coordinación o a Bienestar Estudiantil si necesitas apoyo adicional.");
   lines.push("");
   lines.push("Nuestro objetivo es acompañarte en tu proceso académico y ayudarte a culminar el periodo con éxito.");
   lines.push("");
   lines.push("Quedamos atentos a cualquier inquietud.");
   lines.push("");
   lines.push("Saludos cordiales,");
-  lines.push("Coordinación Académica");
+  lines.push(remitente);
 
   return lines.join("\n");
 }
@@ -182,6 +198,7 @@ export default function Alertas() {
   const [selectedStudentIds, setSelectedStudentIds] = useState(new Set());
   const [expandedStudents, setExpandedStudents] = useState(new Set());
   const [copiedStudentId, setCopiedStudentId] = useState(null);
+  const [copyingStudentId, setCopyingStudentId] = useState(null);
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [carreras, setCarreras] = useState([]);
   const [asignaturas, setAsignaturas] = useState([]);
@@ -719,22 +736,35 @@ export default function Alertas() {
                             {/* Student actions */}
                             <div className="flex gap-2 justify-end pt-2 flex-wrap">
                               <button
-                                onClick={(e) => {
+                                disabled={copyingStudentId === group.student_id}
+                                onClick={async (e) => {
                                   e.stopPropagation();
-                                  const msg = buildStudentMessage(group);
-                                  navigator.clipboard.writeText(msg).then(() => {
+                                  try {
+                                    setCopyingStudentId(group.student_id);
+                                    let tasksDetail = [];
+                                    try {
+                                      tasksDetail = await api.getStudentTasksDetail(group.student_id);
+                                    } catch (_) { /* fallback sin detalle */ }
+                                    const msg = buildStudentMessage(group, user?.nombre, tasksDetail);
+                                    await navigator.clipboard.writeText(msg);
                                     setCopiedStudentId(group.student_id);
                                     setTimeout(() => setCopiedStudentId(null), 2500);
-                                  });
+                                  } finally {
+                                    setCopyingStudentId(null);
+                                  }
                                 }}
                                 className={`text-xs px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 ${
                                   copiedStudentId === group.student_id
                                     ? "bg-green-100 text-green-700 border border-green-300"
-                                    : "bg-amber-50 text-amber-700 border border-amber-300 hover:bg-amber-100"
+                                    : copyingStudentId === group.student_id
+                                      ? "bg-gray-100 text-gray-500 border border-gray-300 cursor-wait"
+                                      : "bg-amber-50 text-amber-700 border border-amber-300 hover:bg-amber-100"
                                 }`}
                               >
                                 {copiedStudentId === group.student_id ? (
                                   <><svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg> Copiado</>
+                                ) : copyingStudentId === group.student_id ? (
+                                  <><svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg> Cargando...</>
                                 ) : (
                                   <><svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg> Copiar mensaje</>
                                 )}
