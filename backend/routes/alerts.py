@@ -188,37 +188,39 @@ def get_pending_alerts(
     student_context = {}
 
     # ── Calcular dias_sin_acceso filtrado por bloque actual ──
-    from ..models.course_config import CourseConfig, SemesterConfig
-    from ..models.avac_access import AvacAccess
-    from sqlalchemy import func as sqlfunc, or_ as sql_or
-    semconfig_q = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
-    bloque_course_codes = set()
-    if semconfig_q and semconfig_q.bloque_actual:
-        bloque_cc = db.query(CourseConfig.codigo_avac).filter(
-            sql_or(
-                CourseConfig.bloque == semconfig_q.bloque_actual,
-                CourseConfig.bloque == "ambos",
-                CourseConfig.bloque.is_(None),
-            ),
-        ).all()
-        bloque_course_codes = {r[0] for r in bloque_cc if r[0]}
-
-    # Get latest snapshot filtered by bloque courses
     dias_por_estudiante = {}
-    if student_ids and bloque_course_codes:
-        avac_filter = [
-            AvacAccess.student_id.in_(student_ids),
-            AvacAccess.dias_sin_acceso.isnot(None),
-            AvacAccess.codigo_curso.in_(bloque_course_codes),
-        ]
-        latest_snap = db.query(sqlfunc.max(AvacAccess.snapshot_date)).filter(*avac_filter).scalar()
-        if latest_snap:
-            avac_filter.append(AvacAccess.snapshot_date == latest_snap)
-            for sid, dias in db.query(
-                AvacAccess.student_id,
-                sqlfunc.max(AvacAccess.dias_sin_acceso),
-            ).filter(*avac_filter).group_by(AvacAccess.student_id).all():
-                dias_por_estudiante[sid] = int(dias) if dias is not None else None
+    try:
+        semconfig_q = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
+        bloque_course_codes = set()
+        if semconfig_q and semconfig_q.bloque_actual:
+            bloque_cc = db.query(CourseConfig.codigo_avac).filter(
+                or_(
+                    CourseConfig.bloque == semconfig_q.bloque_actual,
+                    CourseConfig.bloque == "ambos",
+                    CourseConfig.bloque.is_(None),
+                ),
+            ).all()
+            bloque_course_codes = {r[0] for r in bloque_cc if r[0]}
+
+        if student_ids and bloque_course_codes:
+            latest_snap = db.query(func.max(AvacAccess.snapshot_date)).filter(
+                AvacAccess.student_id.in_(student_ids),
+                AvacAccess.dias_sin_acceso.isnot(None),
+                AvacAccess.codigo_curso.in_(bloque_course_codes),
+            ).scalar()
+            if latest_snap:
+                for sid, dias in db.query(
+                    AvacAccess.student_id,
+                    func.max(AvacAccess.dias_sin_acceso),
+                ).filter(
+                    AvacAccess.student_id.in_(student_ids),
+                    AvacAccess.dias_sin_acceso.isnot(None),
+                    AvacAccess.codigo_curso.in_(bloque_course_codes),
+                    AvacAccess.snapshot_date == latest_snap,
+                ).group_by(AvacAccess.student_id).all():
+                    dias_por_estudiante[sid] = int(dias) if dias is not None else None
+    except Exception:
+        pass  # Fallback: use Student.dias_sin_acceso below
 
     if student_ids:
         for s in db.query(Student).filter(Student.id.in_(student_ids)).all():
