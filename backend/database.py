@@ -41,6 +41,7 @@ def upgrade_tables():
     new_columns: dict[str, list[tuple[str, str]]] = {
         "users": [
             ("permissions", "JSON"),
+            ("pin_hash", "VARCHAR"),
         ],
         "institutions": [],  # new table, created by create_all()
     "students": [
