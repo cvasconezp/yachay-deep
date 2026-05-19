@@ -649,13 +649,15 @@ def get_student_tasks_detail(
 
         # Find unidades where not entregada (solo actividades vencidas según calendario)
         no_entregadas = [s.unidad for s in subs if not s.entregada and s.unidad and s.unidad in unidades_ok]
+        # Find unidades entregadas pero sin calificar aún
+        sin_calificar = [s.unidad for s in subs if s.entregada and not s.calificada and s.unidad and s.unidad in unidades_ok]
         # Find unidades with nota cero or very low (solo actividades vencidas)
         notas_bajas = [s.unidad for s in subs if s.calificada and s.calificacion is not None
                        and s.calificacion_maxima and s.calificacion_maxima > 0
                        and (s.calificacion / s.calificacion_maxima) < 0.47 and s.unidad
                        and s.unidad in unidades_ok]
 
-        if not no_entregadas and not notas_bajas:
+        if not no_entregadas and not notas_bajas and not sin_calificar:
             continue
 
         # Get asignatura info
@@ -668,6 +670,10 @@ def get_student_tasks_detail(
         if no_entregadas:
             tareas_txt = " y ".join([f"Actividad {u}" for u in sorted(no_entregadas)])
             entry["detalles"].append(f"{tareas_txt} sin entrega")
+
+        if sin_calificar:
+            tareas_txt = " y ".join([f"Actividad {u}" for u in sorted(sin_calificar)])
+            entry["detalles"].append(f"{tareas_txt} entregada sin calificar")
 
         if notas_bajas:
             tareas_txt = " y ".join([f"Actividad {u}" for u in sorted(notas_bajas)])

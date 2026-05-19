@@ -59,6 +59,7 @@ class DocenteTrackingStats(BaseModel):
     porcentaje_calificacion: float = 0.0
     promedio_dias_retraso: Optional[float] = None
     cursos: list[str] = []
+    carreras: list[str] = []
     alerta: str = "ok"
 
     class Config:
@@ -209,6 +210,11 @@ def get_docente_tracking(
         pct = round((calificadas / max(total_tareas, 1)) * 100, 1)
         alerta = "critico" if pct < 50 else ("atencion" if pct < 80 else "ok")
 
+        # Collect unique carreras from this docente's courses
+        docente_carreras = sorted(set(
+            c.carrera for c in info["cursos"] if c.carrera
+        ))
+
         output.append(DocenteTrackingStats(
             docente=docente_name,
             correo_docente=info["correo"],
@@ -218,6 +224,7 @@ def get_docente_tracking(
             actividades_pendientes=pendientes,
             porcentaje_calificacion=pct,
             cursos=sorted(set(asignaturas)),
+            carreras=docente_carreras,
             alerta=alerta,
         ))
 

@@ -283,7 +283,9 @@ def generate_alerts_batch(db: Session) -> dict:
     )
     if latest_snap:
         avac_q = avac_q.filter(AvacAccess.snapshot_date == latest_snap)
-    if excluded_course_codes:
+    if included_course_codes:
+        avac_q = avac_q.filter(AvacAccess.codigo_curso.in_(included_course_codes))
+    elif excluded_course_codes:
         avac_q = avac_q.filter(~AvacAccess.codigo_curso.in_(excluded_course_codes))
 
     avac_por_curso = defaultdict(list)

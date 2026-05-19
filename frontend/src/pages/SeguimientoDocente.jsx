@@ -81,6 +81,7 @@ export default function SeguimientoDocente({ embedded = false }) {
   const [loadingDetalle, setLoadingDetalle] = useState(false);
   const [detalleData, setDetalleData] = useState(null);
   const [search, setSearch] = useState("");
+  const [carreraFilter, setCarreraFilter] = useState("");
   const [copied, setCopied] = useState(false);
   const [expandedActs, setExpandedActs] = useState({});
   const navigate = useNavigate();
@@ -114,10 +115,17 @@ export default function SeguimientoDocente({ embedded = false }) {
     }
   };
 
-  const filteredData = search
-    ? data.filter(d => d.docente?.toLowerCase().includes(search.toLowerCase()) ||
-        d.cursos?.some(c => c.toLowerCase().includes(search.toLowerCase())))
-    : data;
+  // Collect unique carreras for dropdown
+  const allCarreras = [...new Set(data.flatMap(d => d.carreras || []))].sort();
+
+  const filteredData = data.filter(d => {
+    const matchSearch = !search ||
+      d.docente?.toLowerCase().includes(search.toLowerCase()) ||
+      d.cursos?.some(c => c.toLowerCase().includes(search.toLowerCase()));
+    const matchCarrera = !carreraFilter ||
+      (d.carreras || []).includes(carreraFilter);
+    return matchSearch && matchCarrera;
+  });
 
   const sortedData = [...filteredData].sort((a, b) => {
     const aVal = a[sortField];
@@ -202,6 +210,19 @@ export default function SeguimientoDocente({ embedded = false }) {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
         </div>
+        {/* Carrera filter dropdown */}
+        {allCarreras.length > 1 && (
+          <select
+            value={carreraFilter}
+            onChange={e => setCarreraFilter(e.target.value)}
+            className="px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-400 bg-white text-gray-700 max-w-xs"
+          >
+            <option value="">Todas las carreras</option>
+            {allCarreras.map(c => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+        )}
         <span className="text-xs text-gray-400">{filteredData.length} docentes</span>
       </div>
 
