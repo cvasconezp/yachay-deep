@@ -33,7 +33,7 @@ Entidad central del sistema. Cada estudiante tiene indicadores de riesgo calcula
 | `nivel_academico` | Integer | Semestre actual (1–8) |
 | `nivel_riesgo` | String | Alto / Medio / Bajo (calculado por ETL) |
 | `indice_compromiso` | Float | 0.0–1.0 (acceso 30% + tareas 30% + rendimiento 25% + admin 15%) |
-| `dias_sin_acceso` | Integer | Días desde último acceso a AVAC |
+| `dias_sin_acceso` | Integer | Días desde último acceso a Moodle |
 | `porcentaje_tareas` | Float | % de tareas entregadas |
 | `promedio_calificaciones` | Float | Promedio de notas finales |
 | `pais` | String | País de domicilio |
@@ -58,7 +58,7 @@ Entidad central del sistema. Cada estudiante tiene indicadores de riesgo calcula
 
 **Índices:** `idx_student_risk_level` (nivel_riesgo), `idx_student_carrera_riesgo` (carrera + nivel_riesgo)
 
-**Relaciones:** → AvacAccess, TaskSubmission, Grade, Intervention, Enrollment, PracticaPreprofesional
+**Relaciones:** → MoodleAccess, TaskSubmission, Grade, Intervention, Enrollment, PracticaPreprofesional
 
 ---
 
@@ -70,7 +70,7 @@ Cada fila = un estudiante × una asignatura matriculada (del reporte institucion
 |---|---|---|
 | `id` | Integer PK | |
 | `student_id` | Integer FK → students | |
-| `codigo_grupo` | String | Código AVAC del grupo (ej: 408364) |
+| `codigo_grupo` | String | Código Moodle del grupo (ej: 408364) |
 | `codigo_asignatura` | String | Código de asignatura (ej: C-HU-201) |
 | `asignatura` | String | Nombre de la asignatura |
 | `tipo_asignatura` | String | COMUN / GENERICA / ESPECIFICA |
@@ -96,7 +96,7 @@ Cada fila = un estudiante × una asignatura matriculada (del reporte institucion
 
 ### 2.3 `grades` — Calificaciones
 
-Una fila por estudiante × asignatura × período. Fuente: calificaciones.csv (AVAC scraping) o TableauHistórico (fallback).
+Una fila por estudiante × asignatura × período. Fuente: calificaciones.csv (Moodle scraping) o TableauHistórico (fallback).
 
 | Campo | Tipo | Descripción |
 |---|---|---|
@@ -117,37 +117,37 @@ Una fila por estudiante × asignatura × período. Fuente: calificaciones.csv (A
 
 ---
 
-### 2.4 `avac_accesses` — Accesos a AVAC
+### 2.4 `moodle_accesses` — Accesos a Moodle
 
-Frecuencia de acceso a la plataforma AVAC (Moodle) por estudiante y curso. Fuente: scraping Selenium.
+Frecuencia de acceso a la plataforma Moodle por estudiante y curso. Fuente: scraping Selenium.
 
 | Campo | Tipo | Descripción |
 |---|---|---|
 | `id` | Integer PK | |
 | `student_id` | Integer FK → students | |
-| `codigo_curso` | String | Código AVAC del curso |
+| `codigo_curso` | String | Código Moodle del curso |
 | `periodo` | String | Período ("P67", "P68") |
 | `snapshot_date` | Date | Fecha del snapshot ETL (para tendencias históricas) |
-| `nombre_estudiante_avac` | String | Nombre tal como aparece en AVAC |
+| `nombre_estudiante_moodle` | String | Nombre tal como aparece en Moodle |
 | `ultimo_acceso_texto` | String | Texto original ("8 días 17 horas") |
 | `dias_sin_acceso` | Float | Valor numérico parseado |
-| `estado_avac` | String | "Activo" / etc. |
+| `estado_moodle` | String | "Activo" / etc. |
 | `fecha_extraccion` | DateTime | Cuándo se extrajo el dato |
 | `created_at` | DateTime | |
 
-**Índices:** `idx_avac_periodo`, `idx_avac_student_periodo`, `idx_avac_snapshot`, `idx_avac_student_snapshot`
+**Índices:** `idx_moodle_periodo`, `idx_moodle_student_periodo`, `idx_moodle_snapshot`, `idx_moodle_student_snapshot`
 
 ---
 
 ### 2.5 `task_submissions` — Entregas de tareas
 
-Estado de entrega y calificación de tareas por estudiante y curso. Fuente: scraping de AVAC.
+Estado de entrega y calificación de tareas por estudiante y curso. Fuente: scraping de Moodle.
 
 | Campo | Tipo | Descripción |
 |---|---|---|
 | `id` | Integer PK | |
 | `student_id` | Integer FK → students | |
-| `codigo_curso` | String | Código AVAC |
+| `codigo_curso` | String | Código Moodle |
 | `periodo` | String | Período |
 | `snapshot_date` | Date | Fecha del snapshot |
 | `unidad` | String | Unidad académica ("1", "2", "3", "4") |
@@ -169,12 +169,12 @@ Estado de entrega y calificación de tareas por estudiante y curso. Fuente: scra
 
 ### 2.6 `courses` — Cursos
 
-Catálogo de cursos AVAC detectados durante el scraping.
+Catálogo de cursos Moodle detectados durante el scraping.
 
 | Campo | Tipo | Descripción |
 |---|---|---|
 | `id` | Integer PK | |
-| `codigo_avac` | String UNIQUE | Código del curso en AVAC |
+| `codigo_moodle` | String UNIQUE | Código del curso en Moodle |
 | `nombre` | String | Nombre del curso |
 | `carrera` | String | Carrera |
 | `docente` | String | Docente asignado |
@@ -186,13 +186,13 @@ Catálogo de cursos AVAC detectados durante el scraping.
 
 ### 2.7 `course_configs` — Configuración de cursos por semestre
 
-Gestión dinámica de qué cursos AVAC scrapear cada semestre. Reemplaza listas hardcodeadas.
+Gestión dinámica de qué cursos Moodle scrapear cada semestre. Reemplaza listas hardcodeadas.
 
 | Campo | Tipo | Descripción |
 |---|---|---|
 | `id` | Integer PK | |
-| `codigo_avac` | String | Código AVAC del curso |
-| `nombre` | String | Nombre en AVAC |
+| `codigo_moodle` | String | Código Moodle del curso |
+| `nombre` | String | Nombre en Moodle |
 | `asignatura` | String | Nombre normalizado |
 | `carrera` | String | Carrera |
 | `docente` | String | Docente |
@@ -329,7 +329,7 @@ Eventos generados automáticamente basados en umbrales del semestre activo.
 | `nombre` | String UNIQUE | Nombre de la institución |
 | `codigo` | String UNIQUE | Código corto |
 | `logo_url` | String | URL del logo |
-| `avac_url` | String | URL del Moodle/AVAC |
+| `avac_url` | String | URL del Moodle/Moodle |
 | `moodle_api_token` | String | Token API Moodle |
 | `activa` | Boolean | Institución activa |
 | `umbral_riesgo_alto` | Float | Default: 0.70 |
@@ -394,7 +394,7 @@ Instituciones educativas donde los estudiantes realizan prácticas. Datos cruzad
 ```
 Student (1) ──→ (N) Enrollment
 Student (1) ──→ (N) Grade
-Student (1) ──→ (N) AvacAccess
+Student (1) ──→ (N) MoodleAccess
 Student (1) ──→ (N) TaskSubmission
 Student (1) ──→ (N) Intervention
 Student (1) ──→ (N) AlertEvent
@@ -416,7 +416,7 @@ El sistema maneja períodos académicos con formato dual:
 
 | Formato | Ejemplo | Usado en |
 |---|---|---|
-| `"P68"` | Período 68 | grades, avac_accesses, task_submissions |
+| `"P68"` | Período 68 | grades, moodle_accesses, task_submissions |
 | `"68"` | Período 68 | enrollments (reporte institucional) |
 | `"2026-1"` | Semestre | semester_configs, course_configs |
 
@@ -430,7 +430,7 @@ Fórmula del `indice_compromiso` (0.0–1.0):
 
 | Componente | Peso | Fuente |
 |---|---|---|
-| Acceso a AVAC | 30% | avac_accesses.dias_sin_acceso |
+| Acceso a Moodle | 30% | moodle_accesses.dias_sin_acceso |
 | Entrega de tareas | 30% | task_submissions (% entregadas) |
 | Rendimiento académico | 25% | grades.nota_final (promedio) |
 | Estado administrativo | 15% | enrollment (pagado, estado) |
