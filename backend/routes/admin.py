@@ -781,7 +781,7 @@ async def check_avac_cookie(
 def debug_student_avac(
     student_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     """Diagnóstico de datos AVAC para un estudiante específico.
     
@@ -883,7 +883,7 @@ def debug_student_avac(
 def debug_student_search(
     q: str = "",
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     """Busca estudiante por nombre/correo para diagnóstico."""
     from ..models import Student
@@ -907,7 +907,7 @@ def debug_student_search(
 def debug_bloque_filter(
     student_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     """Diagnóstico del filtro de bloque para un estudiante específico."""
     from ..models import Student, AvacAccess
@@ -1008,7 +1008,7 @@ def debug_task_submissions(
     codigo_curso: str,
     unidad: str = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
 ):
     """
     Diagnóstico: muestra task_submissions para un curso dado.
