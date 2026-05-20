@@ -243,14 +243,68 @@ const PLANS_UNI = [
   },
 ];
 
+/* ── Beneficios para decisores ────────────────────────── */
+
+const BENEFITS = [
+  {
+    title: "Reduce la deserción",
+    desc: "Identifica estudiantes en riesgo antes de que abandonen. Intervenciones oportunas basadas en evidencia, no en intuición.",
+    icon: (
+      <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.94" />
+      </svg>
+    ),
+  },
+  {
+    title: "Cumple con el CACES",
+    desc: "Genera evidencia auditable de seguimiento, retención y bienestar estudiantil para los 32 indicadores del modelo MEEUEP 2023.",
+    icon: (
+      <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+      </svg>
+    ),
+  },
+  {
+    title: "Ahorra recursos",
+    desc: "Cada estudiante retenido es matrícula recuperada. La inversión se paga reteniendo entre 3 y 5 estudiantes por año.",
+    icon: (
+      <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    ),
+  },
+  {
+    title: "Decisiones con evidencia",
+    desc: "Dashboards ejecutivos, reportes de riesgo por carrera y trazabilidad completa de intervenciones. Información clara para el consejo directivo.",
+    icon: (
+      <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5M9 11.25v1.5M12 9v3.75m3-6v6" />
+      </svg>
+    ),
+  },
+];
+
+const STEPS = [
+  { step: "1", title: "Conecta tus datos", desc: "Importamos los datos de tu Moodle o LMS sin instalar nada. Solo necesitamos acceso de lectura." },
+  { step: "2", title: "La IA analiza y predice", desc: "Nuestros modelos identifican estudiantes en riesgo con 87%+ de precisión y explican por qué." },
+  { step: "3", title: "Tu equipo actúa a tiempo", desc: "Reciben alertas, recomendaciones y herramientas para intervenir antes de que sea tarde." },
+];
+
+const COMPLIANCE = [
+  { norm: "LOES", desc: "Art. 5, 71, 86: derecho a educación de calidad, bienestar estudiantil y seguimiento académico." },
+  { norm: "CACES / MEEUEP", desc: "Indicadores de retención, seguimiento a estudiantes y bienestar dentro del modelo de acreditación 2023." },
+  { norm: "CES", desc: "Reglamento de Régimen Académico: seguimiento de aprobación, repitencia y terceras matrículas." },
+  { norm: "LOPD Ecuador", desc: "Protección de datos personales: cifrado TLS 1.3, AES-256, control de acceso RBAC." },
+];
+
 const FAQS = [
   { q: "¿Cuánto toma la implementación?", a: "El proceso completo toma entre 2 y 4 semanas, dependiendo de la disponibilidad de datos históricos y la complejidad de integración con tu LMS. Incluye configuración, calibración de modelos ML, capacitación del equipo y acompañamiento en go-live." },
-  { q: "¿Funciona con mi Moodle actual?", a: "Sí. Yachay Deep se integra con cualquier instalación de Moodle mediante scraping automatizado de datos de actividad. No requiere plugins adicionales ni cambios en tu Moodle. También soportamos importación por Excel/CSV para otros sistemas." },
+  { q: "¿Funciona con mi Moodle actual?", a: "Sí. Yachay Deep se integra con cualquier instalación de Moodle mediante captura automatizada de datos de actividad. No requiere plugins adicionales ni cambios en tu Moodle. También soportamos importación por Excel/CSV para otros sistemas." },
   { q: "¿Qué precisión tienen las predicciones?", a: "Nuestros modelos alcanzan un 87%+ de precisión en predicción de aprobación/deserción, entrenados con datos reales de tu institución. La precisión mejora conforme acumulamos más datos históricos." },
-  { q: "¿Puedo probar antes de comprar?", a: "Primero agendamos una demostración donde te mostramos la plataforma en acción. Si hay interés, activamos un piloto gratuito de 30 días con el plan Profesional usando tus propios datos, incluyendo onboarding completo y soporte prioritario. Sin compromiso de compra." },
+  { q: "¿Puedo probar antes de comprar?", a: "Sí. Agendamos una demostración personalizada y, si hay interés, activamos un piloto gratuito de 30 días con el plan Profesional usando tus propios datos, incluyendo onboarding completo y soporte prioritario. Sin compromiso de compra." },
   { q: "¿Mis datos están seguros?", a: "Absolutamente. Usamos cifrado TLS 1.3 en tránsito y AES-256 en reposo. Autenticación con cookies HttpOnly, control de acceso por roles (RBAC), y cumplimiento con la Ley Orgánica de Protección de Datos Personales de Ecuador." },
-  { q: "¿Cuántos estudiantes se necesitan como mínimo?", a: "Nuestros planes están diseñados para instituciones con 500+ estudiantes activos. El modelo de ML requiere un mínimo de datos históricos para funcionar con precisión. Durante el piloto gratuito evaluamos la viabilidad con tus datos reales." },
-  { q: "¿Cómo se calcula el precio de mi institución?", a: "Ofrecemos planes diferenciados para institutos tecnológicos y universidades, adaptados a la complejidad y duración de sus programas académicos. Los institutos pueden acceder desde $4,800/año (plan Esencial) o $7,200/año (plan Profesional con IA predictiva). Las universidades cuentan con planes Profesional ($12,000/año), Enterprise ($24,000/año) y Enterprise+ ($48,000/año). Todos los planes incluyen un 20% de descuento en el primer año como Early Adopter. La contratación semestral también está disponible." },
+  { q: "¿Ayuda con la acreditación del CACES?", a: "Sí. Yachay Deep genera evidencia auditable de seguimiento académico, retención estudiantil y bienestar que se alinea con los indicadores del modelo de evaluación MEEUEP 2023 del CACES. Los reportes ejecutivos y la trazabilidad de intervenciones facilitan la preparación para evaluaciones externas." },
+  { q: "¿Cómo se calcula el precio?", a: "Ofrecemos planes diferenciados para institutos tecnológicos y universidades, adaptados a la complejidad y duración de sus programas académicos. Los institutos pueden acceder desde $4,800/año (plan Esencial) o $7,200/año (plan Profesional con IA predictiva). Las universidades cuentan con planes Profesional ($12,000/año), Enterprise ($24,000/año) y Enterprise+ ($48,000/año). Todos los planes incluyen un 20% de descuento en el primer año." },
 ];
 
 export default function Landing() {
@@ -260,12 +314,9 @@ export default function Landing() {
   const [segment, setSegment] = useState("uni");
   const [period, setPeriod] = useState("firstYear");
   const [openFaq, setOpenFaq] = useState(null);
+  const [showTech, setShowTech] = useState(false);
   const plans = segment === "inst" ? PLANS_INST : PLANS_UNI;
 
-  // [SESSION-UX] If the visitor already has an active session, every
-  // "Iniciar sesión" CTA on the public landing turns into "Ir al Dashboard"
-  // so navigating back to / from the sidebar logo doesn't make users feel
-  // like they were logged out.
   const ctaLabel = user ? "Ir al Dashboard" : "Iniciar sesión";
   const ctaTarget = user ? "/dashboard" : "/login";
 
@@ -275,66 +326,60 @@ export default function Landing() {
       <nav className="fixed top-0 w-full bg-white/90 backdrop-blur-sm border-b border-gray-100 z-50">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            {/* Navbar bg is white → CLARO header. Sized responsively to feel
-                like the dominant brand element on the top bar. */}
             <YachayLogo variant="light" className="h-10 sm:h-11 lg:h-12 w-auto" />
           </div>
           <div className="flex items-center gap-3">
-            <a href="#features" className="hidden sm:inline text-sm text-gray-600 hover:text-brand transition-colors px-3 py-1">Funcionalidades</a>
-            <a href="#evolution" className="hidden sm:inline text-sm text-gray-600 hover:text-brand transition-colors px-3 py-1">Evolución</a>
+            <a href="#benefits" className="hidden sm:inline text-sm text-gray-600 hover:text-brand transition-colors px-3 py-1">Beneficios</a>
+            <a href="#how" className="hidden sm:inline text-sm text-gray-600 hover:text-brand transition-colors px-3 py-1">Cómo funciona</a>
             <a href="#pricing" className="hidden sm:inline text-sm text-gray-600 hover:text-brand transition-colors px-3 py-1">Planes</a>
-            <a href="#podcasts" className="hidden sm:inline text-sm text-gray-600 hover:text-brand transition-colors px-3 py-1">Podcasts</a>
+            <a href="#compliance" className="hidden sm:inline text-sm text-gray-600 hover:text-brand transition-colors px-3 py-1">Normativa</a>
             <a href="#contact" className="hidden sm:inline text-sm text-gray-600 hover:text-brand transition-colors px-3 py-1">Contacto</a>
-            <a href="https://pachatech.vercel.app/" target="_blank" rel="noopener noreferrer" className="hidden sm:inline text-sm text-gray-600 hover:text-brand transition-colors px-3 py-1">Pacha Tech</a>
-            <button
-              onClick={() => navigate(ctaTarget)}
+            <a
+              href="#contact"
               className="bg-brand-gold text-brand-dark font-semibold text-sm px-5 py-2 rounded-lg hover:bg-brand-gold-light transition-colors"
             >
-              {ctaLabel}
-            </button>
+              Agendar demo
+            </a>
           </div>
         </div>
       </nav>
 
-      {/* ── Hero ── */}
+      {/* ── Hero: dolor + solución ── */}
       <section className="pt-32 pb-20 bg-gradient-to-br from-brand via-brand-dark to-brand">
         <div className="max-w-6xl mx-auto px-4 text-center">
-          <div className="flex justify-center mb-10">
-            {/* Hero bg is dark gradient → use OSCURO directly (white "Deep"
-                wordmark reads with full contrast on the navy gradient).
-                Logo is the dominant focal point; scales fluidly with viewport. */}
+          <div className="flex justify-center mb-8">
             <YachayLogo
               variant="dark"
-              className="block w-[min(92vw,34rem)] sm:w-[min(80vw,44rem)] lg:w-[min(65vw,56rem)] h-auto drop-shadow-2xl"
+              className="block w-[min(70vw,28rem)] sm:w-[min(60vw,36rem)] lg:w-[min(50vw,44rem)] h-auto drop-shadow-2xl"
             />
           </div>
-          <h1 className="text-4xl md:text-5xl font-bold text-white mb-4 leading-tight">
-            Inteligencia académica preventiva<br />para la retención estudiantil
+          <h1 className="text-3xl md:text-5xl font-bold text-white mb-4 leading-tight">
+            ¿Cuántos estudiantes pierdes<br />cada semestre sin saberlo?
           </h1>
-          <p className="text-brand-ice text-lg md:text-xl max-w-3xl mx-auto mb-4">
-            Learning Analytics-Driven Early Warning Decision Support System
+          <p className="text-brand-ice text-lg md:text-xl max-w-3xl mx-auto mb-3">
+            En Ecuador, 1 de cada 5 universitarios abandona su carrera.
           </p>
           <p className="text-blue-200 max-w-2xl mx-auto mb-10 text-sm leading-relaxed">
-            Yachay Deep identifica, predice, explica y atiende el riesgo académico
-            mediante un framework multinivel con IA explicable, recomendaciones automáticas
-            y trazabilidad de intervenciones de ciclo cerrado.
+            Yachay Deep identifica estudiantes en riesgo antes de que deserten,
+            explica por qué están en peligro y le da a tu equipo las herramientas
+            para intervenir a tiempo. Con inteligencia artificial y evidencia auditable.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-14">
-            <button
-              onClick={() => navigate(ctaTarget)}
+            <a
+              href="#contact"
               className="bg-brand-gold text-brand-dark font-semibold px-8 py-3 rounded-xl text-base hover:bg-brand-gold-light transition-colors shadow-lg"
             >
-              {user ? "Ir al Dashboard" : "Acceder a la plataforma"}
-            </button>
+              Agendar demostración gratuita
+            </a>
             <a
-              href="#features"
+              href="#benefits"
               className="border-2 border-white/30 text-white font-semibold px-8 py-3 rounded-xl text-base hover:bg-white/10 transition-colors"
             >
-              Conocer más
+              Ver beneficios
             </a>
           </div>
 
-          {/* Stats — animated counters */}
+          {/* Stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-3xl mx-auto">
             {STATS.map((s, i) => (
               <AnimatedStat key={i} target={s.target} suffix={s.suffix} label={s.label} delay={i * 150} />
@@ -343,70 +388,90 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── Pacha Tech banner ── */}
-      <section className="bg-gray-50 border-b border-gray-100 py-8">
+      {/* ── El Problema ── */}
+      <section className="py-16 bg-gray-50">
         <div className="max-w-6xl mx-auto px-4">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-6 bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
-            <div className="flex flex-col sm:flex-row items-center gap-4">
-              <div className="w-12 h-12 bg-gradient-to-br from-brand to-brand-light rounded-xl flex items-center justify-center flex-shrink-0">
-                <span className="text-white font-bold text-lg">PT</span>
-              </div>
-              <div className="text-center sm:text-left">
-                <div className="font-bold text-brand text-lg tracking-wide">Pacha Tech</div>
-                <p className="text-sm text-gray-500 max-w-md">
-                  Soluciones de inteligencia académica, analítica del aprendizaje y tecnologías emergentes para educación superior.
-                </p>
-              </div>
+          <SectionHeader
+            title="Un problema que cuesta millones"
+            subtitle="La deserción estudiantil no solo afecta a los estudiantes. Impacta los ingresos, la acreditación y la reputación de tu institución."
+          />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-10">
+            <div className="bg-white rounded-2xl p-6 border border-red-100 text-center">
+              <div className="text-4xl font-extrabold text-red-500 mb-2">20.4%</div>
+              <div className="text-sm font-semibold text-gray-800 mb-1">Deserción promedio</div>
+              <p className="text-xs text-gray-500">Tasa de deserción universitaria en Ecuador según Senescyt (2023). En privadas llega al 27.9%.</p>
             </div>
-            <a
-              href="https://pachatech.vercel.app/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="bg-brand text-white font-semibold text-sm px-6 py-2.5 rounded-lg hover:bg-brand-light transition-colors inline-flex items-center gap-2 flex-shrink-0"
-            >
-              Visitar Pacha Tech
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-              </svg>
+            <div className="bg-white rounded-2xl p-6 border border-red-100 text-center">
+              <div className="text-4xl font-extrabold text-red-500 mb-2">$1,500+</div>
+              <div className="text-sm font-semibold text-gray-800 mb-1">Perdidos por desertor</div>
+              <p className="text-xs text-gray-500">Cada estudiante que abandona representa matrícula perdida, inversión no recuperada y menor ingreso recurrente.</p>
+            </div>
+            <div className="bg-white rounded-2xl p-6 border border-red-100 text-center">
+              <div className="text-4xl font-extrabold text-red-500 mb-2">CACES</div>
+              <div className="text-sm font-semibold text-gray-800 mb-1">Exige evidencia</div>
+              <p className="text-xs text-gray-500">El modelo MEEUEP 2023 evalúa retención, seguimiento y bienestar estudiantil. Sin datos, la acreditación está en riesgo.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Beneficios para el decisor ── */}
+      <section id="benefits" className="py-20">
+        <div className="max-w-6xl mx-auto px-4">
+          <SectionHeader
+            title="Qué gana tu institución con Yachay Deep"
+            subtitle="No es solo tecnología. Es la herramienta que necesitas para retener estudiantes, cumplir normativas y tomar mejores decisiones."
+          />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-12">
+            {BENEFITS.map((b, i) => (
+              <div key={i} className="flex gap-4 bg-white border border-gray-200 rounded-2xl p-6 hover:shadow-lg transition-shadow">
+                <div className="w-14 h-14 bg-gradient-to-br from-brand to-brand-light rounded-xl flex items-center justify-center text-white flex-shrink-0">
+                  {b.icon}
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-900 text-lg mb-1">{b.title}</h3>
+                  <p className="text-gray-500 text-sm leading-relaxed">{b.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── Cómo funciona (3 pasos) ── */}
+      <section id="how" className="py-20 bg-gradient-to-br from-brand-dark via-brand to-brand-light">
+        <div className="max-w-4xl mx-auto px-4">
+          <div className="text-center mb-12">
+            <h2 className="text-2xl md:text-3xl font-bold text-white">Cómo funciona</h2>
+            <p className="text-blue-200 mt-3 max-w-xl mx-auto">Implementación en 2-4 semanas. Sin instalar software en tu Moodle.</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {STEPS.map((s, i) => (
+              <div key={i} className="bg-white/10 backdrop-blur-sm border border-white/15 rounded-2xl p-6 text-center">
+                <div className="w-12 h-12 bg-brand-gold text-brand-dark rounded-full flex items-center justify-center text-xl font-bold mx-auto mb-4">
+                  {s.step}
+                </div>
+                <h3 className="text-white font-bold text-base mb-2">{s.title}</h3>
+                <p className="text-blue-200 text-sm leading-relaxed">{s.desc}</p>
+              </div>
+            ))}
+          </div>
+          <div className="text-center mt-10">
+            <a href="#contact" className="bg-brand-gold text-brand-dark font-semibold px-8 py-3 rounded-xl text-base hover:bg-brand-gold-light transition-colors shadow-lg inline-block">
+              Agendar demostración gratuita
             </a>
           </div>
         </div>
       </section>
 
-      {/* ── 3 Capas ── */}
-      <section id="features" className="py-20">
+      {/* ── Enfoque multinivel (resumido) ── */}
+      <section className="py-16">
         <div className="max-w-6xl mx-auto px-4">
           <SectionHeader
-            title="Tres capas integradas"
-            subtitle="Yachay Deep no es solo un dashboard ni solo un sistema de alerta. Es la integración de Learning Analytics, Early Warning y Decision Support en un único sistema."
+            title="Análisis en cinco niveles simultáneos"
+            subtitle="El abandono es multicausal. Yachay Deep cruza datos de estudiantes, asignaturas, docentes, administración e intervenciones."
           />
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-12">
-            {CAPAS.map((c, i) => (
-              <div key={i} className="bg-white border border-gray-200 rounded-2xl p-6 hover:shadow-lg transition-shadow">
-                <div className="w-14 h-14 bg-gradient-to-br from-brand to-brand-light rounded-xl flex items-center justify-center text-white mb-4">
-                  {c.icon}
-                </div>
-                <h3 className="font-bold text-gray-900 text-lg mb-2">{c.name}</h3>
-                <p className="text-gray-500 text-sm leading-relaxed">{c.desc}</p>
-              </div>
-            ))}
-          </div>
-          <div className="mt-8 bg-gray-50 rounded-xl p-4 text-center">
-            <span className="font-mono text-xs text-gray-500">
-              Datos educativos &rarr; Learning Analytics &rarr; Modelo de riesgo &rarr; Early Warning &rarr; Decision Support &rarr; Intervención
-            </span>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Enfoque multinivel ── */}
-      <section className="py-20 bg-gray-50">
-        <div className="max-w-6xl mx-auto px-4">
-          <SectionHeader
-            title="Enfoque multinivel"
-            subtitle="El abandono y el bajo rendimiento son fenómenos multicausales. Yachay Deep analiza cinco niveles simultáneamente."
-          />
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-12">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-10">
             {NIVELES.map((n, i) => (
               <div key={i} className="bg-white border border-gray-200 rounded-xl p-5 text-center hover:shadow-md transition-shadow">
                 <div className="text-3xl mb-3">{n.emoji}</div>
@@ -418,143 +483,22 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* ── 5 Fases ── */}
-      <section className="py-20">
+      {/* ── Cumplimiento normativo ── */}
+      <section id="compliance" className="py-16 bg-gray-50">
         <div className="max-w-6xl mx-auto px-4">
           <SectionHeader
-            title="Cinco fases de madurez analítica"
-            subtitle="Desde la analítica descriptiva hasta las intervenciones de ciclo cerrado. Cinco fases completadas y una en desarrollo."
+            title="Alineado con la normativa ecuatoriana"
+            subtitle="Yachay Deep te ayuda a cumplir con los requerimientos de seguimiento, retención y protección de datos."
           />
-          <div className="mt-12 space-y-4">
-            {PHASES.map((p, i) => {
-              const isCompleted = p.status === "completed";
-              return (
-                <div key={i} className={`flex gap-4 items-start bg-white border rounded-xl p-5 hover:shadow-md transition-shadow ${
-                  isCompleted ? "border-green-200" : "border-gray-300 border-dashed"
-                }`}>
-                  <div className={`flex-shrink-0 w-10 h-10 text-white rounded-full flex items-center justify-center font-bold text-sm ${
-                    isCompleted ? "bg-green-600" : "bg-gray-400"
-                  }`}>
-                    {i + 1}
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-1">
-                      <span className="font-bold text-gray-900">{p.title}</span>
-                      {isCompleted ? (
-                        <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">Completada</span>
-                      ) : (
-                        <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-medium">En desarrollo</span>
-                      )}
-                    </div>
-                    <p className="text-gray-500 text-sm leading-relaxed">{p.desc}</p>
-                  </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-10">
+            {COMPLIANCE.map((c, i) => (
+              <div key={i} className="flex gap-4 items-start bg-white border border-gray-200 rounded-xl p-5">
+                <div className="flex-shrink-0 w-10 h-10 bg-brand text-white rounded-lg flex items-center justify-center font-bold text-xs">
+                  {c.norm.length > 4 ? c.norm.slice(0, 4) : c.norm}
                 </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      {/* ── Evolucion ── */}
-      <section id="evolution" className="py-20 bg-gray-50">
-        <div className="max-w-6xl mx-auto px-4">
-          <SectionHeader
-            title="De Excel a plataforma web"
-            subtitle="Yachay Deep nació como un sistema sofisticado en Excel con Power Query, macros VBA y dashboard dinámico. Hoy es una plataforma web completa."
-          />
-          <div className="mt-12 grid grid-cols-1 md:grid-cols-2 gap-6">
-            {EVOLUTION.map((e, i) => (
-              <div key={i} className={`rounded-2xl p-6 border ${i === 0 ? "bg-white border-gray-200" : "bg-gradient-to-br from-brand to-brand-light text-white border-transparent"}`}>
-                <div className={`text-xs font-semibold uppercase tracking-wider mb-2 ${i === 0 ? "text-brand-gold" : "text-brand-ice"}`}>
-                  {e.period}
-                </div>
-                <h3 className={`text-xl font-bold mb-3 ${i === 0 ? "text-gray-900" : "text-white"}`}>{e.title}</h3>
-                <p className={`text-sm leading-relaxed ${i === 0 ? "text-gray-500" : "text-blue-100"}`}>{e.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── Tech stack ── */}
-      <section className="py-20">
-        <div className="max-w-6xl mx-auto px-4">
-          <SectionHeader title="Stack tecnológico" />
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mt-10">
-            {TECH.map((t, i) => (
-              <div key={i} className="bg-gray-50 border border-gray-200 rounded-xl p-4">
-                <div className="font-semibold text-gray-800 text-sm mb-1">{t.cat}</div>
-                <div className="text-xs text-gray-500">{t.items}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ── Podcasts ── */}
-      <section id="podcasts" className="py-20 bg-gradient-to-br from-brand-dark via-brand to-brand-light">
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="text-center mb-12">
-            <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm px-4 py-1.5 rounded-full mb-4">
-              <svg className="w-4 h-4 text-brand-gold" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3zM8 11a4 4 0 0 0 8 0h2a6 6 0 0 1-5 5.91V20h3v2H8v-2h3v-3.09A6 6 0 0 1 6 11h2z" />
-              </svg>
-              <span className="text-xs font-semibold text-brand-gold tracking-wider uppercase">Podcast</span>
-            </div>
-            <h2 className="text-2xl md:text-3xl font-bold text-white">Escucha Yachay Deep</h2>
-            <p className="text-blue-200 mt-3 max-w-2xl mx-auto leading-relaxed">
-              Episodios que explican el contexto, motivación y evolución del framework.
-            </p>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {PODCASTS.map((pod, i) => (
-              <div
-                key={i}
-                className={`relative rounded-2xl overflow-hidden transition-all duration-300 ${
-                  playingIdx === i
-                    ? "bg-white shadow-2xl shadow-brand-gold/20 ring-2 ring-brand-gold/40 scale-[1.02]"
-                    : "bg-white/10 backdrop-blur-sm border border-white/15 hover:bg-white/15 hover:border-white/25"
-                }`}
-              >
-                <div className="p-6">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 text-sm font-bold ${
-                      playingIdx === i ? "bg-brand-gold text-brand-dark" : "bg-white/15 text-white"
-                    }`}>
-                      {playingIdx === i ? (
-                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
-                        </svg>
-                      ) : (
-                        <span>{i + 1}</span>
-                      )}
-                    </div>
-                    <span className={`text-xs font-medium uppercase tracking-wider ${
-                      playingIdx === i ? "text-brand-gold" : "text-brand-ice/70"
-                    }`}>
-                      Episodio {i + 1}
-                    </span>
-                  </div>
-                  <h3 className={`font-bold text-base mb-2 leading-snug ${
-                    playingIdx === i ? "text-gray-900" : "text-white"
-                  }`}>
-                    {pod.title}
-                  </h3>
-                  <p className={`text-xs leading-relaxed mb-4 ${
-                    playingIdx === i ? "text-gray-500" : "text-blue-200/80"
-                  }`}>
-                    {pod.description}
-                  </p>
-                  <audio
-                    controls
-                    className="w-full"
-                    onPlay={() => setPlayingIdx(i)}
-                    onPause={() => { if (playingIdx === i) setPlayingIdx(null); }}
-                    onEnded={() => { if (playingIdx === i) setPlayingIdx(null); }}
-                    preload="none"
-                  >
-                    <source src={pod.file} type={pod.file.endsWith('.mp3') ? 'audio/mpeg' : pod.file.endsWith('.wav') ? 'audio/wav' : 'audio/mp4'} />
-                  </audio>
+                <div>
+                  <div className="font-semibold text-gray-900 text-sm">{c.norm}</div>
+                  <p className="text-gray-500 text-xs mt-0.5 leading-relaxed">{c.desc}</p>
                 </div>
               </div>
             ))}
@@ -731,6 +675,77 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* ── Podcasts ── */}
+      <section id="podcasts" className="py-20 bg-gradient-to-br from-brand-dark via-brand to-brand-light">
+        <div className="max-w-6xl mx-auto px-4">
+          <div className="text-center mb-12">
+            <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm px-4 py-1.5 rounded-full mb-4">
+              <svg className="w-4 h-4 text-brand-gold" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3zM8 11a4 4 0 0 0 8 0h2a6 6 0 0 1-5 5.91V20h3v2H8v-2h3v-3.09A6 6 0 0 1 6 11h2z" />
+              </svg>
+              <span className="text-xs font-semibold text-brand-gold tracking-wider uppercase">Podcast</span>
+            </div>
+            <h2 className="text-2xl md:text-3xl font-bold text-white">Escucha Yachay Deep</h2>
+            <p className="text-blue-200 mt-3 max-w-2xl mx-auto leading-relaxed">
+              Episodios que explican el contexto, motivación y evolución del framework.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {PODCASTS.map((pod, i) => (
+              <div
+                key={i}
+                className={`relative rounded-2xl overflow-hidden transition-all duration-300 ${
+                  playingIdx === i
+                    ? "bg-white shadow-2xl shadow-brand-gold/20 ring-2 ring-brand-gold/40 scale-[1.02]"
+                    : "bg-white/10 backdrop-blur-sm border border-white/15 hover:bg-white/15 hover:border-white/25"
+                }`}
+              >
+                <div className="p-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 text-sm font-bold ${
+                      playingIdx === i ? "bg-brand-gold text-brand-dark" : "bg-white/15 text-white"
+                    }`}>
+                      {playingIdx === i ? (
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                        </svg>
+                      ) : (
+                        <span>{i + 1}</span>
+                      )}
+                    </div>
+                    <span className={`text-xs font-medium uppercase tracking-wider ${
+                      playingIdx === i ? "text-brand-gold" : "text-brand-ice/70"
+                    }`}>
+                      Episodio {i + 1}
+                    </span>
+                  </div>
+                  <h3 className={`font-bold text-base mb-2 leading-snug ${
+                    playingIdx === i ? "text-gray-900" : "text-white"
+                  }`}>
+                    {pod.title}
+                  </h3>
+                  <p className={`text-xs leading-relaxed mb-4 ${
+                    playingIdx === i ? "text-gray-500" : "text-blue-200/80"
+                  }`}>
+                    {pod.description}
+                  </p>
+                  <audio
+                    controls
+                    className="w-full"
+                    onPlay={() => setPlayingIdx(i)}
+                    onPause={() => { if (playingIdx === i) setPlayingIdx(null); }}
+                    onEnded={() => { if (playingIdx === i) setPlayingIdx(null); }}
+                    preload="none"
+                  >
+                    <source src={pod.file} type={pod.file.endsWith('.mp3') ? 'audio/mpeg' : pod.file.endsWith('.wav') ? 'audio/wav' : 'audio/mp4'} />
+                  </audio>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* ── FAQ ── */}
       <section className="py-20 bg-gray-50">
         <div className="max-w-3xl mx-auto px-4">
@@ -759,6 +774,117 @@ export default function Landing() {
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* ── Para equipos técnicos (colapsable) ── */}
+      <section className="py-16 bg-white">
+        <div className="max-w-6xl mx-auto px-4">
+          <button
+            onClick={() => setShowTech(!showTech)}
+            className="w-full flex items-center justify-between bg-gray-50 rounded-2xl p-6 hover:bg-gray-100 transition-colors"
+          >
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 text-left">Para equipos técnicos</h2>
+              <p className="text-sm text-gray-500 mt-1 text-left">Arquitectura, fases de desarrollo, stack tecnológico y evolución del sistema.</p>
+            </div>
+            <svg
+              className={`w-6 h-6 text-brand flex-shrink-0 transition-transform ${showTech ? "rotate-180" : ""}`}
+              fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+            </svg>
+          </button>
+
+          {showTech && (
+            <div className="mt-8 space-y-16">
+              {/* 3 Capas */}
+              <div>
+                <SectionHeader
+                  title="Tres capas integradas"
+                  subtitle="Learning Analytics + Early Warning + Decision Support en un único sistema."
+                />
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
+                  {CAPAS.map((c, i) => (
+                    <div key={i} className="bg-white border border-gray-200 rounded-2xl p-6 hover:shadow-lg transition-shadow">
+                      <div className="w-14 h-14 bg-gradient-to-br from-brand to-brand-light rounded-xl flex items-center justify-center text-white mb-4">
+                        {c.icon}
+                      </div>
+                      <h3 className="font-bold text-gray-900 text-lg mb-2">{c.name}</h3>
+                      <p className="text-gray-500 text-sm leading-relaxed">{c.desc}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Fases */}
+              <div>
+                <SectionHeader
+                  title="Seis fases de madurez analítica"
+                  subtitle="Cinco fases completadas y una sexta en desarrollo."
+                />
+                <div className="mt-8 space-y-4">
+                  {PHASES.map((p, i) => {
+                    const isCompleted = p.status === "completed";
+                    return (
+                      <div key={i} className={`flex gap-4 items-start bg-white border rounded-xl p-5 ${
+                        isCompleted ? "border-green-200" : "border-gray-300 border-dashed"
+                      }`}>
+                        <div className={`flex-shrink-0 w-10 h-10 text-white rounded-full flex items-center justify-center font-bold text-sm ${
+                          isCompleted ? "bg-green-600" : "bg-gray-400"
+                        }`}>
+                          {i + 1}
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-1">
+                            <span className="font-bold text-gray-900">{p.title}</span>
+                            {isCompleted ? (
+                              <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">Completada</span>
+                            ) : (
+                              <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-medium">En desarrollo</span>
+                            )}
+                          </div>
+                          <p className="text-gray-500 text-sm leading-relaxed">{p.desc}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Evolución */}
+              <div>
+                <SectionHeader
+                  title="De Excel a plataforma web"
+                  subtitle="Yachay Deep nació como un sistema en Excel con Power Query y macros VBA. Hoy es una plataforma web completa."
+                />
+                <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {EVOLUTION.map((e, i) => (
+                    <div key={i} className={`rounded-2xl p-6 border ${i === 0 ? "bg-white border-gray-200" : "bg-gradient-to-br from-brand to-brand-light text-white border-transparent"}`}>
+                      <div className={`text-xs font-semibold uppercase tracking-wider mb-2 ${i === 0 ? "text-brand-gold" : "text-brand-ice"}`}>
+                        {e.period}
+                      </div>
+                      <h3 className={`text-xl font-bold mb-3 ${i === 0 ? "text-gray-900" : "text-white"}`}>{e.title}</h3>
+                      <p className={`text-sm leading-relaxed ${i === 0 ? "text-gray-500" : "text-blue-100"}`}>{e.desc}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Tech stack */}
+              <div>
+                <SectionHeader title="Stack tecnológico" />
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mt-8">
+                  {TECH.map((t, i) => (
+                    <div key={i} className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                      <div className="font-semibold text-gray-800 text-sm mb-1">{t.cat}</div>
+                      <div className="text-xs text-gray-500">{t.items}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
@@ -853,8 +979,6 @@ export default function Landing() {
     </div>
   );
 }
-
-/* ── Helpers ───────────────────────────────────────────── */
 
 function SectionHeader({ title, subtitle }) {
   return (
