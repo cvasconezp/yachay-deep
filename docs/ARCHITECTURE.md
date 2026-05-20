@@ -67,7 +67,7 @@ Yachay Deep es un sistema de alerta temprana academica que predice riesgos de de
         │              FUENTES DE DATOS                     │
         │                                                   │
         │  ┌──────────┐  ┌──────────────┐  ┌────────────┐ │
-        │  │  Excel    │  │ AVAC/Moodle  │  │  CSV       │ │
+        │  │  Excel    │  │ Moodle  │  │  CSV       │ │
         │  │  Instit.  │  │ (Selenium)   │  │  Manual    │ │
         │  └─────┬─────┘  └──────┬───────┘  └─────┬──────┘ │
         │        └───────────────┼─────────────────┘        │
@@ -136,7 +136,7 @@ PostgreSQL 15 con **15+ modelos** organizados en 3 dominios:
 │  Student ──┐     Course ──── CourseConfig                   │
 │            ├── Enrollment                                   │
 │            ├── Grade                                        │
-│            ├── AvacAccess                                   │
+│            ├── MoodleAccess                                   │
 │            └── TaskSubmission                               │
 │                                                             │
 │  SemesterConfig (periodo activo y configuracion)            │
@@ -178,7 +178,7 @@ Paso  Operacion                          Fuente
  4    Leer calificaciones                Excel (con fallback historico)
  5    Calcular indicadores de riesgo     Datos calculados
  6    Upsert estudiantes                 BD
- 7    Cargar accesos AVAC + tareas       Selenium (AVAC/Moodle)
+ 7    Cargar accesos Moodle + tareas       Selenium (Moodle)
  8    Upsert calificaciones              BD
  9    Calificaciones historicas          BD
 10    Deduplicacion                      BD
@@ -188,7 +188,7 @@ Paso  Operacion                          Fuente
 ### Fuentes de datos
 
 - **Reporte institucional**: archivo Excel con matriculas, calificaciones y datos personales
-- **AVAC/Moodle**: scraping automatizado con Selenium via GitHub Actions (cron diario)
+- **Moodle**: scraping automatizado con Selenium via GitHub Actions (cron diario)
 - **Carga manual**: archivos CSV subidos por administradores
 
 ---
@@ -235,7 +235,7 @@ Paso  Operacion                          Fuente
 
 ### GitHub Actions (CI/CD + Scraping)
 
-- Workflow de scraping diario (AVAC/Moodle)
+- Workflow de scraping diario (Moodle)
 - Pipeline de pruebas automatizadas
 
 ---
