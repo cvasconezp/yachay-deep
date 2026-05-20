@@ -326,7 +326,7 @@ export default function Landing() {
       <nav className="fixed top-0 w-full bg-white/90 backdrop-blur-sm border-b border-gray-100 z-50">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <a href="#top" onClick={e => { e.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }); }} style={{ cursor: 'pointer' }}>
+            <a href="/" onClick={e => { e.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }); history.replaceState(null, '', window.location.pathname); }} style={{ cursor: 'pointer' }}>
               <YachayLogo variant="light" className="h-10 sm:h-11 lg:h-12 w-auto" />
             </a>
           </div>
@@ -1031,7 +1031,4 @@ function AnimatedStat({ target, suffix, label, delay = 0 }) {
       <div className="text-3xl font-bold text-brand-gold">
         {formatted}{suffix}
       </div>
-      <div className="text-blue-200 text-xs mt-1">{label}</div>
-    </div>
-  );
-}
+      <div className="text-
