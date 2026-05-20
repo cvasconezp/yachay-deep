@@ -423,23 +423,34 @@ export default function Landing() {
         <div className="max-w-6xl mx-auto px-4">
           <SectionHeader
             title="Cinco fases de madurez analítica"
-            subtitle="Desde la analítica descriptiva hasta las intervenciones de ciclo cerrado. Todas implementadas y operativas."
+            subtitle="Desde la analítica descriptiva hasta las intervenciones de ciclo cerrado. Cinco fases completadas y una en desarrollo."
           />
           <div className="mt-12 space-y-4">
-            {PHASES.map((p, i) => (
-              <div key={i} className="flex gap-4 items-start bg-white border border-green-200 rounded-xl p-5 hover:shadow-md transition-shadow">
-                <div className="flex-shrink-0 w-10 h-10 bg-green-600 text-white rounded-full flex items-center justify-center font-bold text-sm">
-                  {i + 1}
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-1">
-                    <span className="font-bold text-gray-900">{p.title}</span>
-                    <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">Completada</span>
+            {PHASES.map((p, i) => {
+              const isCompleted = p.status === "completed";
+              return (
+                <div key={i} className={`flex gap-4 items-start bg-white border rounded-xl p-5 hover:shadow-md transition-shadow ${
+                  isCompleted ? "border-green-200" : "border-gray-300 border-dashed"
+                }`}>
+                  <div className={`flex-shrink-0 w-10 h-10 text-white rounded-full flex items-center justify-center font-bold text-sm ${
+                    isCompleted ? "bg-green-600" : "bg-gray-400"
+                  }`}>
+                    {i + 1}
                   </div>
-                  <p className="text-gray-500 text-sm leading-relaxed">{p.desc}</p>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-1">
+                      <span className="font-bold text-gray-900">{p.title}</span>
+                      {isCompleted ? (
+                        <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">Completada</span>
+                      ) : (
+                        <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-medium">En desarrollo</span>
+                      )}
+                    </div>
+                    <p className="text-gray-500 text-sm leading-relaxed">{p.desc}</p>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>
