@@ -70,7 +70,7 @@ const CAPAS = [
   },
   {
     name: "Decision Support System",
-    desc: "Convierte la analítica en acción: fichas de estudiantes, dashboards, listas de tutoría, recomendaciones automáticas y derivación a Bienestar.",
+    desc: "Convierte la analítica en acción: fichas de estudiantes, dashboards ejecutivos, colas de trabajo, tutorías, recomendaciones automáticas y derivación a Bienestar.",
     icon: (
       <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
@@ -97,9 +97,9 @@ const PHASES = [
 const NIVELES = [
   { level: "Estudiante", emoji: "\uD83E\uDDD1\u200D\uD83C\uDF93", desc: "Accesos, tareas, calificaciones, historial, predicciones ML" },
   { level: "Asignatura", emoji: "\uD83D\uDCDA", desc: "Promedios, aprobación, repitencia, materias críticas" },
-  { level: "Docente", emoji: "\uD83D\uDC68\u200D\uD83C\uDFEB", desc: "Carga académica, gestión de cursos, concentración de riesgo" },
-  { level: "Administrativo", emoji: "\uD83C\uDFDB\uFE0F", desc: "Matrícula, deuda, bloqueos financieros" },
-  { level: "Intervención", emoji: "\uD83E\uDD1D", desc: "Acciones institucionales, seguimiento, impacto" },
+  { level: "Docente", emoji: "\uD83D\uDC68\u200D\uD83C\uDFEB", desc: "Carga académica, efectividad, seguimiento y concentración de riesgo" },
+  { level: "Administrativo", emoji: "\uD83C\uDFDB\uFE0F", desc: "Matrícula, terceras matrículas, reportes ejecutivos, prácticas" },
+  { level: "Intervención", emoji: "\uD83E\uDD1D", desc: "Acciones institucionales, colas de trabajo, seguimiento e impacto" },
 ];
 
 const EVOLUTION = [
@@ -111,7 +111,7 @@ const EVOLUTION = [
   {
     period: "2025 - 2026",
     title: "Plataforma web Yachay Deep",
-    desc: "Migración a FastAPI + React + PostgreSQL. Pipeline ETL automatizado, 28 endpoints REST, modelos predictivos por carrera, XAI, recomendaciones automáticas, ciclo cerrado de intervención y soporte multi-carrera.",
+    desc: "Migración a FastAPI + React + PostgreSQL. Pipeline ETL automatizado, 125+ endpoints REST, modelos predictivos por carrera, XAI, recomendaciones automáticas, ciclo cerrado de intervención, reportes ejecutivos, seguimiento docente y soporte multi-institución.",
   },
 ];
 
@@ -144,44 +144,97 @@ const TECH = [
 
 /* ── Component ────────────────────────────────────────── */
 
-const PLANS = [
+const PLANS_INST = [
   {
-    name: "Profesional",
-    desc: "IA predictiva + gestión de intervenciones",
-    totalSem: "5,000",
-    totalAnn: "8,000",
-    perStudent: "$6/estudiante activo",
-    periodLabel: "/semestre",
-    periodLabelAnn: "/año",
+    name: "Esencial",
+    desc: "Analítica descriptiva y alertas de riesgo",
+    priceAnn: "4,800",
+    priceFirstYear: "3,840",
+    priceSem: "2,400",
     features: [
       { text: "Dashboard de riesgo en tiempo real", ok: true },
       { text: "Alertas académicas configurables", ok: true },
-      { text: "Predicciones ML con 87%+ precisión", ok: true },
-      { text: "Simulaciones What-If y contrafactuales", ok: true },
-      { text: "Gestión de intervenciones + impacto", ok: true },
       { text: "Fichas estudiantiles completas", ok: true },
+      { text: "Analítica por asignatura y docente", ok: true },
       { text: "Exportaciones Excel/PDF", ok: true },
-      { text: "Analytics de docentes y asignaturas", ok: true },
+      { text: "5 usuarios · Soporte email", ok: true },
+      { text: "Predicciones ML", ok: false },
+      { text: "Simulaciones What-If", ok: false },
+    ],
+    cta: "Agendar demostración",
+    featured: false,
+  },
+  {
+    name: "Profesional",
+    desc: "IA predictiva + gestión de intervenciones",
+    priceAnn: "7,200",
+    priceFirstYear: "5,760",
+    priceSem: "3,600",
+    features: [
+      { text: "Todo del plan Esencial", ok: true },
+      { text: "Predicciones ML con 87%+ precisión", ok: true },
+      { text: "Explicabilidad del riesgo (XAI)", ok: true },
+      { text: "Simulaciones What-If y contrafactuales", ok: true },
+      { text: "Recomendaciones automáticas", ok: true },
+      { text: "Gestión de intervenciones + impacto", ok: true },
       { text: "10 usuarios · Soporte email + chat", ok: true },
     ],
     cta: "Agendar demostración",
     featured: true,
   },
+];
+
+const PLANS_UNI = [
+  {
+    name: "Profesional",
+    desc: "IA predictiva para universidades",
+    priceAnn: "12,000",
+    priceFirstYear: "9,600",
+    priceSem: "6,000",
+    features: [
+      { text: "Dashboard de riesgo en tiempo real", ok: true },
+      { text: "Alertas académicas configurables", ok: true },
+      { text: "Predicciones ML con 87%+ precisión", ok: true },
+      { text: "Explicabilidad del riesgo (XAI)", ok: true },
+      { text: "Simulaciones What-If y contrafactuales", ok: true },
+      { text: "Recomendaciones automáticas", ok: true },
+      { text: "Gestión de intervenciones + impacto", ok: true },
+      { text: "Fichas estudiantiles completas", ok: true },
+      { text: "10 usuarios · Soporte email + chat", ok: true },
+    ],
+    cta: "Agendar demostración",
+    featured: false,
+  },
   {
     name: "Enterprise",
     desc: "Control total para universidades grandes",
-    totalSem: "15,000",
-    totalAnn: "24,000",
-    perStudent: "$10/est (≤5K) · $5/est (>5K)",
-    periodLabel: "/semestre",
-    periodLabelAnn: "/año",
+    priceAnn: "24,000",
+    priceFirstYear: "19,200",
+    priceSem: "12,000",
     features: [
       { text: "Todo del plan Profesional", ok: true },
       { text: "Tracking avanzado de docentes", ok: true },
       { text: "Comparativa multi-periodo", ok: true },
       { text: "API de integración REST", ok: true },
-      { text: "Instancia dedicada opcional", ok: true },
       { text: "Usuarios ilimitados", ok: true },
+      { text: "Soporte prioritario + chat", ok: true },
+      { text: "SLA 99.5% disponibilidad", ok: true },
+    ],
+    cta: "Contactar Ventas",
+    featured: true,
+  },
+  {
+    name: "Enterprise+",
+    desc: "Máxima capacidad e instancia dedicada",
+    priceAnn: "48,000",
+    priceFirstYear: "38,400",
+    priceSem: "24,000",
+    features: [
+      { text: "Todo del plan Enterprise", ok: true },
+      { text: "Instancia dedicada", ok: true },
+      { text: "Personalización de modelos ML", ok: true },
+      { text: "Integración LMS avanzada", ok: true },
+      { text: "Consultoría de retención", ok: true },
       { text: "Soporte dedicado 24/7", ok: true },
       { text: "SLA 99.9% disponibilidad", ok: true },
     ],
@@ -197,15 +250,17 @@ const FAQS = [
   { q: "¿Puedo probar antes de comprar?", a: "Primero agendamos una demostración donde te mostramos la plataforma en acción. Si hay interés, activamos un piloto gratuito de 30 días con el plan Profesional usando tus propios datos, incluyendo onboarding completo y soporte prioritario. Sin compromiso de compra." },
   { q: "¿Mis datos están seguros?", a: "Absolutamente. Usamos cifrado TLS 1.3 en tránsito y AES-256 en reposo. Autenticación con cookies HttpOnly, control de acceso por roles (RBAC), y cumplimiento con la Ley Orgánica de Protección de Datos Personales de Ecuador." },
   { q: "¿Cuántos estudiantes se necesitan como mínimo?", a: "Nuestros planes están diseñados para instituciones con 500+ estudiantes activos. El modelo de ML requiere un mínimo de datos históricos para funcionar con precisión. Durante el piloto gratuito evaluamos la viabilidad con tus datos reales." },
-  { q: "¿Cómo se calcula el precio de mi institución?", a: "El precio se calcula multiplicando la tarifa del plan por el número de estudiantes activos. Cada plan tiene un mínimo semestral que cubre los costos base de infraestructura y soporte: si el cálculo es menor al mínimo, se cobra el mínimo. Por ejemplo, un instituto con 500 estudiantes en el plan Profesional ($6/est): 500 × $6 = $3,000, pero el mínimo es $5,000, así que paga $5,000/semestre. Una universidad con 3,000 estudiantes en Profesional: 3,000 × $6 = $18,000/semestre. El plan Enterprise incluye tarifa degresiva: $10/est para los primeros 5,000 y $5/est a partir del 5,001. La contratación anual tiene un 20% de descuento." },
+  { q: "¿Cómo se calcula el precio de mi institución?", a: "Ofrecemos planes diferenciados para institutos tecnológicos y universidades, adaptados a la complejidad y duración de sus programas académicos. Los institutos pueden acceder desde $4,800/año (plan Esencial) o $7,200/año (plan Profesional con IA predictiva). Las universidades cuentan con planes Profesional ($12,000/año), Enterprise ($24,000/año) y Enterprise+ ($48,000/año). Todos los planes incluyen un 20% de descuento en el primer año como Early Adopter. La contratación semestral también está disponible." },
 ];
 
 export default function Landing() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [playingIdx, setPlayingIdx] = useState(null);
-  const [annual, setAnnual] = useState(false);
+  const [segment, setSegment] = useState("uni");
+  const [period, setPeriod] = useState("firstYear");
   const [openFaq, setOpenFaq] = useState(null);
+  const plans = segment === "inst" ? PLANS_INST : PLANS_UNI;
 
   // [SESSION-UX] If the visitor already has an active session, every
   // "Iniciar sesión" CTA on the public landing turns into "Ir al Dashboard"
@@ -507,77 +562,138 @@ export default function Landing() {
               Planes que se adaptan a tu institución
             </h2>
             <p className="text-gray-500 max-w-2xl mx-auto leading-relaxed">
-              Inversión clara por semestre. Sin costos ocultos. Precio escala con tu matrícula.
+              Precios diferenciados para institutos tecnológicos y universidades. Sin costos ocultos.
             </p>
 
-            {/* Toggle */}
-            <div className="flex items-center justify-center gap-3 mt-6">
-              <span className={`text-sm font-medium ${!annual ? "text-gray-900" : "text-gray-400"}`}>Semestral</span>
+            {/* Segment toggle */}
+            <div className="flex items-center justify-center gap-1 mt-6 bg-gray-100 rounded-xl p-1 max-w-md mx-auto">
               <button
-                onClick={() => setAnnual(!annual)}
-                className={`relative w-12 h-6 rounded-full transition-colors ${annual ? "bg-brand" : "bg-gray-300"}`}
+                onClick={() => setSegment("inst")}
+                className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-semibold transition-all ${
+                  segment === "inst"
+                    ? "bg-white text-brand shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
               >
-                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${annual ? "translate-x-6" : ""}`} />
+                Institutos Tecnológicos
               </button>
-              <span className={`text-sm font-medium ${annual ? "text-gray-900" : "text-gray-400"}`}>Anual</span>
-              <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-semibold">Ahorra 20%</span>
+              <button
+                onClick={() => setSegment("uni")}
+                className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-semibold transition-all ${
+                  segment === "uni"
+                    ? "bg-white text-brand shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                Universidades
+              </button>
             </div>
+
+            {/* Period toggle */}
+            <div className="flex items-center justify-center gap-2 mt-4">
+              {[
+                { key: "firstYear", label: "Primer año", badge: "20% dto." },
+                { key: "annual", label: "Anual" },
+                { key: "semester", label: "Semestral" },
+              ].map((p) => (
+                <button
+                  key={p.key}
+                  onClick={() => setPeriod(p.key)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    period === p.key
+                      ? "bg-brand text-white"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}
+                >
+                  {p.label}
+                  {p.badge && period === p.key && (
+                    <span className="ml-1.5 text-xs bg-white/20 px-1.5 py-0.5 rounded">{p.badge}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {period === "firstYear" && (
+              <p className="text-xs text-green-600 mt-2 font-medium">
+                Promoción Early Adopter: 20% de descuento en el primer año de contratación
+              </p>
+            )}
+          </div>
+
+          {/* ROI banner */}
+          <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl p-4 mb-8 text-center">
+            <p className="text-sm text-green-800 font-medium">
+              {segment === "inst"
+                ? "Retener 4 estudiantes al año cubre la inversión del plan Profesional"
+                : "Una universidad con 5,000 estudiantes recupera la inversión reteniendo menos del 1% de su matrícula"}
+            </p>
           </div>
 
           {/* Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {PLANS.map((plan, i) => (
-              <div
-                key={i}
-                className={`relative rounded-2xl p-8 transition-all duration-200 hover:-translate-y-1 ${
-                  plan.featured
-                    ? "bg-white border-2 border-brand shadow-xl shadow-brand/10 hover:shadow-2xl"
-                    : "bg-white border border-gray-200 hover:shadow-lg"
-                }`}
-              >
-                {plan.featured && (
-                  <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-brand-gold text-brand-dark text-xs font-bold px-4 py-1 rounded-full">
-                    Más Popular
-                  </div>
-                )}
-                <div className="mb-6">
-                  <h3 className="text-xl font-bold text-gray-900">{plan.name}</h3>
-                  <p className="text-sm text-gray-500 mt-1">{plan.desc}</p>
-                </div>
-                <div className="mb-1">
-                  <span className="text-sm text-gray-500">Desde </span>
-                  <span className="text-4xl font-extrabold text-gray-900">${annual ? plan.totalAnn : plan.totalSem}</span>
-                  <span className="text-gray-500 text-sm ml-1">{annual ? plan.periodLabelAnn : plan.periodLabel}</span>
-                </div>
-                <p className="text-xs text-gray-400 mb-6">{plan.perStudent} · descuento anual 20%</p>
-                <ul className="space-y-3 mb-8">
-                  {plan.features.map((f, j) => (
-                    <li key={j} className="flex items-start gap-2.5 text-sm">
-                      {f.ok ? (
-                        <svg className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                        </svg>
-                      ) : (
-                        <svg className="w-5 h-5 text-gray-300 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      )}
-                      <span className={f.ok ? "text-gray-700" : "text-gray-400"}>{f.text}</span>
-                    </li>
-                  ))}
-                </ul>
-                <a
-                  href="#contact"
-                  className={`block w-full text-center py-3 rounded-xl font-semibold transition-colors ${
+          <div className={`grid grid-cols-1 gap-6 ${plans.length === 3 ? "md:grid-cols-3" : "md:grid-cols-2 max-w-4xl mx-auto"}`}>
+            {plans.map((plan, i) => {
+              const price = period === "firstYear" ? plan.priceFirstYear
+                : period === "annual" ? plan.priceAnn
+                : plan.priceSem;
+              const periodSuffix = period === "semester" ? "/semestre" : "/año";
+
+              return (
+                <div
+                  key={plan.name}
+                  className={`relative rounded-2xl p-8 transition-all duration-200 hover:-translate-y-1 ${
                     plan.featured
-                      ? "bg-brand-gold text-brand-dark hover:bg-brand-gold-light"
-                      : "bg-gray-100 text-gray-800 hover:bg-gray-200"
+                      ? "bg-white border-2 border-brand shadow-xl shadow-brand/10 hover:shadow-2xl"
+                      : "bg-white border border-gray-200 hover:shadow-lg"
                   }`}
                 >
-                  {plan.cta}
-                </a>
-              </div>
-            ))}
+                  {plan.featured && (
+                    <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-brand-gold text-brand-dark text-xs font-bold px-4 py-1 rounded-full whitespace-nowrap">
+                      Más Popular
+                    </div>
+                  )}
+                  <div className="mb-6">
+                    <h3 className="text-xl font-bold text-gray-900">{plan.name}</h3>
+                    <p className="text-sm text-gray-500 mt-1">{plan.desc}</p>
+                  </div>
+                  <div className="mb-1">
+                    <span className="text-4xl font-extrabold text-gray-900">${price}</span>
+                    <span className="text-gray-500 text-sm ml-1">{periodSuffix}</span>
+                  </div>
+                  {period === "firstYear" && (
+                    <p className="text-xs text-green-600 mb-4 font-medium">
+                      Precio regular: ${plan.priceAnn}/año
+                    </p>
+                  )}
+                  {period !== "firstYear" && <div className="mb-4" />}
+                  <ul className="space-y-3 mb-8">
+                    {plan.features.map((f, j) => (
+                      <li key={j} className="flex items-start gap-2.5 text-sm">
+                        {f.ok ? (
+                          <svg className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                          </svg>
+                        ) : (
+                          <svg className="w-5 h-5 text-gray-300 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        )}
+                        <span className={f.ok ? "text-gray-700" : "text-gray-400"}>{f.text}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <a
+                    href="#contact"
+                    className={`block w-full text-center py-3 rounded-xl font-semibold transition-colors ${
+                      plan.featured
+                        ? "bg-brand-gold text-brand-dark hover:bg-brand-gold-light"
+                        : "bg-gray-100 text-gray-800 hover:bg-gray-200"
+                    }`}
+                  >
+                    {plan.cta}
+                  </a>
+                </div>
+              );
+            })}
           </div>
 
           {/* Guarantees */}
@@ -598,7 +714,7 @@ export default function Landing() {
               <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
               </svg>
-              Garantía de satisfacción 60 días
+              Piloto gratuito 30 días
             </span>
           </div>
         </div>
