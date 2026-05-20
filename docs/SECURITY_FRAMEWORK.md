@@ -99,13 +99,13 @@ Implementado con `slowapi` a nivel de IP.
 | Identidad académica | Nombre, cédula, correo institucional | Media |
 | Información curricular | Carrera, sede, nivel, período | Baja |
 | Rendimiento académico | Calificaciones por unidad y actividad | Media |
-| Actividad en plataforma | Frecuencia de acceso a AVAC | Baja |
+| Actividad en plataforma | Frecuencia de acceso a Moodle | Baja |
 | Indicadores calculados | Índice de riesgo, alertas generadas | Media |
 | Intervenciones | Registro de tutorías y seguimientos | Media |
 
 ### 4.2 Datos que NO almacenamos
 
-- Contraseñas de AVAC/Moodle ni de ningún sistema externo.
+- Contraseñas de Moodle ni de ningún sistema externo.
 - Datos financieros, de pago o bancarios.
 - Historial médico o psicológico.
 - Datos biométricos.
