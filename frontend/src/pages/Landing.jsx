@@ -1028,4 +1028,10 @@ function AnimatedStat({ target, suffix, label, delay = 0 }) {
 
   return (
     <div ref={ref} className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/10">
-      <div className="text-3xl fo
+      <div className="text-3xl font-bold text-brand-gold">
+        {formatted}{suffix}
+      </div>
+      <div className="text-blue-200 text-xs mt-1">{label}</div>
+    </div>
+  );
+}
