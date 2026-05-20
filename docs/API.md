@@ -212,14 +212,14 @@ Todos los endpoints autenticados requieren una cookie `access_token` válida. Lo
 | `POST` | `/admin/etl/upload-historico` | Subir datos históricos (TableauHistórico) | Admin |
 | `POST` | `/admin/etl/upload-and-run` | Subir reporte institucional y ejecutar ETL | Admin |
 | `POST` | `/admin/etl/upload-practicas` | Subir datos de prácticas preprofesionales | Admin |
-| `POST` | `/admin/etl/trigger-scraping` | Disparar scraping AVAC | Admin |
+| `POST` | `/admin/etl/trigger-scraping` | Disparar scraping Moodle | Admin |
 | `GET` | `/admin/etl/scraping-progress` | Progreso del scraping en curso | Admin |
 | `GET` | `/admin/system/status` | Estado del sistema | Admin |
 | `GET` | `/admin/system/network-check` | Verificar conectividad de red | Admin |
-| `PUT` | `/admin/system/avac-cookie` | Actualizar cookie AVAC (SSO) | Admin |
-| `GET` | `/admin/system/avac-cookie` | Obtener estado de cookie AVAC | Admin |
+| `PUT` | `/admin/system/avac-cookie` | Actualizar cookie Moodle (SSO) | Admin |
+| `GET` | `/admin/system/avac-cookie` | Obtener estado de cookie Moodle | Admin |
 | `POST` | `/admin/students/deduplicate` | Deduplicar estudiantes | Admin |
-| `GET` | `/admin/debug/student-avac/{student_id}` | Debug: datos AVAC de un estudiante | Admin |
+| `GET` | `/admin/debug/student-avac/{student_id}` | Debug: datos Moodle de un estudiante | Admin |
 | `GET` | `/admin/debug/student-search` | Debug: búsqueda avanzada de estudiantes | Admin |
 | `GET` | `/admin/debug/bloque-filter/{student_id}` | Debug: filtro de bloque activo | Admin |
 | `GET` | `/admin/debug/task-submissions/{codigo_curso}` | Debug: entregas de tareas por curso | Admin |
