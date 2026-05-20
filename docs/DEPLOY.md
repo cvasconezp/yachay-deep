@@ -32,9 +32,9 @@ En tu repo de GitHub → Settings → Secrets and variables → Actions, agrega:
 
 | Secret | Valor |
 |--------|-------|
-| `AVAC_USERNAME` | Tu usuario de AVAC |
-| `AVAC_PASSWORD` | Tu contraseña de AVAC |
-| `AVAC_BASE_URL` | `https://avac.ups.edu.ec/grado67` |
+| `MOODLE_USERNAME` | Tu usuario de Moodle |
+| `MOODLE_PASSWORD` | Tu contraseña de Moodle |
+| `MOODLE_BASE_URL` | `https://moodle.ejemplo.edu.ec` |
 | `DATABASE_URL` | Lo obtienes en el Paso 3 |
 
 ---
@@ -51,9 +51,9 @@ DATABASE_URL=         (Railway lo conecta automáticamente)
 SECRET_KEY=           (genera con: openssl rand -hex 32)
 ADMIN_EMAIL=          cvasconezp@gmail.com
 ADMIN_PASSWORD=       Tu contraseña segura
-AVAC_USERNAME=        Tu usuario AVAC
-AVAC_PASSWORD=        Tu contraseña AVAC
-DATA_PATH_INGRESOS=   ./data/IngresosAVAC
+MOODLE_USERNAME=        Tu usuario Moodle
+MOODLE_PASSWORD=        Tu contraseña Moodle
+DATA_PATH_INGRESOS=   ./data/IngresosMoodle
 DATA_PATH_TAREAS=     ./data/Tareas
 DATA_PATH_CALIFICACIONES= ./data/calificaciones.csv
 CORS_ORIGINS=         ["https://yachay-deep.vercel.app"]
@@ -93,11 +93,11 @@ Para cargar datos iniciales, copia tus CSV existentes a la carpeta `data/` en Ra
 
 El workflow `.github/workflows/daily_scraping.yml` ya está configurado para correr:
 - **Automáticamente**: Lunes a viernes a las 06:00 hora Ecuador
-- **Manualmente**: GitHub → Actions → Daily AVAC Scraping → Run workflow
+- **Manualmente**: GitHub → Actions → Daily Moodle Scraping → Run workflow
 
 El scraping:
 1. Corre en GitHub Actions (servidor en la nube)
-2. Hace login headless en AVAC con tus credenciales
+2. Hace login headless en Moodle con tus credenciales
 3. Descarga todos los cursos
 4. Llama al ETL para actualizar la BD en Railway
 5. Tú abres la app y los datos ya están frescos
