@@ -13,8 +13,6 @@
 
 Yachay Deep es un sistema de inteligencia académica preventiva diseñado para la permanencia estudiantil en educación superior virtual. Integra cinco capas de Learning Analytics para detectar estudiantes en riesgo, predecir deserción y reprobación, explicar las causas, recomendar acciones y medir el impacto de las intervenciones.
 
-**Desplegado en producción** para la Universidad Politécnica Salesiana, soportando +2,300 estudiantes en 18 carreras virtuales.
-
 ### Las 5 capas
 
 1. **Analítica descriptiva y diagnóstica** — Dashboard, fichas, indicadores por carrera, asignatura y docente
