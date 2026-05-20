@@ -147,7 +147,7 @@ const TECH = [
 const PLANS_INST = [
   {
     name: "Esencial",
-    desc: "Analítica descriptiva y alertas de riesgo",
+    desc: "Hasta 1,000 estudiantes",
     priceAnn: "4,800",
     priceFirstYear: "3,840",
     priceSem: "2,400",
@@ -166,7 +166,7 @@ const PLANS_INST = [
   },
   {
     name: "Profesional",
-    desc: "IA predictiva + gestión de intervenciones",
+    desc: "Más de 1,000 estudiantes · IA predictiva",
     priceAnn: "7,200",
     priceFirstYear: "5,760",
     priceSem: "3,600",
@@ -187,7 +187,7 @@ const PLANS_INST = [
 const PLANS_UNI = [
   {
     name: "Profesional",
-    desc: "IA predictiva para universidades",
+    desc: "Hasta 2,000 estudiantes",
     priceAnn: "12,000",
     priceFirstYear: "9,600",
     priceSem: "6,000",
@@ -207,7 +207,7 @@ const PLANS_UNI = [
   },
   {
     name: "Enterprise",
-    desc: "Control total para universidades grandes",
+    desc: "De 2,001 a 10,000 estudiantes",
     priceAnn: "24,000",
     priceFirstYear: "19,200",
     priceSem: "12,000",
@@ -225,7 +225,7 @@ const PLANS_UNI = [
   },
   {
     name: "Enterprise+",
-    desc: "Máxima capacidad e instancia dedicada",
+    desc: "Más de 10,000 estudiantes · Instancia dedicada",
     priceAnn: "48,000",
     priceFirstYear: "38,400",
     priceSem: "24,000",
