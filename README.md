@@ -49,7 +49,7 @@ Yachay Deep es un sistema de inteligencia académica preventiva diseñado para l
                           ┌────────────┼────────────┐
                           │            │            │
                      ETL Pipeline   ML Engine   Scraping
-                     (11 pasos)    (XAI+Rec)   (AVAC/Moodle)
+                     (11 pasos)    (XAI+Rec)   (Moodle)
 ```
 
 ---
@@ -65,7 +65,7 @@ yachay-deep/
 │   ├── models/         # 16+ modelos SQLAlchemy ORM
 │   ├── routes/         # 14 módulos de rutas (125 endpoints)
 │   │   └── analytics/  # 13 sub-módulos de analítica
-│   ├── scraping/       # Scraping AVAC con Selenium (1,158 líneas)
+│   ├── scraping/       # Scraping Moodle con Selenium (1,158 líneas)
 │   └── services/       # Email, utilidades
 ├── frontend/
 │   └── src/
@@ -138,9 +138,9 @@ npm run dev
 | `ADMIN_PASSWORD` | Password del administrador | Sí |
 | `DEBUG` | Modo desarrollo (`True`/`False`) | No |
 | `CORS_ORIGINS` | Orígenes permitidos (JSON array) | No |
-| `AVAC_USERNAME` | Usuario AVAC para scraping | Solo scraping |
-| `AVAC_PASSWORD` | Password AVAC | Solo scraping |
-| `AVAC_TOTP_SECRET` | Secret TOTP para MFA | Solo scraping |
+| `MOODLE_USERNAME` | Usuario Moodle para scraping | Solo scraping |
+| `MOODLE_PASSWORD` | Password Moodle | Solo scraping |
+| `MOODLE_TOTP_SECRET` | Secret TOTP para MFA | Solo scraping |
 
 ---
 
