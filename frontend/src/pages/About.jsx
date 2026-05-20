@@ -55,7 +55,7 @@ const FRAMEWORK_PHASES = [
     items: [
       "Contribuciones por feature (coeficientes / importancias)",
       "Comparación con media de carrera",
-      "Alertas conductuales: inactividad AVAC, tareas, compromiso",
+      "Alertas conductuales: inactividad en el LMS, tareas, compromiso",
       "Escenarios contrafactuales: ¿qué cambiar para reducir el riesgo?",
       "Análisis What-If interactivo",
     ],
@@ -88,7 +88,7 @@ const FRAMEWORK_PHASES = [
     title: "Integración LMS completa",
     status: "upcoming",
     items: [
-      "APIs de Moodle/Canvas para captura automática de datos AVAC",
+      "APIs de Moodle/Canvas para captura automática de datos del LMS",
       "Actualización en tiempo real sin scraping",
       "Notificaciones push/WhatsApp automatizadas",
       "Trazabilidad institucional completa",
