@@ -58,6 +58,16 @@ function TrendChart({ calificacionesHistoricas, calificaciones }) {
   const [chartW, setChartW] = useState(600);
   const [hoveredIdx, setHoveredIdx] = useState(null);
 
+  // Responsive width — hook DEBE estar antes de cualquier early return
+  useEffect(() => {
+    if (!chartRef.current) return;
+    const ro = new ResizeObserver(entries => {
+      for (const e of entries) setChartW(e.contentRect.width);
+    });
+    ro.observe(chartRef.current);
+    return () => ro.disconnect();
+  }, []);
+
   if (!calificacionesHistoricas?.length) return null;
 
   // Group by periodo and calculate average + count
@@ -94,15 +104,7 @@ function TrendChart({ calificacionesHistoricas, calificaciones }) {
   const bestIdx = averages.indexOf(maxAvg);
   const worstIdx = averages.indexOf(minAvg);
 
-  // Responsive width
-  useEffect(() => {
-    if (!chartRef.current) return;
-    const ro = new ResizeObserver(entries => {
-      for (const e of entries) setChartW(e.contentRect.width);
-    });
-    ro.observe(chartRef.current);
-    return () => ro.disconnect();
-  }, []);
+
 
   // SVG dimensions — compact
   const svgH = 80;
