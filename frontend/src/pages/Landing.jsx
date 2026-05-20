@@ -147,7 +147,7 @@ const TECH = [
 const PLANS_INST = [
   {
     name: "Esencial",
-    desc: "Hasta 1,000 estudiantes",
+    desc: "Analítica descriptiva y alertas de riesgo",
     priceAnn: "4,800",
     priceFirstYear: "3,840",
     priceSem: "2,400",
@@ -166,7 +166,7 @@ const PLANS_INST = [
   },
   {
     name: "Profesional",
-    desc: "Más de 1,000 estudiantes · IA predictiva",
+    desc: "IA predictiva + gestión de intervenciones",
     priceAnn: "7,200",
     priceFirstYear: "5,760",
     priceSem: "3,600",
@@ -187,7 +187,7 @@ const PLANS_INST = [
 const PLANS_UNI = [
   {
     name: "Profesional",
-    desc: "Hasta 2,000 estudiantes",
+    desc: "IA predictiva para universidades",
     priceAnn: "12,000",
     priceFirstYear: "9,600",
     priceSem: "6,000",
@@ -207,7 +207,7 @@ const PLANS_UNI = [
   },
   {
     name: "Enterprise",
-    desc: "De 2,001 a 10,000 estudiantes",
+    desc: "Control total para universidades grandes",
     priceAnn: "24,000",
     priceFirstYear: "19,200",
     priceSem: "12,000",
@@ -225,7 +225,7 @@ const PLANS_UNI = [
   },
   {
     name: "Enterprise+",
-    desc: "Más de 10,000 estudiantes · Instancia dedicada",
+    desc: "Máxima capacidad e instancia dedicada",
     priceAnn: "48,000",
     priceFirstYear: "38,400",
     priceSem: "24,000",
@@ -304,7 +304,7 @@ const FAQS = [
   { q: "¿Puedo probar antes de comprar?", a: "Sí. Agendamos una demostración personalizada y, si hay interés, activamos un piloto gratuito de 30 días con el plan Profesional usando tus propios datos, incluyendo onboarding completo y soporte prioritario. Sin compromiso de compra." },
   { q: "¿Mis datos están seguros?", a: "Absolutamente. Usamos cifrado TLS 1.3 en tránsito y AES-256 en reposo. Autenticación con cookies HttpOnly, control de acceso por roles (RBAC), y cumplimiento con la Ley Orgánica de Protección de Datos Personales de Ecuador." },
   { q: "¿Ayuda con la acreditación del CACES?", a: "Sí. Yachay Deep genera evidencia auditable de seguimiento académico, retención estudiantil y bienestar que se alinea con los indicadores del modelo de evaluación MEEUEP 2023 del CACES. Los reportes ejecutivos y la trazabilidad de intervenciones facilitan la preparación para evaluaciones externas." },
-  { q: "¿Cómo se calcula el precio?", a: "El plan depende del tipo de institución y la cantidad de estudiantes. Para institutos tecnológicos: Esencial (hasta 1,000 estudiantes, $4,800/año) o Profesional (más de 1,000, $7,200/año). Para universidades: Profesional (hasta 2,000 estudiantes, $12,000/año), Enterprise (2,001 a 10,000, $24,000/año) o Enterprise+ (más de 10,000, $48,000/año con instancia dedicada). Todos los planes incluyen un 20% de descuento en el primer año como Early Adopter." },
+  { q: "¿Cómo se calcula el precio?", a: "Ofrecemos planes diferenciados para institutos tecnológicos y universidades, adaptados a la complejidad y duración de sus programas académicos. Los institutos pueden acceder desde $4,800/año (plan Esencial) o $7,200/año (plan Profesional con IA predictiva). Las universidades cuentan con planes Profesional ($12,000/año), Enterprise ($24,000/año) y Enterprise+ ($48,000/año). Todos los planes incluyen un 20% de descuento en el primer año." },
 ];
 
 export default function Landing() {
@@ -1031,4 +1031,7 @@ function AnimatedStat({ target, suffix, label, delay = 0 }) {
       <div className="text-3xl font-bold text-brand-gold">
         {formatted}{suffix}
       </div>
-      <div className="text-
+      <div className="text-blue-200 text-xs mt-1">{label}</div>
+    </div>
+  );
+}
