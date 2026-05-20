@@ -44,9 +44,9 @@ function useCountUp(end, duration = 2000, startOnView = true) {
 
 const STATS = [
   { target: 3040, suffix: "+", label: "Estudiantes monitoreados" },
-  { target: 25, suffix: "", label: "Carreras virtuales" },
+  { target: 25, suffix: "", label: "Carreras analizadas" },
   { target: 334, suffix: "", label: "Asignaturas analizadas" },
-  { target: 740, suffix: "+", label: "Aulas virtuales" },
+  { target: 740, suffix: "+", label: "Cursos en el LMS" },
 ];
 
 const CAPAS = [
@@ -87,7 +87,7 @@ const PHASES = [
   { phase: "Fase 3", title: "Explicación del riesgo (XAI)", status: "completed",
     desc: "Factores explicativos, alertas conductuales, escenarios contrafactuales y análisis What-If para cada estudiante." },
   { phase: "Fase 4", title: "Recomendaciones automáticas", status: "completed",
-    desc: "10 categorías de recomendación priorizadas con acción, motivo, medio y destinatario. Exportación Excel configurable." },
+    desc: "9 categorías de recomendación priorizadas con acción, motivo, medio y destinatario. Exportación Excel configurable." },
   { phase: "Fase 5", title: "Intervenciones inteligentes y ciclo cerrado", status: "completed",
     desc: "Registro con snapshots, medición de impacto antes/después, feedback loop ML y derivación a Bienestar Estudiantil." },
   { phase: "Fase 6", title: "Integración LMS completa", status: "upcoming",
@@ -829,7 +829,7 @@ export default function Landing() {
           <div className="text-gray-400 text-xs text-center">
             &copy; {new Date().getFullYear()} Carlos Vasconez-Paredes |{" "}
             <a href="https://pachatech.vercel.app/" target="_blank" rel="noopener noreferrer" className="text-brand-ice hover:text-white transition-colors">Pacha Tech</a>
-            {" "}| Soluciones de inteligencia académica para carreras virtuales
+            {" "}| Soluciones de inteligencia académica para educación superior
           </div>
           <button
             onClick={() => navigate(ctaTarget)}
