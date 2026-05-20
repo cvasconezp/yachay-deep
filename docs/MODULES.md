@@ -53,7 +53,7 @@ Vista 360° de un estudiante individual. Integra 7 fuentes de datos con diagnós
 - Calificaciones del período actual y histórico
 - Historial de intervenciones con medición de impacto (antes/después)
 - Asignaturas matriculadas (enrollments)
-- Accesos AVAC y estado de entregas por curso
+- Accesos Moodle y estado de entregas por curso
 - Prácticas preprofesionales (si aplica)
 - Mapa coroplético de ubicación geográfica
 
@@ -165,7 +165,7 @@ Análisis de indicadores agrupados por docente, y seguimiento de actividad docen
 Generación de listas de convocatoria para tutorías por asignatura, con motivos automáticos.
 
 **Motivos automáticos (4 categorías):**
-- Inactividad en AVAC
+- Inactividad en Moodle
 - Bajo rendimiento (nota < umbral)
 - Tareas sin entregar
 - Compromiso bajo
@@ -226,7 +226,7 @@ Panel de administración completo del sistema.
 **Secciones:**
 - **Usuarios**: CRUD de usuarios, asignación de roles y permisos granulares
 - **ETL**: Ejecución manual del pipeline, monitoreo de estado, logs
-- **Scraping**: Configuración y ejecución de scraping AVAC, estado de últimas ejecuciones
+- **Scraping**: Configuración y ejecución de scraping Moodle, estado de últimas ejecuciones
 - **Cursos**: Gestión de `course_configs` (qué cursos scrapear por semestre)
 - **Semestre**: Configuración de `SemesterConfig` (fechas de bloques, umbrales, auto-alertas)
 - **ML**: Entrenamiento manual, estado de modelos, métricas de rendimiento
@@ -246,9 +246,9 @@ Panel de administración completo del sistema.
 | Fuente | Formato | Frecuencia |
 |---|---|---|
 | Reporte institucional | Excel (.xlsx) | Inicio de semestre |
-| Scraping AVAC (ingresos) | CSV generado | Diario (L-V) |
-| Scraping AVAC (tareas) | CSV generado | Diario (L-V) |
-| Calificaciones AVAC | CSV generado | Diario (L-V) |
+| Scraping Moodle (ingresos) | CSV generado | Diario (L-V) |
+| Scraping Moodle (tareas) | CSV generado | Diario (L-V) |
+| Calificaciones Moodle | CSV generado | Diario (L-V) |
 | TableauHistórico | CSV | Fin de período |
 | Formulario prácticas | Google Forms | Ad-hoc |
 
@@ -256,10 +256,10 @@ Panel de administración completo del sistema.
 1. Lectura de reporte institucional y datos personales
 2. Detección y activación automática de semestre
 3. Carga de enrollments (asignaturas matriculadas)
-4. Lectura de calificaciones (con fallback a TableauHistórico si no hay datos AVAC)
+4. Lectura de calificaciones (con fallback a TableauHistórico si no hay datos Moodle)
 5. Cálculo de indicadores de riesgo (compromiso, días sin acceso, % tareas)
 6. Upsert de estudiantes con indicadores actualizados
-7. Carga de accesos AVAC y estado de tareas
+7. Carga de accesos Moodle y estado de tareas
 8. Upsert de calificaciones del semestre actual
 9. Upsert de calificaciones históricas
 10. Deduplicación de estudiantes (match por nombre normalizado)
@@ -269,11 +269,11 @@ Panel de administración completo del sistema.
 
 ---
 
-## 15. Scraping AVAC
+## 15. Scraping Moodle
 
 **Backend:** `scraping/` (1,158 líneas) · **Ejecución:** GitHub Actions (diario L-V 22:00 UTC)
 
-Extracción automatizada de datos del AVAC (Moodle institucional) usando Selenium + BeautifulSoup.
+Extracción automatizada de datos del Moodle institucional usando Selenium + BeautifulSoup.
 
 **Datos extraídos:**
 - Ingresos: último acceso por estudiante por curso
