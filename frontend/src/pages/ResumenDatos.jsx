@@ -243,7 +243,7 @@ function SmartTreemapCell({ x, y, width, height, name, value, fill, total }) {
   const fontSize = Math.max(9, Math.min(14, Math.min(width / 7, height / 3.5)));
   const subFontSize = Math.max(8, fontSize - 2);
   const maxChars = Math.max(5, Math.floor(width / (fontSize * 0.52)));
-  const displayName = name && name.length > maxChars ? name.slice(0, maxChars - 1) + "\u2026" : name;
+  const displayName = name && name.length > maxChars ? name.slice(0, maxChars - 1) + "…" : name;
   return (
     <g>
       <rect x={x} y={y} width={width} height={height} rx={5}
@@ -278,7 +278,7 @@ function HybridTreemapChart({ title, data, total, topN = 10, onItemClick, palett
   return (
     <div className="rounded-lg p-4" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
       <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: PBI.slate }}>
-        {title} ({data.length} total \u00B7 {total.toLocaleString()} estudiantes)
+        {title} ({data.length} total · {total.toLocaleString()} estudiantes)
       </h3>
       {/* Treemap for top items */}
       <ResponsiveContainer width="100%" height={Math.max(280, Math.min(420, topItems.length * 30))}>
@@ -335,6 +335,176 @@ function PBIKpi({ label, value, sub, accent }) {
 
 /* ── Chip de filtro ── */
 const filterCls = "border rounded-lg px-3 py-1.5 text-xs bg-white focus:ring-2 focus:ring-blue-200 focus:border-blue-400 transition-colors";
+
+/* ── Modal: Lista de estudiantes por carrera ── */
+function CarreraStudentModal({ carrera, estudiantes, total, loading, onClose, onNavigate, periodo }) {
+  const [search, setSearch] = useState("");
+  const [sortCol, setSortCol] = useState("nombre");
+  const [sortAsc, setSortAsc] = useState(true);
+
+  const handleSort = (col) => {
+    if (sortCol === col) setSortAsc(!sortAsc);
+    else { setSortCol(col); setSortAsc(true); }
+  };
+
+  const filtered = (estudiantes || []).filter(e => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return (e.nombre || "").toLowerCase().includes(q)
+      || (e.correo_institucional || "").toLowerCase().includes(q)
+      || (e.cedula || "").toLowerCase().includes(q);
+  });
+
+  const sorted = [...filtered].sort((a, b) => {
+    let va = a[sortCol], vb = b[sortCol];
+    if (va == null) va = "";
+    if (vb == null) vb = "";
+    if (typeof va === "number" && typeof vb === "number") return sortAsc ? va - vb : vb - va;
+    return sortAsc ? String(va).localeCompare(String(vb), "es") : String(vb).localeCompare(String(va), "es");
+  });
+
+  const exportExcel = async () => {
+    const XLSX = await import("xlsx");
+    const wb = XLSX.utils.book_new();
+
+    // LÉEME sheet
+    const leemeData = [
+      ["LÉEME — Información del reporte"],
+      [],
+      ["Plataforma", "YachayDeep — Sistema de Analítica Estudiantil"],
+      ["Autor", "Carlos Vásconez-Paredes"],
+      ["Reporte", `Estudiantes de ${carrera}`],
+      ["Registros", `${filtered.length} estudiantes`],
+      ["Generado", new Date().toLocaleString("es-EC")],
+      [],
+      ["Cita sugerida (APA):", `Vásconez-Paredes, C. (${new Date().getFullYear()}). YachayDeep: Sistema de Analítica Estudiantil. Universidad Politécnica Salesiana.`],
+    ];
+    const wsLeeme = XLSX.utils.aoa_to_sheet(leemeData);
+    wsLeeme["!cols"] = [{ wch: 20 }, { wch: 80 }];
+    XLSX.utils.book_append_sheet(wb, wsLeeme, "LÉEME");
+
+    // Data sheet
+    const headers = ["Nombre", "Cédula", "Correo", "Nivel (moda)", "Grupo (moda)", "Riesgo", "Promedio", "Estado matrícula", "3ra matrícula"];
+    const rows = filtered.map(e => [
+      e.nombre || "", e.cedula || "", e.correo_institucional || "",
+      e.nivel_moda ?? e.nivel_academico ?? "", e.grupo_moda ?? e.grupo ?? "",
+      e.nivel_riesgo || "", e.promedio_calificaciones != null ? Math.round(e.promedio_calificaciones) : "",
+      e.estado_matricula || "", e.es_tercera_matricula ? "Sí" : "No",
+    ]);
+    const wsData = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    wsData["!cols"] = headers.map(() => ({ wch: 22 }));
+    XLSX.utils.book_append_sheet(wb, wsData, "Estudiantes");
+    XLSX.writeFile(wb, `estudiantes_${carrera.replace(/\s+/g, "_").slice(0, 30)}.xlsx`);
+  };
+
+  const SortIcon = ({ col }) => (
+    <span className="ml-0.5 text-[9px]" style={{ color: sortCol === col ? PBI.blue : "#ccc" }}>
+      {sortCol === col ? (sortAsc ? "▲" : "▼") : "⇅"}
+    </span>
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-[96vw] max-w-6xl max-h-[88vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: `2px solid ${PBI.blue}` }}>
+          <div>
+            <h2 className="text-lg font-bold" style={{ color: PBI.navy }}>
+              {"🎓"} Estudiantes — {carrera}
+            </h2>
+            <p className="text-xs mt-0.5" style={{ color: PBI.slate }}>{total} estudiante{total !== 1 ? "s" : ""} matriculados</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={exportExcel} disabled={!filtered.length}
+              className="flex items-center gap-1.5 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:bg-gray-300"
+              style={{ background: filtered.length ? PBI.teal : undefined }}>
+              {"📥"} Exportar Excel
+            </button>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none ml-2">&times;</button>
+          </div>
+        </div>
+
+        {/* Search bar */}
+        <div className="px-6 py-2" style={{ background: "#f8fafc", borderBottom: `1px solid ${PBI.border}` }}>
+          <input
+            type="text" placeholder="Buscar por nombre, cédula o correo..."
+            value={search} onChange={e => setSearch(e.target.value)}
+            className="w-full border rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-400"
+            style={{ borderColor: PBI.border }}
+          />
+          {search && <span className="text-[10px] ml-2" style={{ color: PBI.slate }}>{filtered.length} resultado{filtered.length !== 1 ? "s" : ""}</span>}
+        </div>
+
+        {/* Body */}
+        <div className="overflow-auto flex-1 px-6 py-2">
+          {loading ? (
+            <div className="flex items-center justify-center py-16 text-gray-400">
+              <svg className="animate-spin h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" /></svg>
+              Cargando estudiantes...
+            </div>
+          ) : !sorted.length ? (
+            <div className="text-center py-16 text-gray-400">No se encontraron estudiantes</div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-white">
+                <tr className="text-left text-[10px] font-semibold uppercase tracking-wider border-b-2" style={{ color: PBI.slate, borderColor: PBI.border }}>
+                  <th className="py-2 pr-2 cursor-pointer select-none" onClick={() => handleSort("nombre")}>Nombre <SortIcon col="nombre" /></th>
+                  <th className="py-2 pr-2 cursor-pointer select-none" onClick={() => handleSort("correo_institucional")}>Correo <SortIcon col="correo_institucional" /></th>
+                  <th className="py-2 pr-2 text-center cursor-pointer select-none" onClick={() => handleSort("nivel_moda")}>Nivel <SortIcon col="nivel_moda" /></th>
+                  <th className="py-2 pr-2 cursor-pointer select-none" onClick={() => handleSort("grupo_moda")}>Grupo <SortIcon col="grupo_moda" /></th>
+                  <th className="py-2 pr-2 text-center cursor-pointer select-none" onClick={() => handleSort("nivel_riesgo")}>Riesgo <SortIcon col="nivel_riesgo" /></th>
+                  <th className="py-2 pr-2 text-center cursor-pointer select-none" onClick={() => handleSort("promedio_calificaciones")}>Prom. <SortIcon col="promedio_calificaciones" /></th>
+                  <th className="py-2 pr-2 text-center cursor-pointer select-none" onClick={() => handleSort("estado_matricula")}>Estado <SortIcon col="estado_matricula" /></th>
+                  <th className="py-2 pr-2 text-center">3ra Mat.</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sorted.map((e, i) => (
+                  <tr key={e.id || i} className="border-b hover:bg-blue-50/40 transition-colors" style={{ borderColor: "#f1f5f9" }}>
+                    <td className="py-2 pr-2 max-w-[220px]">
+                      <button
+                        className="font-medium hover:underline truncate block text-left max-w-full text-sm"
+                        style={{ color: PBI.blue }}
+                        title={`${e.nombre} — abrir ficha`}
+                        onClick={() => { onClose(); onNavigate(e.id); }}
+                      >{e.nombre || e.cedula || "—"}</button>
+                    </td>
+                    <td className="py-2 pr-2 text-xs truncate max-w-[180px]" style={{ color: PBI.slate }} title={e.correo_institucional}>{e.correo_institucional || "—"}</td>
+                    <td className="py-2 pr-2 text-center font-semibold" style={{ color: PBI.navy }}>{e.nivel_moda ?? e.nivel_academico ?? "—"}</td>
+                    <td className="py-2 pr-2 text-xs truncate max-w-[160px]" style={{ color: PBI.slate }} title={e.grupo_moda ?? e.grupo ?? ""}>{e.grupo_moda ?? e.grupo ?? "—"}</td>
+                    <td className="py-2 pr-2 text-center">
+                      <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                        e.nivel_riesgo === "Alto" ? "bg-red-100 text-red-700" :
+                        e.nivel_riesgo === "Medio" ? "bg-yellow-100 text-yellow-700" :
+                        e.nivel_riesgo === "Bajo" ? "bg-green-100 text-green-700" :
+                        "bg-gray-100 text-gray-500"
+                      }`}>{e.nivel_riesgo || "—"}</span>
+                    </td>
+                    <td className="py-2 pr-2 text-center" style={{ color: PBI.navy }}>{e.promedio_calificaciones != null ? Math.round(e.promedio_calificaciones) : "—"}</td>
+                    <td className="py-2 pr-2 text-center text-xs" style={{ color: PBI.slate }}>{e.estado_matricula || "—"}</td>
+                    <td className="py-2 pr-2 text-center">
+                      {e.es_tercera_matricula ? (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-100 text-purple-700">Sí</span>
+                      ) : (
+                        <span className="text-[10px]" style={{ color: PBI.slate }}>No</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-2 text-[10px] flex items-center justify-between" style={{ color: PBI.slate, borderTop: `1px solid ${PBI.border}` }}>
+          <span>Mostrando {sorted.length} de {total} estudiantes</span>
+          <span>Clic en nombre para abrir ficha · Columnas ordenables</span>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /* ══════════════════════════════════════════
    PRÁCTICAS TAB (Power BI style)
@@ -613,6 +783,20 @@ export default function ResumenDatos() {
 
   // Carrera expand
   const [expandedCarrera, setExpandedCarrera] = useState(null);
+  const [carreraModal, setCarreraModal] = useState(null);  // { carrera, estudiantes, total, loading }
+
+  const openCarreraStudents = async (carreraName) => {
+    setCarreraModal({ carrera: carreraName, estudiantes: [], total: 0, loading: true });
+    try {
+      const params = { tipo: "carrera_all", carrera: carreraName };
+      if (filtroPeriodo) params.periodo = filtroPeriodo;
+      const res = await api.getEstudiantesListado(params);
+      setCarreraModal({ carrera: carreraName, estudiantes: res.estudiantes || [], total: res.total || 0, loading: false });
+    } catch (e) {
+      console.error("Error loading carrera students:", e);
+      setCarreraModal(prev => prev ? { ...prev, loading: false } : null);
+    }
+  };
 
   // Student list modal (shared component)
   const { openStudentList, StudentListModalEl } = useStudentListModal({
@@ -1185,10 +1369,10 @@ export default function ResumenDatos() {
                     <div key={c.carrera} className="rounded-lg overflow-hidden" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
                       <button onClick={() => setExpandedCarrera(expandedCarrera === c.carrera ? null : c.carrera)}
                         className="w-full px-5 py-3 flex items-center justify-between hover:bg-blue-50/30 transition-colors">
-                        <div className="flex items-center gap-4">
-                          <span className="text-xs" style={{ color: PBI.blue }}>{expandedCarrera === c.carrera ? "▼" : "▶"}</span>
-                          <h4 className="text-sm font-bold" style={{ color: PBI.navy }}>{c.carrera}</h4>
-                          <div className="flex gap-3 text-xs" style={{ color: PBI.slate }}>
+                        <div className="flex items-center gap-4 flex-1 min-w-0">
+                          <span className="text-xs flex-shrink-0" style={{ color: PBI.blue }}>{expandedCarrera === c.carrera ? "▼" : "▶"}</span>
+                          <h4 className="text-sm font-bold truncate" style={{ color: PBI.navy }}>{c.carrera}</h4>
+                          <div className="flex gap-3 text-xs flex-shrink-0" style={{ color: PBI.slate }}>
                             <span><strong style={{ color: PBI.blue }}>{c.total_estudiantes}</strong> est.</span>
                             <span><strong style={{ color: PBI.teal }}>{c.total_docentes}</strong> doc.</span>
                             <span>Prom: <strong style={{ color: PBI.navy }}>{c.promedio_calificaciones ?? "—"}</strong></span>
@@ -1204,6 +1388,22 @@ export default function ResumenDatos() {
                         const cEstado = c.por_estado_matricula ? Object.entries(c.por_estado_matricula) : [];
                         return (
                         <div className="px-5 py-4" style={{ borderTop: `1px solid ${PBI.border}`, background: PBI.bg }}>
+                          {/* Action bar */}
+                          <div className="flex items-center gap-2 mb-3">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); openCarreraStudents(c.carrera); }}
+                              className="flex items-center gap-1.5 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:shadow-md"
+                              style={{ background: PBI.blue }}>
+                              {"👥"} Ver {c.total_estudiantes} estudiantes
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); openCarreraStudents(c.carrera); }}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border"
+                              style={{ color: PBI.teal, borderColor: PBI.teal }}>
+                              {"📥"} Exportar lista
+                            </button>
+                          </div>
+
                           {/* KPI strip */}
                           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 mb-4">
                             {[
@@ -1631,6 +1831,19 @@ export default function ResumenDatos() {
 
       {/* ── Student List Modal ─── */}
       {StudentListModalEl}
+
+      {/* ── Carrera Student Modal ─── */}
+      {carreraModal && (
+        <CarreraStudentModal
+          carrera={carreraModal.carrera}
+          estudiantes={carreraModal.estudiantes}
+          total={carreraModal.total}
+          loading={carreraModal.loading}
+          onClose={() => setCarreraModal(null)}
+          onNavigate={(id) => navigate(`/ficha/${id}`)}
+          periodo={filtroPeriodo}
+        />
+      )}
     </div>
   );
 }

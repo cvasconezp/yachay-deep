@@ -536,8 +536,34 @@ def get_estudiantes_listado(
                 Enrollment.es_tercera_matricula == True,
             ).all()
             asig_condicionados[s.id] = [e.asignatura or "Sin asignatura" for e in enr_tm]
+    elif tipo == "carrera_all":
+        # All students in the given carrera (no further filter)
+        students = base_q.order_by(Student.nombre).all()
     else:
         return {"tipo": tipo, "total": 0, "estudiantes": [], "error": "Tipo no válido"}
+
+    # If carrera_all, pre-compute grupo/nivel mode from enrollments
+    _grupo_nivel_map = {}
+    if tipo == "carrera_all" and students:
+        from collections import Counter
+        sids = [s.id for s in students]
+        # Batch query enrollments for these students
+        enrs = db.query(Enrollment.student_id, Enrollment.nivel, Enrollment.nombre_grupo).filter(
+            Enrollment.student_id.in_(sids)
+        ).all()
+        _nivel_counts = {}   # sid -> Counter of niveles
+        _grupo_counts = {}   # sid -> Counter of grupos
+        for sid, niv, grp in enrs:
+            _nivel_counts.setdefault(sid, Counter())[niv] += 1
+            if grp:
+                _grupo_counts.setdefault(sid, Counter())[grp] += 1
+        for sid in sids:
+            best_nivel = _nivel_counts.get(sid, Counter()).most_common(1)
+            best_grupo = _grupo_counts.get(sid, Counter()).most_common(1)
+            _grupo_nivel_map[sid] = {
+                "nivel_moda": best_nivel[0][0] if best_nivel else None,
+                "grupo_moda": best_grupo[0][0] if best_grupo else None,
+            }
 
     resultado = []
     for s in students:
@@ -554,11 +580,17 @@ def get_estudiantes_listado(
             "dias_sin_acceso": s.dias_sin_acceso,
             "porcentaje_tareas": s.porcentaje_tareas,
             "estado_matricula": s.estado_matricula,
+            "grupo": s.grupo,
+            "es_tercera_matricula": s.es_tercera_matricula,
         }
         if tipo == "repitentes":
             item["asignaturas_repitencia"] = sorted(asig_repitencia.get(s.id, []))
         elif tipo == "condicionados":
             item["asignaturas_condicionado"] = sorted(asig_condicionados.get(s.id, []))
+        elif tipo == "carrera_all":
+            gn = _grupo_nivel_map.get(s.id, {})
+            item["nivel_moda"] = gn.get("nivel_moda")
+            item["grupo_moda"] = gn.get("grupo_moda")
         resultado.append(item)
 
     return {"tipo": tipo, "total": len(resultado), "estudiantes": resultado}
