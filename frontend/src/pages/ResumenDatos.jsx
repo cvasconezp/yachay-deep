@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../services/api";
 import { useStudentListModal } from "../components/StudentListModal";
@@ -214,7 +214,7 @@ function StudentTable({ esc, navigate }) {
 
 /* (PBI palette is now defined globally at the top of the file) */
 
-/* ── Custom Treemap cell ── */
+/* ── Custom Treemap cell (distritos) ── */
 function TreemapCell({ x, y, width, height, name, value, fill }) {
   if (width < 30 || height < 20) return null;
   const code = (name || "").replace(/^Distrito\s+/, "");
@@ -229,6 +229,37 @@ function TreemapCell({ x, y, width, height, name, value, fill }) {
           <text x={x + width / 2} y={y + height / 2 + 10} textAnchor="middle" fill="rgba(255,255,255,0.85)"
             style={{ fontSize: Math.min(11, width / 7) }}>{value} est.</text>
         </>
+      )}
+    </g>
+  );
+}
+
+/* ── Custom Treemap cell for Carreras ── */
+function CarreraTreemapCell({ x, y, width, height, name, value, fill, total }) {
+  if (width < 4 || height < 4) return null;
+  const pct = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+  const canFitName = width > 65 && height > 38;
+  const canFitValue = width > 40 && height > 22;
+  const fontSize = Math.max(9, Math.min(13, Math.min(width / 8, height / 4)));
+  const subFontSize = Math.max(8, fontSize - 2);
+  // Wrap long names
+  const maxChars = Math.max(6, Math.floor(width / (fontSize * 0.55)));
+  const displayName = name && name.length > maxChars ? name.slice(0, maxChars - 1) + "…" : name;
+  return (
+    <g>
+      <rect x={x} y={y} width={width} height={height} rx={5}
+        style={{ fill, stroke: "#fff", strokeWidth: 2.5, cursor: "default", opacity: 0.92 }} />
+      {canFitName && (
+        <>
+          <text x={x + width / 2} y={y + height / 2 - (height > 50 ? 8 : 3)} textAnchor="middle" fill="#fff"
+            style={{ fontSize, fontWeight: 700, textShadow: "0 1px 3px rgba(0,0,0,0.4)" }}>{displayName}</text>
+          <text x={x + width / 2} y={y + height / 2 + (height > 50 ? 10 : 12)} textAnchor="middle" fill="rgba(255,255,255,0.9)"
+            style={{ fontSize: subFontSize, fontWeight: 500 }}>{value} ({pct}%)</text>
+        </>
+      )}
+      {!canFitName && canFitValue && (
+        <text x={x + width / 2} y={y + height / 2 + 3} textAnchor="middle" fill="#fff"
+          style={{ fontSize: Math.max(8, fontSize - 1), fontWeight: 700 }}>{value}</text>
       )}
     </g>
   );
@@ -536,6 +567,7 @@ export default function ResumenDatos() {
 
   // Tab
   const [activeTab, setActiveTab] = useState("general");
+  const [kpiCollapsed, setKpiCollapsed] = useState(false);
 
   // Prácticas preprofesionales
   const [practicasData, setPracticasData] = useState(null);
@@ -662,6 +694,12 @@ export default function ResumenDatos() {
   const carreraBarData = porCarrera
     .sort((a, b) => b.total_estudiantes - a.total_estudiantes)
     .map(c => ({ name: c.carrera?.length > 45 ? c.carrera.slice(0, 43) + "…" : c.carrera, value: c.total_estudiantes, full: c.carrera }));
+
+  // Treemap data for carreras
+  const carreraTreemapData = porCarrera
+    .sort((a, b) => b.total_estudiantes - a.total_estudiantes)
+    .map((c, i) => ({ name: c.carrera, size: c.total_estudiantes, fill: PBI.palette[i % PBI.palette.length] }));
+  const carreraTreemapTotal = porCarrera.reduce((s, c) => s + c.total_estudiantes, 0);
 
   const practicasCount = practicasData?.total_estudiantes || 0;
   const TABS = [
@@ -790,30 +828,56 @@ export default function ResumenDatos() {
       {/* ── Main content (show if students exist) ─── */}
       {!loading && g.total_estudiantes > 0 && (
         <>
-          {/* ── KPI Cards (PBI style) ─── */}
-          <div className="space-y-4 mb-6">
-            {/* Fila 1: Población y estructura */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-              <KPICard icon="🎓" label="Estudiantes" value={g.total_estudiantes?.toLocaleString()} accent={PBI.blue} />
-              <KPICard icon="👨‍🏫" label="Docentes" value={g.total_docentes_enrollment || g.total_docentes || "—"} accent={PBI.teal} />
-              <KPICard icon="📚" label="Carreras" value={g.total_carreras} accent={PBI.purple} />
-              <KPICard icon="📋" label="Matrículas" value={g.total_matriculas?.toLocaleString()} accent={PBI.gold} sub="registros est × materia" />
-              <KPICard icon="📊" label="Prom. Calificaciones" value={g.promedio_calificaciones ?? "—"} accent={PBI.coral} sub={g.promedio_calificaciones ? "sobre 100" : "Aún sin AVAC"} />
-            </div>
+          {/* ── KPI Cards (PBI style, collapsible) ─── */}
+          <div className="mb-5">
+            <button
+              onClick={() => setKpiCollapsed(!kpiCollapsed)}
+              className="w-full flex items-center justify-between px-3 py-2 rounded-lg mb-2 transition-colors hover:bg-gray-50"
+              style={{ background: kpiCollapsed ? "#f8fafc" : "transparent" }}
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: PBI.slate }}>
+                  Indicadores Principales
+                </span>
+                {kpiCollapsed && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ background: `${PBI.blue}12`, color: PBI.blue }}>
+                    {g.total_estudiantes?.toLocaleString()} est. · {g.total_carreras} carreras · {g.total_docentes_enrollment || g.total_docentes || "—"} doc.
+                  </span>
+                )}
+              </div>
+              <span className="text-xs transition-transform" style={{ color: PBI.slate, transform: kpiCollapsed ? "rotate(-90deg)" : "rotate(0deg)" }}>▼</span>
+            </button>
+            <div style={{
+              maxHeight: kpiCollapsed ? 0 : 500,
+              opacity: kpiCollapsed ? 0 : 1,
+              overflow: "hidden",
+              transition: "max-height 0.35s ease, opacity 0.25s ease",
+            }}>
+              <div className="space-y-3">
+                {/* Fila 1: Población y estructura */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+                  <KPICard icon="🎓" label="Estudiantes" value={g.total_estudiantes?.toLocaleString()} accent={PBI.blue} />
+                  <KPICard icon="👨‍🏫" label="Docentes" value={g.total_docentes_enrollment || g.total_docentes || "—"} accent={PBI.teal} />
+                  <KPICard icon="📚" label="Carreras" value={g.total_carreras} accent={PBI.purple} />
+                  <KPICard icon="📋" label="Matrículas" value={g.total_matriculas?.toLocaleString()} accent={PBI.gold} sub="registros est × materia" />
+                  <KPICard icon="📊" label="Prom. Calificaciones" value={g.promedio_calificaciones ?? "—"} accent={PBI.coral} sub={g.promedio_calificaciones ? "sobre 100" : "Aún sin AVAC"} />
+                </div>
 
-            {/* Fila 2: Oferta académica */}
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wider mb-2 ml-1" style={{ color: PBI.slate }}>Oferta académica</p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <KPICard icon="📖" label="Asignaturas" value={g.total_asignaturas} accent="#06B6D4" sub="materias únicas" />
-                <KPICard icon="📑" label="Secciones" value={g.total_secciones ?? "—"} accent={PBI.orange} sub="materia × docente" />
-                <KPICard icon="🖥️" label="Aulas Virtuales" value={g.total_aulas_virtuales ?? "—"} accent="#6366F1" sub="cursos en AVAC" />
+                {/* Fila 2: Oferta académica */}
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider mb-2 ml-1" style={{ color: PBI.slate }}>Oferta académica</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <KPICard icon="📖" label="Asignaturas" value={g.total_asignaturas} accent="#06B6D4" sub="materias únicas" />
+                    <KPICard icon="📑" label="Secciones" value={g.total_secciones ?? "—"} accent={PBI.orange} sub="materia × docente" />
+                    <KPICard icon="🖥️" label="Aulas Virtuales" value={g.total_aulas_virtuales ?? "—"} accent="#6366F1" sub="cursos en AVAC" />
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* ── Tab Navigation (PBI style) ─── */}
-          <div className="flex gap-0 mb-5 overflow-x-auto" style={{ borderBottom: `2px solid ${PBI.border}` }}>
+          {/* ── Tab Navigation (PBI style, sticky) ─── */}
+          <div className="flex gap-0 mb-5 overflow-x-auto sticky top-0 z-10 -mx-1 px-1" style={{ borderBottom: `2px solid ${PBI.border}`, background: PBI.bg }}>
             {TABS.map(t => (
               <button key={t.key} onClick={() => setActiveTab(t.key)}
                 className="px-5 py-2.5 text-sm font-medium transition-colors whitespace-nowrap relative flex items-center gap-1.5"
@@ -883,9 +947,30 @@ export default function ResumenDatos() {
                 </div>
               </div>
 
-              {/* Estudiantes por carrera — bar chart */}
-              {carreraBarData.length > 0 && (
-                <HBarChart title={`Estudiantes por Carrera (${porCarrera.length} carreras)`} data={carreraBarData} color="#6366f1" />
+              {/* Estudiantes por carrera — treemap */}
+              {carreraTreemapData.length > 0 && (
+                <div className="rounded-lg p-4" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: PBI.slate }}>
+                    Distribución por Carrera ({porCarrera.length} carreras · {carreraTreemapTotal.toLocaleString()} estudiantes)
+                  </h3>
+                  <ResponsiveContainer width="100%" height={Math.max(320, Math.min(500, porCarrera.length * 18))}>
+                    <Treemap
+                      data={carreraTreemapData}
+                      dataKey="size"
+                      nameKey="name"
+                      isAnimationActive={false}
+                      content={<CarreraTreemapCell total={carreraTreemapTotal} />}
+                    >
+                      <Tooltip
+                        contentStyle={pbiTooltipStyle}
+                        formatter={(v, name) => {
+                          const pct = carreraTreemapTotal > 0 ? ((v / carreraTreemapTotal) * 100).toFixed(1) : 0;
+                          return [`${v.toLocaleString()} estudiantes (${pct}%)`, name];
+                        }}
+                      />
+                    </Treemap>
+                  </ResponsiveContainer>
+                </div>
               )}
 
               {/* Intervenciones summary */}
@@ -1028,9 +1113,30 @@ export default function ResumenDatos() {
           {/* ═══ TAB: POR CARRERA ═══ */}
           {activeTab === "carreras" && (
             <div className="space-y-5">
-              {/* Summary bar chart */}
-              {carreraBarData.length > 0 && (
-                <HBarChart title={`Estudiantes por Carrera (${porCarrera.length} carreras)`} data={carreraBarData} color="#6366f1" />
+              {/* Summary treemap */}
+              {carreraTreemapData.length > 0 && (
+                <div className="rounded-lg p-4" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: PBI.slate }}>
+                    Distribución por Carrera ({porCarrera.length} carreras · {carreraTreemapTotal.toLocaleString()} estudiantes)
+                  </h3>
+                  <ResponsiveContainer width="100%" height={Math.max(350, Math.min(520, porCarrera.length * 20))}>
+                    <Treemap
+                      data={carreraTreemapData}
+                      dataKey="size"
+                      nameKey="name"
+                      isAnimationActive={false}
+                      content={<CarreraTreemapCell total={carreraTreemapTotal} />}
+                    >
+                      <Tooltip
+                        contentStyle={pbiTooltipStyle}
+                        formatter={(v, name) => {
+                          const pct = carreraTreemapTotal > 0 ? ((v / carreraTreemapTotal) * 100).toFixed(1) : 0;
+                          return [`${v.toLocaleString()} estudiantes (${pct}%)`, name];
+                        }}
+                      />
+                    </Treemap>
+                  </ResponsiveContainer>
+                </div>
               )}
 
               {/* Docentes por carrera */}
