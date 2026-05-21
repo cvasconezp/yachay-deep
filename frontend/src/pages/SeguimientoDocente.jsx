@@ -86,6 +86,10 @@ export default function SeguimientoDocente({ embedded = false }) {
   const [carreraFilter, setCarreraFilter] = useState("");
   const [copied, setCopied] = useState(false);
   const [expandedActs, setExpandedActs] = useState({});
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshMsg, setRefreshMsg] = useState("");
+  const [refreshError, setRefreshError] = useState("");
+  const [pollTimer, setPollTimer] = useState(null);
   const navigate = useNavigate();
 
   const loadData = useCallback(async () => {
@@ -169,6 +173,57 @@ export default function SeguimientoDocente({ embedded = false }) {
     setExpandedActs(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
+  const handleRefreshData = async () => {
+    setRefreshing(true);
+    setRefreshMsg("Solicitando actualización...");
+    setRefreshError("");
+    try {
+      await api.triggerScraping("tareas");
+      setRefreshMsg("Scraping iniciado en GitHub Actions. Esto puede tardar 5-15 min...");
+      // Poll for progress every 15s
+      const timer = setInterval(async () => {
+        try {
+          const progress = await api.getScrapingProgress();
+          if (progress.running) {
+            const pct = progress.progress_pct != null ? ` (${Math.round(progress.progress_pct)}%)` : "";
+            setRefreshMsg(`Actualizando datos${pct}...`);
+          } else if (progress.last_status === "completed") {
+            clearInterval(timer);
+            setPollTimer(null);
+            setRefreshing(false);
+            setRefreshMsg("");
+            loadData(); // reload the table
+          } else if (progress.last_status === "failure") {
+            clearInterval(timer);
+            setPollTimer(null);
+            setRefreshing(false);
+            setRefreshError("El scraping falló. Revisa GitHub Actions para más detalles.");
+            setRefreshMsg("");
+          } else {
+            // Not running, no recent run — might have finished between polls
+            clearInterval(timer);
+            setPollTimer(null);
+            setRefreshing(false);
+            setRefreshMsg("");
+            loadData();
+          }
+        } catch (e) {
+          // Progress check failed, keep polling
+        }
+      }, 15000);
+      setPollTimer(timer);
+    } catch (err) {
+      setRefreshing(false);
+      setRefreshError(err?.detail || err?.message || "Error al solicitar actualización. Verifica permisos de admin.");
+      setRefreshMsg("");
+    }
+  };
+
+  // Cleanup poll timer on unmount
+  useEffect(() => {
+    return () => { if (pollTimer) clearInterval(pollTimer); };
+  }, [pollTimer]);
+
   const SortIcon = ({ field }) => (
     <span className="ml-1 text-xs opacity-40">
       {sortField === field ? (sortOrder === "asc" ? "▲" : "▼") : "⇅"}
@@ -191,7 +246,24 @@ export default function SeguimientoDocente({ embedded = false }) {
               )}
             </p>
           </div>
-          <ExportExcelButton data={data} columns={TRACKING_EXPORT_COLS} filename="seguimiento_docente" reportTitle="Seguimiento Docente" />
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleRefreshData}
+              disabled={refreshing}
+              className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border transition-colors ${
+                refreshing
+                  ? "bg-blue-50 text-blue-600 border-blue-200 cursor-wait"
+                  : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50 hover:text-gray-800"
+              }`}
+              title="Ejecutar scraping de tareas para actualizar datos de calificaciones"
+            >
+              <svg className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              {refreshing ? "Actualizando..." : "Actualizar datos"}
+            </button>
+            <ExportExcelButton data={data} columns={TRACKING_EXPORT_COLS} filename="seguimiento_docente" reportTitle="Seguimiento Docente" />
+          </div>
         </div>
       )}
 
@@ -216,6 +288,25 @@ export default function SeguimientoDocente({ embedded = false }) {
             Los datos de calificaciones pueden no reflejar el estado actual en AVAC.
             Verifique que el scraping diario esté funcionando correctamente.
           </span>
+        </div>
+      )}
+
+      {/* Refresh status messages */}
+      {refreshMsg && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 flex items-center gap-2 text-blue-700 text-sm">
+          <svg className="w-4 h-4 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          <span>{refreshMsg}</span>
+        </div>
+      )}
+      {refreshError && (
+        <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 flex items-center justify-between text-red-700 text-sm">
+          <div className="flex items-center gap-2">
+            <span className="text-base">⚠️</span>
+            <span>{refreshError}</span>
+          </div>
+          <button onClick={() => setRefreshError("")} className="text-red-400 hover:text-red-600 text-lg leading-none">&times;</button>
         </div>
       )}
 
