@@ -72,7 +72,7 @@ export default function Tutorias() {
           <h1 className="text-2xl font-bold text-gray-900">Tutorías por Asignatura</h1>
           <p className="text-gray-500 text-sm">Listas de convocatoria a tutoría agrupadas por materia con motivos de riesgo</p>
         </div>
-        <ExportExcelButton data={tutorias} columns={TUT_EXPORT_COLS} filename="tutorias_asignatura" />
+        <ExportExcelButton data={tutorias} columns={TUT_EXPORT_COLS} filename="tutorias_asignatura" reportTitle="Tutorías por Asignatura" />
       </div>
 
       {error && (

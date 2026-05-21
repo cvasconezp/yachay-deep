@@ -207,7 +207,7 @@ export default function Dashboard() {
           >
             Entregas pendientes
           </button>
-          <ExportExcelButton data={filteredStudents} columns={EXPORT_COLUMNS} filename="dashboard_riesgo" />
+          <ExportExcelButton data={filteredStudents} columns={EXPORT_COLUMNS} filename="dashboard_riesgo" reportTitle="Dashboard de Riesgo Estudiantil" />
         </div>
       </div>
 

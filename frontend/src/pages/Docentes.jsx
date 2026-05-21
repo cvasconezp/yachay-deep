@@ -95,7 +95,7 @@ export default function Docentes() {
           <p className="text-gray-500 text-sm">Analítica, rendimiento y seguimiento de calificaciones docentes</p>
         </div>
         {activeTab === "analitica" && (
-          <ExportExcelButton data={filteredDocentes} columns={DOC_EXPORT_COLS} filename="analitica_docentes" />
+          <ExportExcelButton data={filteredDocentes} columns={DOC_EXPORT_COLS} filename="analitica_docentes" reportTitle="Analítica de Docentes" />
         )}
       </div>
 
@@ -320,6 +320,7 @@ export default function Docentes() {
                         data={asig.estudiantes || []}
                         columns={exportCols}
                         filename={exportFilename}
+                        reportTitle={`Docente: ${detalle.docente} — ${asig.asignatura}`}
                         label="Excel"
                         small
                       />

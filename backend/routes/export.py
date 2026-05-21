@@ -114,7 +114,7 @@ def _add_leeme_sheet(wb, report_title: str, filters_desc: str, user_name: str, g
     # ── 1. INFORMACIÓN DE AUTORÍA ─────────────────────────────────────────
     write_section("1. INFORMACIÓN DE AUTORÍA Y PROPIEDAD INTELECTUAL")
     write_blank()
-    write_line("• Desarrollado por:     Carlos Dario Vasconez Paredes", content_font_bold)
+    write_line("• Desarrollado por:     Carlos Vásconez-Paredes", content_font_bold)
     write_line("• Cargo/Función:        Gestor de Analítica del Aprendizaje")
     write_line("• Institución:          Universidad Politécnica Salesiana")
     write_line(f"• Fecha de generación:  {fecha_str}")
@@ -143,7 +143,7 @@ def _add_leeme_sheet(wb, report_title: str, filters_desc: str, user_name: str, g
     write_blank()
     write_line("• Estilo APA (7ma ed.):", content_font_bold)
     write_line(
-        f"  Vasconez Paredes, C. D. ({anio}). {report_title} "
+        f"  Vásconez-Paredes, C. ({anio}). {report_title} "
         f"(Versión 1.0) [Conjunto de datos/Métricas analíticas]. Gestión de Analítica "
         f"del Aprendizaje, Universidad Politécnica Salesiana.",
         indent=True,
@@ -151,8 +151,8 @@ def _add_leeme_sheet(wb, report_title: str, filters_desc: str, user_name: str, g
     write_blank()
     write_line("• Estilo Vancouver / Nota al pie:", content_font_bold)
     write_line(
-        f"  Datos analíticos y procesamiento metodológico provistos por Carlos Dario "
-        f"Vasconez Paredes, Gestión de Analítica del Aprendizaje, Universidad "
+        f"  Datos analíticos y procesamiento metodológico provistos por Carlos "
+        f"Vásconez-Paredes, Gestión de Analítica del Aprendizaje, Universidad "
         f"Politécnica Salesiana, {anio}.",
         indent=True,
     )
@@ -179,7 +179,7 @@ def _add_leeme_sheet(wb, report_title: str, filters_desc: str, user_name: str, g
 
     # ── Metadatos finales ─────────────────────────────────────────────────
     write_line(f"Generado por: {user_name}", meta_font)
-    write_line("Plataforma:   Yachay Deep — Sistema de Analítica del Aprendizaje", meta_font)
+    write_line("Plataforma:   YachayDeep — Sistema de Analítica del Aprendizaje", meta_font)
     write_blank()
 
     # ── Aplicar borde a toda el área usada ────────────────────────────────
@@ -879,7 +879,7 @@ def export_ficha_pdf(
     story.append(HRFlowable(width="100%", thickness=1, color=GRAY_BORDER))
     footer_style = ParagraphStyle("footer", fontSize=7, textColor=colors.grey, alignment=TA_CENTER)
     story.append(Paragraph(
-        f"Generado por Yachay Deep — {datetime.now().strftime('%d/%m/%Y %H:%M')} — {current_user.nombre}",
+        f"Generado por YachayDeep — {datetime.now().strftime('%d/%m/%Y %H:%M')} — {current_user.nombre}",
         footer_style,
     ))
 

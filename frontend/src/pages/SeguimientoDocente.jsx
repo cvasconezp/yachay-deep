@@ -181,7 +181,7 @@ export default function SeguimientoDocente({ embedded = false }) {
             <h1 className="text-2xl font-bold text-gray-900">Seguimiento de Calificaciones</h1>
             <p className="text-sm text-gray-500 mt-1">Estado de calificación por docente — basado en entregas de tareas AVAC</p>
           </div>
-          <ExportExcelButton data={data} columns={TRACKING_EXPORT_COLS} filename="seguimiento_docente" />
+          <ExportExcelButton data={data} columns={TRACKING_EXPORT_COLS} filename="seguimiento_docente" reportTitle="Seguimiento Docente" />
         </div>
       )}
 

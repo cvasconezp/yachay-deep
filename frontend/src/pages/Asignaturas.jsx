@@ -91,7 +91,7 @@ export default function Asignaturas() {
           <h1 className="text-2xl font-bold text-gray-900">Analítica de Asignaturas</h1>
           <p className="text-gray-500 text-sm">Vista agregada por materia: promedios, aprobación, reprobación, repitencia y materias críticas</p>
         </div>
-        <ExportExcelButton data={filteredAsignaturas} columns={ASIG_EXPORT_COLS} filename="analitica_asignaturas" />
+        <ExportExcelButton data={filteredAsignaturas} columns={ASIG_EXPORT_COLS} filename="analitica_asignaturas" reportTitle="Analítica de Asignaturas" />
       </div>
 
       {error && (
@@ -369,6 +369,7 @@ export default function Asignaturas() {
                         data={exportData}
                         columns={exportCols}
                         filename={exportFilename}
+                        reportTitle={`Asignatura: ${asig.asignatura} — ${asig.docente}`}
                         label="Excel"
                         small
                       />
