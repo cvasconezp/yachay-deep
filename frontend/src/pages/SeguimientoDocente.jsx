@@ -179,7 +179,15 @@ export default function SeguimientoDocente({ embedded = false }) {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Seguimiento de Calificaciones</h1>
-            <p className="text-sm text-gray-500 mt-1">Estado de calificación por docente — basado en entregas de tareas AVAC</p>
+            <p className="text-sm text-gray-500 mt-1">
+              Estado de calificación por docente — basado en entregas de tareas AVAC
+              {resumen?.snapshot_date && (
+                <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200" title={`Último scraping: ${resumen.snapshot_date}${resumen.dias_desde_snapshot != null ? ` (hace ${resumen.dias_desde_snapshot} día${resumen.dias_desde_snapshot !== 1 ? 's' : ''})` : ''}`}>
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  Datos del {new Date(resumen.snapshot_date + "T00:00:00").toLocaleDateString("es-EC", { day: "numeric", month: "short", year: "numeric" })}
+                </span>
+              )}
+            </p>
           </div>
           <ExportExcelButton data={data} columns={TRACKING_EXPORT_COLS} filename="seguimiento_docente" reportTitle="Seguimiento Docente" />
         </div>
@@ -197,7 +205,7 @@ export default function SeguimientoDocente({ embedded = false }) {
       )}
 
       {/* Stale data warning */}
-      {resumen?.dias_desde_snapshot > 2 && (
+      {resumen?.dias_desde_snapshot > 1 && (
         <div className="bg-amber-50 border border-amber-300 rounded-lg px-4 py-3 flex items-center gap-2 text-amber-800 text-sm">
           <span className="text-lg">⚠️</span>
           <span>
