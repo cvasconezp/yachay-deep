@@ -213,8 +213,26 @@ def get_docente_tracking(
         if total_tareas == 0:
             continue
 
-        pct = round((calificadas / max(total_tareas, 1)) * 100, 1)
-        alerta = "critico" if pct < 50 else ("atencion" if pct < 80 else "ok")
+        # Progreso = calificadas / (calificadas + pendientes) — ignora no-entregadas
+        # Si no hay pendientes, el docente ha calificado todo lo entregado = 100%
+        grading_base = calificadas + pendientes
+        if grading_base > 0:
+            pct = round((calificadas / grading_base) * 100, 1)
+        elif total_tareas > 0:
+            # Nadie entregó nada → no hay nada que calificar
+            pct = 100.0
+        else:
+            pct = 0.0
+
+        # Estado: si no hay pendientes, todo está al día
+        if pendientes == 0:
+            alerta = "ok"
+        elif pct < 50:
+            alerta = "critico"
+        elif pct < 80:
+            alerta = "atencion"
+        else:
+            alerta = "ok"
 
         # Collect unique carreras from this docente's courses
         docente_carreras = sorted(set(
