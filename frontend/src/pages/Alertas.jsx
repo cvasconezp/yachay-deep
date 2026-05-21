@@ -52,6 +52,43 @@ const MOTIVO_ESTUDIANTE = {
   deterioro_progresivo: "se ha identificado un descenso sostenido en tus indicadores académicos",
 };
 
+
+/** Mapea tipos de alerta a motivos de intervención sugeridos */
+const ALERT_TO_MOTIVO = {
+  inactividad: "Inactividad en AVAC",
+  compromiso_bajo: "No ingresa regularmente al AVAC",
+  nota_cero: "Nota cero",
+  tareas_bajas: "Tareas no entregadas",
+  notas_bajas_tareas: "Bajas calificaciones",
+  segunda_matricula: "Seguimiento regular",
+  tercera_matricula: "Seguimiento regular",
+  deterioro_progresivo: "Bajas calificaciones",
+  calificacion_docente_pendiente: "Calificaciones",
+};
+
+/** Dado un grupo de alertas, sugiere el motivo más relevante */
+function suggestMotivo(alerts) {
+  // Prioridad: severidad más alta primero
+  const sevOrder = { alto: 0, medio: 1, bajo: 2 };
+  const sorted = [...alerts].sort((a, b) => (sevOrder[a.severidad] ?? 3) - (sevOrder[b.severidad] ?? 3));
+  for (const a of sorted) {
+    const motivo = ALERT_TO_MOTIVO[a.tipo];
+    if (motivo) return motivo;
+  }
+  return "";
+}
+
+/** Genera una observación automática basada en las alertas activas */
+function buildAlertObservation(group) {
+  const lines = [];
+  for (const a of group.alerts) {
+    const label = TIPO_LABELS[a.tipo] || a.tipo;
+    const sev = a.severidad?.toUpperCase() || "";
+    lines.push(`${label} (${sev})${a.mensaje ? ": " + a.mensaje.slice(0, 120) : ""}`);
+  }
+  return `Alertas activas: ${lines.join("; ")}`;
+}
+
 function buildStudentMessage(group, userName, tasksDetail) {
   const nombre = group.student_nombre
     .split(" ")
@@ -397,6 +434,7 @@ export default function Alertas() {
   const [copiedEmailId, setCopiedEmailId] = useState(null);
   const [copyingEmailId, setCopyingEmailId] = useState(null);
   const [showBulkModal, setShowBulkModal] = useState(false);
+  const [individualTarget, setIndividualTarget] = useState(null); // { student, prefill }
   const [carreras, setCarreras] = useState([]);
   const [asignaturas, setAsignaturas] = useState([]);
   const { user } = useAuth();
@@ -1004,6 +1042,20 @@ export default function Alertas() {
                                 className="text-xs px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-600 rounded-lg transition-colors">
                                 ✓ Marcar todas como leídas
                               </button>
+                              <button onClick={(e) => {
+                                  e.stopPropagation();
+                                  setIndividualTarget({
+                                    student: { id: group.student_id, nombre: group.student_nombre, carrera: group.student_carrera },
+                                    prefill: {
+                                      motivo: suggestMotivo(group.alerts),
+                                      observacion: buildAlertObservation(group),
+                                    },
+                                  });
+                                }}
+                                className="text-xs px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors flex items-center gap-1">
+                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                                Intervención
+                              </button>
                               <button onClick={() => navigate(`/ficha/${group.student_id}`)}
                                 className="text-xs px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
                                 Ver ficha →
@@ -1027,6 +1079,21 @@ export default function Alertas() {
           periodo={filterPeriodo}
           onClose={() => setShowBulkModal(false)}
           onSaved={handleBulkSaved}
+        />
+      )}
+
+      {individualTarget && (
+        <BulkInterventionModal
+          selectedStudents={[individualTarget.student]}
+          periodo={filterPeriodo}
+          prefill={individualTarget.prefill}
+          onClose={() => setIndividualTarget(null)}
+          onSaved={(result) => {
+            setIndividualTarget(null);
+            loadAlerts();
+            setSuccess("Intervención registrada correctamente");
+            setTimeout(() => setSuccess(""), 3000);
+          }}
         />
       )}
     </div>

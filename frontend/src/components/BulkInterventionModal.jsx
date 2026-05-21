@@ -71,24 +71,31 @@ export default function BulkInterventionModal({ selectedStudents, periodo, prefi
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={handleCancel}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="px-6 py-5 border-b border-gray-100">
-          <h2 className="text-lg font-bold text-gray-900">Intervención Masiva</h2>
+          <h2 className="text-lg font-bold text-gray-900">
+            {selectedStudents.length === 1 ? "Registrar Intervención" : "Intervención Masiva"}
+          </h2>
           <p className="text-sm text-gray-500 mt-0.5">
-            {selectedStudents.length} estudiante{selectedStudents.length !== 1 ? "s" : ""} seleccionado{selectedStudents.length !== 1 ? "s" : ""}
+            {selectedStudents.length === 1
+              ? selectedStudents[0].nombre || `Estudiante #${selectedStudents[0].id}`
+              : `${selectedStudents.length} estudiantes seleccionados`
+            }
           </p>
         </div>
 
-        {/* Students list preview */}
-        <div className="px-6 pt-4 pb-2">
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 max-h-28 overflow-y-auto">
-            <div className="flex flex-wrap gap-1.5">
-              {selectedStudents.map(s => (
-                <span key={s.id} className="inline-flex items-center bg-white border border-blue-200 rounded-full px-2.5 py-0.5 text-xs text-blue-800">
-                  {s.nombre?.split(" ").slice(0, 2).join(" ") || `#${s.id}`}
-                </span>
-              ))}
+        {/* Students list preview (only for bulk) */}
+        {selectedStudents.length > 1 && (
+          <div className="px-6 pt-4 pb-2">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 max-h-28 overflow-y-auto">
+              <div className="flex flex-wrap gap-1.5">
+                {selectedStudents.map(s => (
+                  <span key={s.id} className="inline-flex items-center bg-white border border-blue-200 rounded-full px-2.5 py-0.5 text-xs text-blue-800">
+                    {s.nombre?.split(" ").slice(0, 2).join(" ") || `#${s.id}`}
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         <form onSubmit={handleSubmit} className="px-6 py-4 space-y-4">
           <div className="grid grid-cols-2 gap-4">
@@ -100,7 +107,12 @@ export default function BulkInterventionModal({ selectedStudents, periodo, prefi
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Motivo *</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                Motivo *
+                {prefill?.motivo && form.motivo === prefill.motivo && (
+                  <span className="ml-1.5 text-[10px] font-semibold text-green-600 bg-green-50 border border-green-200 px-1.5 py-0.5 rounded-full">Sugerido</span>
+                )}
+              </label>
               <select value={form.motivo} onChange={e => update("motivo", e.target.value)} className={selectClass}>
                 <option value="">Seleccionar...</option>
                 {MOTIVOS.map(m => <option key={m} value={m}>{m}</option>)}
@@ -162,7 +174,7 @@ export default function BulkInterventionModal({ selectedStudents, periodo, prefi
               Cancelar
             </button>
             <button type="submit" disabled={saving} className="flex-1 bg-blue-600 text-white rounded-lg py-2.5 text-sm font-semibold hover:bg-blue-700 disabled:opacity-60">
-              {saving ? "Guardando..." : `Guardar ${selectedStudents.length} Intervención${selectedStudents.length !== 1 ? "es" : ""}`}
+              {saving ? "Guardando..." : selectedStudents.length === 1 ? "Guardar Intervención" : `Guardar ${selectedStudents.length} Intervenciones`}
             </button>
           </div>
         </form>
