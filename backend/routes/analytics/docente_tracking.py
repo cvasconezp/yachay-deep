@@ -41,6 +41,7 @@ class ActividadPendiente(BaseModel):
 class CursoPendiente(BaseModel):
     codigo_curso: str
     asignatura: str
+    carrera: Optional[str] = None
     grupo: Optional[str] = None
     total_tareas: int
     calificadas: int
@@ -276,6 +277,7 @@ def get_docente_tracking_resumen(
 @router.get("/docente-tracking/{docente_name}")
 def get_docente_tracking_detalle(
     docente_name: str,
+    carrera: Optional[str] = Query(None, description="Filtrar por carrera"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -289,10 +291,13 @@ def get_docente_tracking_detalle(
 
     unidades_vencidas = _get_unidades_vencidas(semconfig)
 
-    cursos = db.query(CourseConfig).filter(
+    cursos_q = db.query(CourseConfig).filter(
         CourseConfig.docente == docente_name,
         CourseConfig.codigo_avac.isnot(None),
-    ).all()
+    )
+    if carrera:
+        cursos_q = cursos_q.filter(CourseConfig.carrera == carrera)
+    cursos = cursos_q.all()
 
     if not cursos:
         return []
@@ -409,6 +414,7 @@ def get_docente_tracking_detalle(
         result.append(CursoPendiente(
             codigo_curso=cod,
             asignatura=curso.asignatura or cod,
+            carrera=curso.carrera,
             grupo=curso.grupo,
             total_tareas=total,
             calificadas=cal,

@@ -259,7 +259,7 @@ class ApiClient {
 
   // ── Docente Tracking ──
   getDocenteTracking() { return this.get("/analytics/docente-tracking"); }
-  getDocenteTrackingDetalle(docente) { return this.get(`/analytics/docente-tracking/${encodeURIComponent(docente)}`); }
+  getDocenteTrackingDetalle(docente, carrera) { const qs = carrera ? `?carrera=${encodeURIComponent(carrera)}` : ""; return this.get(`/analytics/docente-tracking/${encodeURIComponent(docente)}${qs}`); }
   getDocenteTrackingResumen() { return this.get("/analytics/docente-tracking/resumen"); }
 
   // ── Entregas ──

@@ -17,7 +17,9 @@ const TRACKING_EXPORT_COLS = [
 /* ── Helper: genera mensaje formal de correo ── */
 function buildEmailMessage(docenteName, cursos) {
   if (!cursos || cursos.length === 0) return "";
-  const pendientes = cursos.filter(c => c.pendientes > 0);
+  let filtered = cursos;
+  if (carreraFilter) filtered = filtered.filter(c => c.carrera === carreraFilter);
+  const pendientes = filtered.filter(c => c.pendientes > 0);
   if (pendientes.length === 0) return "";
 
   // Capitalize name nicely
@@ -143,7 +145,7 @@ export default function SeguimientoDocente({ embedded = false }) {
     setCopied(false);
     setExpandedActs({});
     try {
-      const detail = await api.getDocenteTrackingDetalle(docente);
+      const detail = await api.getDocenteTrackingDetalle(docente, carreraFilter);
       setDetalleData(detail);
     } catch (e) {
       console.error("Error cargando detalle:", e);
@@ -154,7 +156,7 @@ export default function SeguimientoDocente({ embedded = false }) {
   };
 
   const copyMessage = () => {
-    const msg = buildEmailMessage(detalleDocente, detalleData);
+    const msg = buildEmailMessage(detalleDocente, detalleData, carreraFilter);
     if (msg) {
       navigator.clipboard.writeText(msg).then(() => {
         setCopied(true);
@@ -402,6 +404,10 @@ export default function SeguimientoDocente({ embedded = false }) {
                     </div>
 
                     {/* Actividades */}
+                    {/* Show carrera when not filtering */}
+                    {!carreraFilter && curso.carrera && (
+                      <div className="text-xs text-gray-400 mt-0.5 mb-2 italic">{curso.carrera}</div>
+                    )}
                     {curso.actividades?.length > 0 ? (
                       <div className="divide-y divide-gray-100">
                         {curso.actividades.map((act, aidx) => {
