@@ -99,19 +99,19 @@ function DonutSection({ title, data, colors, total, onItemClick }) {
   );
 }
 
-/* ── Horizontal bar chart (top N, PBI) ── */
-function HBarChart({ title, data, color = PBI.blue, maxItems = 10 }) {
+/* ── Horizontal bar chart (all items, PBI) ── */
+function HBarChart({ title, data, color = PBI.blue, maxItems = 999, leftMargin = 180 }) {
   if (!data || data.length === 0) return null;
   const sliced = data.slice(0, maxItems);
   return (
     <div className="rounded-lg p-4" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
       <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: PBI.slate }}>{title}</h3>
       <ResponsiveContainer width="100%" height={Math.max(sliced.length * 32, 120)}>
-        <BarChart data={sliced} layout="vertical" margin={{ top: 0, right: 20, bottom: 0, left: 100 }}>
+        <BarChart data={sliced} layout="vertical" margin={{ top: 0, right: 30, bottom: 0, left: 10 }}>
           <CartesianGrid horizontal={false} stroke="#f1f5f9" />
           <XAxis type="number" tick={{ fontSize: 10, fill: PBI.slate }} axisLine={false} tickLine={false} />
-          <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: PBI.navy }} width={95} axisLine={false} tickLine={false} />
-          <Tooltip contentStyle={pbiTooltipStyle} formatter={(v) => [`${v.toLocaleString()}`, ""]} />
+          <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fill: PBI.navy }} width={leftMargin} axisLine={false} tickLine={false} />
+          <Tooltip contentStyle={pbiTooltipStyle} formatter={(v, _, p) => [`${v.toLocaleString()} estudiantes`, p.payload.full || p.payload.name]} />
           <Bar dataKey="value" fill={color} radius={[0, 6, 6, 0]} barSize={18} />
         </BarChart>
       </ResponsiveContainer>
@@ -601,8 +601,7 @@ export default function ResumenDatos() {
 
   const carreraBarData = porCarrera
     .sort((a, b) => b.total_estudiantes - a.total_estudiantes)
-    .slice(0, 15)
-    .map(c => ({ name: c.carrera?.length > 30 ? c.carrera.slice(0, 28) + "..." : c.carrera, value: c.total_estudiantes, full: c.carrera }));
+    .map(c => ({ name: c.carrera?.length > 45 ? c.carrera.slice(0, 43) + "…" : c.carrera, value: c.total_estudiantes, full: c.carrera }));
 
   const TABS = [
     { key: "general", label: "Vista General" },
@@ -620,7 +619,7 @@ export default function ResumenDatos() {
       {/* ── Header ─── */}
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-2xl font-bold" style={{ color: PBI.navy }}>Resumen de Datos</h1>
+          <h1 className="text-2xl font-bold" style={{ color: PBI.navy }}>Análisis Institucional</h1>
           <p className="text-sm" style={{ color: PBI.slate }}>Panel analítico integral — estudiantes, carreras y métricas institucionales</p>
         </div>
         <button onClick={() => setExportOpen(!exportOpen)}
@@ -814,7 +813,7 @@ export default function ResumenDatos() {
 
               {/* Estudiantes por carrera — bar chart */}
               {carreraBarData.length > 0 && (
-                <HBarChart title="Estudiantes por Carrera" data={carreraBarData} color="#6366f1" maxItems={15} />
+                <HBarChart title="Estudiantes por Carrera" data={carreraBarData} color="#6366f1" />
               )}
 
               {/* Intervenciones summary */}
@@ -953,7 +952,7 @@ export default function ResumenDatos() {
             <div className="space-y-5">
               {/* Summary bar chart */}
               {carreraBarData.length > 0 && (
-                <HBarChart title={`Estudiantes por Carrera (${porCarrera.length} carreras)`} data={carreraBarData} color="#6366f1" maxItems={20} />
+                <HBarChart title={`Estudiantes por Carrera (${porCarrera.length} carreras)`} data={carreraBarData} color="#6366f1" />
               )}
 
               {/* Docentes por carrera */}
@@ -961,8 +960,9 @@ export default function ResumenDatos() {
                 <HBarChart
                   title="Docentes por Carrera"
                   data={porCarrera.filter(c => c.total_docentes > 0).sort((a,b) => b.total_docentes - a.total_docentes).map(c => ({
-                    name: c.carrera?.length > 30 ? c.carrera.slice(0, 28) + "..." : c.carrera,
-                    value: c.total_docentes
+                    name: c.carrera?.length > 45 ? c.carrera.slice(0, 43) + "…" : c.carrera,
+                    value: c.total_docentes,
+                    full: c.carrera
                   }))}
                   color="#3b82f6"
                 />
@@ -987,15 +987,23 @@ export default function ResumenDatos() {
                           </div>
                         </div>
                       </button>
-                      {expandedCarrera === c.carrera && (
+                      {expandedCarrera === c.carrera && (() => {
+                        const cInterv = c.intervenciones || {};
+                        const cGenero = c.por_genero ? Object.entries(c.por_genero).filter(([k]) => k !== "Sin dato") : [];
+                        const cEtnia = c.por_etnia ? Object.entries(c.por_etnia).filter(([k]) => k !== "Sin dato").slice(0, 5) : [];
+                        const cSede = c.por_sede ? Object.entries(c.por_sede).filter(([k]) => k !== "Sin dato").slice(0, 5) : [];
+                        const cEstado = c.por_estado_matricula ? Object.entries(c.por_estado_matricula) : [];
+                        return (
                         <div className="px-5 py-4" style={{ borderTop: `1px solid ${PBI.border}`, background: PBI.bg }}>
-                          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+                          {/* KPI strip */}
+                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 mb-4">
                             {[
                               { v: c.total_estudiantes, l: "Estudiantes", c: PBI.blue },
                               { v: c.promedio_calificaciones ?? "—", l: "Promedio", c: PBI.teal },
                               { v: c.promedio_edad ?? "—", l: "Edad prom.", c: PBI.slate },
                               { v: c.promedio_compromiso ? `${(c.promedio_compromiso * 100).toFixed(0)}%` : "—", l: "Compromiso", c: PBI.purple },
                               { v: c.total_docentes, l: "Docentes", c: PBI.gold },
+                              { v: c.condicionados ?? 0, l: "Condicionados", c: PBI.coral },
                             ].map(({ v, l, c: accent }) => (
                               <div key={l} className="text-center rounded-lg py-2" style={{ borderTop: `3px solid ${accent}`, background: PBI.card }}>
                                 <div className="text-2xl font-bold" style={{ color: PBI.navy }}>{v}</div>
@@ -1003,40 +1011,111 @@ export default function ResumenDatos() {
                               </div>
                             ))}
                           </div>
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                            <div className="space-y-1.5">
+
+                          {/* Row 1: Riesgo + Académico + Género */}
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+                            <div className="rounded-lg p-3 space-y-1.5" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
                               <div className="text-[10px] font-semibold uppercase" style={{ color: PBI.slate }}>Riesgo</div>
                               <MiniBar label="Alto" value={c.por_riesgo?.Alto || 0} total={c.total_estudiantes} color={PBI.coral} />
                               <MiniBar label="Medio" value={c.por_riesgo?.Medio || 0} total={c.total_estudiantes} color={PBI.gold} />
                               <MiniBar label="Bajo" value={c.por_riesgo?.Bajo || 0} total={c.total_estudiantes} color={PBI.teal} />
                             </div>
-                            <div className="space-y-1.5">
+                            <div className="rounded-lg p-3 space-y-1.5" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
                               <div className="text-[10px] font-semibold uppercase" style={{ color: PBI.slate }}>Académico</div>
                               <div className="flex justify-between text-xs"><span style={{ color: PBI.slate }}>Reprobados</span><span className="font-bold" style={{ color: PBI.coral }}>{c.reprobados ?? 0}</span></div>
                               <div className="flex justify-between text-xs"><span style={{ color: PBI.slate }}>Repitentes</span><span className="font-bold" style={{ color: PBI.gold }}>{c.repitentes ?? 0}</span></div>
+                              <div className="flex justify-between text-xs"><span style={{ color: PBI.slate }}>Condicionados (3ra mat.)</span><span className="font-bold" style={{ color: PBI.purple }}>{c.condicionados ?? 0}</span></div>
                               <div className="flex justify-between text-xs"><span style={{ color: PBI.slate }}>Prob. deserción alta</span><span className="font-bold" style={{ color: PBI.coral }}>{c.desertores_prob ?? 0}</span></div>
+                              <div className="flex justify-between text-xs"><span style={{ color: PBI.slate }}>Con calificaciones</span><span className="font-bold" style={{ color: PBI.blue }}>{c.con_calificaciones ?? 0}</span></div>
                             </div>
-                            <div className="space-y-1.5">
+                            <div className="rounded-lg p-3 space-y-1.5" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
+                              <div className="text-[10px] font-semibold uppercase" style={{ color: PBI.slate }}>Género</div>
+                              {cGenero.length > 0 ? cGenero.map(([g, cnt]) => (
+                                <MiniBar key={g} label={g} value={cnt} total={c.total_estudiantes} color={GENDER_COLORS[g] || PBI.slate} />
+                              )) : <span className="text-xs" style={{ color: PBI.slate }}>Sin datos</span>}
+                            </div>
+                          </div>
+
+                          {/* Row 2: Ciudades + Etnia + Sede */}
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+                            <div className="rounded-lg p-3 space-y-1.5" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
                               <div className="text-[10px] font-semibold uppercase" style={{ color: PBI.slate }}>Ciudades top</div>
                               {c.por_ciudad && Object.entries(c.por_ciudad).slice(0, 5).map(([city, cnt]) => (
                                 <MiniBar key={city} label={city} value={cnt} total={c.total_estudiantes} color={PBI.teal} />
                               ))}
                             </div>
-                          </div>
-                          {c.por_nivel && Object.keys(c.por_nivel).length > 0 && (
-                            <div className="mt-3">
-                              <div className="text-[10px] font-semibold uppercase mb-1.5" style={{ color: PBI.slate }}>Estudiantes por nivel</div>
-                              <div className="flex flex-wrap gap-2">
-                                {Object.entries(c.por_nivel).map(([niv, cnt]) => (
-                                  <div key={niv} className="rounded-lg px-3 py-1.5 text-xs" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
-                                    <span style={{ color: PBI.slate }}>Niv. {niv}:</span> <span className="font-bold" style={{ color: PBI.navy }}>{cnt}</span>
-                                  </div>
-                                ))}
-                              </div>
+                            <div className="rounded-lg p-3 space-y-1.5" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
+                              <div className="text-[10px] font-semibold uppercase" style={{ color: PBI.slate }}>Autoidentificación étnica</div>
+                              {cEtnia.length > 0 ? cEtnia.map(([e, cnt]) => (
+                                <MiniBar key={e} label={e} value={cnt} total={c.total_estudiantes} color={PBI.purple} />
+                              )) : <span className="text-xs" style={{ color: PBI.slate }}>Sin datos</span>}
                             </div>
-                          )}
+                            <div className="rounded-lg p-3 space-y-1.5" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
+                              <div className="text-[10px] font-semibold uppercase" style={{ color: PBI.slate }}>Sede / Centro de apoyo</div>
+                              {cSede.length > 0 ? cSede.map(([s, cnt]) => (
+                                <MiniBar key={s} label={s} value={cnt} total={c.total_estudiantes} color={PBI.blue} />
+                              )) : <span className="text-xs" style={{ color: PBI.slate }}>Sin datos</span>}
+                            </div>
+                          </div>
+
+                          {/* Row 3: Estado matrícula + Intervenciones + Nivel */}
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            {/* Estado de matrícula */}
+                            <div className="rounded-lg p-3" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
+                              <div className="text-[10px] font-semibold uppercase mb-1.5" style={{ color: PBI.slate }}>Estado de matrícula</div>
+                              {cEstado.length > 0 ? (
+                                <div className="space-y-1">
+                                  {cEstado.sort((a,b) => b[1]-a[1]).map(([est, cnt]) => (
+                                    <div key={est} className="flex justify-between text-xs">
+                                      <span className="truncate" style={{ color: PBI.slate }} title={est}>{est}</span>
+                                      <span className="font-bold ml-2" style={{ color: PBI.navy }}>{cnt}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : <span className="text-xs" style={{ color: PBI.slate }}>Sin datos</span>}
+                            </div>
+
+                            {/* Intervenciones */}
+                            <div className="rounded-lg p-3" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
+                              <div className="text-[10px] font-semibold uppercase mb-1.5" style={{ color: PBI.slate }}>Intervenciones</div>
+                              {cInterv.total > 0 ? (
+                                <div className="space-y-1.5">
+                                  <div className="flex justify-between text-xs"><span style={{ color: PBI.slate }}>Total</span><span className="font-bold" style={{ color: PBI.blue }}>{cInterv.total}</span></div>
+                                  <div className="flex justify-between text-xs"><span style={{ color: PBI.slate }}>Resueltas</span><span className="font-bold" style={{ color: PBI.teal }}>{cInterv.resueltas ?? 0}</span></div>
+                                  <div className="flex justify-between text-xs"><span style={{ color: PBI.slate }}>Pendientes</span><span className="font-bold" style={{ color: PBI.gold }}>{cInterv.pendientes ?? 0}</span></div>
+                                  {cInterv.total > 0 && (
+                                    <div className="flex justify-between text-xs"><span style={{ color: PBI.slate }}>Tasa resolución</span><span className="font-bold" style={{ color: PBI.teal }}>{Math.round((cInterv.resueltas || 0) / cInterv.total * 100)}%</span></div>
+                                  )}
+                                  {cInterv.por_motivo && Object.keys(cInterv.por_motivo).length > 0 && (
+                                    <div className="mt-2 pt-2" style={{ borderTop: `1px solid ${PBI.border}` }}>
+                                      <div className="text-[9px] font-semibold uppercase mb-1" style={{ color: PBI.slate }}>Por motivo</div>
+                                      {Object.entries(cInterv.por_motivo).sort((a,b) => b[1]-a[1]).slice(0, 3).map(([m, cnt]) => (
+                                        <div key={m} className="flex justify-between text-[11px]">
+                                          <span className="truncate" style={{ color: PBI.slate }} title={m}>{m}</span>
+                                          <span className="font-bold ml-1" style={{ color: PBI.navy }}>{cnt}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : <span className="text-xs" style={{ color: PBI.slate }}>Sin intervenciones</span>}
+                            </div>
+
+                            {/* Estudiantes por nivel */}
+                            <div className="rounded-lg p-3" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
+                              <div className="text-[10px] font-semibold uppercase mb-1.5" style={{ color: PBI.slate }}>Estudiantes por nivel</div>
+                              {c.por_nivel && Object.keys(c.por_nivel).length > 0 ? (
+                                <div className="space-y-1.5">
+                                  {Object.entries(c.por_nivel).map(([niv, cnt]) => (
+                                    <MiniBar key={niv} label={`Nivel ${niv}`} value={cnt} total={c.total_estudiantes} color={PBI.blue} />
+                                  ))}
+                                </div>
+                              ) : <span className="text-xs" style={{ color: PBI.slate }}>Sin datos</span>}
+                            </div>
+                          </div>
                         </div>
-                      )}
+                        );
+                      })()}
                     </div>
                   ))}
                 </div>
