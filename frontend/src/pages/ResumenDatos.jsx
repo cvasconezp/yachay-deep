@@ -234,34 +234,91 @@ function TreemapCell({ x, y, width, height, name, value, fill }) {
   );
 }
 
-/* ── Custom Treemap cell for Carreras ── */
-function CarreraTreemapCell({ x, y, width, height, name, value, fill, total }) {
+/* ── Custom Treemap cell (generic, for carreras & distritos) ── */
+function SmartTreemapCell({ x, y, width, height, name, value, fill, total }) {
   if (width < 4 || height < 4) return null;
   const pct = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
-  const canFitName = width > 65 && height > 38;
-  const canFitValue = width > 40 && height > 22;
-  const fontSize = Math.max(9, Math.min(13, Math.min(width / 8, height / 4)));
+  const canFitName = width > 60 && height > 36;
+  const canFitValue = width > 35 && height > 20;
+  const fontSize = Math.max(9, Math.min(14, Math.min(width / 7, height / 3.5)));
   const subFontSize = Math.max(8, fontSize - 2);
-  // Wrap long names
-  const maxChars = Math.max(6, Math.floor(width / (fontSize * 0.55)));
-  const displayName = name && name.length > maxChars ? name.slice(0, maxChars - 1) + "…" : name;
+  const maxChars = Math.max(5, Math.floor(width / (fontSize * 0.52)));
+  const displayName = name && name.length > maxChars ? name.slice(0, maxChars - 1) + "\u2026" : name;
   return (
     <g>
       <rect x={x} y={y} width={width} height={height} rx={5}
-        style={{ fill, stroke: "#fff", strokeWidth: 2.5, cursor: "default", opacity: 0.92 }} />
+        style={{ fill, stroke: "#fff", strokeWidth: 2, cursor: "pointer", opacity: 0.92, transition: "opacity 0.15s" }}
+        onMouseOver={e => e.currentTarget.style.opacity = 1}
+        onMouseOut={e => e.currentTarget.style.opacity = 0.92} />
       {canFitName && (
         <>
-          <text x={x + width / 2} y={y + height / 2 - (height > 50 ? 8 : 3)} textAnchor="middle" fill="#fff"
-            style={{ fontSize, fontWeight: 700, textShadow: "0 1px 3px rgba(0,0,0,0.4)" }}>{displayName}</text>
-          <text x={x + width / 2} y={y + height / 2 + (height > 50 ? 10 : 12)} textAnchor="middle" fill="rgba(255,255,255,0.9)"
-            style={{ fontSize: subFontSize, fontWeight: 500 }}>{value} ({pct}%)</text>
+          <text x={x + width / 2} y={y + height / 2 - (height > 48 ? 7 : 2)} textAnchor="middle" fill="#fff"
+            style={{ fontSize, fontWeight: 700, textShadow: "0 1px 4px rgba(0,0,0,0.5)", pointerEvents: "none" }}>{displayName}</text>
+          <text x={x + width / 2} y={y + height / 2 + (height > 48 ? 11 : 13)} textAnchor="middle" fill="rgba(255,255,255,0.9)"
+            style={{ fontSize: subFontSize, fontWeight: 500, pointerEvents: "none" }}>{value.toLocaleString()} ({pct}%)</text>
         </>
       )}
       {!canFitName && canFitValue && (
         <text x={x + width / 2} y={y + height / 2 + 3} textAnchor="middle" fill="#fff"
-          style={{ fontSize: Math.max(8, fontSize - 1), fontWeight: 700 }}>{value}</text>
+          style={{ fontSize: Math.max(8, fontSize - 1), fontWeight: 700, pointerEvents: "none" }}>{value.toLocaleString()}</text>
       )}
     </g>
+  );
+}
+
+/* ── Hybrid Chart: Treemap (top items) + compact table (rest) ── */
+function HybridTreemapChart({ title, data, total, topN = 10, onItemClick, palette = PBI.palette }) {
+  if (!data || data.length === 0) return null;
+  const sorted = [...data].sort((a, b) => b.value - a.value);
+  const topItems = sorted.slice(0, topN);
+  const restItems = sorted.slice(topN);
+  const topTotal = topItems.reduce((s, d) => s + d.value, 0);
+  const treemapData = topItems.map((d, i) => ({ name: d.name, size: d.value, fill: palette[i % palette.length] }));
+
+  return (
+    <div className="rounded-lg p-4" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
+      <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: PBI.slate }}>
+        {title} ({data.length} total \u00B7 {total.toLocaleString()} estudiantes)
+      </h3>
+      {/* Treemap for top items */}
+      <ResponsiveContainer width="100%" height={Math.max(280, Math.min(420, topItems.length * 30))}>
+        <Treemap data={treemapData} dataKey="size" nameKey="name" isAnimationActive={false}
+          content={<SmartTreemapCell total={total} />}
+          onClick={(node) => { if (onItemClick && node?.name) onItemClick(node.name); }}
+        >
+          <Tooltip contentStyle={pbiTooltipStyle} formatter={(v, name) => {
+            const pct = total > 0 ? ((v / total) * 100).toFixed(1) : 0;
+            return [`${v.toLocaleString()} estudiantes (${pct}%)`, name];
+          }} />
+        </Treemap>
+      </ResponsiveContainer>
+
+      {/* Compact table for remaining items */}
+      {restItems.length > 0 && (
+        <div className="mt-3 pt-3" style={{ borderTop: `1px solid ${PBI.border}` }}>
+          <div className="text-[10px] font-semibold uppercase tracking-wider mb-2" style={{ color: PBI.slate }}>
+            Otras ({restItems.length})
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-4 gap-y-1">
+            {restItems.map((d, i) => {
+              const pct = total > 0 ? ((d.value / total) * 100).toFixed(1) : 0;
+              return (
+                <div key={d.name}
+                  className={`flex items-center justify-between text-xs py-1 px-2 rounded ${onItemClick ? "cursor-pointer hover:bg-blue-50/60 transition-colors" : ""}`}
+                  onClick={onItemClick ? () => onItemClick(d.name) : undefined}
+                  title={d.name}>
+                  <span className="flex items-center gap-1.5 truncate flex-1 min-w-0">
+                    <span className="w-2 h-2 rounded-sm flex-shrink-0" style={{ background: palette[(topN + i) % palette.length] }} />
+                    <span className="truncate" style={{ color: PBI.navy }}>{d.name}</span>
+                  </span>
+                  <span className="ml-2 flex-shrink-0 font-semibold" style={{ color: PBI.slate }}>{d.value} <span className="font-normal text-[10px]">({pct}%)</span></span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -295,12 +352,12 @@ function PracticasTab({ data: practicasData, loading, filtros, setFiltros, expan
   const pd = practicasData;
   const pctMineduc = pd.total_estudiantes ? Math.round(pd.en_mineduc / pd.total_estudiantes * 100) : 0;
 
-  // Treemap data
-  const treemapData = (pd.por_distrito || []).map((d, i) => ({
+  // District data for hybrid chart
+  const distritoChartData = (pd.por_distrito || []).map(d => ({
     name: d.distrito,
-    size: d.total,
-    fill: PBI.palette[i % PBI.palette.length],
+    value: d.total,
   }));
+  const distritoTotal = distritoChartData.reduce((s, d) => s + d.value, 0);
 
   // Nivel data for horizontal bars (cleaned names)
   const nivelData = (pd.por_nivel || []).map(n => ({
@@ -427,17 +484,15 @@ function PracticasTab({ data: practicasData, loading, filtros, setFiltros, expan
           </ResponsiveContainer>
         </div>
 
-        {/* Treemap de distritos */}
-        <div className="rounded-lg p-4" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
-          <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: PBI.slate }}>Distribución por Distrito (n={treemapData.length})</h3>
-          <ResponsiveContainer width="100%" height={Math.max(200, nivelData.length * 45 + 20)}>
-            <Treemap data={treemapData} dataKey="size" nameKey="name" isAnimationActive={false}
-              content={<TreemapCell />}>
-              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: "none", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}
-                formatter={(v, name) => [`${v} estudiantes`, name]} />
-            </Treemap>
-          </ResponsiveContainer>
-        </div>
+        {/* Distribución por Distrito — hybrid treemap */}
+        {distritoChartData.length > 0 && (
+          <HybridTreemapChart
+            title="Distribución por Distrito"
+            data={distritoChartData}
+            total={distritoTotal}
+            topN={8}
+          />
+        )}
       </div>
 
       {/* ── Buscador de escuelas ── */}
@@ -947,30 +1002,15 @@ export default function ResumenDatos() {
                 </div>
               </div>
 
-              {/* Estudiantes por carrera — treemap */}
-              {carreraTreemapData.length > 0 && (
-                <div className="rounded-lg p-4" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
-                  <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: PBI.slate }}>
-                    Distribución por Carrera ({porCarrera.length} carreras · {carreraTreemapTotal.toLocaleString()} estudiantes)
-                  </h3>
-                  <ResponsiveContainer width="100%" height={Math.max(320, Math.min(500, porCarrera.length * 18))}>
-                    <Treemap
-                      data={carreraTreemapData}
-                      dataKey="size"
-                      nameKey="name"
-                      isAnimationActive={false}
-                      content={<CarreraTreemapCell total={carreraTreemapTotal} />}
-                    >
-                      <Tooltip
-                        contentStyle={pbiTooltipStyle}
-                        formatter={(v, name) => {
-                          const pct = carreraTreemapTotal > 0 ? ((v / carreraTreemapTotal) * 100).toFixed(1) : 0;
-                          return [`${v.toLocaleString()} estudiantes (${pct}%)`, name];
-                        }}
-                      />
-                    </Treemap>
-                  </ResponsiveContainer>
-                </div>
+              {/* Estudiantes por carrera — hybrid treemap + table */}
+              {carreraBarData.length > 0 && (
+                <HybridTreemapChart
+                  title="Distribución por Carrera"
+                  data={carreraBarData.map(d => ({ name: d.full || d.name, value: d.value }))}
+                  total={carreraTreemapTotal}
+                  topN={10}
+                  onItemClick={(name) => { setActiveTab("carreras"); setExpandedCarrera(name); }}
+                />
               )}
 
               {/* Intervenciones summary */}
@@ -1113,30 +1153,15 @@ export default function ResumenDatos() {
           {/* ═══ TAB: POR CARRERA ═══ */}
           {activeTab === "carreras" && (
             <div className="space-y-5">
-              {/* Summary treemap */}
-              {carreraTreemapData.length > 0 && (
-                <div className="rounded-lg p-4" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
-                  <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: PBI.slate }}>
-                    Distribución por Carrera ({porCarrera.length} carreras · {carreraTreemapTotal.toLocaleString()} estudiantes)
-                  </h3>
-                  <ResponsiveContainer width="100%" height={Math.max(350, Math.min(520, porCarrera.length * 20))}>
-                    <Treemap
-                      data={carreraTreemapData}
-                      dataKey="size"
-                      nameKey="name"
-                      isAnimationActive={false}
-                      content={<CarreraTreemapCell total={carreraTreemapTotal} />}
-                    >
-                      <Tooltip
-                        contentStyle={pbiTooltipStyle}
-                        formatter={(v, name) => {
-                          const pct = carreraTreemapTotal > 0 ? ((v / carreraTreemapTotal) * 100).toFixed(1) : 0;
-                          return [`${v.toLocaleString()} estudiantes (${pct}%)`, name];
-                        }}
-                      />
-                    </Treemap>
-                  </ResponsiveContainer>
-                </div>
+              {/* Summary hybrid treemap */}
+              {carreraBarData.length > 0 && (
+                <HybridTreemapChart
+                  title="Distribución por Carrera"
+                  data={carreraBarData.map(d => ({ name: d.full || d.name, value: d.value }))}
+                  total={carreraTreemapTotal}
+                  topN={12}
+                  onItemClick={(name) => setExpandedCarrera(expandedCarrera === name ? null : name)}
+                />
               )}
 
               {/* Docentes por carrera */}
@@ -1156,7 +1181,7 @@ export default function ResumenDatos() {
               <div>
                 <h3 className="text-sm font-bold mb-3" style={{ color: PBI.navy }}>Detalle por Carrera</h3>
                 <div className="space-y-2">
-                  {porCarrera.map(c => (
+                  {[...porCarrera].sort((a, b) => (a.carrera || "").localeCompare(b.carrera || "", "es")).map(c => (
                     <div key={c.carrera} className="rounded-lg overflow-hidden" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
                       <button onClick={() => setExpandedCarrera(expandedCarrera === c.carrera ? null : c.carrera)}
                         className="w-full px-5 py-3 flex items-center justify-between hover:bg-blue-50/30 transition-colors">
@@ -1359,7 +1384,14 @@ export default function ResumenDatos() {
                   Cargando indicadores ejecutivos...
                 </div>
               ) : !execData ? (
-                <div className="text-center py-16 text-gray-400">No se pudieron cargar los datos ejecutivos.</div>
+                <div className="text-center py-16">
+                  <div className="text-4xl mb-3">{"🛡️"}</div>
+                  <p className="text-sm font-medium" style={{ color: PBI.navy }}>Dashboard ejecutivo sin datos</p>
+                  <p className="text-xs mt-2 max-w-md mx-auto" style={{ color: PBI.slate }}>
+                    Este dashboard requiere que los estudiantes tengan niveles de riesgo calculados e intervenciones registradas.
+                    Carga los datos de AVAC y ejecuta el proceso ETL para activar los indicadores ejecutivos.
+                  </p>
+                </div>
               ) : (
                 <>
                   {/* KPI Cards */}
@@ -1455,10 +1487,13 @@ export default function ResumenDatos() {
                   Cargando análisis de efectividad...
                 </div>
               ) : !effData || effData.total_analizadas === 0 ? (
-                <div className="text-center py-16 text-gray-400">
-                  <div className="text-4xl mb-3">📭</div>
-                  <p className="text-sm">No hay intervenciones cerradas/resueltas para analizar</p>
-                  <p className="text-xs mt-1">Cierra o resuelve intervenciones para ver su efectividad</p>
+                <div className="text-center py-16">
+                  <div className="text-4xl mb-3">{"🎯"}</div>
+                  <p className="text-sm font-medium" style={{ color: PBI.navy }}>Sin datos de efectividad</p>
+                  <p className="text-xs mt-2 max-w-md mx-auto" style={{ color: PBI.slate }}>
+                    Este análisis evalúa intervenciones cerradas o resueltas. Se activará cuando existan
+                    intervenciones con estado de resolución. Registra y cierra intervenciones desde la ficha de cada estudiante.
+                  </p>
                 </div>
               ) : (
                 <>
