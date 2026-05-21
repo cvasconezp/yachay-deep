@@ -129,6 +129,7 @@ def _get_unidades_vencidas(semconfig) -> set:
 
 @router.get("/docente-tracking", response_model=list[DocenteTrackingStats])
 def get_docente_tracking(
+    carrera: Optional[str] = Query(None, description="Filtrar por carrera"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -138,6 +139,8 @@ def get_docente_tracking(
         return []
 
     cursos = _get_bloque_courses(db, semconfig)
+    if carrera:
+        cursos = [c for c in cursos if c.carrera == carrera]
     if not cursos:
         return []
 
@@ -240,11 +243,12 @@ def get_docente_tracking(
 
 @router.get("/docente-tracking/resumen", response_model=ResumenDocenteTracking)
 def get_docente_tracking_resumen(
+    carrera: Optional[str] = Query(None, description="Filtrar por carrera"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Resumen general de seguimiento docente."""
-    all_stats = get_docente_tracking(db=db, current_user=current_user)
+    all_stats = get_docente_tracking(carrera=carrera, db=db, current_user=current_user)
 
     # Obtener fecha del snapshot más reciente de task_submissions
     from datetime import date as date_type

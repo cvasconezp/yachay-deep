@@ -258,9 +258,9 @@ class ApiClient {
   }
 
   // ── Docente Tracking ──
-  getDocenteTracking() { return this.get("/analytics/docente-tracking"); }
+  getDocenteTracking(carrera) { const qs = carrera ? `?carrera=${encodeURIComponent(carrera)}` : ""; return this.get(`/analytics/docente-tracking${qs}`); }
   getDocenteTrackingDetalle(docente, carrera) { const qs = carrera ? `?carrera=${encodeURIComponent(carrera)}` : ""; return this.get(`/analytics/docente-tracking/${encodeURIComponent(docente)}${qs}`); }
-  getDocenteTrackingResumen() { return this.get("/analytics/docente-tracking/resumen"); }
+  getDocenteTrackingResumen(carrera) { const qs = carrera ? `?carrera=${encodeURIComponent(carrera)}` : ""; return this.get(`/analytics/docente-tracking/resumen${qs}`); }
 
   // ── Entregas ──
   getEntregasPendientes(params = {}) {

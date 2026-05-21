@@ -93,8 +93,8 @@ export default function SeguimientoDocente({ embedded = false }) {
     setError("");
     try {
       const [trackingData, resumenData] = await Promise.all([
-        api.getDocenteTracking(),
-        api.getDocenteTrackingResumen(),
+        api.getDocenteTracking(carreraFilter),
+        api.getDocenteTrackingResumen(carreraFilter),
       ]);
       setData(trackingData || []);
       setResumen(resumenData);
@@ -104,7 +104,7 @@ export default function SeguimientoDocente({ embedded = false }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [carreraFilter]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
