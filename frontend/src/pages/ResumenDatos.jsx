@@ -238,30 +238,39 @@ function TreemapCell({ x, y, width, height, name, value, fill }) {
 function SmartTreemapCell({ x, y, width, height, name, value, fill, total }) {
   if (width < 4 || height < 4) return null;
   const pct = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
-  const canFitName = width > 60 && height > 36;
-  const canFitValue = width > 35 && height > 20;
-  const fontSize = Math.max(9, Math.min(14, Math.min(width / 7, height / 3.5)));
+  const pad = 6; // internal padding
+  const innerW = width - pad * 2;
+  const innerH = height - pad * 2;
+  const canFitName = innerW > 50 && innerH > 28;
+  const canFitValue = innerW > 28 && innerH > 14;
+  const fontSize = Math.max(9, Math.min(14, Math.min(innerW / 7, innerH / 3.2)));
   const subFontSize = Math.max(8, fontSize - 2);
-  const maxChars = Math.max(5, Math.floor(width / (fontSize * 0.52)));
-  const displayName = name && name.length > maxChars ? name.slice(0, maxChars - 1) + "…" : name;
+  const clipId = `clip-${Math.round(x)}-${Math.round(y)}`;
   return (
     <g>
+      <defs>
+        <clipPath id={clipId}>
+          <rect x={x + pad} y={y + pad} width={innerW} height={innerH} />
+        </clipPath>
+      </defs>
       <rect x={x} y={y} width={width} height={height} rx={5}
         style={{ fill, stroke: "#fff", strokeWidth: 2, cursor: "pointer", opacity: 0.92, transition: "opacity 0.15s" }}
         onMouseOver={e => e.currentTarget.style.opacity = 1}
         onMouseOut={e => e.currentTarget.style.opacity = 0.92} />
-      {canFitName && (
-        <>
-          <text x={x + width / 2} y={y + height / 2 - (height > 48 ? 7 : 2)} textAnchor="middle" fill="#fff"
-            style={{ fontSize, fontWeight: 700, textShadow: "0 1px 4px rgba(0,0,0,0.5)", pointerEvents: "none" }}>{displayName}</text>
-          <text x={x + width / 2} y={y + height / 2 + (height > 48 ? 11 : 13)} textAnchor="middle" fill="rgba(255,255,255,0.9)"
-            style={{ fontSize: subFontSize, fontWeight: 500, pointerEvents: "none" }}>{value.toLocaleString()} ({pct}%)</text>
-        </>
-      )}
-      {!canFitName && canFitValue && (
-        <text x={x + width / 2} y={y + height / 2 + 3} textAnchor="middle" fill="#fff"
-          style={{ fontSize: Math.max(8, fontSize - 1), fontWeight: 700, pointerEvents: "none" }}>{value.toLocaleString()}</text>
-      )}
+      <g clipPath={`url(#${clipId})`}>
+        {canFitName && (
+          <>
+            <text x={x + width / 2} y={y + height / 2 - (innerH > 40 ? 7 : 2)} textAnchor="middle" fill="#fff"
+              style={{ fontSize, fontWeight: 700, textShadow: "0 1px 4px rgba(0,0,0,0.5)", pointerEvents: "none" }}>{name}</text>
+            <text x={x + width / 2} y={y + height / 2 + (innerH > 40 ? 11 : 13)} textAnchor="middle" fill="rgba(255,255,255,0.9)"
+              style={{ fontSize: subFontSize, fontWeight: 500, pointerEvents: "none" }}>{value.toLocaleString()} ({pct}%)</text>
+          </>
+        )}
+        {!canFitName && canFitValue && (
+          <text x={x + width / 2} y={y + height / 2 + 3} textAnchor="middle" fill="#fff"
+            style={{ fontSize: Math.max(8, fontSize - 1), fontWeight: 700, pointerEvents: "none" }}>{value.toLocaleString()}</text>
+        )}
+      </g>
     </g>
   );
 }
@@ -366,24 +375,13 @@ function CarreraStudentModal({ carrera, estudiantes, total, loading, onClose, on
   const exportExcel = async () => {
     const XLSX = await import("xlsx");
     const wb = XLSX.utils.book_new();
+    const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+    const now = new Date();
+    const fecha = `${now.getDate()} de ${MESES[now.getMonth()]} de ${now.getFullYear()}`;
+    const anio = now.getFullYear();
+    const reportTitle = `Estudiantes de ${carrera}`;
 
-    // LÉEME sheet
-    const leemeData = [
-      ["LÉEME — Información del reporte"],
-      [],
-      ["Plataforma", "YachayDeep — Sistema de Analítica Estudiantil"],
-      ["Autor", "Carlos Vásconez-Paredes"],
-      ["Reporte", `Estudiantes de ${carrera}`],
-      ["Registros", `${filtered.length} estudiantes`],
-      ["Generado", new Date().toLocaleString("es-EC")],
-      [],
-      ["Cita sugerida (APA):", `Vásconez-Paredes, C. (${new Date().getFullYear()}). YachayDeep: Sistema de Analítica Estudiantil. Universidad Politécnica Salesiana.`],
-    ];
-    const wsLeeme = XLSX.utils.aoa_to_sheet(leemeData);
-    wsLeeme["!cols"] = [{ wch: 20 }, { wch: 80 }];
-    XLSX.utils.book_append_sheet(wb, wsLeeme, "LÉEME");
-
-    // Data sheet
+    // Data sheet (prepare first to count rows/cols)
     const headers = ["Nombre", "Cédula", "Correo", "Nivel (moda)", "Grupo (moda)", "Riesgo", "Promedio", "Estado matrícula", "3ra matrícula"];
     const rows = filtered.map(e => [
       e.nombre || "", e.cedula || "", e.correo_institucional || "",
@@ -391,6 +389,65 @@ function CarreraStudentModal({ carrera, estudiantes, total, loading, onClose, on
       e.nivel_riesgo || "", e.promedio_calificaciones != null ? Math.round(e.promedio_calificaciones) : "",
       e.estado_matricula || "", e.es_tercera_matricula ? "Sí" : "No",
     ]);
+
+    // LÉEME sheet (standard format)
+    const leemeLines = [
+      ["════════════════════════════════════════════════════════════════"],
+      ["           DOCUMENTACIÓN Y TÉRMINOS DE USO DE DATOS"],
+      ["════════════════════════════════════════════════════════════════"],
+      [""],
+      ["1. INFORMACIÓN DE AUTORÍA Y PROPIEDAD INTELECTUAL"],
+      ["────────────────────────────────────────────────────────────────"],
+      ["• Desarrollado por:     Carlos Vásconez-Paredes"],
+      ["• Cargo/Función:        Gestor de Analítica del Aprendizaje"],
+      ["• Institución:          Universidad Politécnica Salesiana"],
+      [`• Fecha de generación:  ${fecha}`],
+      ["• Versión del dataset:  v1.0 (Estructurado y Procesado)"],
+      [`• Reporte:              ${reportTitle}`],
+      [""],
+      ["2. CONDICIONES DE USO Y RECONOCIMIENTO (LICENCIA)"],
+      ["────────────────────────────────────────────────────────────────"],
+      ["Este conjunto de datos, métricas e interpretaciones analíticas son el resultado"],
+      ["de un desarrollo metodológico y técnico específico. Se autoriza su uso para"],
+      ["fines académicos, artículos científicos, ponencias y conferencias, bajo la"],
+      ["condición estricta de otorgar el crédito correspondiente al autor."],
+      [""],
+      ["De acuerdo con las políticas de integridad científica, la omisión de la fuente"],
+      ["se considerará una falta a la ética académica."],
+      [""],
+      ["3. FORMA SUGERIDA DE CITA / REFERENCIA"],
+      ["────────────────────────────────────────────────────────────────"],
+      ["• Estilo APA (7ma ed.):"],
+      [`  Vásconez-Paredes, C. (${anio}). ${reportTitle}`],
+      ["  (Versión 1.0) [Conjunto de datos/Métricas analíticas]. Gestión de Analítica"],
+      ["  del Aprendizaje, Universidad Politécnica Salesiana."],
+      [""],
+      ["• Estilo Vancouver / Nota al pie:"],
+      ["  Datos analíticos y procesamiento metodológico provistos por Carlos"],
+      ["  Vásconez-Paredes, Gestión de Analítica del Aprendizaje, Universidad"],
+      [`  Politécnica Salesiana, ${anio}.`],
+      [""],
+      ["4. CONTACTO Y COLABORACIÓN"],
+      ["────────────────────────────────────────────────────────────────"],
+      ["Si su investigación requiere modificaciones metodológicas en los datos, cruces"],
+      ["de variables avanzados o una interpretación analítica conjunta que impacte la"],
+      ['sección de "Metodología" o "Resultados" del artículo, por favor tome contacto'],
+      ["para estructurar una participación formal bajo la figura de coautoría."],
+      [""],
+      ["Contacto: cvasconez@ups.edu.ec"],
+      [""],
+      ["5. INFORMACIÓN DE ESTA EXPORTACIÓN"],
+      ["────────────────────────────────────────────────────────────────"],
+      [`• Filas de datos:   ${rows.length}`],
+      [`• Columnas:         ${headers.length}`],
+      [`• Fecha/hora:       ${now.toLocaleString("es-EC")}`],
+      ["• Plataforma:       YachayDeep — Sistema de Analítica del Aprendizaje"],
+      ["════════════════════════════════════════════════════════════════"],
+    ];
+    const wsLeeme = XLSX.utils.aoa_to_sheet(leemeLines.map(l => [l[0] || ""]));
+    wsLeeme["!cols"] = [{ wch: 80 }];
+    XLSX.utils.book_append_sheet(wb, wsLeeme, "LÉEME");
+
     const wsData = XLSX.utils.aoa_to_sheet([headers, ...rows]);
     wsData["!cols"] = headers.map(() => ({ wch: 22 }));
     XLSX.utils.book_append_sheet(wb, wsData, "Estudiantes");
