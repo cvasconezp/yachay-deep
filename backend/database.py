@@ -5,16 +5,20 @@ from .config import settings
 
 _is_sqlite = "sqlite" in settings.DATABASE_URL
 
-engine = create_engine(
-    settings.DATABASE_URL,
+_engine_kwargs = dict(
     pool_pre_ping=True,
-    # Pool más robusto para Railway PostgreSQL (límite de conexiones bajo)
-    pool_size=3 if not _is_sqlite else 0,
-    max_overflow=5 if not _is_sqlite else 0,
-    pool_recycle=300,        # reciclar conexiones cada 5 min
-    pool_timeout=20,         # timeout más corto para detectar problemas
     connect_args={"check_same_thread": False} if _is_sqlite else {},
 )
+if not _is_sqlite:
+    # Pool más robusto para Railway PostgreSQL (límite de conexiones bajo)
+    _engine_kwargs.update(
+        pool_size=3,
+        max_overflow=5,
+        pool_recycle=300,        # reciclar conexiones cada 5 min
+        pool_timeout=20,         # timeout más corto para detectar problemas
+    )
+
+engine = create_engine(settings.DATABASE_URL, **_engine_kwargs)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()

@@ -256,7 +256,7 @@ class TestTMAlerts:
         assert alerts.status_code == 200
         tm_alerts = [a for a in alerts.json() if a["tipo"] == "tercera_matricula"]
         assert len(tm_alerts) >= 1
-        assert tm_alerts[0]["severidad"] == "critico"
+        assert tm_alerts[0]["severidad"] == "alto"
         assert "tercera matrícula" in tm_alerts[0]["mensaje"].lower()
 
     def test_no_tm_alert_for_normal_student(
@@ -539,4 +539,4 @@ class TestLoadTercerasMatriculas:
             AlertEvent.tipo == "tercera_matricula",
         ).first()
         assert alert is not None
-        assert alert.severidad == "critico"
+        assert alert.severidad == "alto"

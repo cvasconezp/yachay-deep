@@ -18,6 +18,178 @@ from ..models.user import User
 router = APIRouter(prefix="/export", tags=["export"])
 
 
+# ─── Meses en español ────────────────────────────────────────────────────────
+
+MESES_ES = {
+    1: "enero", 2: "febrero", 3: "marzo", 4: "abril",
+    5: "mayo", 6: "junio", 7: "julio", 8: "agosto",
+    9: "septiembre", 10: "octubre", 11: "noviembre", 12: "diciembre",
+}
+
+
+# ─── Helper: Hoja LÉEME ──────────────────────────────────────────────────────
+
+def _add_leeme_sheet(wb, report_title: str, filters_desc: str, user_name: str, generated_at: datetime):
+    """
+    Inserta una hoja 'LÉEME' como primera hoja del workbook con información
+    de autoría, condiciones de uso y cita sugerida.
+    """
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+
+    ws = wb.create_sheet("LÉEME", 0)
+
+    # ── Estilos ──────────────────────────────────────────────────────────────
+    NAVY = "1B3A6B"
+    GRAY_BG = "F5F7FA"
+    GOLD = "F0B000"
+
+    title_font = Font(name="Calibri", bold=True, color=NAVY, size=14)
+    section_font = Font(name="Calibri", bold=True, color="FFFFFF", size=11)
+    section_fill = PatternFill(start_color=NAVY, end_color=NAVY, fill_type="solid")
+    content_font = Font(name="Calibri", size=10)
+    content_font_bold = Font(name="Calibri", size=10, bold=True)
+    meta_font = Font(name="Calibri", size=10, color="555555")
+    gold_font = Font(name="Calibri", size=10, bold=True, color=GOLD.replace("#", ""))
+    thin_border = Border(
+        left=Side(style="thin", color="D0D5DD"),
+        right=Side(style="thin", color="D0D5DD"),
+        top=Side(style="thin", color="D0D5DD"),
+        bottom=Side(style="thin", color="D0D5DD"),
+    )
+    wrap_align = Alignment(vertical="top", wrap_text=True)
+    center_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    # ── Ancho de columna ─────────────────────────────────────────────────────
+    ws.column_dimensions["A"].width = 80
+
+    # ── Fecha dinámica ───────────────────────────────────────────────────────
+    dia = generated_at.day
+    mes = MESES_ES.get(generated_at.month, str(generated_at.month))
+    anio = generated_at.year
+    fecha_str = f"{dia} de {mes} de {anio}"
+
+    # ── Contenido ────────────────────────────────────────────────────────────
+    row = 1
+
+    def write_title(text):
+        nonlocal row
+        cell = ws.cell(row=row, column=1, value=text)
+        cell.font = title_font
+        cell.alignment = center_align
+        cell.border = thin_border
+        row += 1
+
+    def write_section(text):
+        nonlocal row
+        cell = ws.cell(row=row, column=1, value=text)
+        cell.font = section_font
+        cell.fill = section_fill
+        cell.alignment = Alignment(vertical="center", wrap_text=True)
+        cell.border = thin_border
+        row += 1
+
+    def write_line(text, font=None, indent=False):
+        nonlocal row
+        display = ("    " + text) if indent else text
+        cell = ws.cell(row=row, column=1, value=display)
+        cell.font = font or content_font
+        cell.alignment = wrap_align
+        cell.border = thin_border
+        row += 1
+
+    def write_blank():
+        nonlocal row
+        cell = ws.cell(row=row, column=1, value="")
+        cell.border = thin_border
+        row += 1
+
+    # ════════════════════════════════════════════════════════════════════════
+    # TÍTULO
+    # ════════════════════════════════════════════════════════════════════════
+    write_blank()
+    write_title("DOCUMENTACIÓN Y TÉRMINOS DE USO DE DATOS")
+    write_blank()
+
+    # ── 1. INFORMACIÓN DE AUTORÍA ─────────────────────────────────────────
+    write_section("1. INFORMACIÓN DE AUTORÍA Y PROPIEDAD INTELECTUAL")
+    write_blank()
+    write_line("• Desarrollado por:     Carlos Dario Vasconez Paredes", content_font_bold)
+    write_line("• Cargo/Función:        Gestor de Analítica del Aprendizaje")
+    write_line("• Institución:          Universidad Politécnica Salesiana")
+    write_line(f"• Fecha de generación:  {fecha_str}")
+    write_line("• Versión del dataset:  v1.0 (Estructurado y Procesado)")
+    write_line(f"• Reporte:              {report_title}")
+    write_blank()
+
+    # ── 2. CONDICIONES DE USO ─────────────────────────────────────────────
+    write_section("2. CONDICIONES DE USO Y RECONOCIMIENTO (LICENCIA)")
+    write_blank()
+    write_line(
+        "Este conjunto de datos, métricas e interpretaciones analíticas son el resultado "
+        "de un desarrollo metodológico y técnico específico. Se autoriza su uso para "
+        "fines académicos, artículos científicos, ponencias y conferencias, bajo la "
+        "condición estricta de otorgar el crédito correspondiente al autor."
+    )
+    write_blank()
+    write_line(
+        "De acuerdo con las políticas de integridad científica, la omisión de la fuente "
+        "se considerará una falta a la ética académica."
+    )
+    write_blank()
+
+    # ── 3. FORMA SUGERIDA DE CITA ─────────────────────────────────────────
+    write_section("3. FORMA SUGERIDA DE CITA / REFERENCIA")
+    write_blank()
+    write_line("• Estilo APA (7ma ed.):", content_font_bold)
+    write_line(
+        f"  Vasconez Paredes, C. D. ({anio}). {report_title} "
+        f"(Versión 1.0) [Conjunto de datos/Métricas analíticas]. Gestión de Analítica "
+        f"del Aprendizaje, Universidad Politécnica Salesiana.",
+        indent=True,
+    )
+    write_blank()
+    write_line("• Estilo Vancouver / Nota al pie:", content_font_bold)
+    write_line(
+        f"  Datos analíticos y procesamiento metodológico provistos por Carlos Dario "
+        f"Vasconez Paredes, Gestión de Analítica del Aprendizaje, Universidad "
+        f"Politécnica Salesiana, {anio}.",
+        indent=True,
+    )
+    write_blank()
+
+    # ── 4. CONTACTO Y COLABORACIÓN ────────────────────────────────────────
+    write_section("4. CONTACTO Y COLABORACIÓN")
+    write_blank()
+    write_line(
+        "Si su investigación requiere modificaciones metodológicas en los datos, cruces "
+        "de variables avanzados o una interpretación analítica conjunta que impacte la "
+        'sección de "Metodología" o "Resultados" del artículo, por favor tome contacto '
+        "para estructurar una participación formal bajo la figura de coautoría."
+    )
+    write_blank()
+    write_line("Contacto: cvasconez@ups.edu.ec", content_font_bold)
+    write_blank()
+
+    # ── 5. FILTROS APLICADOS ──────────────────────────────────────────────
+    write_section("5. FILTROS APLICADOS EN ESTA EXPORTACIÓN")
+    write_blank()
+    write_line(filters_desc)
+    write_blank()
+
+    # ── Metadatos finales ─────────────────────────────────────────────────
+    write_line(f"Generado por: {user_name}", meta_font)
+    write_line("Plataforma:   Yachay Deep — Sistema de Analítica del Aprendizaje", meta_font)
+    write_blank()
+
+    # ── Aplicar borde a toda el área usada ────────────────────────────────
+    for r in range(1, row):
+        cell = ws.cell(row=r, column=1)
+        cell.border = thin_border
+
+    return ws
+
+
 # ─── Columnas disponibles para exportación Excel ─────────────────────────────
 
 EXPORT_COLUMNS = {
@@ -202,6 +374,14 @@ def export_estudiantes_excel(
     ws.freeze_panes = "A2"
     ws.auto_filter.ref = ws.dimensions
 
+    # ── Agregar hoja LÉEME ────────────────────────────────────────────────
+    now = datetime.now()
+    report_title_str = f"Estudiantes — {carrera}" if carrera else "Estudiantes — Todas las carreras"
+    _add_leeme_sheet(wb, report_title_str, filter_desc, current_user.nombre, now)
+
+    # Asegurar que la hoja de datos sea la activa al abrir
+    wb.active = wb.sheetnames.index("Estudiantes")
+
     buffer = BytesIO()
     wb.save(buffer)
     buffer.seek(0)
@@ -380,10 +560,19 @@ def export_intervenciones_excel(
         filter_parts.append(f"Seguimiento={seguimiento}")
     if len(filter_parts) == 1:
         filter_parts.append("(sin filtros)")
-    ws.cell(row=summary_row + 2, column=1, value=" ".join(filter_parts)).font = Font(size=9, color="888888")
+    filter_desc = " ".join(filter_parts)
+    ws.cell(row=summary_row + 2, column=1, value=filter_desc).font = Font(size=9, color="888888")
 
     ws.freeze_panes = "A2"
     ws.auto_filter.ref = ws.dimensions
+
+    # ── Agregar hoja LÉEME ────────────────────────────────────────────────
+    now = datetime.now()
+    report_title_str = f"Intervenciones — {carrera}" if carrera else "Intervenciones — Todas las carreras"
+    _add_leeme_sheet(wb, report_title_str, filter_desc, current_user.nombre, now)
+
+    # Asegurar que la hoja de datos sea la activa al abrir
+    wb.active = wb.sheetnames.index("Intervenciones")
 
     buffer = BytesIO()
     wb.save(buffer)

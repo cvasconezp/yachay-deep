@@ -9,6 +9,7 @@ import {
   PieChart, Pie, Cell,
   BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  LabelList,
   Treemap,
 } from "recharts";
 
@@ -29,14 +30,35 @@ const GENDER_COLORS = { Masculino: PBI.blue, Femenino: "#EC4899", "Sin dato": PB
 const pbiTooltipStyle = { fontSize: 12, borderRadius: 8, border: "none", boxShadow: "0 4px 12px rgba(0,0,0,.1)", background: "#fff" };
 
 /* ── KPI Card (Power BI style) ─────────── */
+/* KPI tooltip descriptions */
+const KPI_TOOLTIPS = {
+  "Estudiantes": "Total de estudiantes matriculados en el período",
+  "Docentes": "Total de docentes asignados a materias",
+  "Carreras": "Programas académicos activos",
+  "Matrículas": "Registros de estudiante × materia",
+  "Prom. Calificaciones": "Promedio general de notas sobre 100",
+  "Asignaturas": "Materias únicas ofertadas",
+  "Secciones": "Grupos de materia × docente",
+  "Aulas Virtuales": "Cursos activos en plataforma AVAC",
+  "Matrículas con Repitencia": "Estudiantes que repiten alguna materia",
+  "Con Riesgo Calculado": "Estudiantes con indicador de riesgo generado",
+  "Con Calificaciones": "Estudiantes con notas registradas",
+  "Docentes (calificaciones)": "Docentes que han registrado calificaciones",
+  "Total analizadas": "Intervenciones cerradas evaluadas",
+  "Exitosas": "Intervenciones con resultado positivo",
+  "No exitosas": "Intervenciones sin mejora observable",
+  "Tasa de éxito": "Porcentaje de intervenciones exitosas",
+};
+
 function KPICard({ label, value, sub, icon, accent = PBI.blue, onClick }) {
   const clickable = !!onClick;
+  const tooltip = clickable ? "Clic para ver listado" : (KPI_TOOLTIPS[label] || label);
   return (
     <div
-      className={`rounded-lg p-4 flex flex-col ${clickable ? "cursor-pointer hover:shadow-md transition-all" : ""}`}
+      className={`rounded-lg p-4 flex flex-col transition-all ${clickable ? "cursor-pointer hover:shadow-lg hover:-translate-y-0.5" : "hover:shadow-sm"}`}
       style={{ background: PBI.card, border: `1px solid ${PBI.border}`, borderTop: `3px solid ${accent}` }}
       onClick={onClick}
-      title={clickable ? "Clic para ver listado" : undefined}
+      title={tooltip}
     >
       <div className="flex items-center gap-2 mb-1">
         {icon && <span className="text-base">{icon}</span>}
@@ -66,18 +88,30 @@ function MiniBar({ label, value, total, color = PBI.blue }) {
 /* ── Donut chart section (PBI style) ──── */
 function DonutSection({ title, data, colors, total, onItemClick }) {
   if (!data || data.length === 0) return null;
+  const titleWithCount = `${title} (n=${data.length})`;
   return (
     <div className="rounded-lg p-4" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
-      <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: PBI.slate }}>{title}</h3>
+      <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: PBI.slate }}>{titleWithCount}</h3>
       <div className="flex items-center gap-4">
-        <ResponsiveContainer width={120} height={120}>
-          <PieChart>
-            <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={30} outerRadius={50} paddingAngle={3} strokeWidth={0}>
-              {data.map((_, i) => <Cell key={i} fill={colors[i % colors.length]} />)}
-            </Pie>
-            <Tooltip contentStyle={pbiTooltipStyle} formatter={(v, name) => [`${v.toLocaleString()}`, name]} />
-          </PieChart>
-        </ResponsiveContainer>
+        <div style={{ position: "relative", width: 120, height: 120 }}>
+          <ResponsiveContainer width={120} height={120}>
+            <PieChart>
+              <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={30} outerRadius={50} paddingAngle={3} strokeWidth={0}>
+                {data.map((_, i) => <Cell key={i} fill={colors[i % colors.length]} />)}
+              </Pie>
+              <Tooltip contentStyle={pbiTooltipStyle} formatter={(v, name) => {
+                const pct = total > 0 ? ((v / total) * 100).toFixed(1) : 0;
+                return [`${v.toLocaleString()} (${pct}%)`, name];
+              }} />
+            </PieChart>
+          </ResponsiveContainer>
+          {total > 0 && (
+            <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", textAlign: "center", pointerEvents: "none" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: PBI.navy, lineHeight: 1.1 }}>{total.toLocaleString()}</div>
+              <div style={{ fontSize: 8, color: PBI.slate, textTransform: "uppercase" }}>Total</div>
+            </div>
+          )}
+        </div>
         <div className="flex-1 space-y-1.5">
           {data.map((d, i) => {
             const clickHandler = onItemClick ? () => onItemClick(d.name) : undefined;
@@ -103,16 +137,23 @@ function DonutSection({ title, data, colors, total, onItemClick }) {
 function HBarChart({ title, data, color = PBI.blue, maxItems = 999, leftMargin = 180 }) {
   if (!data || data.length === 0) return null;
   const sliced = data.slice(0, maxItems);
+  const totalSum = sliced.reduce((s, d) => s + (d.value || 0), 0);
+  const titleAnnotated = `${title} (n=${sliced.length})`;
   return (
     <div className="rounded-lg p-4" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
-      <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: PBI.slate }}>{title}</h3>
+      <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: PBI.slate }}>{titleAnnotated}</h3>
       <ResponsiveContainer width="100%" height={Math.max(sliced.length * 32, 120)}>
-        <BarChart data={sliced} layout="vertical" margin={{ top: 0, right: 30, bottom: 0, left: 10 }}>
+        <BarChart data={sliced} layout="vertical" margin={{ top: 0, right: 50, bottom: 0, left: 10 }}>
           <CartesianGrid horizontal={false} stroke="#f1f5f9" />
           <XAxis type="number" tick={{ fontSize: 10, fill: PBI.slate }} axisLine={false} tickLine={false} />
           <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fill: PBI.navy }} width={leftMargin} axisLine={false} tickLine={false} />
-          <Tooltip contentStyle={pbiTooltipStyle} formatter={(v, _, p) => [`${v.toLocaleString()} estudiantes`, p.payload.full || p.payload.name]} />
-          <Bar dataKey="value" fill={color} radius={[0, 6, 6, 0]} barSize={18} />
+          <Tooltip contentStyle={pbiTooltipStyle} formatter={(v, _, p) => {
+            const pct = totalSum > 0 ? ((v / totalSum) * 100).toFixed(1) : 0;
+            return [`${v.toLocaleString()} estudiantes (${pct}%)`, p.payload.full || p.payload.name];
+          }} />
+          <Bar dataKey="value" fill={color} radius={[0, 6, 6, 0]} barSize={18}>
+            <LabelList dataKey="value" position="right" style={{ fontSize: 10, fill: PBI.navy, fontWeight: 600 }} />
+          </Bar>
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -284,7 +325,7 @@ function PracticasTab({ data: practicasData, loading, filtros, setFiltros, expan
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Sistema Educativo — donut */}
         <div className="rounded-lg p-4" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
-          <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: PBI.slate }}>Sistema Educativo</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: PBI.slate }}>Sistema Educativo (n={sistemaData.length})</h3>
           <ResponsiveContainer width="100%" height={180}>
             <PieChart>
               <Pie data={sistemaData} cx="50%" cy="50%" innerRadius={45} outerRadius={75} paddingAngle={3}
@@ -292,25 +333,39 @@ function PracticasTab({ data: practicasData, loading, filtros, setFiltros, expan
                 {sistemaData.map((_, i) => <Cell key={i} fill={sistemaColors[i % sistemaColors.length]} />)}
               </Pie>
               <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: "none", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}
-                formatter={(v, name) => [`${v} estudiantes`, name]} />
+                formatter={(v, name) => {
+                  const tot = sistemaData.reduce((s, d) => s + d.value, 0);
+                  const pct = tot > 0 ? ((v / tot) * 100).toFixed(1) : 0;
+                  return [`${v} estudiantes (${pct}%)`, name];
+                }} />
               <Legend iconType="circle" iconSize={8}
-                formatter={(v) => <span style={{ fontSize: 11, color: PBI.slate }}>{v}</span>} />
+                formatter={(v, entry) => {
+                  const item = sistemaData.find(d => d.name === v);
+                  const tot = sistemaData.reduce((s, d) => s + d.value, 0);
+                  const pct = item && tot > 0 ? Math.round((item.value / tot) * 100) : 0;
+                  return <span style={{ fontSize: 11, color: PBI.slate }}>{v} ({pct}%)</span>;
+                }} />
             </PieChart>
           </ResponsiveContainer>
         </div>
 
         {/* Centro de Apoyo — bar */}
         <div className="rounded-lg p-4" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
-          <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: PBI.slate }}>Centro de Apoyo</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: PBI.slate }}>Centro de Apoyo (n={centroData.length})</h3>
           <ResponsiveContainer width="100%" height={180}>
             <BarChart data={centroData} barCategoryGap="20%">
               <CartesianGrid vertical={false} stroke="#f1f5f9" />
               <XAxis dataKey="name" tick={{ fontSize: 11, fill: PBI.slate }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 10, fill: PBI.slate }} axisLine={false} tickLine={false} />
               <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: "none", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}
-                formatter={(v) => [`${v} est.`, ""]} />
+                formatter={(v) => {
+                  const tot = centroData.reduce((s, d) => s + d.value, 0);
+                  const pct = tot > 0 ? ((v / tot) * 100).toFixed(1) : 0;
+                  return [`${v} estudiantes (${pct}%)`, ""];
+                }} />
               <Bar dataKey="value" radius={[6, 6, 0, 0]}>
                 {centroData.map((_, i) => <Cell key={i} fill={centroColors[i % centroColors.length]} />)}
+                <LabelList dataKey="value" position="top" style={{ fontSize: 10, fill: PBI.navy, fontWeight: 600 }} />
               </Bar>
             </BarChart>
           </ResponsiveContainer>
@@ -321,16 +376,21 @@ function PracticasTab({ data: practicasData, loading, filtros, setFiltros, expan
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Nivel de práctica */}
         <div className="rounded-lg p-4" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
-          <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: PBI.slate }}>Nivel de Práctica</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: PBI.slate }}>Nivel de Práctica (n={nivelData.length})</h3>
           <ResponsiveContainer width="100%" height={nivelData.length * 45 + 20}>
             <BarChart data={nivelData} layout="vertical" barCategoryGap="25%">
               <CartesianGrid horizontal={false} stroke="#f1f5f9" />
               <XAxis type="number" tick={{ fontSize: 10, fill: PBI.slate }} axisLine={false} tickLine={false} />
               <YAxis type="category" dataKey="name" width={180} tick={{ fontSize: 11, fill: PBI.navy }} axisLine={false} tickLine={false} />
               <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: "none", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}
-                formatter={(v, _, p) => [`${v} estudiantes`, p.payload.full]} />
+                formatter={(v, _, p) => {
+                  const tot = nivelData.reduce((s, d) => s + d.value, 0);
+                  const pct = tot > 0 ? ((v / tot) * 100).toFixed(1) : 0;
+                  return [`${v} estudiantes (${pct}%)`, p.payload.full];
+                }} />
               <Bar dataKey="value" radius={[0, 6, 6, 0]}>
                 {nivelData.map((_, i) => <Cell key={i} fill={[PBI.teal, PBI.blue, PBI.purple][i % 3]} />)}
+                <LabelList dataKey="value" position="right" style={{ fontSize: 10, fill: PBI.navy, fontWeight: 600 }} />
               </Bar>
             </BarChart>
           </ResponsiveContainer>
@@ -338,7 +398,7 @@ function PracticasTab({ data: practicasData, loading, filtros, setFiltros, expan
 
         {/* Treemap de distritos */}
         <div className="rounded-lg p-4" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
-          <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: PBI.slate }}>Distribución por Distrito</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: PBI.slate }}>Distribución por Distrito (n={treemapData.length})</h3>
           <ResponsiveContainer width="100%" height={Math.max(200, nivelData.length * 45 + 20)}>
             <Treemap data={treemapData} dataKey="size" nameKey="name" isAnimationActive={false}
               content={<TreemapCell />}>
@@ -603,15 +663,16 @@ export default function ResumenDatos() {
     .sort((a, b) => b.total_estudiantes - a.total_estudiantes)
     .map(c => ({ name: c.carrera?.length > 45 ? c.carrera.slice(0, 43) + "…" : c.carrera, value: c.total_estudiantes, full: c.carrera }));
 
+  const practicasCount = practicasData?.total_estudiantes || 0;
   const TABS = [
-    { key: "general", label: "Vista General" },
-    { key: "academico", label: "Académico" },
-    { key: "demografico", label: "Demográfico" },
-    { key: "carreras", label: "Por Carrera" },
-    { key: "tendencias", label: "Tendencias" },
-    { key: "practicas", label: "Prácticas" },
-    { key: "ejecutivo", label: "Ejecutivo" },
-    { key: "efectividad", label: "Efectividad" },
+    { key: "general", label: "Vista General", icon: "📊" },
+    { key: "academico", label: "Académico", icon: "📝" },
+    { key: "demografico", label: "Demográfico", icon: "👥" },
+    { key: "carreras", label: "Por Carrera", icon: "🎓", badge: porCarrera.length || null },
+    { key: "tendencias", label: "Tendencias", icon: "📈", badge: comparativa.length >= 2 ? comparativa.length : null },
+    { key: "practicas", label: "Prácticas", icon: "🏫", badge: practicasCount || null },
+    { key: "ejecutivo", label: "Ejecutivo", icon: "🛡️" },
+    { key: "efectividad", label: "Efectividad", icon: "🎯" },
   ];
 
   return (
@@ -620,7 +681,11 @@ export default function ResumenDatos() {
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-2xl font-bold" style={{ color: PBI.navy }}>Análisis Institucional</h1>
-          <p className="text-sm" style={{ color: PBI.slate }}>Panel analítico integral — estudiantes, carreras y métricas institucionales</p>
+          <p className="text-sm" style={{ color: PBI.slate }}>
+            {filtroPeriodo && g.total_estudiantes
+              ? `Período ${filtroPeriodo} — ${g.total_estudiantes?.toLocaleString()} estudiantes en ${g.total_carreras || "—"} carreras`
+              : "Panel analítico integral — estudiantes, carreras y métricas institucionales"}
+          </p>
         </div>
         <button onClick={() => setExportOpen(!exportOpen)}
           className="flex items-center gap-2 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm hover:opacity-90"
@@ -751,14 +816,21 @@ export default function ResumenDatos() {
           <div className="flex gap-0 mb-5 overflow-x-auto" style={{ borderBottom: `2px solid ${PBI.border}` }}>
             {TABS.map(t => (
               <button key={t.key} onClick={() => setActiveTab(t.key)}
-                className="px-5 py-2.5 text-sm font-medium transition-colors whitespace-nowrap relative"
+                className="px-5 py-2.5 text-sm font-medium transition-colors whitespace-nowrap relative flex items-center gap-1.5"
                 style={{
                   color: activeTab === t.key ? PBI.navy : PBI.slate,
                   fontWeight: activeTab === t.key ? 700 : 500,
                   borderBottom: activeTab === t.key ? `3px solid ${PBI.blue}` : "3px solid transparent",
                   marginBottom: "-2px",
                 }}>
+                <span className="text-sm">{t.icon}</span>
                 {t.label}
+                {t.badge && (
+                  <span className="ml-1 px-1.5 py-0 text-[10px] font-semibold rounded-full" style={{
+                    background: activeTab === t.key ? `${PBI.blue}15` : "#f1f5f9",
+                    color: activeTab === t.key ? PBI.blue : PBI.slate,
+                  }}>{t.badge}</span>
+                )}
               </button>
             ))}
           </div>
@@ -813,7 +885,7 @@ export default function ResumenDatos() {
 
               {/* Estudiantes por carrera — bar chart */}
               {carreraBarData.length > 0 && (
-                <HBarChart title="Estudiantes por Carrera" data={carreraBarData} color="#6366f1" />
+                <HBarChart title={`Estudiantes por Carrera (${porCarrera.length} carreras)`} data={carreraBarData} color="#6366f1" />
               )}
 
               {/* Intervenciones summary */}
@@ -877,14 +949,20 @@ export default function ResumenDatos() {
                 {/* Nivel académico */}
                 {nivelData.length > 0 && (
                   <div className="rounded-lg p-4" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
-                    <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: PBI.slate }}>Estudiantes por Nivel Académico</h3>
+                    <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: PBI.slate }}>Estudiantes por Nivel Académico (n={nivelData.length} niveles)</h3>
                     <ResponsiveContainer width="100%" height={240}>
-                      <BarChart data={nivelData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                      <BarChart data={nivelData} margin={{ top: 20, right: 20, bottom: 5, left: 0 }}>
                         <CartesianGrid vertical={false} stroke="#f1f5f9" />
                         <XAxis dataKey="name" tick={{ fontSize: 11, fill: PBI.slate }} axisLine={false} tickLine={false} />
                         <YAxis tick={{ fontSize: 11, fill: PBI.slate }} axisLine={false} tickLine={false} />
-                        <Tooltip contentStyle={pbiTooltipStyle} formatter={(v) => [`${v} estudiantes`, ""]} />
-                        <Bar dataKey="value" name="Estudiantes" fill={PBI.blue} radius={[6, 6, 0, 0]} />
+                        <Tooltip contentStyle={pbiTooltipStyle} formatter={(v) => {
+                          const total = nivelData.reduce((s, d) => s + d.value, 0);
+                          const pct = total > 0 ? ((v / total) * 100).toFixed(1) : 0;
+                          return [`${v} estudiantes (${pct}%)`, ""];
+                        }} />
+                        <Bar dataKey="value" name="Estudiantes" fill={PBI.blue} radius={[6, 6, 0, 0]}>
+                          <LabelList dataKey="value" position="top" style={{ fontSize: 10, fill: PBI.navy, fontWeight: 600 }} />
+                        </Bar>
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -1036,6 +1114,13 @@ export default function ResumenDatos() {
                             </div>
                           </div>
 
+                          {/* Separator */}
+                          <div className="flex items-center gap-3 my-1">
+                            <div className="flex-1 h-px" style={{ background: PBI.border }} />
+                            <span className="text-[9px] uppercase tracking-widest" style={{ color: PBI.slate }}>Demografía</span>
+                            <div className="flex-1 h-px" style={{ background: PBI.border }} />
+                          </div>
+
                           {/* Row 2: Ciudades + Etnia + Sede */}
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
                             <div className="rounded-lg p-3 space-y-1.5" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
@@ -1056,6 +1141,13 @@ export default function ResumenDatos() {
                                 <MiniBar key={s} label={s} value={cnt} total={c.total_estudiantes} color={PBI.blue} />
                               )) : <span className="text-xs" style={{ color: PBI.slate }}>Sin datos</span>}
                             </div>
+                          </div>
+
+                          {/* Separator */}
+                          <div className="flex items-center gap-3 my-1">
+                            <div className="flex-1 h-px" style={{ background: PBI.border }} />
+                            <span className="text-[9px] uppercase tracking-widest" style={{ color: PBI.slate }}>Matrícula y seguimiento</span>
+                            <div className="flex-1 h-px" style={{ background: PBI.border }} />
                           </div>
 
                           {/* Row 3: Estado matrícula + Intervenciones + Nivel */}
