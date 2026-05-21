@@ -238,14 +238,50 @@ function TreemapCell({ x, y, width, height, name, value, fill }) {
 function SmartTreemapCell({ x, y, width, height, name, value, fill, total }) {
   if (width < 4 || height < 4) return null;
   const pct = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
-  const pad = 6; // internal padding
+  const pad = 6;
   const innerW = width - pad * 2;
   const innerH = height - pad * 2;
-  const canFitName = innerW > 50 && innerH > 28;
   const canFitValue = innerW > 28 && innerH > 14;
-  const fontSize = Math.max(9, Math.min(14, Math.min(innerW / 7, innerH / 3.2)));
-  const subFontSize = Math.max(8, fontSize - 2);
   const clipId = `clip-${Math.round(x)}-${Math.round(y)}`;
+
+  // Adaptive font size based on cell area
+  const area = innerW * innerH;
+  const fontSize = Math.max(8, Math.min(14, Math.sqrt(area) / 8));
+  const subFontSize = Math.max(7, fontSize - 2);
+  const lineHeight = fontSize * 1.25;
+
+  // Word-wrap name into multiple lines based on available width
+  const wrapText = (text, maxWidth, fs) => {
+    if (!text) return [];
+    const avgCharW = fs * 0.62; // approximate char width
+    const maxChars = Math.floor(maxWidth / avgCharW);
+    if (text.length <= maxChars) return [text];
+    const words = text.split(/\s+/);
+    const lines = [];
+    let current = "";
+    for (const word of words) {
+      const test = current ? current + " " + word : word;
+      if (test.length > maxChars && current) {
+        lines.push(current);
+        current = word;
+      } else {
+        current = test;
+      }
+    }
+    if (current) lines.push(current);
+    return lines;
+  };
+
+  const nameLines = wrapText(name, innerW - 4, fontSize);
+  const totalTextHeight = nameLines.length * lineHeight + (subFontSize + 4);
+  const canFitName = innerW > 40 && innerH > 24 && totalTextHeight < innerH;
+  // If can't fit wrapped name, try just showing value
+  const canFitNameCompact = !canFitName && innerW > 40 && innerH > 20 && nameLines.length > 0;
+
+  // Vertical centering: start Y so the text block is centered
+  const blockHeight = canFitName ? totalTextHeight : (canFitNameCompact ? lineHeight + subFontSize + 4 : 0);
+  const startY = y + height / 2 - blockHeight / 2 + fontSize * 0.35;
+
   return (
     <g>
       <defs>
@@ -260,15 +296,27 @@ function SmartTreemapCell({ x, y, width, height, name, value, fill, total }) {
       <g clipPath={`url(#${clipId})`}>
         {canFitName && (
           <>
-            <text x={x + width / 2} y={y + height / 2 - (innerH > 40 ? 7 : 2)} textAnchor="middle" fill="#fff"
-              style={{ fontSize, fontWeight: 700, textShadow: "0 1px 4px rgba(0,0,0,0.5)", pointerEvents: "none" }}>{name}</text>
-            <text x={x + width / 2} y={y + height / 2 + (innerH > 40 ? 11 : 13)} textAnchor="middle" fill="rgba(255,255,255,0.9)"
+            {nameLines.map((line, i) => (
+              <text key={i} x={x + width / 2} y={startY + i * lineHeight} textAnchor="middle" fill="#fff"
+                style={{ fontSize, fontWeight: 700, textShadow: "0 1px 4px rgba(0,0,0,0.5)", pointerEvents: "none" }}>{line}</text>
+            ))}
+            <text x={x + width / 2} y={startY + nameLines.length * lineHeight + 4} textAnchor="middle" fill="rgba(255,255,255,0.9)"
               style={{ fontSize: subFontSize, fontWeight: 500, pointerEvents: "none" }}>{value.toLocaleString()} ({pct}%)</text>
           </>
         )}
-        {!canFitName && canFitValue && (
+        {!canFitName && canFitNameCompact && (
+          <>
+            <text x={x + width / 2} y={y + height / 2 - 2} textAnchor="middle" fill="#fff"
+              style={{ fontSize: Math.max(7, fontSize - 1), fontWeight: 700, textShadow: "0 1px 3px rgba(0,0,0,0.5)", pointerEvents: "none" }}>
+              {name.length > Math.floor(innerW / (fontSize * 0.5)) ? name.slice(0, Math.floor(innerW / (fontSize * 0.5))) + "\u2026" : name}
+            </text>
+            <text x={x + width / 2} y={y + height / 2 + subFontSize + 2} textAnchor="middle" fill="rgba(255,255,255,0.85)"
+              style={{ fontSize: Math.max(7, subFontSize), fontWeight: 500, pointerEvents: "none" }}>{value.toLocaleString()}</text>
+          </>
+        )}
+        {!canFitName && !canFitNameCompact && canFitValue && (
           <text x={x + width / 2} y={y + height / 2 + 3} textAnchor="middle" fill="#fff"
-            style={{ fontSize: Math.max(8, fontSize - 1), fontWeight: 700, pointerEvents: "none" }}>{value.toLocaleString()}</text>
+            style={{ fontSize: Math.max(7, fontSize - 1), fontWeight: 700, pointerEvents: "none" }}>{value.toLocaleString()}</text>
         )}
       </g>
     </g>
