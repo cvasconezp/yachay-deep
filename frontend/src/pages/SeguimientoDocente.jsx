@@ -231,50 +231,54 @@ export default function SeguimientoDocente({ embedded = false }) {
   );
 
   return (
-    <div className={embedded ? "" : "p-6 space-y-6 max-w-[1400px] mx-auto"}>
+    <div className={embedded ? "space-y-4" : "p-6 space-y-6 max-w-[1400px] mx-auto"}>
       {!embedded && (
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Seguimiento de Calificaciones</h1>
-            <p className="text-sm text-gray-500 mt-1">
-              Estado de calificación por docente — basado en entregas de tareas AVAC
-              {resumen?.snapshot_date && (
-                <span className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200" title={`Último scraping: ${resumen.snapshot_date}${resumen.dias_desde_snapshot != null ? ` (hace ${resumen.dias_desde_snapshot} día${resumen.dias_desde_snapshot !== 1 ? 's' : ''})` : ''}`}>
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                  Datos del {new Date(resumen.snapshot_date + "T00:00:00").toLocaleDateString("es-EC", { day: "numeric", month: "short", year: "numeric" })}
-                </span>
-              )}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleRefreshData}
-              disabled={refreshing}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border transition-colors ${
-                refreshing
-                  ? "bg-blue-50 text-blue-600 border-blue-200 cursor-wait"
-                  : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50 hover:text-gray-800"
-              }`}
-              title="Ejecutar scraping de tareas para actualizar datos de calificaciones"
-            >
-              <svg className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              {refreshing ? "Actualizando..." : "Actualizar datos"}
-            </button>
-            <ExportExcelButton data={data} columns={TRACKING_EXPORT_COLS} filename="seguimiento_docente" reportTitle="Seguimiento Docente" />
-          </div>
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Seguimiento de Calificaciones</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Estado de calificación por docente — basado en entregas de tareas AVAC
+          </p>
         </div>
       )}
+
+      {/* Toolbar: snapshot badge + action buttons — always visible */}
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          {resumen?.snapshot_date && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200" title={`Último scraping: ${resumen.snapshot_date}${resumen.dias_desde_snapshot != null ? ` (hace ${resumen.dias_desde_snapshot} día${resumen.dias_desde_snapshot !== 1 ? 's' : ''})` : ''}`}>
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              Datos del {new Date(resumen.snapshot_date + "T00:00:00").toLocaleDateString("es-EC", { day: "numeric", month: "short", year: "numeric" })}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleRefreshData}
+            disabled={refreshing}
+            className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border transition-colors ${
+              refreshing
+                ? "bg-blue-50 text-blue-600 border-blue-200 cursor-wait"
+                : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50 hover:text-gray-800"
+            }`}
+            title="Ejecutar scraping de tareas para actualizar datos de calificaciones"
+          >
+            <svg className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            {refreshing ? "Actualizando..." : "Actualizar datos"}
+          </button>
+          <ExportExcelButton data={data} columns={TRACKING_EXPORT_COLS} filename="seguimiento_docente" reportTitle="Seguimiento Docente" />
+        </div>
+      </div>
 
       {/* KPI Cards */}
       {resumen && (
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          <SummaryCard title="Docentes" value={resumen.total_docentes} />
-          <SummaryCard title="Pendientes totales" value={resumen.total_pendientes} color={resumen.total_pendientes > 0 ? "red" : "green"} />
-          <SummaryCard title="Promedio calif." value={`${resumen.promedio_general_calificacion}%`} />
-          <SummaryCard title="Críticos" value={resumen.docentes_criticos} color={resumen.docentes_criticos > 0 ? "red" : "green"} />
-          <SummaryCard title="Atención" value={resumen.docentes_en_atencion} color={resumen.docentes_en_atencion > 0 ? "yellow" : "green"} />
+          <SummaryCard label="Docentes" value={resumen.total_docentes} />
+          <SummaryCard label="Pendientes totales" value={resumen.total_pendientes} color={resumen.total_pendientes > 0 ? "red" : "green"} />
+          <SummaryCard label="Promedio calif." value={`${resumen.promedio_general_calificacion}%`} />
+          <SummaryCard label="Críticos" value={resumen.docentes_criticos} color={resumen.docentes_criticos > 0 ? "red" : "green"} />
+          <SummaryCard label="Atención" value={resumen.docentes_en_atencion} color={resumen.docentes_en_atencion > 0 ? "yellow" : "green"} />
         </div>
       )}
 
