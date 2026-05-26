@@ -621,6 +621,9 @@ async def get_scraping_progress(
                         pass
             if completed_durations:
                 avg_duration_secs = sum(completed_durations) / len(completed_durations)
+            else:
+                # Fallback: estimate 40 min if no historical successful runs
+                avg_duration_secs = 40 * 60
 
             # Calculate time-based progress
             elapsed_secs = 0
@@ -640,6 +643,7 @@ async def get_scraping_progress(
                     "estimated_total_min": round(avg_duration_secs / 60),
                     "remaining_min": remaining_min,
                     "based_on_runs": len(completed_durations),
+                    "is_estimate": len(completed_durations) == 0,
                 }
 
             result = {
@@ -666,11 +670,19 @@ async def get_scraping_progress(
                         job = jobs[0]
                         steps = job.get("steps", [])
                         current_step = None
+                        completed_steps = 0
+                        total_steps = len(steps)
                         for s in steps:
-                            if s.get("status") == "in_progress":
+                            if s.get("status") == "completed":
+                                completed_steps += 1
+                            elif s.get("status") == "in_progress":
                                 current_step = s.get("name")
-                                break
                         result["current_step"] = current_step
+                        result["steps_completed"] = completed_steps
+                        result["steps_total"] = total_steps
+                        # Step-based progress as fallback/complement
+                        if total_steps > 0:
+                            result["step_progress_pct"] = min(round(completed_steps / total_steps * 100), 99)
 
             return result
 

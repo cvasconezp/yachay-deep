@@ -169,15 +169,22 @@ function TabSistema() {
             const elapsed = tp?.elapsed_min ?? (scrapingProgress.started_at
               ? Math.floor((Date.now() - new Date(scrapingProgress.started_at).getTime()) / 60000) : 0);
             const elapsedStr = elapsed < 1 ? "menos de 1 min" : `${elapsed} min`;
-            const pct = tp?.percent ?? 0;
+            // Use time-based progress, fall back to step-based, then 0
+            const pct = tp?.percent ?? scrapingProgress.step_progress_pct ?? 0;
             const remaining = tp?.remaining_min;
             const stepName = scrapingProgress.current_step || "";
+            const stepsInfo = scrapingProgress.steps_completed != null && scrapingProgress.steps_total
+              ? `Paso ${scrapingProgress.steps_completed}/${scrapingProgress.steps_total}`
+              : null;
             return (
             <div className="mt-4 bg-indigo-50 border border-indigo-200 rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                   <div className="w-2.5 h-2.5 bg-indigo-500 rounded-full animate-pulse"></div>
                   <span className="text-sm font-semibold text-indigo-800">Scraping en progreso</span>
+                  {stepName && (
+                    <span className="text-xs text-indigo-500 bg-indigo-100 px-2 py-0.5 rounded-full">{stepName}</span>
+                  )}
                 </div>
                 <span className="text-sm font-bold text-indigo-700">
                   {elapsedStr}
@@ -188,8 +195,8 @@ function TabSistema() {
               </div>
               <div className="w-full bg-indigo-100 rounded-full h-3 overflow-hidden">
                 <div
-                  className="bg-indigo-500 h-full rounded-full transition-all duration-500 relative overflow-hidden"
-                  style={{ width: `${pct}%` }}
+                  className={`h-full rounded-full transition-all duration-500 relative overflow-hidden ${pct > 0 ? "bg-indigo-500" : "bg-indigo-400"}`}
+                  style={{ width: pct > 0 ? `${pct}%` : "100%", opacity: pct > 0 ? 1 : 0.4 }}
                 >
                   <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent"
                     style={{ animation: "shimmer 2s infinite linear", backgroundSize: "200% 100%" }}></div>
@@ -197,8 +204,8 @@ function TabSistema() {
               </div>
               <div className="flex items-center justify-between mt-2 text-xs text-indigo-600">
                 <span>
-                  {pct}%
-                  {stepName && <span className="ml-1 text-indigo-500">— {stepName}</span>}
+                  {pct > 0 ? `${pct}%` : "Ejecutando..."}
+                  {stepsInfo && <span className="ml-2 text-indigo-400">({stepsInfo})</span>}
                 </span>
                 {scrapingProgress.started_at && (
                   <span className="text-indigo-400">
@@ -206,9 +213,14 @@ function TabSistema() {
                   </span>
                 )}
               </div>
-              {tp && (
+              {tp && !tp.is_estimate && (
                 <div className="mt-1.5 text-[11px] text-indigo-400 italic">
                   Estimación basada en {tp.based_on_runs} ejecución{tp.based_on_runs !== 1 ? "es" : ""} anterior{tp.based_on_runs !== 1 ? "es" : ""} (~{tp.estimated_total_min} min promedio)
+                </div>
+              )}
+              {tp?.is_estimate && (
+                <div className="mt-1.5 text-[11px] text-indigo-400 italic">
+                  Estimación aproximada (~{tp.estimated_total_min} min). Se ajustará con ejecuciones futuras.
                 </div>
               )}
               {scrapingProgress.html_url && (

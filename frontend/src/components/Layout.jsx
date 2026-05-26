@@ -133,9 +133,12 @@ export function Layout({ children }) {
           const tp = scrapingProgress.time_progress;
           const elapsed = tp?.elapsed_min ?? (scrapingProgress.started_at
             ? Math.floor((Date.now() - new Date(scrapingProgress.started_at).getTime()) / 60000) : 0);
-          const pct = tp?.percent ?? 0;
+          const pct = tp?.percent ?? scrapingProgress.step_progress_pct ?? 0;
           const remaining = tp?.remaining_min;
           const stepName = scrapingProgress.current_step || "";
+          const stepsLabel = scrapingProgress.steps_completed != null && scrapingProgress.steps_total
+            ? `${scrapingProgress.steps_completed}/${scrapingProgress.steps_total}`
+            : null;
           return (
           <div className={`${sidebarOpen ? "px-3 py-2" : "px-1 py-2"} border-b border-white/10`}>
             {sidebarOpen ? (
@@ -145,17 +148,28 @@ export function Layout({ children }) {
                     <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse flex-shrink-0"></div>
                     <span className="text-[10px] font-semibold text-blue-200 uppercase tracking-wider">Scraping</span>
                   </div>
-                  <span className="text-[10px] text-brand-gold font-bold">{pct}%</span>
+                  <span className="text-[10px] text-brand-gold font-bold">{pct > 0 ? `${pct}%` : ""}</span>
                 </div>
                 <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
-                  <div className="h-full rounded-full transition-all duration-700 relative overflow-hidden"
-                    style={{ width: `${pct}%`, backgroundColor: "#F5C518" }}>
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent"
-                      style={{ animation: "shimmer 2s infinite linear", backgroundSize: "200% 100%" }}></div>
-                  </div>
+                  {pct > 0 ? (
+                    <div className="h-full rounded-full transition-all duration-700 relative overflow-hidden"
+                      style={{ width: `${pct}%`, backgroundColor: "#F5C518" }}>
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent"
+                        style={{ animation: "shimmer 2s infinite linear", backgroundSize: "200% 100%" }}></div>
+                    </div>
+                  ) : (
+                    <div className="h-full rounded-full relative overflow-hidden"
+                      style={{ width: "100%", backgroundColor: "rgba(245, 197, 24, 0.4)" }}>
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent"
+                        style={{ animation: "shimmer 1.5s infinite linear", backgroundSize: "200% 100%" }}></div>
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center justify-between mt-1">
-                  <span className="text-[9px] text-blue-300">{elapsed} min</span>
+                  <span className="text-[9px] text-blue-300">
+                    {elapsed} min
+                    {stepsLabel && <span className="text-blue-400/60 ml-1">({stepsLabel} pasos)</span>}
+                  </span>
                   {remaining != null && remaining > 0 ? (
                     <span className="text-[9px] text-blue-400">~{remaining} min rest.</span>
                   ) : elapsed > 0 ? (
@@ -167,15 +181,18 @@ export function Layout({ children }) {
                 )}
               </div>
             ) : (
-              <div className="flex flex-col items-center gap-1" title={`Scraping: ${pct}% — ${elapsed} min`}>
+              <div className="flex flex-col items-center gap-1" title={`Scraping: ${pct > 0 ? pct + "%" : "en progreso"} — ${elapsed} min`}>
                 <div className="relative w-8 h-8">
                   <svg className="w-8 h-8 -rotate-90" viewBox="0 0 32 32">
                     <circle cx="16" cy="16" r="12" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="3"/>
                     <circle cx="16" cy="16" r="12" fill="none" stroke="#F5C518" strokeWidth="3"
-                      strokeDasharray={`${pct * 0.754} 75.4`}
-                      strokeLinecap="round"/>
+                      strokeDasharray={pct > 0 ? `${pct * 0.754} 75.4` : "75.4 75.4"}
+                      strokeLinecap="round"
+                      style={pct === 0 ? { animation: "spin 3s linear infinite" } : {}}/>
                   </svg>
-                  <div className="absolute inset-0 flex items-center justify-center text-[7px] font-bold text-brand-gold">{pct}%</div>
+                  <div className="absolute inset-0 flex items-center justify-center text-[7px] font-bold text-brand-gold">
+                    {pct > 0 ? `${pct}%` : `${elapsed}m`}
+                  </div>
                 </div>
               </div>
             )}
