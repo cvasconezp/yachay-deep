@@ -5,12 +5,30 @@ FastAPI application entry point
 [SEC-02] Fase 2: HttpOnly cookies + Sentry integration
 """
 from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import logging
 
 from .config import settings, validate_security_settings
+import re as _re
+
+def _is_allowed_origin(origin: str) -> bool:
+    """
+    Check if origin is allowed: either in the explicit list or matches
+    the wildcard subdomain pattern (e.g. *.yachaydeep.com).
+    """
+    if not origin:
+        return False
+    if origin in settings.CORS_ORIGINS:
+        return True
+    wildcard = settings.CORS_WILDCARD_DOMAIN
+    if wildcard and origin.startswith("https://") and origin.endswith(wildcard):
+        # Ensure the subdomain part is valid (no dots = single level)
+        subdomain = origin[len("https://"):-len(wildcard)]
+        if subdomain and _re.match(r"^[a-zA-Z0-9-]+$", subdomain):
+            return True
+    return False
+
 
 # ── Sentry (opcional) ──
 if settings.SENTRY_DSN:
@@ -234,14 +252,43 @@ app = FastAPI(
 )
 
 
-# CORS — permite el frontend en Vercel
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type"],
-)
+# CORS — permite el frontend en Vercel + wildcard *.yachaydeep.com
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
+
+class DynamicCORSMiddleware(BaseHTTPMiddleware):
+    """Custom CORS middleware that supports wildcard subdomain matching."""
+    ALLOWED_METHODS = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+    ALLOWED_HEADERS = "Authorization, Content-Type"
+
+    async def dispatch(self, request: Request, call_next):
+        origin = request.headers.get("origin", "")
+        allowed = _is_allowed_origin(origin)
+
+        # Handle preflight
+        if request.method == "OPTIONS" and allowed:
+            return Response(
+                status_code=200,
+                headers={
+                    "Access-Control-Allow-Origin": origin,
+                    "Access-Control-Allow-Credentials": "true",
+                    "Access-Control-Allow-Methods": self.ALLOWED_METHODS,
+                    "Access-Control-Allow-Headers": self.ALLOWED_HEADERS,
+                    "Access-Control-Max-Age": "600",
+                    "Vary": "Origin",
+                },
+            )
+
+        response = await call_next(request)
+
+        if allowed:
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            response.headers["Vary"] = "Origin"
+
+        return response
+
+app.add_middleware(DynamicCORSMiddleware)
 
 # ── Global exception handler ─────────────────────────────────────────────
 # Evita que excepciones no manejadas dejen al navegador con "NetworkError".
@@ -263,7 +310,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     # añade headers si el handler lanza antes del middleware)
     origin = request.headers.get("origin")
     cors_headers = {}
-    if origin and origin in settings.CORS_ORIGINS:
+    if origin and _is_allowed_origin(origin):
         cors_headers["Access-Control-Allow-Origin"] = origin
         cors_headers["Access-Control-Allow-Credentials"] = "true"
         cors_headers["Vary"] = "Origin"
@@ -301,6 +348,8 @@ async def add_security_headers(request: Request, call_next):
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=()"
     # [SEC-08] FIX: Content-Security-Policy
     csp_origins = " ".join(settings.CORS_ORIGINS)
+    if settings.CORS_WILDCARD_DOMAIN:
+        csp_origins += f" https://*{settings.CORS_WILDCARD_DOMAIN}"
     response.headers["Content-Security-Policy"] = (
         f"default-src 'self'; "
         f"script-src 'self' 'unsafe-inline'; "

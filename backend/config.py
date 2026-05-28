@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: Optional[str] = None
     SMTP_FROM: Optional[str] = None
     BIENESTAR_EMAIL: Optional[str] = None  # destinatario del departamento
-    FRONTEND_URL: str = "https://yachay-deep.vercel.app"
+    FRONTEND_URL: str = "https://yachaydeep.com"
 
     # App
     APP_NAME: str = "Yachay Deep"
@@ -65,7 +65,14 @@ class Settings(BaseSettings):
     SENTRY_DSN: Optional[str] = None
     # CORS_ORIGINS: set via env as JSON array ["url"] or comma-separated "url1,url2"
     # Default covers local dev + Vercel production
-    CORS_ORIGINS: list[str] = ["http://localhost:3000", "https://yachay-deep.vercel.app"]
+    CORS_ORIGINS: list[str] = [
+        "http://localhost:3000",
+        "https://yachay-deep.vercel.app",
+        "https://yachaydeep.com",
+    ]
+    # Wildcard domain: any subdomain of this domain is auto-allowed for CORS
+    # e.g. ".yachaydeep.com" allows ups.yachaydeep.com, kapak.yachaydeep.com, etc.
+    CORS_WILDCARD_DOMAIN: Optional[str] = ".yachaydeep.com"
 
     @model_validator(mode="before")
     @classmethod
