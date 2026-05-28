@@ -4,6 +4,7 @@ import { useAuth } from "../hooks/useAuth";
 import { api } from "../services/api";
 import { YachayLogo, YachayIcon } from "./YachayLogo";
 import NotificationBell from "./NotificationBell";
+import { useTenant } from "../hooks/useTenant";
 
 import PinSetupModal from "./PinSetupModal";
 const NAV_ITEMS = [
@@ -28,6 +29,7 @@ const ADMIN_ITEMS = [
 
 export function Layout({ children }) {
   const { user, logout, isAdmin, lock } = useAuth();
+  const { tenant, isSubdomain: isSub } = useTenant();
   const location = useLocation();
   const navigate = useNavigate();
   const [alertCount, setAlertCount] = useState(null);
@@ -82,8 +84,8 @@ export function Layout({ children }) {
     });
   };
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     navigate("/login");
   };
 
@@ -254,6 +256,14 @@ export function Layout({ children }) {
                   </button>
                 )}
               </div>
+              {isSub && isAdmin && (
+                <button
+                  onClick={() => { window.location.href = "https://yachaydeep.com/instituciones"; }}
+                  className="w-full text-left text-xs text-amber-400 hover:text-white transition-colors flex items-center gap-1"
+                >
+                  🏛️ Cambiar institución
+                </button>
+              )}
               <button
                 onClick={handleLogout}
                 className="w-full text-left text-xs text-blue-400 hover:text-white transition-colors"

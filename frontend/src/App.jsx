@@ -82,7 +82,7 @@ function IdleLockManager() {
 function PortalOrDashboard() {
   const { user } = useAuth();
   if (!isSubdomain() && user?.role === "admin") {
-    return <TenantPortal />;
+    return <Navigate to="/instituciones" replace />;
   }
   return (
     <PrivateRoute tabKey="dashboard">
@@ -100,6 +100,14 @@ export default function App() {
           <Routes>
             <Route path="/" element={isSubdomain() ? <Navigate to="/login" replace /> : <Landing />} />
             <Route path="/login" element={<Login />} />
+            <Route
+              path="/instituciones"
+              element={
+                <PrivateRoute adminOnly>
+                  <TenantPortal />
+                </PrivateRoute>
+              }
+            />
             <Route
               path="/dashboard"
               element={<PortalOrDashboard />}

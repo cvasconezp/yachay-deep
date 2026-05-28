@@ -98,7 +98,7 @@ export default function TenantPortal() {
   }, []);
 
   const handleNavigate = (url) => {
-    window.open(url, "_blank");
+    window.location.href = url;
   };
 
   // Merge API institutions with hardcoded tenant configs
@@ -162,7 +162,7 @@ export default function TenantPortal() {
 
             {/* Add new tenant card */}
             <button
-              onClick={() => window.open("https://kapak.yachaydeep.com", "_blank")}
+              onClick={() => { window.location.href = "https://kapak.yachaydeep.com"; }}
               className="border-2 border-dashed border-gray-300 rounded-2xl p-6 flex flex-col items-center justify-center gap-2 text-gray-400 hover:border-brand-gold hover:text-brand-gold transition-colors min-h-[200px]"
             >
               <span className="text-4xl">+</span>
