@@ -50,14 +50,14 @@ export default function Login() {
     <div className="min-h-screen bg-gradient-to-br from-brand to-brand-dark flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-8">
         <div className="text-center mb-8">
-          <div className="flex justify-center mb-5">
+          <a href="https://yachaydeep.com" className="flex justify-center mb-5">
             {/* Login card bg is white → CLARO renders natively without a wrapper.
                 Logo scales with the card / viewport. */}
             <YachayLogo
               variant="light"
               className="block w-[min(80%,20rem)] sm:w-[min(80%,22rem)] h-auto"
             />
-          </div>
+          </a>
           <h1 className="sr-only">Yachay Deep</h1>
           <p className="text-gray-500 mt-2 text-sm">Sistema de Monitoreo Académico</p>
         </div>

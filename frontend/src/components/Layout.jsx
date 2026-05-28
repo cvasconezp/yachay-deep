@@ -113,21 +113,21 @@ export function Layout({ children }) {
             back to the public landing (/). */}
         <div className="border-b border-gray-200 bg-white">
           {sidebarOpen ? (
-            <Link
-              to="/"
+            <a
+              href="https://yachaydeep.com"
               aria-label="Ir al inicio de Yachay Deep"
               className="block px-4 py-3.5 transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-inset"
             >
               <YachayLogo variant="light" className="w-full h-auto block" />
-            </Link>
+            </a>
           ) : (
-            <Link
-              to="/"
+            <a
+              href="https://yachaydeep.com"
               aria-label="Ir al inicio de Yachay Deep"
               className="block px-2 py-3 transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-inset"
             >
               <YachayIcon className="w-full h-auto block" />
-            </Link>
+            </a>
           )}
         </div>
 
