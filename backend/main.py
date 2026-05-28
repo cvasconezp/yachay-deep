@@ -253,42 +253,17 @@ app = FastAPI(
 
 
 # CORS — permite el frontend en Vercel + wildcard *.yachaydeep.com
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
+# allow_origin_regex matches any single-level subdomain of yachaydeep.com
+from fastapi.middleware.cors import CORSMiddleware
 
-class DynamicCORSMiddleware(BaseHTTPMiddleware):
-    """Custom CORS middleware that supports wildcard subdomain matching."""
-    ALLOWED_METHODS = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-    ALLOWED_HEADERS = "Authorization, Content-Type"
-
-    async def dispatch(self, request: Request, call_next):
-        origin = request.headers.get("origin", "")
-        allowed = _is_allowed_origin(origin)
-
-        # Handle preflight
-        if request.method == "OPTIONS" and allowed:
-            return Response(
-                status_code=200,
-                headers={
-                    "Access-Control-Allow-Origin": origin,
-                    "Access-Control-Allow-Credentials": "true",
-                    "Access-Control-Allow-Methods": self.ALLOWED_METHODS,
-                    "Access-Control-Allow-Headers": self.ALLOWED_HEADERS,
-                    "Access-Control-Max-Age": "600",
-                    "Vary": "Origin",
-                },
-            )
-
-        response = await call_next(request)
-
-        if allowed:
-            response.headers["Access-Control-Allow-Origin"] = origin
-            response.headers["Access-Control-Allow-Credentials"] = "true"
-            response.headers["Vary"] = "Origin"
-
-        return response
-
-app.add_middleware(DynamicCORSMiddleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_origin_regex=r"https://[a-zA-Z0-9-]+\.yachaydeep\.com",
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
+)
 
 # ── Global exception handler ─────────────────────────────────────────────
 # Evita que excepciones no manejadas dejen al navegador con "NetworkError".
