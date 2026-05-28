@@ -56,7 +56,7 @@ class Settings(BaseSettings):
     # [SEC-02] Cookie config for HttpOnly JWT
     COOKIE_DOMAIN: Optional[str] = None  # None = scoped to API origin; set ".yachaydeep.com" only if API is on same domain
     COOKIE_SECURE: bool = True                    # False for localhost dev
-    COOKIE_SAMESITE: str = "none"                  # "none" required for cross-origin (Railway API + Vercel/yachaydeep frontend)
+    COOKIE_SAMESITE: str = "lax"                   # "lax" is safe since Vercel proxies API requests (same-origin)
 
     # GitHub API — para disparar scraping desde la UI sin esperar al cron
     GITHUB_TOKEN: Optional[str] = None
