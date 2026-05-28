@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     DEBUG: bool = False
 
     # [SEC-02] Cookie config for HttpOnly JWT
-    COOKIE_DOMAIN: Optional[str] = None  # None = scoped to API origin; set ".yachaydeep.com" only if API is on same domain
+    COOKIE_DOMAIN: Optional[str] = ".yachaydeep.com"  # shared across *.yachaydeep.com (works because Vercel proxy makes it same-origin)
     COOKIE_SECURE: bool = True                    # False for localhost dev
     COOKIE_SAMESITE: str = "lax"                   # "lax" is safe since Vercel proxies API requests (same-origin)
 
