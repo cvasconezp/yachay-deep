@@ -21,6 +21,7 @@ import Admin from "./pages/Admin";
 import About from "./pages/About";
 import EntregasPendientes from "./pages/EntregasPendientes";
 import { isSubdomain } from "./hooks/useTenant";
+import TenantPortal from "./pages/TenantPortal";
 
 function PrivateRoute({ children, adminOnly = false, tabKey = null }) {
   const { user, loading } = useAuth();
@@ -73,6 +74,23 @@ function IdleLockManager() {
   );
 }
 
+
+/**
+ * On root domain (yachaydeep.com), admin users see the tenant portal.
+ * On subdomains, everyone sees the regular dashboard.
+ */
+function PortalOrDashboard() {
+  const { user } = useAuth();
+  if (!isSubdomain() && user?.role === "admin") {
+    return <TenantPortal />;
+  }
+  return (
+    <PrivateRoute tabKey="dashboard">
+      <Dashboard />
+    </PrivateRoute>
+  );
+}
+
 export default function App() {
   return (
     <ErrorBoundary>
@@ -84,11 +102,7 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route
               path="/dashboard"
-              element={
-                <PrivateRoute tabKey="dashboard">
-                  <Dashboard />
-                </PrivateRoute>
-              }
+              element={<PortalOrDashboard />}
             />
             <Route
               path="/ficha"
