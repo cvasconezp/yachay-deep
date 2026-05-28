@@ -263,7 +263,7 @@ app.add_middleware(
     allow_origin_regex=r"https://[a-zA-Z0-9-]+\.yachaydeep\.com",
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_headers=["Authorization", "Content-Type", "X-Tenant"],
 )
 
 # ── Global exception handler ─────────────────────────────────────────────
