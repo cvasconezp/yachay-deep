@@ -91,6 +91,24 @@ function PortalOrDashboard() {
   );
 }
 
+
+/**
+ * Auth-protected route WITHOUT sidebar/Layout.
+ * Used for the admin portal which has its own header.
+ */
+function PortalRoute({ children }) {
+  const { user, loading } = useAuth();
+  if (loading)
+    return (
+      <div className="min-h-screen flex items-center justify-center text-gray-400">
+        Cargando...
+      </div>
+    );
+  if (!user) return <Navigate to="/login" />;
+  if (user.role !== "admin") return <Navigate to="/dashboard" />;
+  return children;
+}
+
 export default function App() {
   return (
     <ErrorBoundary>
@@ -103,9 +121,9 @@ export default function App() {
             <Route
               path="/instituciones"
               element={
-                <PrivateRoute adminOnly>
+                <PortalRoute>
                   <TenantPortal />
-                </PrivateRoute>
+                </PortalRoute>
               }
             />
             <Route
