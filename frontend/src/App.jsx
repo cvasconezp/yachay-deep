@@ -20,6 +20,7 @@ import ResumenDatos from "./pages/ResumenDatos";
 import Admin from "./pages/Admin";
 import About from "./pages/About";
 import EntregasPendientes from "./pages/EntregasPendientes";
+import { isSubdomain } from "./hooks/useTenant";
 
 function PrivateRoute({ children, adminOnly = false, tabKey = null }) {
   const { user, loading } = useAuth();
@@ -79,7 +80,7 @@ export default function App() {
         <BrowserRouter>
           <IdleLockManager />
           <Routes>
-            <Route path="/" element={<Landing />} />
+            <Route path="/" element={isSubdomain() ? <Navigate to="/login" replace /> : <Landing />} />
             <Route path="/login" element={<Login />} />
             <Route
               path="/dashboard"
@@ -182,7 +183,7 @@ export default function App() {
                 </PrivateRoute>
               }
             />
-            <Route path="*" element={<Navigate to="/" />} />
+            <Route path="*" element={<Navigate to={isSubdomain() ? "/login" : "/"} />} />
           </Routes>
         </BrowserRouter>
       </AuthProvider>

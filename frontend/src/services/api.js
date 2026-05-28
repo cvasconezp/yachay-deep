@@ -6,6 +6,8 @@
  * [SEC-07/BUG-03] Sanitización de mensajes de error.
  */
 
+import { getTenant } from "../hooks/useTenant";
+
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 function sanitizeErrorMessage(raw) {
@@ -20,8 +22,10 @@ class ApiClient {
 
   async request(path, options = {}) {
     const isFormData = options.body instanceof FormData;
+    const tenant = getTenant();
     const headers = {
       ...(isFormData ? {} : { "Content-Type": "application/json" }),
+      ...(tenant ? { "X-Tenant": tenant } : {}),
       ...options.headers,
     };
 
