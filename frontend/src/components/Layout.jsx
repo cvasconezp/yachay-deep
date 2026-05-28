@@ -86,7 +86,8 @@ export function Layout({ children }) {
 
   const handleLogout = async () => {
     await logout();
-    navigate("/login");
+    // Hard redirect — clears React state and forces fresh cookie check
+    window.location.href = "/login";
   };
 
   // Filtrar sidebar según permisos del usuario
