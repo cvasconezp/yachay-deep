@@ -14,7 +14,6 @@ import string
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import text
 
 from ..database import get_db
 from ..auth.jwt import get_current_user
@@ -274,18 +273,22 @@ def seed_demo_database(
         demo_db.flush()
         user_id_map = {current_user.id: demo_admin.id}
 
-        # 3. Semester configs (no PII)
+        # 3. Semester configs (no PII - copy as-is via ORM)
         for sc in semester_configs:
-            demo_db.execute(
-                text("INSERT INTO semester_configs (semestre, activo, bloque_actual, "
-                     "fecha_inicio_b1, fecha_fin_b1, fecha_inicio_b2, fecha_fin_b2, "
-                     "umbrales, calendario_academico) "
-                     "VALUES (:s, :a, :ba, :fb1, :fe1, :fb2, :fe2, :u, :c)"),
-                {"s": sc.semestre, "a": sc.activo, "ba": sc.bloque_actual,
-                 "fb1": sc.fecha_inicio_b1, "fe1": sc.fecha_fin_b1,
-                 "fb2": sc.fecha_inicio_b2, "fe2": sc.fecha_fin_b2,
-                 "u": sc.umbrales, "c": sc.calendario_academico}
-            )
+            demo_db.add(SemesterConfig(
+                semestre=sc.semestre, activo=sc.activo,
+                bloque_actual=sc.bloque_actual,
+                bloque1_inicio=sc.bloque1_inicio, bloque1_fin=sc.bloque1_fin,
+                bloque2_inicio=sc.bloque2_inicio, bloque2_fin=sc.bloque2_fin,
+                calendario_academico=sc.calendario_academico,
+                umbral_nota_aprobacion=sc.umbral_nota_aprobacion,
+                umbral_dias_inactividad=sc.umbral_dias_inactividad,
+                umbral_tareas_minimo=sc.umbral_tareas_minimo,
+                umbral_compromiso_minimo=sc.umbral_compromiso_minimo,
+                auto_alertas=sc.auto_alertas,
+                retrain_cada_n_etl=sc.retrain_cada_n_etl,
+                retrain_contador_etl=0,
+            ))
         stats["semester_configs"] = len(semester_configs)
 
         # 4. Courses
