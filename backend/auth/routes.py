@@ -103,9 +103,12 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db
 
 @router.post("/logout")
 def logout():
-    """[SEC-02] Borra la HttpOnly cookie."""
+    """[SEC-02] Borra la HttpOnly cookie (both legacy and subdomain-shared)."""
     response = JSONResponse(content={"detail": "Sesión cerrada"})
+    # Delete cookie for shared subdomain domain (.yachaydeep.com)
     response.delete_cookie(key=COOKIE_NAME, path="/", domain=settings.COOKIE_DOMAIN)
+    # Also delete legacy cookie set without explicit domain (exact origin match)
+    response.delete_cookie(key=COOKIE_NAME, path="/")
     return response
 
 
