@@ -105,10 +105,16 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db
 def logout():
     """[SEC-02] Borra la HttpOnly cookie (both legacy and subdomain-shared)."""
     response = JSONResponse(content={"detail": "Sesión cerrada"})
+    # Must match ALL attributes of the original set_cookie for browser to delete it
+    _del_kwargs = dict(
+        secure=settings.COOKIE_SECURE,
+        httponly=True,
+        samesite=settings.COOKIE_SAMESITE,
+    )
     # Delete cookie for shared subdomain domain (.yachaydeep.com)
-    response.delete_cookie(key=COOKIE_NAME, path="/", domain=settings.COOKIE_DOMAIN)
+    response.delete_cookie(key=COOKIE_NAME, path="/", domain=settings.COOKIE_DOMAIN, **_del_kwargs)
     # Also delete legacy cookie set without explicit domain (exact origin match)
-    response.delete_cookie(key=COOKIE_NAME, path="/")
+    response.delete_cookie(key=COOKIE_NAME, path="/", **_del_kwargs)
     return response
 
 
