@@ -7,6 +7,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = "sqlite:///./yachay.db"  # dev default; Railway sets PostgreSQL
+    DEMO_DATABASE_URL: Optional[str] = None  # separate DB for demo tenant
 
     # JWT
     SECRET_KEY: str = "change-this-in-production-use-openssl-rand-hex-32"

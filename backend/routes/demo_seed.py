@@ -100,41 +100,45 @@ def _generate_phone():
     return f"09{random.randint(10000000, 99999999)}"
 
 
-@router.post("/generate-anonymized-snapshot")
-def generate_anonymized_snapshot(
+@router.post("/seed-demo-db")
+def seed_demo_database(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
     """
-    Generates an anonymized copy of current student data.
-    Returns a JSON summary — the actual anonymization for multi-tenant
-    will write to a separate schema/table set when full multi-tenant is implemented.
-
-    For now, returns the anonymization mapping so it can be reviewed.
+    Copies students from production DB to demo DB with anonymized PII.
+    Also creates a demo admin user.
+    Academic data (risk, grades, engagement) stays realistic.
     """
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Solo admin")
 
-    from ..models.student import Student
+    from ..database import DemoSessionLocal, demo_engine
+    if not DemoSessionLocal or not demo_engine:
+        raise HTTPException(status_code=503, detail="DEMO_DATABASE_URL no configurada en Railway")
 
+    from ..models.student import Student
+    from ..models.user import User, UserRole
+    from ..auth.jwt import hash_password
+
+    # Read production students
     students = db.query(Student).all()
     if not students:
-        raise HTTPException(status_code=404, detail="No hay estudiantes para anonimizar")
+        raise HTTPException(status_code=404, detail="No hay estudiantes en producción")
 
-    # Collect unique carreras and create mapping
+    # Build carrera mapping
     real_carreras = list(set(s.carrera for s in students if s.carrera))
     random.shuffle(real_carreras)
     carrera_map = {}
     for i, rc in enumerate(real_carreras):
         carrera_map[rc] = DEMO_CARRERAS[i % len(DEMO_CARRERAS)]
 
-    # Shuffle PII independently
     n = len(students)
-    genders = [s.genero for s in students]
 
-    # Generate names based on gender distribution
+    # Generate anonymized PII
     nombres_pool = []
-    for g in genders:
+    for s in students:
+        g = s.genero
         if g and g.lower() in ("femenino", "f", "mujer"):
             nombres_pool.append(random.choice(NOMBRES_F))
         elif g and g.lower() in ("masculino", "m", "hombre"):
@@ -144,40 +148,73 @@ def generate_anonymized_snapshot(
 
     apellidos1 = [random.choice(APELLIDOS) for _ in range(n)]
     apellidos2 = [random.choice(APELLIDOS) for _ in range(n)]
-    cedulas = [_generate_cedula() for _ in range(n)]
-    ciudades_shuffled = [random.choice(CIUDADES) for _ in range(n)]
-    provincias_shuffled = [random.choice(PROVINCIAS) for _ in range(n)]
 
-    anonymized = []
-    for i, s in enumerate(students):
-        nombre_completo = f"{apellidos1[i]} {apellidos2[i]} {nombres_pool[i]}"
-        anon = {
-            "original_id": s.id,
-            "nombre": nombre_completo,
-            "cedula": cedulas[i],
-            "correo": _generate_email(nombres_pool[i], apellidos1[i]),
-            "correo_institucional": _generate_email(nombres_pool[i], apellidos1[i]),
-            "telefono": _generate_phone(),
-            "whatsapp": _generate_phone(),
-            "carrera": carrera_map.get(s.carrera, s.carrera),
-            "ciudad": ciudades_shuffled[i],
-            "provincia": provincias_shuffled[i],
-            # Academic data stays the same (realistic demo)
-            "nivel_riesgo": s.nivel_riesgo,
-            "indice_compromiso": s.indice_compromiso,
-            "dias_sin_acceso": s.dias_sin_acceso,
-            "porcentaje_tareas": s.porcentaje_tareas,
-            "promedio_calificaciones": s.promedio_calificaciones,
-            "nivel_academico": s.nivel_academico,
-            "periodo": s.periodo,
+    # Write to demo DB
+    demo_db = DemoSessionLocal()
+    try:
+        # Clear existing demo students
+        demo_db.query(Student).delete()
+        demo_db.commit()
+
+        for i, s in enumerate(students):
+            nombre = f"{apellidos1[i]} {apellidos2[i]} {nombres_pool[i]}"
+            demo_student = Student(
+                cedula=_generate_cedula(),
+                nombre=nombre,
+                correo=_generate_email(nombres_pool[i], apellidos1[i]),
+                correo_institucional=_generate_email(nombres_pool[i], apellidos1[i]),
+                telefono=_generate_phone(),
+                whatsapp=_generate_phone(),
+                carrera=carrera_map.get(s.carrera, s.carrera),
+                sede=s.sede,
+                campus=s.campus,
+                nivel_academico=s.nivel_academico,
+                nivel_riesgo=s.nivel_riesgo,
+                indice_compromiso=s.indice_compromiso,
+                dias_sin_acceso=s.dias_sin_acceso,
+                porcentaje_tareas=s.porcentaje_tareas,
+                promedio_calificaciones=s.promedio_calificaciones,
+                pais="Ecuador",
+                provincia=random.choice(PROVINCIAS),
+                ciudad=random.choice(CIUDADES),
+                genero=s.genero,
+                periodo=s.periodo,
+                estado_matricula=s.estado_matricula,
+                prob_desercion=s.prob_desercion,
+                prob_reprobacion=s.prob_reprobacion,
+                es_tercera_matricula=s.es_tercera_matricula,
+                score_recuperabilidad=s.score_recuperabilidad,
+                nivel_recuperabilidad=s.nivel_recuperabilidad,
+            )
+            demo_db.add(demo_student)
+
+        # Create demo admin user (same password as production admin for convenience)
+        existing_admin = demo_db.query(User).filter(User.role == UserRole.admin).first()
+        if not existing_admin:
+            import os
+            admin_pass = os.environ.get("ADMIN_PASSWORD", "demo2026")
+            demo_admin = User(
+                email=current_user.email,
+                nombre="Admin Demo",
+                hashed_password=hash_password(admin_pass),
+                role=UserRole.admin,
+                is_active=True,
+            )
+            demo_db.add(demo_admin)
+
+        demo_db.commit()
+
+        return {
+            "status": "success",
+            "students_copied": n,
+            "carreras_mapped": carrera_map,
+            "demo_university": DEMO_UNIVERSITY,
+            "admin_email": current_user.email,
+            "message": f"{n} estudiantes anonimizados copiados a BD demo. "
+                       f"Admin: {current_user.email} (misma contraseña).",
         }
-        anonymized.append(anon)
-
-    return {
-        "total_students": n,
-        "university_name": DEMO_UNIVERSITY,
-        "carrera_mapping": carrera_map,
-        "sample": anonymized[:5],  # Only return 5 as preview
-        "message": f"Snapshot de {n} estudiantes anonimizados listo. "
-                   "Los datos académicos (riesgo, notas, compromiso) se mantienen reales.",
-    }
+    except Exception as e:
+        demo_db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error seeding demo: {str(e)}")
+    finally:
+        demo_db.close()

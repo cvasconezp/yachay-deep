@@ -316,6 +316,16 @@ app.include_router(demo_seed_router)
 
 
 @app.middleware("http")
+async def tenant_routing_middleware(request: Request, call_next):
+    """Set current tenant based on X-Tenant header for DB routing."""
+    from .database import set_current_tenant
+    tenant = request.headers.get("x-tenant", "").lower() or None
+    set_current_tenant(tenant)
+    response = await call_next(request)
+    return response
+
+
+@app.middleware("http")
 async def add_security_headers(request: Request, call_next):
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"

@@ -21,10 +21,42 @@ if not _is_sqlite:
 engine = create_engine(settings.DATABASE_URL, **_engine_kwargs)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+# ── Demo tenant DB (separate PostgreSQL instance) ──
+demo_engine = None
+DemoSessionLocal = None
+
+if settings.DEMO_DATABASE_URL:
+    _demo_is_sqlite = "sqlite" in settings.DEMO_DATABASE_URL
+    _demo_kwargs = dict(
+        pool_pre_ping=True,
+        connect_args={"check_same_thread": False} if _demo_is_sqlite else {},
+    )
+    if not _demo_is_sqlite:
+        _demo_kwargs.update(pool_size=2, max_overflow=3, pool_recycle=300, pool_timeout=20)
+    demo_engine = create_engine(settings.DEMO_DATABASE_URL, **_demo_kwargs)
+    DemoSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=demo_engine)
 Base = declarative_base()
 
+# Context variable to track current tenant per-request
+import contextvars
+_current_tenant = contextvars.ContextVar("current_tenant", default=None)
+
+def set_current_tenant(tenant: str | None):
+    """Called by middleware to set tenant for current request."""
+    _current_tenant.set(tenant)
+
+def get_current_tenant() -> str | None:
+    """Get current tenant from context."""
+    return _current_tenant.get()
+
 def get_db():
-    db = SessionLocal()
+    """Tenant-aware DB session. Routes to correct DB based on context tenant."""
+    tenant = _current_tenant.get()
+    if tenant == "demo" and DemoSessionLocal:
+        db = DemoSessionLocal()
+    else:
+        db = SessionLocal()
     try:
         yield db
     finally:
@@ -33,6 +65,9 @@ def get_db():
 def create_tables():
     from . import models  # noqa: import all models to register them
     Base.metadata.create_all(bind=engine)
+    # Also create tables in demo DB if configured
+    if demo_engine:
+        Base.metadata.create_all(bind=demo_engine)
 
 
 def upgrade_tables():
