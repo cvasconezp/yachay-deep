@@ -1,14 +1,12 @@
 """
-Demo data anonymization — generates shuffled/anonymized data
-for demo.yachaydeep.com presentations.
-
-Strategy: Copies ALL tables from production to demo DB, anonymizing PII.
-Uses bulk operations and batched commits to avoid timeouts.
+Demo data anonymization — phased seeding to avoid Railway timeouts.
+Each phase copies a subset of tables. Run phase 1 first, then 2, then 3.
 """
 import random
 import string
 import logging
-from fastapi import APIRouter, Depends, HTTPException
+import json
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -17,142 +15,140 @@ from ..auth.jwt import get_current_user
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin/demo", tags=["demo"])
 
-BATCH_SIZE = 500  # commit every N rows
+BATCH = 500
+NOMBRES = ["Carlos","Juan","Luis","Miguel","José","Andrés","David","Fernando",
+           "Ricardo","Santiago","María","Ana","Gabriela","Sofía","Valentina",
+           "Camila","Isabella","Daniela","Lucía","Natalia","Carolina","Andrea"]
+APELLIDOS = ["García","Rodríguez","Martínez","López","González","Hernández",
+             "Pérez","Sánchez","Ramírez","Torres","Flores","Rivera","Gómez",
+             "Díaz","Reyes","Morales","Cruz","Ortiz","Gutiérrez","Chávez",
+             "Ramos","Vargas","Castillo","Jiménez","Moreno","Romero","Alvarado",
+             "Ruiz","Mendoza","Aguilar","Medina","Herrera","Vega","Castro",
+             "Espinoza","Zambrano","Vera","Pacheco","Cárdenas","Lara",
+             "Campoverde","Quezada","Cabrera","Toapanta","Guamán"]
+CIUDADES = ["Quito","Guayaquil","Cuenca","Ambato","Loja","Riobamba","Machala"]
+PROVINCIAS = ["Pichincha","Guayas","Azuay","Tungurahua","Loja","Chimborazo","El Oro"]
+DEMO_CARRERAS = ["Ing. Ciencias de la Computación","Lic. Ciencias de la Educación",
+                 "Ing. Biotecnología","Administración de Empresas","Comunicación Social",
+                 "Psicología Clínica","Derecho","Ing. Ambiental","Contabilidad y Auditoría",
+                 "Medicina Veterinaria"]
+OBS = ["Contactado. Problemas de conectividad.","Retomará actividades.",
+       "No contestó. Mensaje dejado.","Carga laboral.","Derivado a bienestar.",
+       "Se comprometió a ponerse al día.","Dificultades económicas.",
+       "Mejoró participación.","Problemas de salud.","Coordinación notificada."]
 
-NOMBRES_M = [
-    "Carlos", "Juan", "Luis", "Miguel", "José", "Andrés", "David",
-    "Fernando", "Ricardo", "Santiago", "Diego", "Sebastián", "Mateo",
-    "Alejandro", "Daniel", "Gabriel", "Pablo", "Nicolás", "Martín",
-    "Emilio", "Roberto", "Héctor", "Francisco", "Eduardo", "Tomás",
-]
-NOMBRES_F = [
-    "María", "Ana", "Gabriela", "Sofía", "Valentina", "Camila",
-    "Isabella", "Daniela", "Lucía", "Natalia", "Carolina", "Andrea",
-    "Fernanda", "Paula", "Valeria", "Alejandra", "Mariana", "Diana",
-]
-APELLIDOS = [
-    "García", "Rodríguez", "Martínez", "López", "González", "Hernández",
-    "Pérez", "Sánchez", "Ramírez", "Torres", "Flores", "Rivera",
-    "Gómez", "Díaz", "Reyes", "Morales", "Cruz", "Ortiz", "Gutiérrez",
-    "Chávez", "Ramos", "Vargas", "Castillo", "Jiménez", "Moreno",
-    "Romero", "Alvarado", "Ruiz", "Mendoza", "Aguilar", "Medina",
-    "Herrera", "Vega", "Castro", "Ríos", "Contreras", "Guerrero",
-    "Espinoza", "Zambrano", "Vera", "Pacheco", "Cárdenas", "Lara",
-    "Campoverde", "Quezada", "Cabrera", "Toapanta", "Guamán",
-]
-CIUDADES = ["Quito", "Guayaquil", "Cuenca", "Ambato", "Loja", "Riobamba",
-            "Machala", "Portoviejo", "Ibarra", "Esmeraldas"]
-PROVINCIAS = ["Pichincha", "Guayas", "Azuay", "Tungurahua", "Loja",
-              "Chimborazo", "El Oro", "Manabí", "Imbabura", "Esmeraldas"]
-DEMO_CARRERAS = [
-    "Ingeniería en Ciencias de la Computación", "Licenciatura en Ciencias de la Educación",
-    "Ingeniería en Biotecnología", "Administración de Empresas",
-    "Comunicación Social", "Psicología Clínica", "Derecho",
-    "Ingeniería Ambiental", "Contabilidad y Auditoría", "Medicina Veterinaria",
-]
-OBSERVACIONES_DEMO = [
-    "Se contactó al estudiante. Indica problemas de conectividad.",
-    "Estudiante confirma que retomará actividades.",
-    "No contestó la llamada. Se dejó mensaje.",
-    "Carga laboral como razón de inactividad.",
-    "Se derivó a bienestar estudiantil.",
-    "Estudiante se comprometió a ponerse al día.",
-    "Contactado vía email. Dificultades económicas.",
-    "Seguimiento realizado. Mejoró su participación.",
-    "Problemas de salud. Se recomienda seguimiento.",
-    "Coordinación académica notificada.",
-]
-
-def _cedula():
+def _ced():
     return f"{random.randint(1,24):02d}{random.randint(0,5)}{''.join(random.choices(string.digits,k=6))}{random.randint(0,9)}"
-
-def _email(n, a):
-    for old, new in [("á","a"),("é","e"),("í","i"),("ó","o"),("ú","u"),("ñ","n")]:
-        n = n.lower().replace(old, new)
-        a = a.lower().replace(old, new)
+def _em(n,a):
+    for o,r in [("á","a"),("é","e"),("í","i"),("ó","o"),("ú","u"),("ñ","n")]:
+        n=n.lower().replace(o,r); a=a.lower().replace(o,r)
     return f"{n[0]}{a}{random.randint(10,99)}@unie.edu.ec"
+def _ph(): return f"09{random.randint(10000000,99999999)}"
+def _rn(): return f"{random.choice(APELLIDOS)} {random.choice(APELLIDOS)} {random.choice(NOMBRES)}"
 
-def _phone():
-    return f"09{random.randint(10000000,99999999)}"
 
-def _rand_name():
-    return f"{random.choice(APELLIDOS)} {random.choice(APELLIDOS)} {random.choice(NOMBRES_M + NOMBRES_F)}"
+def _get_demo_db():
+    from ..database import DemoSessionLocal, demo_engine
+    if not DemoSessionLocal:
+        raise HTTPException(status_code=503, detail="DEMO_DATABASE_URL no configurada")
+    return DemoSessionLocal()
+
+
+def _get_maps(db):
+    """Build carrera_map, docente_map, student_id_map from production + demo DBs."""
+    from ..models.student import Student
+    from ..models.enrollment import Enrollment
+    from ..models.grade import Grade
+    from ..models.course import Course
+    from ..models.course_config import CourseConfig
+    from ..models.docente_tracking import DocenteTracking
+
+    # Carrera map
+    real_carreras = list(set(r[0] for r in db.query(Student.carrera).distinct() if r[0]))
+    random.seed(42)  # deterministic mapping
+    random.shuffle(real_carreras)
+    carrera_map = {rc: DEMO_CARRERAS[i % len(DEMO_CARRERAS)] for i, rc in enumerate(real_carreras)}
+
+    # Docente map
+    all_doc = set()
+    for model in [Enrollment, Grade, Course, CourseConfig, DocenteTracking]:
+        if hasattr(model, 'docente'):
+            for r in db.query(model.docente).distinct():
+                if r[0]: all_doc.add(r[0])
+    random.seed(42)
+    docente_map = {d: _rn() for d in sorted(all_doc)}
+
+    # Student ID map (prod → demo)
+    demo_db = _get_demo_db()
+    try:
+        prod_ids = [r[0] for r in db.query(Student.id).order_by(Student.id).all()]
+        demo_ids = [r[0] for r in demo_db.query(Student.id).order_by(Student.id).all()]
+        student_id_map = {}
+        for p, d in zip(prod_ids, demo_ids):
+            student_id_map[p] = d
+    finally:
+        demo_db.close()
+
+    return carrera_map, docente_map, student_id_map
 
 
 @router.post("/seed-demo-db")
-def seed_demo_database(
+def seed_phase1(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Copies ALL tables from production to demo with anonymized PII. Batched for performance."""
+    """Phase 1: Students + Users + Semester/Course configs. Fast."""
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Solo admin")
 
-    from ..database import DemoSessionLocal, demo_engine
-    if not DemoSessionLocal or not demo_engine:
-        raise HTTPException(status_code=503, detail="DEMO_DATABASE_URL no configurada")
-
     from ..models.student import Student
     from ..models.user import User, UserRole
+    from ..models.course import Course
+    from ..models.course_config import CourseConfig, SemesterConfig
     from ..models.enrollment import Enrollment
     from ..models.grade import Grade
     from ..models.avac_access import AvacAccess
     from ..models.task_submission import TaskSubmission
-    from ..models.course import Course
-    from ..models.course_config import CourseConfig, SemesterConfig
     from ..models.intervention import Intervention
     from ..models.alert_event import AlertEvent
     from ..models.docente_tracking import DocenteTracking
     from ..auth.jwt import hash_password
 
-    stats = {}
-    demo_db = DemoSessionLocal()
-
+    demo_db = _get_demo_db()
     try:
-        # ── Clear demo tables ──
-        logger.info("Clearing demo tables...")
-        for model in [AlertEvent, DocenteTracking, Intervention, TaskSubmission,
-                      AvacAccess, Grade, Enrollment, CourseConfig, SemesterConfig,
-                      Course, Student, User]:
-            demo_db.query(model).delete()
+        # Clear ALL tables
+        for m in [AlertEvent, DocenteTracking, Intervention, TaskSubmission,
+                  AvacAccess, Grade, Enrollment, CourseConfig, SemesterConfig,
+                  Course, Student, User]:
+            demo_db.query(m).delete()
         demo_db.commit()
 
-        # ── Read production data ──
-        logger.info("Reading production data...")
         students = db.query(Student).all()
         if not students:
             raise HTTPException(status_code=404, detail="No hay estudiantes")
 
-        # Build carrera map
+        # Build maps
         real_carreras = list(set(s.carrera for s in students if s.carrera))
+        random.seed(42)
         random.shuffle(real_carreras)
         carrera_map = {rc: DEMO_CARRERAS[i % len(DEMO_CARRERAS)] for i, rc in enumerate(real_carreras)}
 
-        # Build docente map from enrollments (biggest source of teacher names)
-        all_docentes = set()
-        for row in db.query(Enrollment.docente).distinct():
-            if row[0]: all_docentes.add(row[0])
-        for row in db.query(Grade.docente).distinct():
-            if row[0]: all_docentes.add(row[0])
-        for row in db.query(Course.docente).distinct():
-            if row[0]: all_docentes.add(row[0])
-        for row in db.query(CourseConfig.docente).distinct():
-            if row[0]: all_docentes.add(row[0])
-        for row in db.query(DocenteTracking.docente).distinct():
-            if row[0]: all_docentes.add(row[0])
-        docente_map = {d: _rand_name() for d in all_docentes}
+        all_doc = set()
+        for model in [Enrollment, Grade, Course, CourseConfig, DocenteTracking]:
+            for r in db.query(model.docente).distinct():
+                if r[0]: all_doc.add(r[0])
+        random.seed(42)
+        docente_map = {d: _rn() for d in sorted(all_doc)}
 
-        # ── 1. Students ──
-        logger.info(f"Seeding {len(students)} students...")
-        student_id_map = {}
+        # Students
+        random.seed(None)  # back to random
         for i, s in enumerate(students):
-            nom = random.choice(NOMBRES_F if s.genero and s.genero.lower() in ("femenino","f","mujer") else NOMBRES_M)
+            nom = random.choice(NOMBRES)
             ap1, ap2 = random.choice(APELLIDOS), random.choice(APELLIDOS)
-            nombre = f"{ap1} {ap2} {nom}"
-            ds = Student(
-                cedula=_cedula(), nombre=nombre,
-                correo=_email(nom, ap1), correo_institucional=_email(nom, ap1),
-                telefono=_phone(), whatsapp=_phone(),
+            demo_db.add(Student(
+                cedula=_ced(), nombre=f"{ap1} {ap2} {nom}",
+                correo=_em(nom,ap1), correo_institucional=_em(nom,ap1),
+                telefono=_ph(), whatsapp=_ph(),
                 carrera=carrera_map.get(s.carrera, s.carrera),
                 sede=s.sede, campus=s.campus, nivel_academico=s.nivel_academico,
                 nivel_riesgo=s.nivel_riesgo, indice_compromiso=s.indice_compromiso,
@@ -164,32 +160,19 @@ def seed_demo_database(
                 es_tercera_matricula=s.es_tercera_matricula,
                 score_recuperabilidad=s.score_recuperabilidad,
                 nivel_recuperabilidad=s.nivel_recuperabilidad,
-            )
-            demo_db.add(ds)
-            if (i + 1) % BATCH_SIZE == 0:
-                demo_db.flush()
-        demo_db.flush()
-
-        # Build ID map after flush
-        demo_students = demo_db.query(Student.id).order_by(Student.id).all()
-        for orig, new in zip(students, demo_students):
-            student_id_map[orig.id] = new[0]
-        stats["students"] = len(students)
+            ))
+            if (i+1) % BATCH == 0: demo_db.flush()
         demo_db.commit()
-        logger.info(f"Students done: {len(students)}")
 
-        # ── 2. Admin user ──
-        demo_admin = User(
+        # Admin
+        demo_db.add(User(
             email=current_user.email, nombre="Admin Demo",
             hashed_password=current_user.hashed_password,
             role=UserRole.admin, is_active=True,
-        )
-        demo_db.add(demo_admin)
-        demo_db.flush()
-        user_id_map = {current_user.id: demo_admin.id}
+        ))
         demo_db.commit()
 
-        # ── 3. Semester configs (no PII) ──
+        # Semester configs
         for sc in db.query(SemesterConfig).all():
             demo_db.add(SemesterConfig(
                 semestre=sc.semestre, activo=sc.activo, bloque_actual=sc.bloque_actual,
@@ -204,9 +187,8 @@ def seed_demo_database(
                 retrain_cada_n_etl=sc.retrain_cada_n_etl, retrain_contador_etl=0,
             ))
         demo_db.commit()
-        stats["semester_configs"] = db.query(SemesterConfig).count()
 
-        # ── 4. Courses ──
+        # Courses + Course configs
         for c in db.query(Course).all():
             demo_db.add(Course(
                 codigo_avac=c.codigo_avac, nombre=c.nombre,
@@ -215,90 +197,130 @@ def seed_demo_database(
                 periodo=c.periodo, grupo=c.grupo,
             ))
         demo_db.commit()
-        stats["courses"] = db.query(Course).count()
-
-        # ── 5. Course configs ──
         for cc in db.query(CourseConfig).all():
             dn = docente_map.get(cc.docente, cc.docente)
             demo_db.add(CourseConfig(
                 codigo_avac=cc.codigo_avac, nombre=cc.nombre, asignatura=cc.asignatura,
                 carrera=carrera_map.get(cc.carrera, cc.carrera),
-                docente=dn, correo_docente=_email(dn.split()[-1], dn.split()[0]) if dn else None,
+                docente=dn, correo_docente=_em(dn.split()[-1],dn.split()[0]) if dn else None,
                 semestre=cc.semestre, bloque=cc.bloque, nivel=cc.nivel, grupo=cc.grupo,
                 activo=cc.activo, es_especial=cc.es_especial, notas=cc.notas,
             ))
         demo_db.commit()
-        stats["course_configs"] = db.query(CourseConfig).count()
 
-        # ── 6. Enrollments (large - batch) ──
-        logger.info("Seeding enrollments...")
-        count = 0
+        return {"status": "ok", "phase": 1, "students": len(students),
+                "message": "Phase 1 done. Now run phase=2"}
+    except HTTPException: raise
+    except Exception as e:
+        demo_db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        demo_db.close()
+
+
+@router.post("/seed-demo-phase2")
+def seed_phase2(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Phase 2: Enrollments + Grades (large tables)."""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Solo admin")
+
+    from ..models.enrollment import Enrollment
+    from ..models.grade import Grade
+
+    carrera_map, docente_map, sid_map = _get_maps(db)
+    demo_db = _get_demo_db()
+    stats = {}
+    try:
+        # Enrollments
+        c = 0
         for e in db.query(Enrollment).yield_per(1000):
-            nsid = student_id_map.get(e.student_id)
-            if not nsid: continue
+            ns = sid_map.get(e.student_id)
+            if not ns: continue
             dn = docente_map.get(e.docente, e.docente)
             demo_db.add(Enrollment(
-                student_id=nsid, codigo_grupo=e.codigo_grupo,
+                student_id=ns, codigo_grupo=e.codigo_grupo,
                 codigo_asignatura=e.codigo_asignatura, asignatura=e.asignatura,
                 tipo_asignatura=e.tipo_asignatura,
                 carrera=carrera_map.get(e.carrera, e.carrera),
                 nivel=e.nivel, nombre_grupo=e.nombre_grupo, bloque=e.bloque,
-                docente=dn, correo_docente=_email(dn.split()[-1], dn.split()[0]) if dn else None,
+                docente=dn, correo_docente=_em(dn.split()[-1],dn.split()[0]) if dn else None,
                 numero_repitencias=e.numero_repitencias, pagado=e.pagado,
                 estado_matriculado=e.estado_matriculado,
                 es_tercera_matricula=e.es_tercera_matricula,
                 tipo_aprobacion=e.tipo_aprobacion, estado_solicitud=e.estado_solicitud,
                 periodo=e.periodo,
             ))
-            count += 1
-            if count % BATCH_SIZE == 0: demo_db.commit()
+            c += 1
+            if c % BATCH == 0: demo_db.commit()
         demo_db.commit()
-        stats["enrollments"] = count
+        stats["enrollments"] = c
 
-        # ── 7. Grades (large - batch) ──
-        logger.info("Seeding grades...")
-        count = 0
+        # Grades
+        c = 0
         for g in db.query(Grade).yield_per(1000):
-            nsid = student_id_map.get(g.student_id)
-            if not nsid: continue
+            ns = sid_map.get(g.student_id)
+            if not ns: continue
             demo_db.add(Grade(
-                student_id=nsid, asignatura=g.asignatura,
+                student_id=ns, asignatura=g.asignatura,
                 carrera=carrera_map.get(g.carrera, g.carrera),
                 grupo=g.grupo, docente=docente_map.get(g.docente, g.docente),
                 nota_final=g.nota_final, periodo=g.periodo, sede=g.sede,
                 numero_repitencias=g.numero_repitencias, nivel=g.nivel,
             ))
-            count += 1
-            if count % BATCH_SIZE == 0: demo_db.commit()
+            c += 1
+            if c % BATCH == 0: demo_db.commit()
         demo_db.commit()
-        stats["grades"] = count
+        stats["grades"] = c
 
-        # ── 8. AVAC accesses (large - batch) ──
-        logger.info("Seeding avac_accesses...")
-        count = 0
+        return {"status": "ok", "phase": 2, **stats, "message": "Phase 2 done. Now run phase=3"}
+    except Exception as e:
+        demo_db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        demo_db.close()
+
+
+@router.post("/seed-demo-phase3")
+def seed_phase3(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Phase 3: AVAC accesses + Task submissions (largest tables)."""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Solo admin")
+
+    from ..models.avac_access import AvacAccess
+    from ..models.task_submission import TaskSubmission
+
+    _, _, sid_map = _get_maps(db)
+    demo_db = _get_demo_db()
+    stats = {}
+    try:
+        c = 0
         for a in db.query(AvacAccess).yield_per(1000):
-            nsid = student_id_map.get(a.student_id)
-            if not nsid: continue
+            ns = sid_map.get(a.student_id)
+            if not ns: continue
             demo_db.add(AvacAccess(
-                student_id=nsid, codigo_curso=a.codigo_curso, periodo=a.periodo,
+                student_id=ns, codigo_curso=a.codigo_curso, periodo=a.periodo,
                 snapshot_date=a.snapshot_date, nombre_estudiante_avac="Estudiante Demo",
                 ultimo_acceso_texto=a.ultimo_acceso_texto,
                 dias_sin_acceso=a.dias_sin_acceso, estado_avac=a.estado_avac,
                 fecha_extraccion=a.fecha_extraccion,
             ))
-            count += 1
-            if count % BATCH_SIZE == 0: demo_db.commit()
+            c += 1
+            if c % BATCH == 0: demo_db.commit()
         demo_db.commit()
-        stats["avac_accesses"] = count
+        stats["avac_accesses"] = c
 
-        # ── 9. Task submissions (large - batch, no PII) ──
-        logger.info("Seeding task_submissions...")
-        count = 0
+        c = 0
         for ts in db.query(TaskSubmission).yield_per(1000):
-            nsid = student_id_map.get(ts.student_id)
-            if not nsid: continue
+            ns = sid_map.get(ts.student_id)
+            if not ns: continue
             demo_db.add(TaskSubmission(
-                student_id=nsid, codigo_curso=ts.codigo_curso, periodo=ts.periodo,
+                student_id=ns, codigo_curso=ts.codigo_curso, periodo=ts.periodo,
                 snapshot_date=ts.snapshot_date, unidad=ts.unidad, estado=ts.estado,
                 calificacion_texto=ts.calificacion_texto, calificacion=ts.calificacion,
                 calificacion_maxima=ts.calificacion_maxima,
@@ -306,53 +328,75 @@ def seed_demo_database(
                 fecha_entrega=ts.fecha_entrega, fecha_calificacion=ts.fecha_calificacion,
                 calificacion_final=ts.calificacion_final, total_curso=ts.total_curso,
             ))
-            count += 1
-            if count % BATCH_SIZE == 0: demo_db.commit()
+            c += 1
+            if c % BATCH == 0: demo_db.commit()
         demo_db.commit()
-        stats["task_submissions"] = count
+        stats["task_submissions"] = c
 
-        # ── 10. Interventions ──
-        logger.info("Seeding interventions...")
-        count = 0
+        return {"status": "ok", "phase": 3, **stats, "message": "Phase 3 done. Now run phase=4"}
+    except Exception as e:
+        demo_db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        demo_db.close()
+
+
+@router.post("/seed-demo-phase4")
+def seed_phase4(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Phase 4: Interventions + Alerts + Docente tracking."""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Solo admin")
+
+    from ..models.intervention import Intervention
+    from ..models.alert_event import AlertEvent
+    from ..models.docente_tracking import DocenteTracking
+    from ..models.user import User
+
+    carrera_map, docente_map, sid_map = _get_maps(db)
+    demo_db = _get_demo_db()
+    demo_admin = demo_db.query(User).first()
+    uid_map = {current_user.id: demo_admin.id} if demo_admin else {}
+    stats = {}
+    try:
+        c = 0
         for iv in db.query(Intervention).yield_per(500):
-            nsid = student_id_map.get(iv.student_id)
-            if not nsid: continue
+            ns = sid_map.get(iv.student_id)
+            if not ns: continue
             demo_db.add(Intervention(
-                student_id=nsid, monitor_id=user_id_map.get(iv.monitor_id),
+                student_id=ns, monitor_id=uid_map.get(iv.monitor_id),
                 monitor_nombre="Admin Demo" if iv.monitor_nombre else None,
                 carrera=carrera_map.get(iv.carrera, iv.carrera),
                 medio=iv.medio, motivo=iv.motivo, estado=iv.estado,
                 asignatura=iv.asignatura, docente=docente_map.get(iv.docente, iv.docente),
-                observacion=random.choice(OBSERVACIONES_DEMO) if iv.observacion else None,
+                observacion=random.choice(OBS) if iv.observacion else None,
                 periodo=iv.periodo, resultado=iv.resultado,
                 requiere_seguimiento=iv.requiere_seguimiento, nota_cierre=iv.nota_cierre,
                 derivar_bienestar=iv.derivar_bienestar, derivar_financiero=iv.derivar_financiero,
                 derivar_coordinacion=iv.derivar_coordinacion, derivar_docente=iv.derivar_docente,
             ))
-            count += 1
-            if count % BATCH_SIZE == 0: demo_db.commit()
+            c += 1
+            if c % BATCH == 0: demo_db.commit()
         demo_db.commit()
-        stats["interventions"] = count
+        stats["interventions"] = c
 
-        # ── 11. Alert events ──
-        logger.info("Seeding alert_events...")
-        count = 0
+        c = 0
         for ae in db.query(AlertEvent).yield_per(1000):
-            nsid = student_id_map.get(ae.student_id)
-            if not nsid: continue
+            ns = sid_map.get(ae.student_id)
+            if not ns: continue
             demo_db.add(AlertEvent(
-                student_id=nsid, tipo=ae.tipo, codigo_curso=ae.codigo_curso,
+                student_id=ns, tipo=ae.tipo, codigo_curso=ae.codigo_curso,
                 mensaje=ae.mensaje, severidad=ae.severidad,
                 leido=ae.leido, leido_por="Admin Demo" if ae.leido_por else None,
             ))
-            count += 1
-            if count % BATCH_SIZE == 0: demo_db.commit()
+            c += 1
+            if c % BATCH == 0: demo_db.commit()
         demo_db.commit()
-        stats["alert_events"] = count
+        stats["alert_events"] = c
 
-        # ── 12. Docente tracking ──
-        logger.info("Seeding docente_tracking...")
-        count = 0
+        c = 0
         for dt in db.query(DocenteTracking).yield_per(1000):
             demo_db.add(DocenteTracking(
                 codigo_curso=dt.codigo_curso, nombre_curso=dt.nombre_curso,
@@ -362,25 +406,14 @@ def seed_demo_database(
                 docente=docente_map.get(dt.docente, dt.docente),
                 dias_retraso=dt.dias_retraso, semestre=dt.semestre, fuente=dt.fuente,
             ))
-            count += 1
-            if count % BATCH_SIZE == 0: demo_db.commit()
+            c += 1
+            if c % BATCH == 0: demo_db.commit()
         demo_db.commit()
-        stats["docente_tracking"] = count
+        stats["docente_tracking"] = c
 
-        logger.info(f"Demo seed complete: {stats}")
-        return {
-            "status": "success",
-            "tables_seeded": stats,
-            "carreras_mapped": carrera_map,
-            "docentes_anonymized": len(docente_map),
-            "admin_email": current_user.email,
-        }
-    except HTTPException:
-        raise
+        return {"status": "ok", "phase": 4, **stats, "message": "All phases complete! Demo is ready."}
     except Exception as e:
         demo_db.rollback()
-        import traceback
-        logger.error(f"Seed error: {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         demo_db.close()
