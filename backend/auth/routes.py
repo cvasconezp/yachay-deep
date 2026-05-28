@@ -105,7 +105,7 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db
 def logout():
     """[SEC-02] Borra la HttpOnly cookie."""
     response = JSONResponse(content={"detail": "Sesión cerrada"})
-    response.delete_cookie(key=COOKIE_NAME, path="/")
+    response.delete_cookie(key=COOKIE_NAME, path="/", domain=settings.COOKIE_DOMAIN)
     return response
 
 

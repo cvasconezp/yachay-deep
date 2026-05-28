@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     DEBUG: bool = False
 
     # [SEC-02] Cookie config for HttpOnly JWT
-    COOKIE_DOMAIN: Optional[str] = None          # None = auto (current domain)
+    COOKIE_DOMAIN: Optional[str] = ".yachaydeep.com"  # shared across *.yachaydeep.com subdomains
     COOKIE_SECURE: bool = True                    # False for localhost dev
     COOKIE_SAMESITE: str = "lax"                  # "lax" para navegación normal, "strict" para máxima seguridad
 
