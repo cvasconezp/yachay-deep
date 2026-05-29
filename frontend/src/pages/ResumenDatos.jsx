@@ -143,9 +143,7 @@ function HBarChart({ title, data, color = PBI.blue, maxItems = 999, leftMargin =
     <div className="rounded-lg p-4" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
       <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: PBI.slate }}>{titleAnnotated}</h3>
       <ResponsiveContainer width="100%" height={Math.max(sliced.length * 32, 120)}>
-        <BarChart data={sliced} layout="vertical" margin={{ top: 0, right: 50, bottom: 0, left: 10 }}
-          onClick={onBarClick ? (state) => { if (state?.activePayload?.[0]) onBarClick(state.activePayload[0].payload.name); } : undefined}
-          style={onBarClick ? { cursor: "pointer" } : undefined}>
+        <BarChart data={sliced} layout="vertical" margin={{ top: 0, right: 50, bottom: 0, left: 10 }}>
           <CartesianGrid horizontal={false} stroke="#f1f5f9" />
           <XAxis type="number" tick={{ fontSize: 10, fill: PBI.slate }} axisLine={false} tickLine={false} />
           <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fill: PBI.navy }} width={leftMargin} axisLine={false} tickLine={false} />
@@ -153,7 +151,9 @@ function HBarChart({ title, data, color = PBI.blue, maxItems = 999, leftMargin =
             const pct = totalSum > 0 ? ((v / totalSum) * 100).toFixed(1) : 0;
             return [`${v.toLocaleString()} estudiantes (${pct}%)`, p.payload.full || p.payload.name];
           }} />
-          <Bar dataKey="value" radius={[0, 6, 6, 0]} barSize={18}>
+          <Bar dataKey="value" radius={[0, 6, 6, 0]} barSize={18}
+            onClick={onBarClick ? (data) => onBarClick(data.name) : undefined}
+            style={onBarClick ? { cursor: "pointer" } : undefined}>
             {sliced.map((entry, idx) => (
               <Cell key={idx} fill={activeItem === entry.name ? "#0f766e" : color}
                     stroke={activeItem === entry.name ? "#0f766e" : "none"} strokeWidth={activeItem === entry.name ? 2 : 0} />
