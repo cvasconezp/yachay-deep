@@ -134,7 +134,7 @@ function DonutSection({ title, data, colors, total, onItemClick }) {
 }
 
 /* ── Horizontal bar chart (all items, PBI) ── */
-function HBarChart({ title, data, color = PBI.blue, maxItems = 999, leftMargin = 180 }) {
+function HBarChart({ title, data, color = PBI.blue, maxItems = 999, leftMargin = 180, onBarClick = null, activeItem = null }) {
   if (!data || data.length === 0) return null;
   const sliced = data.slice(0, maxItems);
   const totalSum = sliced.reduce((s, d) => s + (d.value || 0), 0);
@@ -143,7 +143,9 @@ function HBarChart({ title, data, color = PBI.blue, maxItems = 999, leftMargin =
     <div className="rounded-lg p-4" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
       <h3 className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: PBI.slate }}>{titleAnnotated}</h3>
       <ResponsiveContainer width="100%" height={Math.max(sliced.length * 32, 120)}>
-        <BarChart data={sliced} layout="vertical" margin={{ top: 0, right: 50, bottom: 0, left: 10 }}>
+        <BarChart data={sliced} layout="vertical" margin={{ top: 0, right: 50, bottom: 0, left: 10 }}
+          onClick={onBarClick ? (state) => { if (state?.activePayload?.[0]) onBarClick(state.activePayload[0].payload.name); } : undefined}
+          style={onBarClick ? { cursor: "pointer" } : undefined}>
           <CartesianGrid horizontal={false} stroke="#f1f5f9" />
           <XAxis type="number" tick={{ fontSize: 10, fill: PBI.slate }} axisLine={false} tickLine={false} />
           <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fill: PBI.navy }} width={leftMargin} axisLine={false} tickLine={false} />
@@ -151,11 +153,75 @@ function HBarChart({ title, data, color = PBI.blue, maxItems = 999, leftMargin =
             const pct = totalSum > 0 ? ((v / totalSum) * 100).toFixed(1) : 0;
             return [`${v.toLocaleString()} estudiantes (${pct}%)`, p.payload.full || p.payload.name];
           }} />
-          <Bar dataKey="value" fill={color} radius={[0, 6, 6, 0]} barSize={18}>
+          <Bar dataKey="value" radius={[0, 6, 6, 0]} barSize={18}>
+            {sliced.map((entry, idx) => (
+              <Cell key={idx} fill={activeItem === entry.name ? "#0f766e" : color}
+                    stroke={activeItem === entry.name ? "#0f766e" : "none"} strokeWidth={activeItem === entry.name ? 2 : 0} />
+            ))}
             <LabelList dataKey="value" position="right" style={{ fontSize: 10, fill: PBI.navy, fontWeight: 600 }} />
           </Bar>
         </BarChart>
       </ResponsiveContainer>
+    </div>
+  );
+}
+
+
+/* ── City → Carrera breakdown panel ──── */
+function CityCarreraBreakdown({ city, porCarrera, onClose }) {
+  // Extract per-carrera counts for the selected city
+  const breakdown = (porCarrera || [])
+    .map(c => ({
+      carrera: c.carrera,
+      count: c.por_ciudad?.[city] || 0,
+      riesgo: c.por_riesgo || {},
+    }))
+    .filter(c => c.count > 0)
+    .sort((a, b) => b.count - a.count);
+
+  const total = breakdown.reduce((s, b) => s + b.count, 0);
+
+  return (
+    <div className="rounded-lg p-4" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-xs font-semibold uppercase tracking-wider" style={{ color: PBI.slate }}>
+          {city} — {total} estudiantes en {breakdown.length} carrera{breakdown.length !== 1 ? "s" : ""}
+        </h3>
+        <button onClick={onClose} className="text-xs text-gray-400 hover:text-red-500 transition-colors px-2 py-1 rounded hover:bg-red-50">
+          ✕ Cerrar
+        </button>
+      </div>
+      <div className="space-y-2 max-h-[400px] overflow-y-auto">
+        {breakdown.map((b, i) => {
+          const pct = total > 0 ? ((b.count / total) * 100).toFixed(1) : 0;
+          const alto = b.riesgo?.Alto || 0;
+          return (
+            <div key={i} className="flex items-center gap-3 group">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-medium truncate" style={{ color: PBI.navy }} title={b.carrera}>
+                    {b.carrera}
+                  </span>
+                  <span className="text-xs font-semibold ml-2 whitespace-nowrap" style={{ color: PBI.navy }}>
+                    {b.count} <span className="text-gray-400 font-normal">({pct}%)</span>
+                  </span>
+                </div>
+                <div className="w-full bg-gray-100 rounded-full h-2">
+                  <div className="h-2 rounded-full transition-all" style={{
+                    width: `${(b.count / breakdown[0].count) * 100}%`,
+                    background: `linear-gradient(90deg, #14b8a6, #0d9488)`,
+                  }} />
+                </div>
+              </div>
+              {alto > 0 && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-50 text-red-600 font-medium whitespace-nowrap">
+                  {alto} alto riesgo
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -888,6 +954,7 @@ export default function ResumenDatos() {
 
   // Carrera expand
   const [expandedCarrera, setExpandedCarrera] = useState(null);
+  const [selectedCity, setSelectedCity] = useState(null);
   const [carreraModal, setCarreraModal] = useState(null);  // { carrera, estudiantes, total, loading }
 
   const openCarreraStudents = async (carreraName) => {
@@ -1431,9 +1498,14 @@ export default function ResumenDatos() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <HBarChart title="Estudiantes por Ciudad" data={ciudadData} color="#14b8a6" maxItems={12} />
-                {sedeData.length > 1 && (
+                <HBarChart title="Estudiantes por Ciudad" data={ciudadData} color="#14b8a6" maxItems={12}
+                  onBarClick={(city) => setSelectedCity(selectedCity === city ? null : city)}
+                  activeItem={selectedCity} />
+                {sedeData.length > 1 && !selectedCity && (
                   <HBarChart title="Estudiantes por Sede / Centro de Apoyo" data={sedeData} color="#8b5cf6" maxItems={10} />
+                )}
+                {selectedCity && (
+                  <CityCarreraBreakdown city={selectedCity} porCarrera={porCarrera} onClose={() => setSelectedCity(null)} />
                 )}
               </div>
             </div>
