@@ -174,7 +174,6 @@ function CityCarreraBreakdown({ city, porCarrera, onClose }) {
     .map(c => ({
       carrera: c.carrera,
       count: c.por_ciudad?.[city] || 0,
-      riesgo: c.por_riesgo || {},
     }))
     .filter(c => c.count > 0)
     .sort((a, b) => b.count - a.count);
@@ -194,7 +193,6 @@ function CityCarreraBreakdown({ city, porCarrera, onClose }) {
       <div className="space-y-2 max-h-[400px] overflow-y-auto">
         {breakdown.map((b, i) => {
           const pct = total > 0 ? ((b.count / total) * 100).toFixed(1) : 0;
-          const alto = b.riesgo?.Alto || 0;
           return (
             <div key={i} className="flex items-center gap-3 group">
               <div className="flex-1 min-w-0">
@@ -213,11 +211,7 @@ function CityCarreraBreakdown({ city, porCarrera, onClose }) {
                   }} />
                 </div>
               </div>
-              {alto > 0 && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-50 text-red-600 font-medium whitespace-nowrap">
-                  {alto} alto riesgo
-                </span>
-              )}
+
             </div>
           );
         })}
