@@ -62,6 +62,14 @@ def get_db():
     finally:
         db.close()
 
+def get_prod_db():
+    """Always returns a production DB session (ignores tenant). Used for auth."""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
 def create_tables():
     from . import models  # noqa: import all models to register them
     Base.metadata.create_all(bind=engine)

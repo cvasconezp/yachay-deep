@@ -13,7 +13,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
 from ..config import settings
-from ..database import get_db
+from ..database import get_prod_db
 from ..models.user import User
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -56,7 +56,7 @@ def _extract_token(request: Request, bearer_token: Optional[str]) -> Optional[st
 def get_current_user(
     request: Request,
     bearer_token: Optional[str] = Depends(oauth2_scheme),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_prod_db),  # always production — JWT IDs are from production
 ) -> User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
