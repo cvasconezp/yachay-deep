@@ -395,7 +395,7 @@ export default function About() {
 
       {/* Footer */}
       <div className="text-center py-8 text-xs text-gray-400 border-t border-gray-200 mt-10">
-        &copy; {new Date().getFullYear()} Carlos Vasconez-Paredes | PachaTech | Yachay Deep v1.0
+        &copy; {new Date().getFullYear()} Carlos Vasconez-Paredes | Yachay Deep v1.0
       </div>
     </div>
   );

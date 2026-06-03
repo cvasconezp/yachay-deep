@@ -2025,7 +2025,7 @@ function FichaEstudianteInner() {
 
           {/* ═══ PIE DE PÁGINA ═══ */}
           <div className="bg-gradient-to-r from-[#0F2444] to-[#1B3A6B] text-white/50 text-center py-2 text-[9px] tracking-widest uppercase">
-            Yachay Deep — Pacha Tech © &nbsp;·&nbsp; {today}
+            Yachay Deep © &nbsp;·&nbsp; {today}
           </div>
 
         </div>
