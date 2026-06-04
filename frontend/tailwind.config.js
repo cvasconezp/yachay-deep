@@ -1,19 +1,13 @@
 /** @type {import('tailwindcss').Config} */
+// Tokens de marca: copia sincronizada de yachaydeep-web/packages/brand/preset.cjs
+// (fuente unica de verdad). NO editar colores aqui ni en el preset a mano.
+import brandPreset from "./brand.preset.cjs";
+
 export default {
+  presets: [brandPreset],
   content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   theme: {
     extend: {
-      colors: {
-        brand: {
-          DEFAULT: "#1B3A6B",
-          dark: "#0F2444",
-          light: "#2B5AA0",
-          gold: "#E8A838",
-          "gold-light": "#F5C563",
-          ice: "#A8DCE8",
-          "ice-light": "#D8EFF4",
-        },
-      },
       animation: {
         "spin-slow": "spin 3s linear infinite",
       },
