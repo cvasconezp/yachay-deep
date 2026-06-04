@@ -34,6 +34,20 @@ export function getTenant() {
   return null;
 }
 
+/**
+ * Host dedicado del panel de administración (KAPAK).
+ * El panel vive en la RAÍZ de kapak.yachaydeep.com.
+ * Dev override: localhost?host=kapak
+ */
+export function isAdminHost() {
+  const hostname = window.location.hostname;
+  if (hostname === "kapak.yachaydeep.com") return true;
+  if (hostname === "localhost" || hostname === "127.0.0.1") {
+    return new URLSearchParams(window.location.search).get("host") === "kapak";
+  }
+  return false;
+}
+
 export function isSubdomain() {
   return getTenant() !== null;
 }

@@ -95,6 +95,7 @@ def upgrade_tables():
         "users": [
             ("permissions", "JSON"),
             ("pin_hash", "VARCHAR"),
+            ("tenant", "VARCHAR"),
         ],
         "institutions": [],  # new table, created by create_all()
     "students": [

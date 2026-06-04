@@ -2,6 +2,27 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { YachayLogo } from "../components/YachayLogo";
+import { isSubdomain, isAdminHost } from "../hooks/useTenant";
+
+/**
+ * Destino tras iniciar sesión (login centralizado):
+ * - En kapak/dominio raíz: admin → panel KAPAK; usuario con institución →
+ *   su subdominio (la cookie de sesión es válida en *.yachaydeep.com).
+ * - En un subdominio de institución: dashboard normal.
+ */
+function goAfterLogin(u, navigate) {
+  if (!isSubdomain()) {
+    if (u?.role === "admin") {
+      navigate(isAdminHost() ? "/" : "/core/kapak", { replace: true });
+      return;
+    }
+    if (u?.tenant) {
+      window.location.href = `https://${u.tenant}.yachaydeep.com/dashboard`;
+      return;
+    }
+  }
+  navigate("/dashboard", { replace: true });
+}
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -17,7 +38,7 @@ export default function Login() {
   // the public landing while already authenticated.
   useEffect(() => {
     if (!authLoading && user) {
-      navigate("/dashboard", { replace: true });
+      goAfterLogin(user, navigate);
     }
   }, [authLoading, user, navigate]);
 
@@ -26,8 +47,8 @@ export default function Login() {
     setError("");
     setLoading(true);
     try {
-      await login(email, password);
-      navigate("/dashboard");
+      const u = await login(email, password);
+      goAfterLogin(u, navigate);
     } catch (err) {
       setError(err.message || "Credenciales incorrectas");
     } finally {

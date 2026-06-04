@@ -37,6 +37,7 @@ class UserCreate(BaseModel):
     password: str = Field(..., min_length=8, max_length=128)
     role: UserRole = UserRole.monitor
     permissions: Optional[list[str]] = None  # tabs permitidos: ["dashboard","alertas",...]
+    tenant: Optional[str] = None  # código de institución (subdominio); None = global
     send_welcome_email: bool = True
 
 
@@ -46,6 +47,7 @@ class UserUpdate(BaseModel):
     nombre: Optional[str] = None
     password: Optional[str] = Field(None, min_length=8)
     permissions: Optional[list[str]] = None
+    tenant: Optional[str] = None
 
 
 class UserResponse(BaseModel):
@@ -56,6 +58,7 @@ class UserResponse(BaseModel):
     is_active: bool
     created_at: Optional[datetime]
     permissions: Optional[list[str]] = None
+    tenant: Optional[str] = None
     has_pin: bool = False
 
     class Config:
@@ -86,7 +89,7 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db
     response = JSONResponse(content={
         "access_token": token,
         "token_type": "bearer",
-        "user": {"id": user.id, "email": user.email, "nombre": user.nombre, "role": user.role, "permissions": user.permissions, "has_pin": user.pin_hash is not None},
+        "user": {"id": user.id, "email": user.email, "nombre": user.nombre, "role": user.role, "permissions": user.permissions, "tenant": user.tenant, "has_pin": user.pin_hash is not None},
     })
     response.set_cookie(
         key=COOKIE_NAME,
@@ -129,6 +132,7 @@ def me(current_user: User = Depends(get_current_user)):
         is_active=current_user.is_active,
         created_at=current_user.created_at,
         permissions=current_user.permissions,
+        tenant=current_user.tenant,
         has_pin=current_user.pin_hash is not None,
     )
 
@@ -143,6 +147,7 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db)):
         hashed_password=hash_password(payload.password),
         role=payload.role,
         permissions=payload.permissions,
+        tenant=payload.tenant,
     )
     db.add(user)
     db.commit()
@@ -186,6 +191,8 @@ def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)
         user.hashed_password = hash_password(updates["password"])
     if "permissions" in updates:
         user.permissions = updates["permissions"]
+    if "tenant" in updates:
+        user.tenant = updates["tenant"]
     db.commit()
     db.refresh(user)
     return user

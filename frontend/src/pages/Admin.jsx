@@ -1708,20 +1708,27 @@ function PermissionCheckboxes({ selected, onChange, compact = false }) {
 // ─────────────────────────────────────────────────────────────────────────────
 function TabUsuarios() {
   const [users, setUsers] = useState([]);
-  const [newUser, setNewUser] = useState({ email: "", nombre: "", password: "", role: "monitor", permissions: null, send_welcome_email: true });
+  const [institutions, setInstitutions] = useState([]);
+  const [newUser, setNewUser] = useState({ email: "", nombre: "", password: "", role: "monitor", permissions: null, tenant: null, send_welcome_email: true });
   const [userMsg, setUserMsg] = useState("");
   const [editing, setEditing] = useState(null); // user being edited, or null
 
   const reload = () => api.listUsers().then(setUsers).catch(() => setUserMsg("Error: No se pudieron cargar los usuarios"));
 
   useEffect(() => { reload(); }, []);
+  useEffect(() => { api.getInstitutions().then(setInstitutions).catch(() => {}); }, []);
+
+  // Códigos de institución (subdominios) disponibles
+  const tenantOptions = ["ups", "demo", ...institutions
+    .map((i) => i.codigo)
+    .filter((c) => c && !["ups", "demo"].includes(c))];
 
   const handleCreateUser = async (e) => {
     e.preventDefault();
     try {
       await api.createUser(newUser);
       setUserMsg("Usuario creado correctamente");
-      setNewUser({ email: "", nombre: "", password: "", role: "monitor", permissions: null, send_welcome_email: true });
+      setNewUser({ email: "", nombre: "", password: "", role: "monitor", permissions: null, tenant: null, send_welcome_email: true });
       reload();
     } catch (err) {
       setUserMsg("Error: " + err.message);
@@ -1743,7 +1750,7 @@ function TabUsuarios() {
 
       <div className="bg-white rounded-xl border border-gray-200 p-5">
         <h3 className="font-medium text-gray-700 mb-3 text-sm">Crear nuevo usuario</h3>
-        <form onSubmit={handleCreateUser} className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <form onSubmit={handleCreateUser} className="grid grid-cols-2 md:grid-cols-6 gap-3">
           <input value={newUser.email} onChange={e => setNewUser(u => ({ ...u, email: e.target.value }))}
             type="email" placeholder="Email" required
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
@@ -1760,6 +1767,14 @@ function TabUsuarios() {
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
             {Object.entries(ROLE_LABELS).map(([k, v]) => (
               <option key={k} value={k}>{v}</option>
+            ))}
+          </select>
+          <select value={newUser.tenant ?? ""} onChange={e => setNewUser(u => ({ ...u, tenant: e.target.value || null }))}
+            title="Institución a la que pertenece el usuario"
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+            <option value="">🌐 Global (todas)</option>
+            {tenantOptions.map((c) => (
+              <option key={c} value={c}>{c.toUpperCase()}</option>
             ))}
           </select>
           <button type="submit"
@@ -1804,6 +1819,7 @@ function TabUsuarios() {
               <th className="text-left px-5 py-2.5 text-gray-600 font-medium">Nombre</th>
               <th className="text-left px-5 py-2.5 text-gray-600 font-medium">Email</th>
               <th className="text-center px-5 py-2.5 text-gray-600 font-medium">Rol</th>
+              <th className="text-center px-5 py-2.5 text-gray-600 font-medium">Institución</th>
               <th className="text-center px-5 py-2.5 text-gray-600 font-medium">Estado</th>
               <th className="text-center px-5 py-2.5 text-gray-600 font-medium">Permisos</th>
               <th className="text-right px-5 py-2.5 text-gray-600 font-medium">Acciones</th>
@@ -1815,6 +1831,7 @@ function TabUsuarios() {
                 <td className="px-5 py-2.5 font-medium text-gray-800">{u.nombre}</td>
                 <td className="px-5 py-2.5 text-gray-500">{u.email}</td>
                 <td className="px-5 py-2.5 text-center text-xs font-medium text-blue-600">{ROLE_LABELS[u.role] || u.role}</td>
+                <td className="px-5 py-2.5 text-center text-xs text-gray-600">{u.tenant ? u.tenant.toUpperCase() : "Global"}</td>
                 <td className="px-5 py-2.5 text-center">
                   <button onClick={() => toggleUser(u)}
                     className={`px-2 py-0.5 rounded-full text-xs font-medium ${u.is_active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
@@ -1845,6 +1862,7 @@ function TabUsuarios() {
       {editing && (
         <EditUserModal
           user={editing}
+          tenantOptions={tenantOptions}
           onClose={() => setEditing(null)}
           onSaved={() => { setEditing(null); reload(); }}
           onError={(msg) => setUserMsg("Error: " + msg)}
@@ -1854,11 +1872,12 @@ function TabUsuarios() {
   );
 }
 
-function EditUserModal({ user, onClose, onSaved, onError }) {
+function EditUserModal({ user, tenantOptions = [], onClose, onSaved, onError }) {
   const [nombre, setNombre] = useState(user.nombre || "");
   const [role, setRole] = useState(user.role || "monitor");
   const [permissions, setPermissions] = useState(user.permissions ?? null);
   const [isActive, setIsActive] = useState(!!user.is_active);
+  const [tenant, setTenant] = useState(user.tenant ?? null);
   const [password, setPassword] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -1870,6 +1889,7 @@ function EditUserModal({ user, onClose, onSaved, onError }) {
       if (nombre !== user.nombre) payload.nombre = nombre;
       if (role !== user.role) payload.role = role;
       if (isActive !== !!user.is_active) payload.is_active = isActive;
+      if ((tenant ?? null) !== (user.tenant ?? null)) payload.tenant = tenant;
       if (password.trim()) payload.password = password;
       // Always send permissions if changed
       const permChanged = JSON.stringify(permissions) !== JSON.stringify(user.permissions ?? null);
@@ -1931,6 +1951,20 @@ function EditUserModal({ user, onClose, onSaved, onError }) {
                 <option value="0">Inactivo</option>
               </select>
             </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Institución</label>
+            <select value={tenant ?? ""} onChange={(e) => setTenant(e.target.value || null)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="">🌐 Global (todas)</option>
+              {tenantOptions.map((c) => (
+                <option key={c} value={c}>{c.toUpperCase()}</option>
+              ))}
+            </select>
+            <p className="text-[11px] text-gray-400 mt-1">
+              Al iniciar sesión en kapak.yachaydeep.com el usuario será dirigido a su institución.
+            </p>
           </div>
 
           <div>

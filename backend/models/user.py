@@ -24,3 +24,4 @@ class User(Base):
     last_login = Column(DateTime(timezone=True), nullable=True)
     permissions = Column(JSON, nullable=True, default=None, comment="Lista de tabs permitidos, ej: ['dashboard','alertas','ficha']")
     pin_hash = Column(String, nullable=True, comment="BCrypt hash del PIN de 6 dígitos para desbloqueo rápido")
+    tenant = Column(String, nullable=True, comment="Código de institución (subdominio) del usuario, ej: 'ups', 'demo'. NULL = acceso global (admins)")

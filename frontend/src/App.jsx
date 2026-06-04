@@ -20,7 +20,7 @@ import ResumenDatos from "./pages/ResumenDatos";
 import Admin from "./pages/Admin";
 import About from "./pages/About";
 import EntregasPendientes from "./pages/EntregasPendientes";
-import { isSubdomain } from "./hooks/useTenant";
+import { isSubdomain, isAdminHost } from "./hooks/useTenant";
 import TenantPortal from "./pages/TenantPortal";
 
 function PrivateRoute({ children, adminOnly = false, tabKey = null }) {
@@ -82,7 +82,7 @@ function IdleLockManager() {
 function PortalOrDashboard() {
   const { user } = useAuth();
   if (!isSubdomain() && user?.role === "admin") {
-    return <Navigate to="/core/kapak" replace />;
+    return <Navigate to={isAdminHost() ? "/" : "/core/kapak"} replace />;
   }
   return (
     <PrivateRoute tabKey="dashboard">
@@ -116,20 +116,38 @@ export default function App() {
         <BrowserRouter>
           <IdleLockManager />
           <Routes>
-            <Route path="/" element={isSubdomain() ? <Navigate to="/login" replace /> : <Landing />} />
+            <Route
+              path="/"
+              element={
+                isAdminHost() ? (
+                  /* kapak.yachaydeep.com → panel de administración en la raíz */
+                  <PortalRoute>
+                    <TenantPortal />
+                  </PortalRoute>
+                ) : isSubdomain() ? (
+                  <Navigate to="/login" replace />
+                ) : (
+                  <Landing />
+                )
+              }
+            />
             <Route path="/login" element={<Login />} />
             <Route
               path="/core/kapak"
               element={
-                <PortalRoute>
-                  <TenantPortal />
-                </PortalRoute>
+                isAdminHost() ? (
+                  <Navigate to="/" replace />
+                ) : (
+                  <PortalRoute>
+                    <TenantPortal />
+                  </PortalRoute>
+                )
               }
             />
-            {/* Backward-compat: la ruta antigua redirige al nuevo panel KAPAK */}
+            {/* Backward-compat: la ruta antigua redirige al panel KAPAK */}
             <Route
               path="/instituciones"
-              element={<Navigate to="/core/kapak" replace />}
+              element={<Navigate to={isAdminHost() ? "/" : "/core/kapak"} replace />}
             />
             <Route
               path="/dashboard"
