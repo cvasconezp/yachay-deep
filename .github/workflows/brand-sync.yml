@@ -31,8 +31,8 @@ jobs:
       - name: Commit y push si hay cambios
         run: |
           cd "$GITHUB_WORKSPACE"
-          git config user.name "yachaydeep-brand-bot"
-          git config user.email "bot@yachaydeep.com"
+          git config user.name "Carlos Vasconez"
+          git config user.email "cvasconezp@gmail.com"
           if [ -n "$(git status --porcelain)" ]; then
             git add -A
             git commit -m "chore: sync de marca desde yachaydeep-brand"
