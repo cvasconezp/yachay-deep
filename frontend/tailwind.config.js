@@ -1,7 +1,7 @@
 /** @type {import('tailwindcss').Config} */
-// Tokens de marca: copia sincronizada de yachaydeep-web/packages/brand/preset.cjs
-// (fuente unica de verdad). NO editar colores aqui ni en el preset a mano.
-import brandPreset from "./brand.preset.cjs";
+// Tokens de marca: https://github.com/cvasconezp/yachaydeep-brand
+// (fuente unica de verdad). NO definir colores de marca aqui.
+import brandPreset from "@yachaydeep/brand/preset";
 
 export default {
   presets: [brandPreset],
