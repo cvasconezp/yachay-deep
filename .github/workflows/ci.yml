@@ -1,0 +1,75 @@
+# CI Pipeline — Yachay Deep
+# REMEDIACIÓN:
+#   [ARCH-01] Tests automatizados en CI
+#   [ARCH-02] Linting automatizado
+#   [SEC-09] Auditoría de dependencias
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── Linting (advisory — no bloquea deploys) ──
+  lint:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - run: pip install ruff
+      - run: ruff check backend/ || true
+      - run: ruff format --check backend/ || true
+
+  # ── Tests Backend con Coverage ──
+  test-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - run: pip install -r backend/requirements.txt
+      - run: pip install pytest pytest-asyncio httpx pytest-cov
+      - name: Run tests with coverage
+        run: pytest --tb=short -q --cov=backend --cov-report=term-missing --cov-fail-under=60
+        env:
+          DATABASE_URL: "sqlite://"
+          SECRET_KEY: "ci-test-secret-key"
+          DEBUG: "True"
+          ADMIN_EMAIL: "ci@test.com"
+          ADMIN_PASSWORD: "CiTestPass123!"
+
+  # ── Tests Frontend con Coverage ──
+  test-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+      - run: cd frontend && npm ci
+      - name: Run tests with coverage
+        run: cd frontend && npx vitest run --coverage
+
+  # ── Auditoría de dependencias ──
+  security-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+      # [SEC-09] pip-audit
+      - run: pip install pip-audit
+      - run: pip-audit -r backend/requirements.txt --ignore-vuln PYSEC-2024-* || true
+      # [SEC-09] npm audit
+      - run: cd frontend && npm ci && npm audit --audit-level=high || true

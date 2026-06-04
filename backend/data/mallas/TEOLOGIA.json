@@ -1,0 +1,73 @@
+{
+  "carrera": "Teología",
+  "modalidad": "En línea",
+  "sede": "Matriz Cuenca",
+  "total_niveles": 8,
+  "total_asignaturas": 47,
+  "fuente": "Malla curricular oficial UPS - Teología",
+  "niveles": {
+    "1": [
+      "Problemas de la historia de la filosofía",
+      "Introducción a la Biblia",
+      "Fenomenología de la religión",
+      "Teoría del conocimiento",
+      "Comunicación oral y escrita",
+      "Introducción a la teología"
+    ],
+    "2": [
+      "Antropología filosófica",
+      "Pensamiento crítico",
+      "Pentateuco y libros históricos",
+      "Ontología",
+      "Griego I",
+      "Teología fundamental"
+    ],
+    "3": [
+      "Antropología teológica",
+      "Sapienciales y poéticos",
+      "Psicología general y pastoral",
+      "Historia de las religiones y ecumenismo",
+      "Profetas",
+      "Griego II"
+    ],
+    "4": [
+      "Patrística",
+      "Misionología",
+      "Sinópticos y Hechos",
+      "Historia de la Iglesia antigua y medieval",
+      "Doctrina social de la Iglesia"
+    ],
+    "5": [
+      "Cristología",
+      "Literatura joánica",
+      "Historia de la Iglesia moderna y contemporánea",
+      "Teología sacramental I: sacramentos de iniciación",
+      "Historia de la Iglesia latinoamericana y ecuatoriana",
+      "Literatura paulina y cartas católicas"
+    ],
+    "6": [
+      "Revelación trinitaria",
+      "Teología latinoamericana",
+      "Didáctica general",
+      "Mariología",
+      "Teología sacramental II: sacramentos de curación y servicio",
+      "Investigación",
+      "Moral fundamental",
+      "Fundamentos de la pedagogía religiosa"
+    ],
+    "7": [
+      "Liturgia",
+      "Prácticas de servicio comunitario I",
+      "Derecho canónico",
+      "Eclesiología",
+      "Prácticas pre profesionales: planeación pastoral"
+    ],
+    "8": [
+      "Escatología",
+      "Planificación pastoral",
+      "Integración curricular",
+      "Prácticas de servicio comunitario II",
+      "Teología pastoral"
+    ]
+  }
+}

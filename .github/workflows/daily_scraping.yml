@@ -1,0 +1,125 @@
+name: Daily AVAC Scraping + ETL
+
+on:
+  # Ejecutar todos los días a las 17:00 (hora Ecuador = UTC-5, entonces 22:00 UTC)
+  schedule:
+    - cron: "0 22 * * *"  # Todos los días a las 22:00 UTC (17:00 Ecuador)
+
+  # Permitir ejecución manual desde GitHub
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Qué scraping ejecutar"
+        required: true
+        default: "full"
+        type: choice
+        options: [full, ingresos, tareas]
+
+jobs:
+  scraping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v6
+
+      - name: Configurar DNS (Google DNS para evitar bloqueos)
+        run: |
+          echo "🌐 Configurando Google DNS (8.8.8.8, 8.8.4.4)..."
+          sudo sed -i 's/^nameserver.*//' /etc/resolv.conf
+          echo "nameserver 8.8.8.8" | sudo tee /etc/resolv.conf
+          echo "nameserver 8.8.4.4" | sudo tee -a /etc/resolv.conf
+          echo "📋 DNS configurado:"
+          cat /etc/resolv.conf
+          echo "🔍 Test de resolución DNS:"
+          nslookup avac.ups.edu.ec 8.8.8.8 || true
+          echo "🔍 Test de conectividad HTTP:"
+          curl -sI --max-time 10 https://avac.ups.edu.ec/grado68/login/index.php | head -5 || true
+
+      - name: Configurar Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Instalar Chrome para Selenium
+        uses: browser-actions/setup-chrome@v2
+
+      - name: Instalar dependencias Python
+        run: |
+          cd backend
+          pip install -r requirements.txt
+          pip install selenium==4.25.0 beautifulsoup4==4.12.3 requests==2.32.3
+
+      - name: Crear directorios de datos
+        run: |
+          mkdir -p data/IngresosAVAC
+          mkdir -p data/Tareas
+          mkdir -p data/TableauHistorico
+          mkdir -p data/Reportes
+          mkdir -p data/DatosEspecificos
+          mkdir -p /tmp/scraping_screenshots
+
+      # ─── Descargar archivos estáticos (TableauHistorico, Reportes, DatosEspecificos) ───
+      - name: Descargar datos estáticos (TableauHistorico, Reportes, DatosEspecificos)
+        env:
+          STATIC_DATA_URL: ${{ secrets.STATIC_DATA_URL }}
+        run: |
+          if [ -z "$STATIC_DATA_URL" ]; then
+            echo "⏭️ STATIC_DATA_URL no configurado, omitiendo descarga de datos estáticos."
+            exit 0
+          fi
+          echo "📥 Descargando archivos estáticos desde STATIC_DATA_URL..."
+          curl -fsSL -o static_data.zip "$STATIC_DATA_URL"
+          unzip -o static_data.zip -d data/
+          echo "✅ Archivos estáticos extraídos:"
+          ls -R data/TableauHistorico/ data/Reportes/ data/DatosEspecificos/ 2>/dev/null || true
+
+      - name: Ejecutar scraping + ETL
+        env:
+          # Credenciales AVAC — configuradas en GitHub Secrets
+          AVAC_USERNAME: ${{ secrets.AVAC_USERNAME }}
+          AVAC_PASSWORD: ${{ secrets.AVAC_PASSWORD }}
+          AVAC_TOTP_SECRET: ${{ secrets.AVAC_TOTP_SECRET }}
+          # AVAC_SESSION_COOKIE: leída desde BD (admin panel) — ya no se usa GitHub Secret
+          AVAC_BASE_URL: ${{ secrets.AVAC_BASE_URL || 'https://avac.ups.edu.ec/grado68' }}
+
+          # Base de datos Railway
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+          # Rutas de datos
+          DATA_PATH_INGRESOS: ./data/IngresosAVAC
+          DATA_PATH_TAREAS: ./data/Tareas
+          DATA_PATH_CALIFICACIONES: ./data/calificaciones.csv
+          DATA_PATH_CALIFICACIONES_HISTORICO: ./data/TableauHistorico
+          DATA_PATH_REPORTE: ./data/Reportes
+          DATA_PATH_DATOS_ESPECIFICOS: ./data/DatosEspecificos
+
+          # Screenshots del login
+          SCRAPING_SCREENSHOTS_DIR: /tmp/scraping_screenshots
+
+        run: |
+          python -m backend.scraping.runner --mode ${{ inputs.mode || 'full' }}
+
+      - name: Subir screenshots del login como artefacto
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: login-screenshots-${{ github.run_number }}
+          path: /tmp/scraping_screenshots/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Subir logs y diagnóstico como artefacto
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: scraping-logs-${{ github.run_number }}
+          path: |
+            data/IngresosAVAC/cursos_no_encontrados.csv
+            data/IngresosAVAC/errores.log
+            /tmp/avac_login_error.png
+            /tmp/avac_login_error.html
+          retention-days: 30
+
