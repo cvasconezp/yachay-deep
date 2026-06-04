@@ -74,9 +74,10 @@ export default function Login() {
           <a href="https://yachaydeep.com" className="flex justify-center mb-5">
             {/* Login card bg is white → CLARO renders natively without a wrapper.
                 Logo scales with the card / viewport. */}
+            {/* Lockup vertical de marca — diseñado para login/splash */}
             <YachayLogo
-              variant="light"
-              className="block w-[min(80%,20rem)] sm:w-[min(80%,22rem)] h-auto"
+              variant="stacked"
+              className="block w-[min(55%,13rem)] h-auto"
             />
           </a>
           <h1 className="sr-only">Yachay Deep</h1>

@@ -2,9 +2,9 @@
  * Tests: YachayLogo, YachayIcon
  *
  * Both marks are rendered as <img> referencing SVG assets in /public:
- *   - YachayLogo variant="light" → /brand/logo-full.png      (alias de "full")
- *   - YachayLogo variant="dark"  → /brand/logo-hero-dark.png  (alias de "hero-dark")
- *   - YachayIcon                 → /brand/logo-icon.png
+ *   - YachayLogo variant="light" → /brand/logo-full.svg      (alias de "full")
+ *   - YachayLogo variant="dark"  → /brand/logo-hero-dark.svg  (alias de "hero-dark")
+ *   - YachayIcon                 → /brand/logo-icon.svg
  * Activos unificados desde @yachaydeep/brand.
  */
 import { describe, it, expect } from "vitest";
@@ -23,13 +23,13 @@ describe("YachayLogo", () => {
   it("usa la variante light por defecto", () => {
     const { container } = render(<YachayLogo />);
     const img = container.querySelector("img");
-    expect(img.getAttribute("src")).toBe("/brand/logo-full.png");
+    expect(img.getAttribute("src")).toBe("/brand/logo-full.svg");
   });
 
   it("usa la variante dark cuando se especifica", () => {
     const { container } = render(<YachayLogo variant="dark" />);
     const img = container.querySelector("img");
-    expect(img.getAttribute("src")).toBe("/brand/logo-hero-dark.png");
+    expect(img.getAttribute("src")).toBe("/brand/logo-hero-dark.svg");
   });
 
   it("size establece height (ancho automático por CSS)", () => {
@@ -59,7 +59,7 @@ describe("YachayIcon", () => {
     const { container } = render(<YachayIcon />);
     const img = container.querySelector("img");
     expect(img).toBeInTheDocument();
-    expect(img.getAttribute("src")).toBe("/brand/logo-icon.png");
+    expect(img.getAttribute("src")).toBe("/brand/logo-icon.svg");
   });
 
   it("respeta size cuando se especifica", () => {

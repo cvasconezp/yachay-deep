@@ -11,20 +11,22 @@
  *   light  → full       (lockup horizontal sobre fondo claro)
  *   dark   → hero-dark   (lockup sobre fondo oscuro)
  */
+// SVG: nitidez en cualquier tamaño y ~10x menos peso.
 const VARIANT_SRC = {
-  full:        "/brand/logo-full.png",
-  hero:        "/brand/logo-hero.png",
-  "hero-dark": "/brand/logo-hero-dark.png",
-  navbar:      "/brand/logo-navbar.png",
-  banner:      "/brand/banner.png",
-  icon:        "/brand/logo-icon.png",
-  simple:      "/brand/logo-icon-simple.png",
+  full:        "/brand/logo-full.svg",
+  hero:        "/brand/logo-hero.svg",
+  "hero-dark": "/brand/logo-hero-dark.svg",
+  navbar:      "/brand/logo-navbar.svg",
+  banner:      "/brand/banner.svg",
+  icon:        "/brand/logo-icon.svg",
+  simple:      "/brand/logo-icon-simple.svg",
+  stacked:     "/brand/logo-stacked.svg",
   // alias retrocompatibles
-  light:       "/brand/logo-full.png",
-  dark:        "/brand/logo-hero-dark.png",
+  light:       "/brand/logo-full.svg",
+  dark:        "/brand/logo-hero-dark.svg",
 };
 
-const ICON_SRC = "/brand/logo-icon.png";
+const ICON_SRC = "/brand/logo-icon.svg";
 
 export function YachayLogo({ variant = "full", size, className = "" }) {
   const src = VARIANT_SRC[variant] ?? VARIANT_SRC.full;
