@@ -259,7 +259,7 @@ export function Layout({ children }) {
               </div>
               {isSub && isAdmin && (
                 <button
-                  onClick={() => { window.location.href = "https://yachaydeep.com/instituciones"; }}
+                  onClick={() => { window.location.href = "https://yachaydeep.com/core/kapak"; }}
                   className="w-full text-left text-xs text-amber-400 hover:text-white transition-colors flex items-center gap-1"
                 >
                   🏛️ Cambiar institución

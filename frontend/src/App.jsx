@@ -82,7 +82,7 @@ function IdleLockManager() {
 function PortalOrDashboard() {
   const { user } = useAuth();
   if (!isSubdomain() && user?.role === "admin") {
-    return <Navigate to="/instituciones" replace />;
+    return <Navigate to="/core/kapak" replace />;
   }
   return (
     <PrivateRoute tabKey="dashboard">
@@ -119,12 +119,17 @@ export default function App() {
             <Route path="/" element={isSubdomain() ? <Navigate to="/login" replace /> : <Landing />} />
             <Route path="/login" element={<Login />} />
             <Route
-              path="/instituciones"
+              path="/core/kapak"
               element={
                 <PortalRoute>
                   <TenantPortal />
                 </PortalRoute>
               }
+            />
+            {/* Backward-compat: la ruta antigua redirige al nuevo panel KAPAK */}
+            <Route
+              path="/instituciones"
+              element={<Navigate to="/core/kapak" replace />}
             />
             <Route
               path="/dashboard"
