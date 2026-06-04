@@ -8,7 +8,9 @@
  * localhost:3000?tenant=demo → tenant: "demo" (dev override)
  */
 
-const MAIN_DOMAINS = ["yachaydeep.com", "yachay-deep.vercel.app"];
+// "kapak.yachaydeep.com" va PRIMERO: es el host del panel de administracion (KAPAK)
+// y debe tratarse como dominio raiz (tenant null), no como tenant "kapak".
+const MAIN_DOMAINS = ["kapak.yachaydeep.com", "yachaydeep.com", "yachay-deep.vercel.app"];
 
 export function getTenant() {
   const hostname = window.location.hostname;
