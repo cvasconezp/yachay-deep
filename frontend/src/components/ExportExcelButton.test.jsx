@@ -47,7 +47,7 @@ describe("ExportExcelButton", () => {
   it("muestra conteo de filas y columnas", async () => {
     render(<ExportExcelButton columns={COLUMNS} data={DATA} />);
     await userEvent.click(screen.getByText("Exportar Excel"));
-    expect(screen.getByText("2 filas · 3 columnas")).toBeInTheDocument();
+    expect(screen.getByText(/2 filas · 3 columnas/)).toBeInTheDocument();
   });
 
   it("tiene botones Seleccionar todas y Mínimo", async () => {

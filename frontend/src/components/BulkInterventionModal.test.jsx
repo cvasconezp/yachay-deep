@@ -76,9 +76,12 @@ describe("BulkInterventionModal", () => {
     expect(screen.getByText("No entregó Unidad 1")).toBeInTheDocument();
   });
 
-  it("singular para 1 estudiante", () => {
+  it("modo individual para 1 estudiante", () => {
+    // Con 1 estudiante el modal pasa a modo individual: titulo "Registrar
+    // Intervención" + nombre del estudiante (ya no hay conteo "1 seleccionado")
     render(<BulkInterventionModal selectedStudents={[STUDENTS[0]]} onClose={() => {}} onSaved={() => {}} />);
-    expect(screen.getByText(/1\s*estudiante\s*seleccionado/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Guardar 1 Intervención$/i })).toBeInTheDocument();
+    expect(screen.getByText("Registrar Intervención")).toBeInTheDocument();
+    expect(screen.getByText("Juan Pérez")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Guardar Intervención$/i })).toBeInTheDocument();
   });
 });

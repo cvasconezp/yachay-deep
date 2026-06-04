@@ -52,7 +52,7 @@ describe("Layout", () => {
   it("muestra items de navegación", async () => {
     renderLayout();
     await waitFor(() => {});
-    expect(screen.getByText("Dashboard")).toBeInTheDocument();
+    expect(screen.getByText("Estudiantes")).toBeInTheDocument();
     expect(screen.getByText("Ficha Estudiante")).toBeInTheDocument();
     expect(screen.getByText("Alertas")).toBeInTheDocument();
   });
@@ -69,17 +69,26 @@ describe("Layout", () => {
     expect(screen.queryByText("Administración")).not.toBeInTheDocument();
   });
 
-  it("muestra brand Yachay Deep", async () => {
+  it("muestra el logo de marca (link al inicio)", async () => {
     renderLayout();
     await waitFor(() => {});
-    expect(screen.getByText("Yachay Deep")).toBeInTheDocument();
-    expect(screen.getByText("Monitoreo Académico")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Ir al inicio de Yachay Deep")
+    ).toBeInTheDocument();
   });
 
-  it("muestra badge de alertas cuando hay alertas", async () => {
-    renderLayout({}, { critico: 3, alto: 2 });
+  it("muestra resumen de alertas cuando hay alertas", async () => {
+    // alertCount = alto + medio; con alto=0 se muestra "N alertas"
+    renderLayout({}, { alto: 0, medio: 5 });
     await waitFor(() => {
-      expect(screen.getByText("5")).toBeInTheDocument();
+      expect(screen.getByText("5 alertas")).toBeInTheDocument();
+    });
+  });
+
+  it("prioriza el conteo de alto riesgo en el resumen", async () => {
+    renderLayout({}, { alto: 2, medio: 3 });
+    await waitFor(() => {
+      expect(screen.getByText("2 alto riesgo")).toBeInTheDocument();
     });
   });
 });
