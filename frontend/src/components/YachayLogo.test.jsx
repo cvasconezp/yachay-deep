@@ -2,15 +2,15 @@
  * Tests: YachayLogo, YachayIcon
  *
  * Both marks are rendered as <img> referencing SVG assets in /public:
- *   - YachayLogo variant="light"  → /yachay-logo-light.svg
- *   - YachayLogo variant="dark"   → /yachay-logo-dark.svg
- *   - YachayIcon                  → /yachay-favicon.svg
+ *   - YachayLogo variant="light" → /brand/logo-full.png      (alias de "full")
+ *   - YachayLogo variant="dark"  → /brand/logo-hero-dark.png  (alias de "hero-dark")
+ *   - YachayIcon                 → /brand/logo-icon.png
+ * Activos unificados desde @yachaydeep/brand.
  */
 import { describe, it, expect } from "vitest";
 import { render } from "@testing-library/react";
 import { YachayLogo, YachayIcon } from "./YachayLogo.jsx";
 
-const HEADER_ASPECT = 840 / 445;
 
 describe("YachayLogo", () => {
   it("renderiza el logo como <img>", () => {
@@ -23,20 +23,19 @@ describe("YachayLogo", () => {
   it("usa la variante light por defecto", () => {
     const { container } = render(<YachayLogo />);
     const img = container.querySelector("img");
-    expect(img.getAttribute("src")).toBe("/yachay-logo-light.svg");
+    expect(img.getAttribute("src")).toBe("/brand/logo-full.png");
   });
 
   it("usa la variante dark cuando se especifica", () => {
     const { container } = render(<YachayLogo variant="dark" />);
     const img = container.querySelector("img");
-    expect(img.getAttribute("src")).toBe("/yachay-logo-dark.svg");
+    expect(img.getAttribute("src")).toBe("/brand/logo-hero-dark.png");
   });
 
-  it("size establece height y width vía aspect ratio", () => {
+  it("size establece height (ancho automático por CSS)", () => {
     const { container } = render(<YachayLogo size={100} />);
     const img = container.querySelector("img");
     expect(img.getAttribute("height")).toBe("100");
-    expect(img.getAttribute("width")).toBe(String(Math.round(100 * HEADER_ASPECT)));
   });
 
   it("sin size, no emite atributos width/height (responsive via CSS)", () => {
@@ -60,7 +59,7 @@ describe("YachayIcon", () => {
     const { container } = render(<YachayIcon />);
     const img = container.querySelector("img");
     expect(img).toBeInTheDocument();
-    expect(img.getAttribute("src")).toBe("/yachay-favicon.svg");
+    expect(img.getAttribute("src")).toBe("/brand/logo-icon.png");
   });
 
   it("respeta size cuando se especifica", () => {

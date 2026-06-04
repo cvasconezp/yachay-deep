@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Capa_1" xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 445 445">
+  <!-- Generator: Adobe Illustrator 29.5.0, SVG Export Plug-In . SVG Version: 2.1.0 Build 137)  -->
+  <defs>
+    <style>
+      .st0 {
+        fill: #e8a838;
+      }
+
+      .st1 {
+        fill: #d8eff4;
+      }
+
+      .st2 {
+        fill: #5ea9d5;
+      }
+
+      .st3 {
+        fill: #1b3a6b;
+      }
+
+      .st4 {
+        fill: #a8dce8;
+      }
+
+      .st5 {
+        fill: none;
+        stroke: #fff;
+        stroke-miterlimit: 10;
+        stroke-width: .86px;
+      }
+
+      .st6 {
+        fill: #fefefe;
+      }
+
+      .st7 {
+        fill: #feffff;
+      }
+
+      .st8 {
+        fill: #102d50;
+      }
+    </style>
+  </defs>
+  <rect class="st8" width="446.29" height="446.16"/>
+  <g>
+    <g>
+      <circle class="st0" cx="165.7" cy="64.89" r="33.52"/>
+      <g>
+        <path class="st4" d="M142.42,198.99s71.36-98.12,78.91-98.12c6.74,0,81.26,98.12,81.26,98.12h-160.17Z"/>
+        <path class="st1" d="M142.42,198.99s33.57-66.98,38.52-66.98c5.39,0-8.72,66.98-8.72,66.98h-29.8Z"/>
+      </g>
+      <path class="st3" d="M107.03,197.59h230.94v70.77c0,9.93-3.72,19.87-11.17,29.8l-81.95,100.57c-8.69,9.93-16.14,14.9-22.35,14.9s-13.66-4.97-22.35-14.9l-81.95-100.57c-7.45-9.93-11.17-19.87-11.17-29.8v-70.77Z"/>
+    </g>
+    <g>
+      <line class="st5" x1="300.19" y1="201.07" x2="321.31" y2="224.14"/>
+      <line class="st5" x1="321.31" y1="224.14" x2="202.37" y2="283.94"/>
+      <line class="st5" x1="321.31" y1="224.14" x2="285.23" y2="309.57"/>
+      <circle class="st2" cx="321.31" cy="224.14" r="8"/>
+      <circle class="st7" cx="202.37" cy="283.94" r="7.5"/>
+      <circle class="st7" cx="285.23" cy="309.57" r="7"/>
+      <circle class="st7" cx="224.37" cy="362.87" r="6"/>
+      <circle class="st7" cx="194.11" cy="358.46" r="5"/>
+      <circle class="st6" cx="133.61" cy="254.77" r="8"/>
+      <line class="st5" x1="135.69" y1="202.86" x2="134.76" y2="253.21"/>
+      <line class="st5" x1="227.67" y1="210.41" x2="202.37" y2="283.94"/>
+      <line class="st5" x1="133.61" y1="254.77" x2="202.37" y2="283.94"/>
+      <line class="st5" x1="202.37" y1="284.79" x2="194.11" y2="359.09"/>
+      <line class="st5" x1="133.61" y1="254.77" x2="194.11" y2="359.09"/>
+      <line class="st5" x1="285.23" y1="309.57" x2="224.37" y2="362.87"/>
+      <line class="st5" x1="202.37" y1="284.79" x2="285.23" y2="309.57"/>
+      <line class="st5" x1="224.37" y1="362.87" x2="221.82" y2="412.33"/>
+      <line class="st5" x1="285.23" y1="309.57" x2="221.82" y2="412.33"/>
+      <line class="st5" x1="221.82" y1="412.33" x2="194.11" y2="359.09"/>
+      <line class="st5" x1="194.11" y1="359.09" x2="224.37" y2="362.87"/>
+    </g>
+  </g>
+</svg>
