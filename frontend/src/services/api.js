@@ -251,6 +251,10 @@ class ApiClient {
   // ── Export ──
   exportFichaPDF(studentId) { return this.getBlob(`/export/ficha/${studentId}/pdf`); }
   getExportColumnas() { return this.get("/export/columnas-disponibles"); }
+  getAsignaturasDisponibles(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.get(`/export/asignaturas-disponibles${qs ? "?" + qs : ""}`);
+  }
   exportEstudiantesExcel(params) {
     const qs = new URLSearchParams(params).toString();
     return this.getBlob(`/export/estudiantes/excel${qs ? "?" + qs : ""}`);

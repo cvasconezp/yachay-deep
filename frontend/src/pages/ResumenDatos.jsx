@@ -944,6 +944,8 @@ export default function ResumenDatos() {
   const [exportNivel, setExportNivel] = useState("");
   const [exportRiesgo, setExportRiesgo] = useState("");
   const [exportPeriodo, setExportPeriodo] = useState("");
+  const [exportAsignatura, setExportAsignatura] = useState("");
+  const [asignaturasDisp, setAsignaturasDisp] = useState([]);
   const [exporting, setExporting] = useState(false);
 
   // Carrera expand
@@ -990,6 +992,14 @@ export default function ResumenDatos() {
     api.getCarreras().then(setCarreras).catch(() => {});
     api.getExportColumnas().then(setColsDisponibles).catch(() => {});
   }, []);
+
+  // Cargar asignaturas disponibles para el filtro de exportación (según carrera/período del export)
+  useEffect(() => {
+    const params = {};
+    if (exportCarrera) params.carrera = exportCarrera;
+    if (exportPeriodo) params.periodo = exportPeriodo;
+    api.getAsignaturasDisponibles(params).then(setAsignaturasDisp).catch(() => setAsignaturasDisp([]));
+  }, [exportCarrera, exportPeriodo]);
 
   const loadData = useCallback(async () => {
     if (!filtroPeriodo) return;
@@ -1070,6 +1080,7 @@ export default function ResumenDatos() {
       if (exportCarrera) params.set("carrera", exportCarrera);
       if (exportNivel) params.set("nivel", exportNivel);
       if (exportRiesgo) params.set("nivel_riesgo", exportRiesgo);
+      if (exportAsignatura) params.set("asignatura", exportAsignatura);
       if (exportPeriodo) params.set("periodo", exportPeriodo);
       const blob = await api.exportEstudiantesExcel(params);
       const url = URL.createObjectURL(blob);
@@ -1157,6 +1168,12 @@ export default function ResumenDatos() {
               className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500">
               <option value="">Todos los riesgos</option>
               {["Alto", "Medio", "Bajo"].map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+            <select value={exportAsignatura} onChange={e => setExportAsignatura(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 min-w-[200px]"
+              title="Filtra los estudiantes matriculados en una asignatura específica">
+              <option value="">Todas las asignaturas</option>
+              {asignaturasDisp.map(a => <option key={a} value={a}>{a}</option>)}
             </select>
           </div>
           <div className="mb-3">

@@ -200,6 +200,7 @@ EXPORT_COLUMNS = {
     "telefono": {"label": "Teléfono", "getter": lambda s, _: s.telefono},
     "whatsapp": {"label": "WhatsApp", "getter": lambda s, _: s.whatsapp},
     "carrera": {"label": "Carrera", "getter": lambda s, _: s.carrera},
+    "asignatura": {"label": "Asignatura", "getter": lambda s, ctx: ctx.get("_asignatura")},
     "nivel_academico": {"label": "Nivel académico", "getter": lambda s, _: s.nivel_academico},
     "sede": {"label": "Centro de apoyo", "getter": lambda s, _: s.sede},
     "grupo": {"label": "Grupo", "getter": lambda s, _: s.grupo},
@@ -231,12 +232,35 @@ def get_columnas_disponibles(
     return [{"key": k, "label": v["label"]} for k, v in EXPORT_COLUMNS.items()]
 
 
+@router.get("/asignaturas-disponibles")
+def get_asignaturas_disponibles(
+    carrera: Optional[str] = None,
+    periodo: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Lista de asignaturas distintas (para el selector de exportación por asignatura).
+    Filtrable por carrera y período."""
+    from sqlalchemy import or_
+    q = db.query(Enrollment.asignatura).filter(Enrollment.asignatura.isnot(None))
+    if carrera:
+        q = q.filter(func.lower(Enrollment.carrera).contains(carrera.lower()))
+    pf = periodo or "actual"
+    if pf not in ("actual", "todos"):
+        if pf.startswith("P"):
+            q = q.filter(or_(Enrollment.periodo == pf, Enrollment.periodo == pf[1:]))
+        else:
+            q = q.filter(or_(Enrollment.periodo == pf, Enrollment.periodo == f"P{pf}"))
+    return sorted({a for (a,) in q.distinct().all() if a})
+
+
 @router.get("/estudiantes/excel")
 def export_estudiantes_excel(
     carrera: Optional[str] = None,
     nivel: Optional[int] = None,
     nivel_riesgo: Optional[str] = None,
     periodo: Optional[str] = None,
+    asignatura: Optional[str] = None,
     columnas: str = Query("cedula,nombre,correo_institucional,carrera,nivel_academico,nivel_riesgo", description="Columnas separadas por coma"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -271,31 +295,53 @@ def export_estudiantes_excel(
         if not student_ids_in_periodo:
             raise HTTPException(status_code=404, detail=f"No hay estudiantes para el período {periodo_filter}")
 
-    # Filtrar estudiantes
-    query = db.query(Student)
-    if carrera:
-        query = query.filter(func.lower(Student.carrera).contains(carrera.lower()))
-    if nivel:
-        query = query.filter(Student.nivel_academico == nivel)
-    if nivel_riesgo:
-        query = query.filter(Student.nivel_riesgo == nivel_riesgo)
-    if student_ids_in_periodo is not None:
-        query = query.filter(Student.id.in_(student_ids_in_periodo))
-    query = query.order_by(Student.carrera, Student.nivel_academico, Student.nombre)
-    students = query.all()
-
-    if not students:
-        raise HTTPException(status_code=404, detail="No se encontraron estudiantes con los filtros aplicados")
-
     # Parsear columnas solicitadas
     cols_requested = [c.strip() for c in columnas.split(",") if c.strip() in EXPORT_COLUMNS]
     if not cols_requested:
         cols_requested = ["cedula", "nombre", "correo_institucional", "carrera", "nivel_academico", "nivel_riesgo"]
 
+    # ¿Modo por asignatura? Se activa si hay filtro de asignatura o si se pidió la columna "asignatura".
+    # En ese caso cada fila es una matrícula (estudiante × asignatura), uniendo Enrollment con Student.
+    enrollment_mode = bool(asignatura) or ("asignatura" in cols_requested)
+
+    if enrollment_mode:
+        eq = db.query(Enrollment, Student).join(Student, Enrollment.student_id == Student.id)
+        if carrera:
+            eq = eq.filter(func.lower(Student.carrera).contains(carrera.lower()))
+        if nivel:
+            eq = eq.filter(Student.nivel_academico == nivel)
+        if nivel_riesgo:
+            eq = eq.filter(Student.nivel_riesgo == nivel_riesgo)
+        if asignatura:
+            eq = eq.filter(func.lower(Enrollment.asignatura) == asignatura.strip().lower())
+        if periodo_filter not in ("actual", "todos"):
+            pf = periodo_filter
+            if pf.startswith("P"):
+                eq = eq.filter(or_(Enrollment.periodo == pf, Enrollment.periodo == pf[1:]))
+            else:
+                eq = eq.filter(or_(Enrollment.periodo == pf, Enrollment.periodo == f"P{pf}"))
+        eq = eq.order_by(Student.carrera, Enrollment.asignatura, Student.nombre)
+        export_rows = [(s, e.asignatura) for (e, s) in eq.all()]
+    else:
+        query = db.query(Student)
+        if carrera:
+            query = query.filter(func.lower(Student.carrera).contains(carrera.lower()))
+        if nivel:
+            query = query.filter(Student.nivel_academico == nivel)
+        if nivel_riesgo:
+            query = query.filter(Student.nivel_riesgo == nivel_riesgo)
+        if student_ids_in_periodo is not None:
+            query = query.filter(Student.id.in_(student_ids_in_periodo))
+        query = query.order_by(Student.carrera, Student.nivel_academico, Student.nombre)
+        export_rows = [(s, None) for s in query.all()]
+
+    if not export_rows:
+        raise HTTPException(status_code=404, detail="No se encontraron estudiantes con los filtros aplicados")
+
     # Pre-cargar contexto (intervenciones por estudiante)
     ctx = {}
     if "total_intervenciones" in cols_requested:
-        student_ids = [s.id for s in students]
+        student_ids = [s.id for (s, _a) in export_rows]
         interv_counts = dict(
             db.query(Intervention.student_id, func.count(Intervention.id))
             .filter(Intervention.student_id.in_(student_ids))
@@ -331,7 +377,8 @@ def export_estudiantes_excel(
         cell.border = thin_border
 
     # Datos
-    for row_idx, student in enumerate(students, 2):
+    for row_idx, (student, _asig) in enumerate(export_rows, 2):
+        ctx["_asignatura"] = _asig
         for col_idx, col_key in enumerate(cols_requested, 1):
             value = EXPORT_COLUMNS[col_key]["getter"](student, ctx)
             cell = ws.cell(row=row_idx, column=col_idx, value=value)
@@ -343,15 +390,17 @@ def export_estudiantes_excel(
     # Autofit columns
     for col_idx, col_key in enumerate(cols_requested, 1):
         max_len = len(EXPORT_COLUMNS[col_key]["label"])
-        for row_idx in range(2, min(len(students) + 2, 52)):  # Sample first 50 rows
+        for row_idx in range(2, min(len(export_rows) + 2, 52)):  # Sample first 50 rows
             val = ws.cell(row=row_idx, column=col_idx).value
             if val:
                 max_len = max(max_len, len(str(val)))
         ws.column_dimensions[ws.cell(row=1, column=col_idx).column_letter].width = min(max_len + 3, 40)
 
     # Fila de resumen
-    summary_row = len(students) + 3
-    ws.cell(row=summary_row, column=1, value=f"Total: {len(students)} estudiantes").font = Font(bold=True, size=10)
+    summary_row = len(export_rows) + 3
+    _total_label = (f"Total: {len(export_rows)} matrículas (estudiante × asignatura)"
+                    if enrollment_mode else f"Total: {len(export_rows)} estudiantes")
+    ws.cell(row=summary_row, column=1, value=_total_label).font = Font(bold=True, size=10)
     ws.cell(row=summary_row + 1, column=1, value=f"Generado: {datetime.now().strftime('%d/%m/%Y %H:%M')} — {current_user.nombre}").font = Font(size=9, color="888888")
 
     # Filtro aplicado
@@ -362,11 +411,13 @@ def export_estudiantes_excel(
         filter_desc += "Período=Semestre actual "
     if carrera:
         filter_desc += f"Carrera={carrera} "
+    if asignatura:
+        filter_desc += f"Asignatura={asignatura} "
     if nivel:
         filter_desc += f"Nivel={nivel} "
     if nivel_riesgo:
         filter_desc += f"Riesgo={nivel_riesgo} "
-    if not carrera and not nivel and not nivel_riesgo:
+    if not carrera and not nivel and not nivel_riesgo and not asignatura:
         filter_desc += "(sin filtros adicionales)"
     ws.cell(row=summary_row + 2, column=1, value=filter_desc).font = Font(size=9, color="888888")
 
