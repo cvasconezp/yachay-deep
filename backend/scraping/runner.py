@@ -46,7 +46,9 @@ def run_scraping(mode: str = "full"):
     # Validar que el scraping produjo resultados
     for step, result in results.items():
         if isinstance(result, dict):
-            procesados = result.get("codigos_procesados", 0)
+            # Los scrapers usan claves distintas: estado_tareas -> "codigos_procesados",
+            # ingresos_avac -> "procesados". Aceptar ambas para no reportar falsos fallos.
+            procesados = result.get("codigos_procesados", result.get("procesados", 0))
             errores = result.get("errores", [])
             if procesados == 0:
                 logger.error(
