@@ -201,6 +201,7 @@ EXPORT_COLUMNS = {
     "whatsapp": {"label": "WhatsApp", "getter": lambda s, _: s.whatsapp},
     "carrera": {"label": "Carrera", "getter": lambda s, _: s.carrera},
     "asignatura": {"label": "Asignatura", "getter": lambda s, ctx: ctx.get("_asignatura")},
+    "docente": {"label": "Docente", "getter": lambda s, ctx: ctx.get("_docente")},
     "nivel_academico": {"label": "Nivel académico", "getter": lambda s, _: s.nivel_academico},
     "sede": {"label": "Centro de apoyo", "getter": lambda s, _: s.sede},
     "grupo": {"label": "Grupo", "getter": lambda s, _: s.grupo},
@@ -254,6 +255,31 @@ def get_asignaturas_disponibles(
     return sorted({a for (a,) in q.distinct().all() if a})
 
 
+@router.get("/docentes-disponibles")
+def get_docentes_disponibles(
+    carrera: Optional[str] = None,
+    asignatura: Optional[str] = None,
+    periodo: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Lista de docentes distintos (para el selector de exportación por docente).
+    Filtrable por carrera, asignatura y período."""
+    from sqlalchemy import or_
+    q = db.query(Enrollment.docente).filter(Enrollment.docente.isnot(None))
+    if carrera:
+        q = q.filter(func.lower(Enrollment.carrera).contains(carrera.lower()))
+    if asignatura:
+        q = q.filter(func.lower(Enrollment.asignatura) == asignatura.strip().lower())
+    pf = periodo or "actual"
+    if pf not in ("actual", "todos"):
+        if pf.startswith("P"):
+            q = q.filter(or_(Enrollment.periodo == pf, Enrollment.periodo == pf[1:]))
+        else:
+            q = q.filter(or_(Enrollment.periodo == pf, Enrollment.periodo == f"P{pf}"))
+    return sorted({d for (d,) in q.distinct().all() if d})
+
+
 @router.get("/estudiantes/excel")
 def export_estudiantes_excel(
     carrera: Optional[str] = None,
@@ -261,6 +287,7 @@ def export_estudiantes_excel(
     nivel_riesgo: Optional[str] = None,
     periodo: Optional[str] = None,
     asignatura: Optional[str] = None,
+    docente: Optional[str] = None,
     columnas: str = Query("cedula,nombre,correo_institucional,carrera,nivel_academico,nivel_riesgo", description="Columnas separadas por coma"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -302,7 +329,7 @@ def export_estudiantes_excel(
 
     # ¿Modo por asignatura? Se activa si hay filtro de asignatura o si se pidió la columna "asignatura".
     # En ese caso cada fila es una matrícula (estudiante × asignatura), uniendo Enrollment con Student.
-    enrollment_mode = bool(asignatura) or ("asignatura" in cols_requested)
+    enrollment_mode = bool(asignatura) or bool(docente) or ("asignatura" in cols_requested) or ("docente" in cols_requested)
 
     if enrollment_mode:
         eq = db.query(Enrollment, Student).join(Student, Enrollment.student_id == Student.id)
@@ -314,6 +341,8 @@ def export_estudiantes_excel(
             eq = eq.filter(Student.nivel_riesgo == nivel_riesgo)
         if asignatura:
             eq = eq.filter(func.lower(Enrollment.asignatura) == asignatura.strip().lower())
+        if docente:
+            eq = eq.filter(func.lower(Enrollment.docente) == docente.strip().lower())
         if periodo_filter not in ("actual", "todos"):
             pf = periodo_filter
             if pf.startswith("P"):
@@ -321,7 +350,7 @@ def export_estudiantes_excel(
             else:
                 eq = eq.filter(or_(Enrollment.periodo == pf, Enrollment.periodo == f"P{pf}"))
         eq = eq.order_by(Student.carrera, Enrollment.asignatura, Student.nombre)
-        export_rows = [(s, e.asignatura) for (e, s) in eq.all()]
+        export_rows = [(s, e.asignatura, e.docente) for (e, s) in eq.all()]
     else:
         query = db.query(Student)
         if carrera:
@@ -333,7 +362,7 @@ def export_estudiantes_excel(
         if student_ids_in_periodo is not None:
             query = query.filter(Student.id.in_(student_ids_in_periodo))
         query = query.order_by(Student.carrera, Student.nivel_academico, Student.nombre)
-        export_rows = [(s, None) for s in query.all()]
+        export_rows = [(s, None, None) for s in query.all()]
 
     if not export_rows:
         raise HTTPException(status_code=404, detail="No se encontraron estudiantes con los filtros aplicados")
@@ -341,7 +370,7 @@ def export_estudiantes_excel(
     # Pre-cargar contexto (intervenciones por estudiante)
     ctx = {}
     if "total_intervenciones" in cols_requested:
-        student_ids = [s.id for (s, _a) in export_rows]
+        student_ids = [s.id for (s, _a, _d) in export_rows]
         interv_counts = dict(
             db.query(Intervention.student_id, func.count(Intervention.id))
             .filter(Intervention.student_id.in_(student_ids))
@@ -377,8 +406,9 @@ def export_estudiantes_excel(
         cell.border = thin_border
 
     # Datos
-    for row_idx, (student, _asig) in enumerate(export_rows, 2):
+    for row_idx, (student, _asig, _doc) in enumerate(export_rows, 2):
         ctx["_asignatura"] = _asig
+        ctx["_docente"] = _doc
         for col_idx, col_key in enumerate(cols_requested, 1):
             value = EXPORT_COLUMNS[col_key]["getter"](student, ctx)
             cell = ws.cell(row=row_idx, column=col_idx, value=value)
@@ -413,11 +443,13 @@ def export_estudiantes_excel(
         filter_desc += f"Carrera={carrera} "
     if asignatura:
         filter_desc += f"Asignatura={asignatura} "
+    if docente:
+        filter_desc += f"Docente={docente} "
     if nivel:
         filter_desc += f"Nivel={nivel} "
     if nivel_riesgo:
         filter_desc += f"Riesgo={nivel_riesgo} "
-    if not carrera and not nivel and not nivel_riesgo and not asignatura:
+    if not carrera and not nivel and not nivel_riesgo and not asignatura and not docente:
         filter_desc += "(sin filtros adicionales)"
     ws.cell(row=summary_row + 2, column=1, value=filter_desc).font = Font(size=9, color="888888")
 

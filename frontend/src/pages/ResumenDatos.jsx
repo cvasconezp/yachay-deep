@@ -946,6 +946,8 @@ export default function ResumenDatos() {
   const [exportPeriodo, setExportPeriodo] = useState("");
   const [exportAsignatura, setExportAsignatura] = useState("");
   const [asignaturasDisp, setAsignaturasDisp] = useState([]);
+  const [exportDocente, setExportDocente] = useState("");
+  const [docentesDisp, setDocentesDisp] = useState([]);
   const [exporting, setExporting] = useState(false);
 
   // Carrera expand
@@ -1000,6 +1002,15 @@ export default function ResumenDatos() {
     if (exportPeriodo) params.periodo = exportPeriodo;
     api.getAsignaturasDisponibles(params).then(setAsignaturasDisp).catch(() => setAsignaturasDisp([]));
   }, [exportCarrera, exportPeriodo]);
+
+  // Cargar docentes disponibles para el filtro de exportación (según carrera/asignatura/período)
+  useEffect(() => {
+    const params = {};
+    if (exportCarrera) params.carrera = exportCarrera;
+    if (exportAsignatura) params.asignatura = exportAsignatura;
+    if (exportPeriodo) params.periodo = exportPeriodo;
+    api.getDocentesDisponibles(params).then(setDocentesDisp).catch(() => setDocentesDisp([]));
+  }, [exportCarrera, exportAsignatura, exportPeriodo]);
 
   const loadData = useCallback(async () => {
     if (!filtroPeriodo) return;
@@ -1081,6 +1092,7 @@ export default function ResumenDatos() {
       if (exportNivel) params.set("nivel", exportNivel);
       if (exportRiesgo) params.set("nivel_riesgo", exportRiesgo);
       if (exportAsignatura) params.set("asignatura", exportAsignatura);
+      if (exportDocente) params.set("docente", exportDocente);
       if (exportPeriodo) params.set("periodo", exportPeriodo);
       const blob = await api.exportEstudiantesExcel(params);
       const url = URL.createObjectURL(blob);
@@ -1174,6 +1186,12 @@ export default function ResumenDatos() {
               title="Filtra los estudiantes matriculados en una asignatura específica">
               <option value="">Todas las asignaturas</option>
               {asignaturasDisp.map(a => <option key={a} value={a}>{a}</option>)}
+            </select>
+            <select value={exportDocente} onChange={e => setExportDocente(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 min-w-[200px]"
+              title="Filtra los estudiantes por el docente de la asignatura">
+              <option value="">Todos los docentes</option>
+              {docentesDisp.map(d => <option key={d} value={d}>{d}</option>)}
             </select>
           </div>
           <div className="mb-3">

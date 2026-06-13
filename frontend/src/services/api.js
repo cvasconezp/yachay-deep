@@ -255,6 +255,10 @@ class ApiClient {
     const qs = new URLSearchParams(params).toString();
     return this.get(`/export/asignaturas-disponibles${qs ? "?" + qs : ""}`);
   }
+  getDocentesDisponibles(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.get(`/export/docentes-disponibles${qs ? "?" + qs : ""}`);
+  }
   exportEstudiantesExcel(params) {
     const qs = new URLSearchParams(params).toString();
     return this.getBlob(`/export/estudiantes/excel${qs ? "?" + qs : ""}`);
