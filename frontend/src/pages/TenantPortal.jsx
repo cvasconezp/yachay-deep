@@ -32,6 +32,21 @@ const TENANT_CONFIGS = {
 
 function TenantCard({ tenant, code, onNavigate, isSuperAdmin = false }) {
   const [viewAs, setViewAs] = useState("");
+  const [demoBusy, setDemoBusy] = useState(false);
+  const [demoMsg, setDemoMsg] = useState("");
+  const isDemo = code === "demo";
+
+  const regenDemo = async (e) => {
+    e.stopPropagation();
+    if (!window.confirm("Esto BORRARÁ los datos del demo y generará ~1000 estudiantes sintéticos (1-2 min). ¿Continuar?")) return;
+    setDemoBusy(true); setDemoMsg("");
+    try {
+      const r = await api.regenerateDemoSynthetic(1000);
+      const c = r.creados || {};
+      setDemoMsg(`Listo: ${c.estudiantes} estudiantes, ${c.calificaciones} notas, ${c.alertas} alertas.`);
+    } catch (err) { setDemoMsg("Error: " + err.message); }
+    finally { setDemoBusy(false); }
+  };
   const config = TENANT_CONFIGS[code] || {
     name: tenant?.nombre || code,
     short: code.toUpperCase(),
@@ -84,6 +99,15 @@ function TenantCard({ tenant, code, onNavigate, isSuperAdmin = false }) {
         </div>
       </div>
     </button>
+    {isSuperAdmin && isDemo && (
+      <div className="mt-2 px-1">
+        <button onClick={regenDemo} disabled={demoBusy}
+          className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white px-3 py-1.5 rounded-lg text-xs font-medium">
+          {demoBusy ? "Regenerando… (1-2 min)" : "↻ Regenerar demo (1000)"}
+        </button>
+        {demoMsg && <p className={`text-[11px] mt-1 ${demoMsg.startsWith("Error") ? "text-red-600" : "text-green-700"}`}>{demoMsg}</p>}
+      </div>
+    )}
     {isSuperAdmin && (
       <div className="mt-2 flex items-center gap-2 text-xs px-1">
         <span className="text-gray-500">Ver como:</span>

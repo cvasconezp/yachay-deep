@@ -27,22 +27,8 @@ function TabSistema() {
   const [scrapingMsg, setScrapingMsg] = useState("");
   const [scrapingMode, setScrapingMode] = useState("full");
   const [scrapingProgress, setScrapingProgress] = useState(null);
-  const { isSuperAdmin } = useAuth();
-  const [demoLoading, setDemoLoading] = useState(false);
-  const [demoMsg, setDemoMsg] = useState("");
 
   const loadMlStatus = () => api.getPredictionStatus().then(setMlStatus).catch(() => {});
-
-  const regenDemo = async () => {
-    if (!window.confirm('Esto BORRARÁ los datos del demo y generará ~1000 estudiantes sintéticos nuevos (puede tardar 1-2 min). ¿Continuar?')) return;
-    setDemoLoading(true); setDemoMsg('');
-    try {
-      const r = await api.regenerateDemoSynthetic(1000);
-      const c = r.creados || {};
-      setDemoMsg(`Listo: ${c.estudiantes} estudiantes, ${c.matriculas} matrículas, ${c.calificaciones} notas.`);
-    } catch (e) { setDemoMsg('Error: ' + e.message); }
-    finally { setDemoLoading(false); }
-  };
 
   const loadRuns = (page = 1) => {
     api.getETLRuns(page).then(data => { setRunsData(data); setRunsPage(data.page); }).catch(() => setMsg("Error: No se pudo cargar el historial ETL"));
@@ -522,25 +508,6 @@ function TabSistema() {
         )}
       </div>
 
-      {isSuperAdmin && (
-        <div className="bg-white rounded-xl border border-purple-200 p-6">
-          <h2 className="font-semibold text-gray-800 mb-1">Datos Demo (super-admin)</h2>
-          <p className="text-sm text-gray-500 mb-4">
-            Regenera la base de datos <strong>demo</strong> con datos 100% sintéticos (sin información real).
-            Genera ~1000 estudiantes con máximo 6 materias por nivel, más historial de notas, alertas,
-            intervenciones, seguimiento docente y ejecuciones de scraping. No afecta producción. Puede tardar 1-2 min.
-          </p>
-          <button onClick={regenDemo} disabled={demoLoading}
-            className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white px-5 py-2 rounded-lg text-sm font-medium">
-            {demoLoading ? "Generando… (puede tardar 1-2 min)" : "Regenerar datos demo (1000)"}
-          </button>
-          {demoMsg && (
-            <div className={`text-sm mt-3 px-4 py-2 rounded-lg ${demoMsg.startsWith("Error") ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
-              {demoMsg}
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }
