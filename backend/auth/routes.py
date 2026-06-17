@@ -64,6 +64,12 @@ class UserUpdate(BaseModel):
     permissions: Optional[list[str]] = None
     tenant: Optional[str] = None
 
+class ChangeEmailRequest(BaseModel):
+    new_email: EmailStr
+    password: str = Field(..., min_length=8)
+    code: Optional[str] = None  # código 2FA si el usuario lo tiene activo
+
+
 
 class UserResponse(BaseModel):
     id: int
@@ -475,3 +481,24 @@ def twofa_disable(password: str = Form(...), current_user: User = Depends(get_cu
     current_user.recovery_codes = None
     db.commit()
     return {"detail": "2FA desactivado"}
+
+
+@router.post("/change-email")
+def change_email(payload: ChangeEmailRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_prod_db)):
+    """Cambia el correo del usuario autenticado con re-autenticación fuerte:
+    contraseña + (si tiene 2FA) código TOTP o de recuperación. Sin confirmación por email."""
+    if not verify_password(payload.password, current_user.hashed_password):
+        raise HTTPException(status_code=401, detail="Contraseña incorrecta")
+    if current_user.totp_enabled:
+        if not payload.code or not _verify_2fa_code(current_user, payload.code, db):
+            raise HTTPException(status_code=401, detail="Código 2FA inválido o requerido")
+    new_email = payload.new_email.lower().strip()
+    if new_email == current_user.email:
+        raise HTTPException(status_code=400, detail="El correo nuevo es igual al actual")
+    if db.query(User).filter(User.email == new_email, User.id != current_user.id).first():
+        raise HTTPException(status_code=400, detail="Ese correo ya está en uso")
+    old = current_user.email
+    current_user.email = new_email
+    db.commit()
+    logger.info("Cambio de correo: %s -> %s (user_id=%s)", old, new_email, current_user.id)
+    return {"detail": "Correo actualizado", "email": new_email}

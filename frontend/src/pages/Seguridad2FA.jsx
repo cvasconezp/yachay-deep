@@ -16,11 +16,15 @@ export default function Seguridad2FA() {
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
-  const { isSuperAdmin, mustEnroll2FA, refreshUser } = useAuth();
+  const { user, isSuperAdmin, mustEnroll2FA, refreshUser } = useAuth();
   const navigate = useNavigate();
   const [usuarios, setUsuarios] = useState([]);
   const [resetUserId, setResetUserId] = useState("");
   const [resetMsg, setResetMsg] = useState("");
+  const [nuevoCorreo, setNuevoCorreo] = useState("");
+  const [emailPwd, setEmailPwd] = useState("");
+  const [emailCode, setEmailCode] = useState("");
+  const [emailMsg, setEmailMsg] = useState("");
 
   const loadStatus = () => api.get2FAStatus().then(setStatus).catch(() => {});
   useEffect(() => { loadStatus(); }, []);
@@ -169,6 +173,33 @@ export default function Seguridad2FA() {
           {resetMsg && <p className="text-xs mt-2 text-gray-700">{resetMsg}</p>}
         </div>
       )}
+
+      <form onSubmit={cambiarCorreo} className="border border-gray-200 rounded-lg p-4 mt-6">
+        <h2 className="text-sm font-bold text-gray-800 mb-1">Cambiar mi correo</h2>
+        <p className="text-xs text-gray-500 mb-3">
+          Correo actual: <strong>{user?.email}</strong>. Requiere tu contraseña{user?.totp_enabled ? " y código 2FA" : ""}.
+        </p>
+        <div className="space-y-2">
+          <input type="email" value={nuevoCorreo} onChange={e => setNuevoCorreo(e.target.value)}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="nuevo@correo.com" required />
+          <input type="password" value={emailPwd} onChange={e => setEmailPwd(e.target.value)}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Contraseña actual" required />
+          {user?.totp_enabled && (
+            <input type="text" inputMode="numeric" value={emailCode} onChange={e => setEmailCode(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm tracking-widest text-center"
+              placeholder="Código 2FA" required />
+          )}
+          <button type="submit" disabled={busy}
+            className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white px-5 py-2 rounded-lg text-sm font-medium">
+            Cambiar correo
+          </button>
+        </div>
+        {emailMsg && (
+          <div className={`text-sm mt-3 px-4 py-2 rounded-lg ${emailMsg.startsWith("Error") ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
+            {emailMsg}
+          </div>
+        )}
+      </form>
     </div>
   );
 }

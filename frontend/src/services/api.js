@@ -145,6 +145,9 @@ class ApiClient {
     const form = new FormData(); form.append("code", code);
     return this.request("/auth/2fa/verify-setup", { method: "POST", body: form, headers: {} });
   }
+  changeEmail(new_email, password, code = null) {
+    return this.request("/auth/change-email", { method: "POST", body: JSON.stringify({ new_email, password, code }) });
+  }
   disable2FA(password) {
     const form = new FormData(); form.append("password", password);
     return this.request("/auth/2fa/disable", { method: "POST", body: form, headers: {} });
