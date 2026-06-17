@@ -496,11 +496,27 @@ def demo_info(current_user=Depends(get_current_user)):
     except Exception as e:
         out["produccion"]["error"] = str(e)
 
+    from ..models.course_config import CourseConfig, SemesterConfig
+
+    def _sem_activo(session):
+        sc = session.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
+        return sc.semestre if sc else None
+
+    try:
+        pdb = SessionLocal()
+        out["produccion"]["cursos_config"] = pdb.query(CourseConfig).count()
+        out["produccion"]["semestre_activo"] = _sem_activo(pdb)
+        pdb.close()
+    except Exception as e:
+        out["produccion"]["cursos_error"] = str(e)
+
     if demo_engine is not None:
         out["demo"] = _safe(demo_engine.url)
         try:
             ddb = _get_demo_db()
             out["demo"]["estudiantes"] = ddb.query(Student).count()
+            out["demo"]["cursos_config"] = ddb.query(CourseConfig).count()
+            out["demo"]["semestre_activo"] = _sem_activo(ddb)
             ddb.close()
         except Exception as e:
             out["demo"]["error"] = str(e)
