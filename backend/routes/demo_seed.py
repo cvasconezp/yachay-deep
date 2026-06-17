@@ -417,3 +417,126 @@ def seed_phase4(
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         demo_db.close()
+
+
+# ─────────── [DEMO] Generación de datos 100% sintéticos (super-admin) ───────────
+SUBJECTS = [
+    "Matemática General", "Lengua y Comunicación", "Introducción a la Profesión",
+    "Metodología de la Investigación", "Estadística Aplicada", "Ética Profesional",
+    "Fundamentos de Programación", "Psicología General", "Sociología", "Economía",
+    "Cálculo Diferencial", "Álgebra Lineal", "Bases de Datos", "Gestión de Proyectos",
+    "Pensamiento Crítico", "Realidad Nacional", "Antropología", "Pedagogía General",
+    "Didáctica", "Evaluación Educativa", "Tecnologías Educativas", "Inglés I",
+    "Inglés II", "Contabilidad Básica", "Derecho Constitucional", "Biología",
+    "Química General", "Física", "Filosofía", "Currículo", "Práctica Preprofesional",
+    "Innovación Educativa", "Gestión del Talento", "Marketing Digital",
+]
+
+
+def _wipe_demo(demo_db):
+    """Borra TODOS los datos del demo (respetando FKs). No toca usuarios/settings."""
+    from ..models import (AlertEvent, Intervention, Grade, Enrollment, AvacAccess,
+                          TaskSubmission, DocenteTracking, RecommendationLog, Student,
+                          CourseConfig, SemesterConfig)
+    for model in (AlertEvent, Intervention, RecommendationLog, DocenteTracking,
+                  Grade, Enrollment, AvacAccess, TaskSubmission, Student,
+                  CourseConfig, SemesterConfig):
+        try:
+            demo_db.query(model).delete()
+        except Exception as e:
+            logger.warning(f"wipe {model.__name__}: {e}")
+    demo_db.commit()
+
+
+@router.post("/regenerate-synthetic")
+def regenerate_synthetic(
+    n_estudiantes: int = Query(120, ge=10, le=600),
+    current_user=Depends(get_current_user),
+):
+    """[DEMO] Regenera la BD demo con datos 100% sintéticos (sin PII real).
+    Máximo 6 materias por estudiante/semestre. Solo super-admin."""
+    from ..auth.jwt import is_super_admin
+    if not is_super_admin(current_user):
+        raise HTTPException(status_code=403, detail="Se requiere super administrador (admin global)")
+
+    from datetime import datetime, timezone, timedelta
+    from ..models import (Student, Enrollment, Grade, AvacAccess, TaskSubmission,
+                          SemesterConfig)
+
+    demo_db = _get_demo_db()
+    try:
+        _wipe_demo(demo_db)
+
+        # Semestre activo demo (fechas vigentes para que el período actual funcione)
+        now = datetime.now(timezone.utc)
+        sem = SemesterConfig(
+            semestre="P68", activo=True, bloque_actual="2",
+            bloque1_inicio=now - timedelta(days=120), bloque1_fin=now - timedelta(days=40),
+            bloque2_inicio=now - timedelta(days=39), bloque2_fin=now + timedelta(days=40),
+        )
+        demo_db.add(sem); demo_db.commit()
+
+        creados = {"estudiantes": 0, "matriculas": 0, "calificaciones": 0,
+                   "accesos": 0, "tareas": 0}
+
+        for _ in range(n_estudiantes):
+            nom = random.choice(NOMBRES)
+            ap1, ap2 = random.choice(APELLIDOS), random.choice(APELLIDOS)
+            nivel = random.randint(1, 8)
+            dias = random.choice([0, 1, 3, 7, 12, 16, 20, 25, 30])
+            comp = round(random.uniform(0.1, 1.0), 2)
+            tareas = round(random.uniform(20, 100), 1)
+            prom = round(random.uniform(45, 98), 1)
+            riesgo = ("Alto" if (dias > 21 or comp < 0.3)
+                      else "Medio" if (dias > 14 or comp < 0.5) else "Bajo")
+            carrera = random.choice(DEMO_CARRERAS)
+            st = Student(
+                cedula=_ced(), nombre=f"{ap1} {ap2} {nom}", correo=_em(nom, ap1),
+                correo_institucional=_em(nom, ap1), telefono=_ph(), carrera=carrera,
+                nivel_academico=nivel, nivel_riesgo=riesgo, indice_compromiso=comp,
+                dias_sin_acceso=dias, porcentaje_tareas=tareas, promedio_calificaciones=prom,
+                pais="Ecuador", provincia=random.choice(PROVINCIAS), ciudad=random.choice(CIUDADES),
+                genero=random.choice(["M", "F"]), periodo="P68", estado_matricula="Matriculado",
+            )
+            demo_db.add(st); demo_db.flush()
+            creados["estudiantes"] += 1
+
+            # ≤6 materias por semestre
+            materias = random.sample(SUBJECTS, k=random.randint(4, 6))
+            for asig in materias:
+                codigo = f"DEMO{random.randint(100000, 999999)}"
+                docente = _rn()
+                demo_db.add(Enrollment(
+                    student_id=st.id, codigo_grupo=codigo, asignatura=asig, carrera=carrera,
+                    nivel=nivel, docente=docente, periodo="68", bloque=2,
+                    estado_matriculado="MATRICULADO",
+                ))
+                creados["matriculas"] += 1
+                demo_db.add(Grade(
+                    student_id=st.id, asignatura=asig, carrera=carrera, docente=docente,
+                    nota_final=round(random.uniform(40, 100), 1), periodo="P68", nivel=nivel,
+                ))
+                creados["calificaciones"] += 1
+                # algunas tareas por materia
+                for u in range(1, random.randint(2, 5)):
+                    entregada = random.random() > 0.25
+                    demo_db.add(TaskSubmission(
+                        student_id=st.id, codigo_curso=codigo, periodo="P68", unidad=str(u),
+                        entregada=entregada, calificada=entregada,
+                        calificacion=round(random.uniform(5, 10), 1) if entregada else None,
+                        calificacion_maxima=10.0,
+                    ))
+                    creados["tareas"] += 1
+
+            demo_db.add(AvacAccess(
+                student_id=st.id, codigo_curso=f"DEMO{random.randint(100000, 999999)}",
+                periodo="P68", dias_sin_acceso=float(dias),
+                ultimo_acceso_texto=f"{dias} días", estado_avac="Activo" if dias < 14 else "Inactivo",
+            ))
+            creados["accesos"] += 1
+
+        demo_db.commit()
+        logger.info(f"[DEMO] Datos sintéticos regenerados: {creados}")
+        return {"detail": "Datos demo regenerados", "creados": creados}
+    finally:
+        demo_db.close()
