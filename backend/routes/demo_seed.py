@@ -448,6 +448,48 @@ def _wipe_demo(demo_db):
     demo_db.commit()
 
 
+@router.get("/info")
+def demo_info(current_user=Depends(get_current_user)):
+    """[DEMO] Diagnóstico (super-admin): a qué BD apunta el demo vs producción
+    (host/base, SIN credenciales) y conteo de estudiantes en cada una.
+    Sirve para verificar que el generador escribe en la BD demo y NO en producción."""
+    from ..auth.jwt import is_super_admin
+    if not is_super_admin(current_user):
+        raise HTTPException(status_code=403, detail="Se requiere super administrador")
+    from ..database import engine as prod_engine, demo_engine
+    from ..models.student import Student
+
+    def _safe(url):
+        try:
+            return {"host": url.host, "database": url.database, "backend": url.get_backend_name()}
+        except Exception:
+            return {"host": None, "database": None}
+
+    out = {"demo_configurada": demo_engine is not None}
+    out["produccion"] = _safe(prod_engine.url)
+    try:
+        from ..database import SessionLocal
+        pdb = SessionLocal()
+        out["produccion"]["estudiantes"] = pdb.query(Student).count()
+        pdb.close()
+    except Exception as e:
+        out["produccion"]["error"] = str(e)
+
+    if demo_engine is not None:
+        out["demo"] = _safe(demo_engine.url)
+        try:
+            ddb = _get_demo_db()
+            out["demo"]["estudiantes"] = ddb.query(Student).count()
+            ddb.close()
+        except Exception as e:
+            out["demo"]["error"] = str(e)
+        out["misma_bd_que_produccion"] = (
+            out["demo"].get("host") == out["produccion"].get("host")
+            and out["demo"].get("database") == out["produccion"].get("database")
+        )
+    return out
+
+
 @router.post("/regenerate-synthetic")
 def regenerate_synthetic(
     n_estudiantes: int = Query(120, ge=10, le=600),
