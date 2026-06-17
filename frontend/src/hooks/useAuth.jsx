@@ -80,6 +80,7 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={{
       user, loading, login, logout, isAdmin: user?.role === "admin",
+      isSuperAdmin: !!user?.is_super_admin, mustEnroll2FA: !!user?.must_enroll_2fa,
       locked, lock, unlock, refreshUser,
     }}>
       {children}

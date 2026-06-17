@@ -24,7 +24,7 @@ import EntregasPendientes from "./pages/EntregasPendientes";
 import { isSubdomain, isAdminHost } from "./hooks/useTenant";
 import TenantPortal from "./pages/TenantPortal";
 
-function PrivateRoute({ children, adminOnly = false, tabKey = null }) {
+function PrivateRoute({ children, adminOnly = false, tabKey = null, allowDuringEnrollment = false }) {
   const { user, loading } = useAuth();
 
   // ← NUEVO: activa el enforcer solo cuando el usuario está autenticado
@@ -37,6 +37,8 @@ function PrivateRoute({ children, adminOnly = false, tabKey = null }) {
       </div>
     );
   if (!user) return <Navigate to="/login" />;
+  // [WF3] Enrolamiento 2FA forzado: si debe activar 2FA, solo puede ir a /seguridad.
+  if (user.must_enroll_2fa && !allowDuringEnrollment) return <Navigate to="/seguridad" replace />;
   if (adminOnly && user.role !== "admin") return <Navigate to="/dashboard" />;
   if (tabKey && user.permissions && !user.permissions.includes(tabKey)) {
     return <Navigate to="/dashboard" />;
@@ -173,7 +175,7 @@ export default function App() {
             <Route
               path="/seguridad"
               element={
-                <PrivateRoute>
+                <PrivateRoute allowDuringEnrollment>
                   <Seguridad2FA />
                 </PrivateRoute>
               }

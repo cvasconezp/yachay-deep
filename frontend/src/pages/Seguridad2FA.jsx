@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { api } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
+import { useNavigate } from "react-router-dom";
 
 /**
  * [WF3] Pantalla de gestión de 2FA (TOTP): enrolamiento con QR,
@@ -15,7 +16,8 @@ export default function Seguridad2FA() {
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
-  const { isAdmin } = useAuth();
+  const { isSuperAdmin, mustEnroll2FA, refreshUser } = useAuth();
+  const navigate = useNavigate();
   const [usuarios, setUsuarios] = useState([]);
   const [resetUserId, setResetUserId] = useState("");
   const [resetMsg, setResetMsg] = useState("");
@@ -23,8 +25,8 @@ export default function Seguridad2FA() {
   const loadStatus = () => api.get2FAStatus().then(setStatus).catch(() => {});
   useEffect(() => { loadStatus(); }, []);
   useEffect(() => {
-    if (isAdmin) api.listUsers().then(setUsuarios).catch(() => setUsuarios([]));
-  }, [isAdmin]);
+    if (isSuperAdmin) api.listUsers().then(setUsuarios).catch(() => setUsuarios([]));
+  }, [isSuperAdmin]);
 
   const resetUsuario2FA = async () => {
     if (!resetUserId) return;
@@ -52,7 +54,9 @@ export default function Seguridad2FA() {
       setRecovery(r.recovery_codes);
       setSetupData(null); setCode("");
       await loadStatus();
+      await refreshUser();
       setMsg("2FA activado correctamente. Guarda tus códigos de recuperación.");
+      if (mustEnroll2FA) setTimeout(() => navigate("/dashboard"), 1500);
     } catch (e) { setErr(e.message); }
     finally { setBusy(false); }
   };
@@ -75,6 +79,12 @@ export default function Seguridad2FA() {
       <p className="text-sm text-gray-500 mb-5">
         Añade un segundo factor con una app autenticadora (Google Authenticator, Microsoft Authenticator, etc.).
       </p>
+
+      {mustEnroll2FA && (
+        <div className="bg-amber-50 border border-amber-300 text-amber-800 rounded-lg px-4 py-3 text-sm mb-4">
+          🔒 Tu organización exige 2FA. Debes activarlo aquí para poder usar el resto del sistema.
+        </div>
+      )}
 
       {status && (
         <div className={`rounded-lg px-4 py-3 text-sm mb-4 ${status.enabled ? "bg-green-50 text-green-700 border border-green-200" : "bg-gray-50 text-gray-600 border border-gray-200"}`}>
@@ -137,7 +147,7 @@ export default function Seguridad2FA() {
         </form>
       )}
 
-      {isAdmin && (
+      {isSuperAdmin && (
         <div className="border border-gray-200 rounded-lg p-4 mt-6">
           <h2 className="text-sm font-bold text-gray-800 mb-1">Resetear 2FA de un usuario (admin)</h2>
           <p className="text-xs text-gray-500 mb-3">
