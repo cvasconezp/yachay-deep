@@ -43,6 +43,18 @@ export default function Seguridad2FA() {
     finally { setBusy(false); }
   };
 
+  const cambiarCorreo = async (e) => {
+    e.preventDefault();
+    setEmailMsg(""); setBusy(true);
+    try {
+      const r = await api.changeEmail(nuevoCorreo, emailPwd, emailCode || null);
+      setEmailMsg("Correo actualizado a " + r.email);
+      setNuevoCorreo(""); setEmailPwd(""); setEmailCode("");
+      await refreshUser();
+    } catch (err) { setEmailMsg("Error: " + err.message); }
+    finally { setBusy(false); }
+  };
+
   const startSetup = async () => {
     setErr(""); setMsg(""); setBusy(true);
     try { setSetupData(await api.setup2FA()); }
