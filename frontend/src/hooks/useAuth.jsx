@@ -14,10 +14,19 @@ import { api } from "../services/api";
 const AuthContext = createContext(null);
 const SESSION_CHECK_MS = 120_000; // verificar sesión cada 2 min
 
+// [AUDIT] Presets de permisos por rol (deben coincidir con Admin.jsx ROLE_PRESETS)
+const ROLE_PRESETS = {
+  admin: null,
+  coordinador: ["dashboard","alertas","intervenciones","ficha","asignaturas","entregas","docentes","tutorias","resumen"],
+  docente: ["dashboard","ficha","asignaturas","entregas","docentes"],
+  monitor: ["dashboard","alertas","intervenciones","ficha","asignaturas","entregas","tutorias"],
+};
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [locked, setLocked] = useState(false);
+  const [viewAsRole, setViewAsRoleState] = useState(() => sessionStorage.getItem("yd_view_as") || null);
   const intervalRef = useRef(null);
 
   // Cargar usuario al montar (la cookie HttpOnly se envía automáticamente)
@@ -58,6 +67,8 @@ export function AuthProvider({ children }) {
     }
     setUser(null);
     setLocked(false);
+    sessionStorage.removeItem("yd_view_as");
+    setViewAsRoleState(null);
   }, []);
 
   // [SEC-03] Idle lock
@@ -77,10 +88,31 @@ export function AuthProvider({ children }) {
     } catch { /* ignore */ }
   }, []);
 
+  // [AUDIT] Ver como rol (solo super-admin). null = vista real.
+  const setViewAsRole = useCallback((role) => {
+    if (role && !user?.is_super_admin) return;
+    if (role) sessionStorage.setItem("yd_view_as", role);
+    else sessionStorage.removeItem("yd_view_as");
+    setViewAsRoleState(role || null);
+  }, [user]);
+
+  const realSuper = !!user?.is_super_admin;
+  const previewing = !!(viewAsRole && realSuper);
+  const effUser = previewing
+    ? { ...user, role: viewAsRole, permissions: ROLE_PRESETS[viewAsRole] ?? null }
+    : user;
+  const isReadOnly = previewing && viewAsRole === "docente";
+
+  useEffect(() => { api.setPreviewReadOnly && api.setPreviewReadOnly(isReadOnly); }, [isReadOnly]);
+
   return (
     <AuthContext.Provider value={{
-      user, loading, login, logout, isAdmin: user?.role === "admin",
-      isSuperAdmin: !!user?.is_super_admin, mustEnroll2FA: !!user?.must_enroll_2fa,
+      user: effUser, realUser: user, loading, login, logout,
+      isAdmin: effUser?.role === "admin",
+      isSuperAdmin: previewing ? false : realSuper,
+      realIsSuperAdmin: realSuper,
+      mustEnroll2FA: !!user?.must_enroll_2fa,
+      viewAsRole, setViewAsRole, previewing, isReadOnly,
       locked, lock, unlock, refreshUser,
     }}>
       {children}

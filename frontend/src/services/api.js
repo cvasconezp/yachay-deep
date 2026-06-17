@@ -18,7 +18,10 @@ function sanitizeErrorMessage(raw) {
 class ApiClient {
   constructor() {
     this.baseUrl = BASE_URL;
+    this._previewReadOnly = false;
   }
+
+  setPreviewReadOnly(v) { this._previewReadOnly = !!v; }
 
   async _tryRefresh() {
     // [WF4] Renueva el access token usando el refresh cookie. Deduplica llamadas concurrentes.
@@ -37,6 +40,13 @@ class ApiClient {
   }
 
   async request(path, options = {}) {
+    // [AUDIT] En vista previa de rol de solo lectura (Docente), bloquear escrituras (excepto /auth/).
+    if (this._previewReadOnly && !path.startsWith("/auth/")) {
+      const m = (options.method || "GET").toUpperCase();
+      if (["POST", "PUT", "PATCH", "DELETE"].includes(m)) {
+        throw new Error("Modo vista previa (Docente): solo lectura. Acción de escritura bloqueada.");
+      }
+    }
     const isFormData = options.body instanceof FormData;
     const tenant = getTenant();
     const headers = {
