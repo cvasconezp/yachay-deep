@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { api } from "../services/api";
+import { useAuth } from "../hooks/useAuth";
 
 /**
  * [WF3] Pantalla de gestión de 2FA (TOTP): enrolamiento con QR,
@@ -14,9 +15,27 @@ export default function Seguridad2FA() {
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const { isAdmin } = useAuth();
+  const [usuarios, setUsuarios] = useState([]);
+  const [resetUserId, setResetUserId] = useState("");
+  const [resetMsg, setResetMsg] = useState("");
 
   const loadStatus = () => api.get2FAStatus().then(setStatus).catch(() => {});
   useEffect(() => { loadStatus(); }, []);
+  useEffect(() => {
+    if (isAdmin) api.listUsers().then(setUsuarios).catch(() => setUsuarios([]));
+  }, [isAdmin]);
+
+  const resetUsuario2FA = async () => {
+    if (!resetUserId) return;
+    setResetMsg(""); setBusy(true);
+    try {
+      const r = await api.resetUser2FA(resetUserId);
+      setResetMsg(r.detail || "2FA reseteado");
+      api.listUsers().then(setUsuarios).catch(() => {});
+    } catch (e) { setResetMsg("Error: " + e.message); }
+    finally { setBusy(false); }
+  };
 
   const startSetup = async () => {
     setErr(""); setMsg(""); setBusy(true);
@@ -116,6 +135,29 @@ export default function Seguridad2FA() {
             Desactivar 2FA
           </button>
         </form>
+      )}
+
+      {isAdmin && (
+        <div className="border border-gray-200 rounded-lg p-4 mt-6">
+          <h2 className="text-sm font-bold text-gray-800 mb-1">Resetear 2FA de un usuario (admin)</h2>
+          <p className="text-xs text-gray-500 mb-3">
+            Si un usuario perdió su dispositivo, desactiva su 2FA para que pueda volver a enrolarse.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <select value={resetUserId} onChange={e => setResetUserId(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm min-w-[240px]">
+              <option value="">Selecciona un usuario…</option>
+              {usuarios.map(u => (
+                <option key={u.id} value={u.id}>{u.email} {u.role ? `(${u.role})` : ""}</option>
+              ))}
+            </select>
+            <button onClick={resetUsuario2FA} disabled={busy || !resetUserId}
+              className="bg-amber-600 hover:bg-amber-700 disabled:bg-gray-300 text-white px-4 py-2 rounded-lg text-sm font-medium">
+              Resetear 2FA
+            </button>
+          </div>
+          {resetMsg && <p className="text-xs mt-2 text-gray-700">{resetMsg}</p>}
+        </div>
       )}
     </div>
   );

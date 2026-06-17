@@ -149,6 +149,7 @@ class ApiClient {
   removePin() { return this.request("/auth/pin", { method: "DELETE" }); }
   createUser(data) { return this.post("/auth/users", data); }
   listUsers() { return this.get("/auth/users"); }
+  resetUser2FA(userId) { return this.request(`/auth/users/${userId}/reset-2fa`, { method: "POST" }); }
   updateUser(id, data) { return this.patch(`/auth/users/${id}`, data); }
 
   // ── Students (PERF-01: paginado) ──
