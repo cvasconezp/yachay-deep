@@ -219,16 +219,27 @@ def _create_default_admin():
             logger.info(f"Usuario admin ya existe: {admin_email}")
             return
 
-        # Si existe algún admin (con email diferente), actualizar sus credenciales
         admin = db.query(User).filter(User.role == UserRole.admin).first()
-        if admin:
+        admin_reset = os.environ.get("ADMIN_RESET", "").lower() in ("1", "true", "yes")
+
+        if admin and not admin_reset:
+            # [Opción B] Ya hay un admin: NO sobrescribir (respeta cambios de correo/clave
+            # hechos en la app). Para forzar un reseteo de recuperación, usar ADMIN_RESET=true.
+            logger.info(
+                "Ya existe un admin; no se sobrescribe (cambios en la app se conservan). "
+                "Usa ADMIN_RESET=true para forzar reseteo desde variables de entorno."
+            )
+            return
+
+        if admin and admin_reset:
+            # Recuperación explícita: resetear credenciales del primer admin a las del env.
             admin.email = admin_email
             admin.hashed_password = hash_password(admin_pass)
             admin.is_active = True
             db.commit()
-            logger.info(f"Usuario admin actualizado: {admin_email}")
+            logger.warning(f"[ADMIN_RESET] Credenciales de admin reseteadas a {admin_email}")
         else:
-            # No existe ningún admin → crear uno nuevo
+            # No existe ningún admin → crear uno nuevo (bootstrap inicial)
             new_admin = User(
                 email=admin_email,
                 nombre="Administrador",
