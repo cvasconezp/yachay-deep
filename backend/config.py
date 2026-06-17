@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30   # [WF4] access corto; renovación vía refresh token
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30     # [WF4] vida del refresh token
     REQUIRE_ADMIN_2FA: bool = False  # [WF3] si True, los admin deben tener 2FA activo para usar /admin/*
+    REQUIRE_2FA: bool = False        # [WF3] si True, TODOS los usuarios deben tener 2FA activo (enrolamiento forzado)
 
     # AVAC scraping credentials (stored as Railway/GitHub env vars)
     AVAC_USERNAME: Optional[str] = None

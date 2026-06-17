@@ -19,6 +19,7 @@ from ..database import get_db, get_prod_db
 from ..models.user import User, UserRole
 from .jwt import (verify_password, create_access_token, create_refresh_token, decode_token,
                   hash_password, needs_rehash, get_current_user, require_admin,
+                  require_super_admin, is_super_admin,
                   COOKIE_NAME, REFRESH_COOKIE_NAME)
 from ..models.refresh_token import RefreshToken
 from jose import JWTError
@@ -27,6 +28,15 @@ import logging
 logger = logging.getLogger(__name__)
 
 limiter = Limiter(key_func=get_remote_address)
+
+
+def _user_2fa_flags(user) -> dict:
+    enabled = bool(getattr(user, 'totp_enabled', False))
+    return {
+        'totp_enabled': enabled,
+        'must_enroll_2fa': bool(settings.REQUIRE_2FA and not enabled),
+        'is_super_admin': is_super_admin(user),
+    }
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
@@ -65,6 +75,9 @@ class UserResponse(BaseModel):
     permissions: Optional[list[str]] = None
     tenant: Optional[str] = None
     has_pin: bool = False
+    totp_enabled: bool = False
+    must_enroll_2fa: bool = False
+    is_super_admin: bool = False
 
     class Config:
         from_attributes = True
@@ -130,7 +143,7 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), co
         "access_token": token,
         "refresh_token": refresh,
         "token_type": "bearer",
-        "user": {"id": user.id, "email": user.email, "nombre": user.nombre, "role": user.role, "permissions": user.permissions, "tenant": user.tenant, "has_pin": user.pin_hash is not None},
+        "user": {"id": user.id, "email": user.email, "nombre": user.nombre, "role": user.role, "permissions": user.permissions, "tenant": user.tenant, "has_pin": user.pin_hash is not None, **_user_2fa_flags(user)},
     })
     _set_refresh_cookie(response, refresh)  # [WF4]
     response.set_cookie(
@@ -239,6 +252,7 @@ def me(current_user: User = Depends(get_current_user)):
         permissions=current_user.permissions,
         tenant=current_user.tenant,
         has_pin=current_user.pin_hash is not None,
+        **_user_2fa_flags(current_user),
     )
 
 
@@ -303,7 +317,7 @@ def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)
     return user
 
 
-@router.post("/users/{user_id}/reset-2fa", dependencies=[Depends(require_admin)])
+@router.post("/users/{user_id}/reset-2fa", dependencies=[Depends(require_super_admin)])
 def admin_reset_2fa(user_id: int, db: Session = Depends(get_db)):
     """[WF3] Un admin resetea (desactiva) el 2FA de un usuario que perdió su
     dispositivo. El usuario podrá volver a enrolarse desde /seguridad."""

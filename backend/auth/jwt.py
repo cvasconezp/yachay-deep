@@ -112,6 +112,15 @@ def get_current_user(
     user = db.query(User).filter(User.id == user_id, User.is_active == True).first()
     if user is None:
         raise credentials_exception
+
+    # [WF3] Enrolamiento 2FA obligatorio: si REQUIRE_2FA está activo y el usuario
+    # no tiene 2FA, solo se le permiten las rutas de enrolamiento/sesión. El resto
+    # devuelve 403 2FA_ENROLLMENT_REQUIRED para forzar la configuración primero.
+    if settings.REQUIRE_2FA and not getattr(user, "totp_enabled", False):
+        path = request.url.path
+        _allowed = ("/auth/2fa", "/auth/me", "/auth/logout")
+        if not any(path.startswith(p) for p in _allowed):
+            raise HTTPException(status_code=403, detail="2FA_ENROLLMENT_REQUIRED")
     return user
 
 
@@ -123,4 +132,15 @@ def require_admin(current_user: User = Depends(get_current_user)) -> User:
     # así que un admin sin 2FA todavía puede entrar a activarlo.
     if settings.REQUIRE_ADMIN_2FA and not getattr(current_user, "totp_enabled", False):
         raise HTTPException(status_code=403, detail="2FA_ENROLLMENT_REQUIRED")
+    return current_user
+
+
+def is_super_admin(user: User) -> bool:
+    """Super admin = admin con tenant global (NULL). Único que puede resetear 2FA ajeno."""
+    return user.role == "admin" and getattr(user, "tenant", None) in (None, "")
+
+
+def require_super_admin(current_user: User = Depends(get_current_user)) -> User:
+    if not is_super_admin(current_user):
+        raise HTTPException(status_code=403, detail="Se requiere super administrador (admin global)")
     return current_user
