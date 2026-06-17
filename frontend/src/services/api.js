@@ -170,6 +170,7 @@ class ApiClient {
   createUser(data) { return this.post("/auth/users", data); }
   listUsers() { return this.get("/auth/users"); }
   resetUser2FA(userId) { return this.request(`/auth/users/${userId}/reset-2fa`, { method: "POST" }); }
+  resetUserPassword(userId, new_password) { return this.request(`/auth/users/${userId}/reset-password`, { method: "POST", body: JSON.stringify({ new_password }) }); }
   regenerateDemoSynthetic(n = 1000) {
     const controller = new AbortController();
     const t = setTimeout(() => controller.abort(), 180000); // hasta 3 min

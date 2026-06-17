@@ -16,10 +16,11 @@ export default function Seguridad2FA() {
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
-  const { user, isSuperAdmin, mustEnroll2FA, refreshUser } = useAuth();
+  const { user, isAdmin, isSuperAdmin, mustEnroll2FA, refreshUser } = useAuth();
   const navigate = useNavigate();
   const [usuarios, setUsuarios] = useState([]);
   const [resetUserId, setResetUserId] = useState("");
+  const [resetPwd, setResetPwd] = useState("");
   const [resetMsg, setResetMsg] = useState("");
   const [nuevoCorreo, setNuevoCorreo] = useState("");
   const [emailPwd, setEmailPwd] = useState("");
@@ -29,8 +30,8 @@ export default function Seguridad2FA() {
   const loadStatus = () => api.get2FAStatus().then(setStatus).catch(() => {});
   useEffect(() => { loadStatus(); }, []);
   useEffect(() => {
-    if (isSuperAdmin) api.listUsers().then(setUsuarios).catch(() => setUsuarios([]));
-  }, [isSuperAdmin]);
+    if (isAdmin) api.listUsers().then(setUsuarios).catch(() => setUsuarios([]));
+  }, [isAdmin]);
 
   const resetUsuario2FA = async () => {
     if (!resetUserId) return;
@@ -39,6 +40,17 @@ export default function Seguridad2FA() {
       const r = await api.resetUser2FA(resetUserId);
       setResetMsg(r.detail || "2FA reseteado");
       api.listUsers().then(setUsuarios).catch(() => {});
+    } catch (e) { setResetMsg("Error: " + e.message); }
+    finally { setBusy(false); }
+  };
+
+  const resetUsuarioPassword = async () => {
+    if (!resetUserId || !resetPwd) return;
+    setResetMsg(""); setBusy(true);
+    try {
+      const r = await api.resetUserPassword(resetUserId, resetPwd);
+      setResetMsg(r.detail || "Contraseña actualizada");
+      setResetPwd("");
     } catch (e) { setResetMsg("Error: " + e.message); }
     finally { setBusy(false); }
   };
@@ -163,9 +175,9 @@ export default function Seguridad2FA() {
         </form>
       )}
 
-      {isSuperAdmin && (
+      {isAdmin && (
         <div className="border border-gray-200 rounded-lg p-4 mt-6">
-          <h2 className="text-sm font-bold text-gray-800 mb-1">Resetear 2FA de un usuario (admin)</h2>
+          <h2 className="text-sm font-bold text-gray-800 mb-1">Restablecer acceso de un usuario (admin)</h2>
           <p className="text-xs text-gray-500 mb-3">
             Si un usuario perdió su dispositivo, desactiva su 2FA para que pueda volver a enrolarse.
           </p>
@@ -180,6 +192,15 @@ export default function Seguridad2FA() {
             <button onClick={resetUsuario2FA} disabled={busy || !resetUserId}
               className="bg-amber-600 hover:bg-amber-700 disabled:bg-gray-300 text-white px-4 py-2 rounded-lg text-sm font-medium">
               Resetear 2FA
+            </button>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 mt-3">
+            <input type="text" value={resetPwd} onChange={e => setResetPwd(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm min-w-[240px]"
+              placeholder="Nueva contraseña (mín. 8)" />
+            <button onClick={resetUsuarioPassword} disabled={busy || !resetUserId || resetPwd.length < 8}
+              className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white px-4 py-2 rounded-lg text-sm font-medium">
+              Restablecer contraseña
             </button>
           </div>
           {resetMsg && <p className="text-xs mt-2 text-gray-700">{resetMsg}</p>}

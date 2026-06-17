@@ -354,18 +354,37 @@ def update_user(user_id: int, payload: UserUpdate, current_user: User = Depends(
     return user
 
 
-@router.post("/users/{user_id}/reset-2fa", dependencies=[Depends(require_super_admin)])
-def admin_reset_2fa(user_id: int, db: Session = Depends(get_db)):
-    """[WF3] Un admin resetea (desactiva) el 2FA de un usuario que perdió su
-    dispositivo. El usuario podrá volver a enrolarse desde /seguridad."""
+@router.post("/users/{user_id}/reset-2fa")
+def admin_reset_2fa(user_id: int, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    """[WF3] Un admin resetea (desactiva) el 2FA de un usuario de SU institución
+    (super-admin: cualquiera). El usuario podrá volver a enrolarse desde /seguridad."""
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    _assert_can_manage_tenant(current_user, user.tenant)
     user.totp_enabled = False
     user.totp_secret = None
     user.recovery_codes = None
     db.commit()
     return {"detail": f"2FA reseteado para {user.email}", "user_id": user.id, "email": user.email}
+
+
+class ResetPasswordRequest(BaseModel):
+    new_password: str = Field(..., min_length=8, max_length=128)
+
+
+@router.post("/users/{user_id}/reset-password")
+def admin_reset_password(user_id: int, payload: ResetPasswordRequest, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    """Un admin restablece la contraseña de un usuario de SU institución
+    (super-admin: cualquiera). Además se le desactivan futuros... (no toca 2FA)."""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    _assert_can_manage_tenant(current_user, user.tenant)
+    user.hashed_password = hash_password(payload.new_password)
+    db.commit()
+    logger.info("Admin %s reseteó contraseña de %s", current_user.email, user.email)
+    return {"detail": f"Contraseña actualizada para {user.email}", "user_id": user.id, "email": user.email}
 
 
 # ── PIN de desbloqueo rápido ─────────────────────────────────────────────
