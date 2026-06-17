@@ -99,4 +99,9 @@ def get_current_user(
 def require_admin(current_user: User = Depends(get_current_user)) -> User:
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Se requieren permisos de administrador")
+    # [WF3] Enforcement opcional: si REQUIRE_ADMIN_2FA está activo, el admin debe tener 2FA.
+    # Los endpoints de enrolamiento (/auth/2fa/*) usan get_current_user, no require_admin,
+    # así que un admin sin 2FA todavía puede entrar a activarlo.
+    if settings.REQUIRE_ADMIN_2FA and not getattr(current_user, "totp_enabled", False):
+        raise HTTPException(status_code=403, detail="2FA_ENROLLMENT_REQUIRED")
     return current_user

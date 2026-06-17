@@ -4,7 +4,7 @@ Login SET-COOKIE HttpOnly+Secure+SameSite. Logout borra cookie.
 Bearer header sigue funcionando como fallback (API consumers).
 """
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status, Form
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -67,7 +67,7 @@ class UserResponse(BaseModel):
 
 @router.post("/login")
 @limiter.limit("5/minute")
-def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), code: Optional[str] = Form(None), db: Session = Depends(get_db)):
     """[SEC-02] Login con HttpOnly cookie + Bearer token (backward compat)."""
     user = db.query(User).filter(User.email == form_data.username.lower()).first()
     if not user or not verify_password(form_data.password, user.hashed_password):
@@ -79,6 +79,13 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db
         )
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Usuario desactivado")
+
+    # [WF3] Segundo factor: si el usuario tiene 2FA activo, exigir código TOTP o de recuperación.
+    if user.totp_enabled:
+        if not code:
+            raise HTTPException(status_code=401, detail="2FA_REQUIRED")
+        if not _verify_2fa_code(user, code, db):
+            raise HTTPException(status_code=401, detail="Código 2FA inválido")
 
     # [WF1B] Rehash transparente: si el hash es de un esquema viejo (bcrypt),
     # se regenera a argon2id con la contraseña que el usuario acaba de validar.
@@ -256,3 +263,94 @@ def remove_pin(
     current_user.pin_hash = None
     db.commit()
     return {"detail": "PIN eliminado"}
+
+
+# ─────────────────────────── [WF3] 2FA (TOTP) ───────────────────────────
+import io as _io
+import base64 as _base64
+import secrets as _secrets
+
+try:
+    import pyotp as _pyotp
+    import qrcode as _qrcode
+    _TWOFA_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    _TWOFA_AVAILABLE = False
+
+
+def _verify_2fa_code(user: User, code: str, db: Session) -> bool:
+    """Verifica un código TOTP de 6 dígitos o, en su defecto, un código de recuperación
+    (de un solo uso). Si se usa uno de recuperación, se consume."""
+    code = (code or "").strip().replace(" ", "")
+    if not code:
+        return False
+    # 1) TOTP
+    if user.totp_secret and _TWOFA_AVAILABLE:
+        if _pyotp.TOTP(user.totp_secret).verify(code, valid_window=1):
+            return True
+    # 2) Código de recuperación (hash argon2; se consume el usado)
+    if user.recovery_codes:
+        restantes = list(user.recovery_codes)
+        for h in restantes:
+            if verify_password(code, h):
+                restantes.remove(h)
+                user.recovery_codes = restantes
+                db.commit()
+                return True
+    return False
+
+
+@router.get("/2fa/status")
+def twofa_status(current_user: User = Depends(get_current_user)):
+    """Estado de 2FA del usuario autenticado."""
+    return {
+        "enabled": bool(current_user.totp_enabled),
+        "recovery_codes_remaining": len(current_user.recovery_codes or []),
+    }
+
+
+@router.post("/2fa/setup")
+def twofa_setup(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Genera un secreto TOTP y un QR para escanear. Aún NO habilita 2FA
+    (se confirma en /2fa/verify-setup con un código del autenticador)."""
+    if not _TWOFA_AVAILABLE:
+        raise HTTPException(500, "pyotp/qrcode no instalados")
+    if current_user.totp_enabled:
+        raise HTTPException(400, "2FA ya está activo. Desactívalo antes de re-enrolar.")
+    secret = _pyotp.random_base32()
+    uri = _pyotp.totp.TOTP(secret).provisioning_uri(name=current_user.email, issuer_name="Yachay Deep")
+    img = _qrcode.make(uri)
+    buf = _io.BytesIO(); img.save(buf, format="PNG")
+    qr_b64 = _base64.b64encode(buf.getvalue()).decode()
+    current_user.totp_secret = secret  # guardado pero no habilitado hasta verificar
+    db.commit()
+    return {"qr": f"data:image/png;base64,{qr_b64}", "secret": secret, "otpauth_uri": uri}
+
+
+@router.post("/2fa/verify-setup")
+def twofa_verify_setup(code: str = Form(...), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Confirma el enrolamiento: valida un código del app, habilita 2FA y
+    entrega los códigos de recuperación (se muestran UNA sola vez)."""
+    if not _TWOFA_AVAILABLE:
+        raise HTTPException(500, "pyotp/qrcode no instalados")
+    if not current_user.totp_secret:
+        raise HTTPException(400, "Primero llama a /2fa/setup")
+    if not _pyotp.TOTP(current_user.totp_secret).verify(code.strip(), valid_window=1):
+        raise HTTPException(400, "Código inválido")
+    plain_codes = [_secrets.token_hex(4) for _ in range(8)]
+    current_user.recovery_codes = [hash_password(c) for c in plain_codes]
+    current_user.totp_enabled = True
+    db.commit()
+    return {"recovery_codes": plain_codes, "detail": "2FA activado"}
+
+
+@router.post("/2fa/disable")
+def twofa_disable(password: str = Form(...), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Desactiva 2FA. Requiere la contraseña actual como confirmación."""
+    if not verify_password(password, current_user.hashed_password):
+        raise HTTPException(401, "Contraseña incorrecta")
+    current_user.totp_enabled = False
+    current_user.totp_secret = None
+    current_user.recovery_codes = None
+    db.commit()
+    return {"detail": "2FA desactivado"}

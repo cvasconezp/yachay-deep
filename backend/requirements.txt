@@ -24,3 +24,4 @@ joblib==1.5.3
 slowapi==0.1.9
 httpx==0.28.1
 requests==2.32.3
+qrcode[pil]==7.4.2

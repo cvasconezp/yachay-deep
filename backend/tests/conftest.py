@@ -21,6 +21,13 @@ os.environ["ADMIN_PASSWORD"] = "TestPassword123!"
 
 from backend.database import Base, get_db, get_prod_db
 from backend.main import app
+
+# Desactivar rate limiting en tests (evita 429 al hacer múltiples logins)
+try:
+    from backend.auth.routes import limiter as _auth_limiter
+    _auth_limiter.enabled = False
+except Exception:
+    pass
 from backend.models.user import User, UserRole
 from backend.auth.jwt import hash_password, create_access_token
 

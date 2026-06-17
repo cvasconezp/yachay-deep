@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "change-this-in-production-use-openssl-rand-hex-32"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480  # 8 hours
+    REQUIRE_ADMIN_2FA: bool = False  # [WF3] si True, los admin deben tener 2FA activo para usar /admin/*
 
     # AVAC scraping credentials (stored as Railway/GitHub env vars)
     AVAC_USERNAME: Optional[str] = None
