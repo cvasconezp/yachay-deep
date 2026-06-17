@@ -16,7 +16,7 @@ from slowapi.util import get_remote_address
 from ..config import settings
 from ..database import get_db
 from ..models.user import User, UserRole
-from .jwt import verify_password, create_access_token, hash_password, get_current_user, require_admin, COOKIE_NAME
+from .jwt import verify_password, create_access_token, hash_password, needs_rehash, get_current_user, require_admin, COOKIE_NAME
 
 import logging
 logger = logging.getLogger(__name__)
@@ -79,6 +79,11 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db
         )
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Usuario desactivado")
+
+    # [WF1B] Rehash transparente: si el hash es de un esquema viejo (bcrypt),
+    # se regenera a argon2id con la contraseña que el usuario acaba de validar.
+    if needs_rehash(user.hashed_password):
+        user.hashed_password = hash_password(form_data.password)
 
     user.last_login = datetime.now(timezone.utc)
     db.commit()

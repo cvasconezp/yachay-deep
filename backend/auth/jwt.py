@@ -16,7 +16,15 @@ from ..config import settings
 from ..database import get_prod_db
 from ..models.user import User
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# [WF1B] argon2id por defecto; bcrypt aceptado para verificar hashes antiguos.
+# deprecated="auto" marca los esquemas viejos para rehash transparente en login.
+pwd_context = CryptContext(
+    schemes=["argon2", "bcrypt"],
+    deprecated="auto",
+    argon2__time_cost=3,
+    argon2__memory_cost=65536,  # 64 MB
+    argon2__parallelism=4,
+)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login", auto_error=False)
 
 COOKIE_NAME = "yd_token"
@@ -28,6 +36,11 @@ def hash_password(password: str) -> str:
 
 def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
+
+
+def needs_rehash(hashed: str) -> bool:
+    """True si el hash usa un esquema obsoleto (ej. bcrypt) y debe regenerarse."""
+    return pwd_context.needs_update(hashed)
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
