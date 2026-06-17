@@ -75,6 +75,13 @@ class ApiClient {
         const ok = await this._tryRefresh();
         if (ok) return this.request(path, { ...options, _retried: true });
       }
+      // Leer el detalle para no perder señales como "2FA_REQUIRED" o el motivo
+      // específico (código 2FA inválido, credenciales incorrectas).
+      const err401 = await response.json().catch(() => ({}));
+      const detail401 = typeof err401.detail === "string" ? err401.detail : null;
+      if (detail401 && detail401 !== "No autenticado") {
+        throw new Error(sanitizeErrorMessage(detail401));
+      }
       window.dispatchEvent(new CustomEvent("yd:unauthorized"));
       throw new Error("No autenticado");
     }
