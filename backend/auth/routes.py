@@ -15,7 +15,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from ..config import settings
-from ..database import get_db
+from ..database import get_db, get_prod_db
 from ..models.user import User, UserRole
 from .jwt import (verify_password, create_access_token, create_refresh_token, decode_token,
                   hash_password, needs_rehash, get_current_user, require_admin,
@@ -318,7 +318,7 @@ class PinVerifyRequest(BaseModel):
 def set_pin(
     payload: PinSetRequest,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_prod_db),
 ):
     """Configura o actualiza el PIN de desbloqueo. Requiere contraseña actual."""
     if not verify_password(payload.password, current_user.hashed_password):
@@ -350,7 +350,7 @@ def verify_pin(
 @router.delete("/pin")
 def remove_pin(
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_prod_db),
 ):
     """Elimina el PIN configurado."""
     current_user.pin_hash = None
@@ -403,7 +403,7 @@ def twofa_status(current_user: User = Depends(get_current_user)):
 
 
 @router.post("/2fa/setup")
-def twofa_setup(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def twofa_setup(current_user: User = Depends(get_current_user), db: Session = Depends(get_prod_db)):
     """Genera un secreto TOTP y un QR para escanear. Aún NO habilita 2FA
     (se confirma en /2fa/verify-setup con un código del autenticador)."""
     if not _TWOFA_AVAILABLE:
@@ -421,7 +421,7 @@ def twofa_setup(current_user: User = Depends(get_current_user), db: Session = De
 
 
 @router.post("/2fa/verify-setup")
-def twofa_verify_setup(code: str = Form(...), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def twofa_verify_setup(code: str = Form(...), current_user: User = Depends(get_current_user), db: Session = Depends(get_prod_db)):
     """Confirma el enrolamiento: valida un código del app, habilita 2FA y
     entrega los códigos de recuperación (se muestran UNA sola vez)."""
     if not _TWOFA_AVAILABLE:
@@ -438,7 +438,7 @@ def twofa_verify_setup(code: str = Form(...), current_user: User = Depends(get_c
 
 
 @router.post("/2fa/disable")
-def twofa_disable(password: str = Form(...), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def twofa_disable(password: str = Form(...), current_user: User = Depends(get_current_user), db: Session = Depends(get_prod_db)):
     """Desactiva 2FA. Requiere la contraseña actual como confirmación."""
     if not verify_password(password, current_user.hashed_password):
         raise HTTPException(401, "Contraseña incorrecta")
