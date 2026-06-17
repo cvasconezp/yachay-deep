@@ -19,7 +19,7 @@ os.environ["DEBUG"] = "True"
 os.environ["ADMIN_EMAIL"] = "admin@test.yachay.edu.ec"
 os.environ["ADMIN_PASSWORD"] = "TestPassword123!"
 
-from backend.database import Base, get_db
+from backend.database import Base, get_db, get_prod_db
 from backend.main import app
 from backend.models.user import User, UserRole
 from backend.auth.jwt import hash_password, create_access_token
@@ -62,6 +62,7 @@ def client(db):
             pass
 
     app.dependency_overrides[get_db] = _override
+    app.dependency_overrides[get_prod_db] = _override  # auth usa get_prod_db
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
