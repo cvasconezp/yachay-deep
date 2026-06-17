@@ -20,6 +20,22 @@ class ApiClient {
     this.baseUrl = BASE_URL;
   }
 
+  async _tryRefresh() {
+    // [WF4] Renueva el access token usando el refresh cookie. Deduplica llamadas concurrentes.
+    if (this._refreshing) return this._refreshing;
+    this._refreshing = (async () => {
+      try {
+        const r = await fetch(`${this.baseUrl}/auth/refresh`, { method: "POST", credentials: "include" });
+        return r.ok;
+      } catch {
+        return false;
+      }
+    })();
+    const ok = await this._refreshing;
+    this._refreshing = null;
+    return ok;
+  }
+
   async request(path, options = {}) {
     const isFormData = options.body instanceof FormData;
     const tenant = getTenant();
@@ -53,6 +69,12 @@ class ApiClient {
     }
 
     if (response.status === 401) {
+      // [WF4] Auto-refresh: renueva el access token una sola vez y reintenta.
+      const noRetry = path.includes("/auth/refresh") || path.includes("/auth/login");
+      if (!options._retried && !noRetry) {
+        const ok = await this._tryRefresh();
+        if (ok) return this.request(path, { ...options, _retried: true });
+      }
       window.dispatchEvent(new CustomEvent("yd:unauthorized"));
       throw new Error("No autenticado");
     }
@@ -79,11 +101,15 @@ class ApiClient {
   patch(path, body) { return this.request(path, { method: "PATCH", body: JSON.stringify(body) }); }
   delete(path) { return this.request(path, { method: "DELETE" }); }
 
-  async getBlob(path) {
+  async getBlob(path, _retried = false) {
     const response = await fetch(`${this.baseUrl}${path}`, {
       credentials: "include",
     });
     if (response.status === 401) {
+      if (!_retried) {
+        const ok = await this._tryRefresh();
+        if (ok) return this.getBlob(path, true);
+      }
       window.dispatchEvent(new CustomEvent("yd:unauthorized"));
       throw new Error("No autenticado");
     }

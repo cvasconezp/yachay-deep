@@ -3,7 +3,8 @@ Auth routes — [SEC-02] Fase 2: HttpOnly cookie JWT.
 Login SET-COOKIE HttpOnly+Secure+SameSite. Logout borra cookie.
 Bearer header sigue funcionando como fallback (API consumers).
 """
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request, status, Form
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.responses import JSONResponse
@@ -16,7 +17,11 @@ from slowapi.util import get_remote_address
 from ..config import settings
 from ..database import get_db
 from ..models.user import User, UserRole
-from .jwt import verify_password, create_access_token, hash_password, needs_rehash, get_current_user, require_admin, COOKIE_NAME
+from .jwt import (verify_password, create_access_token, create_refresh_token, decode_token,
+                  hash_password, needs_rehash, get_current_user, require_admin,
+                  COOKIE_NAME, REFRESH_COOKIE_NAME)
+from ..models.refresh_token import RefreshToken
+from jose import JWTError
 
 import logging
 logger = logging.getLogger(__name__)
@@ -65,6 +70,28 @@ class UserResponse(BaseModel):
         from_attributes = True
 
 
+def _set_refresh_cookie(response, token: str):
+    response.set_cookie(
+        key=REFRESH_COOKIE_NAME, value=token, httponly=True,
+        secure=settings.COOKIE_SECURE, samesite=settings.COOKIE_SAMESITE,
+        domain=settings.COOKIE_DOMAIN, path="/", max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400,
+    )
+
+
+def _issue_refresh_token(db: Session, user_id: int, replaced_by: str = None) -> str:
+    """Crea un registro RefreshToken y devuelve el JWT firmado."""
+    jti = uuid.uuid4().hex
+    expires = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    db.add(RefreshToken(id=jti, user_id=user_id, expires_at=expires, revoked=False))
+    db.commit()
+    return create_refresh_token({"sub": str(user_id), "jti": jti})
+
+
+def _revoke_all_user_tokens(db: Session, user_id: int):
+    db.query(RefreshToken).filter(RefreshToken.user_id == user_id, RefreshToken.revoked == False).update({"revoked": True})
+    db.commit()
+
+
 @router.post("/login")
 @limiter.limit("5/minute")
 def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), code: Optional[str] = Form(None), db: Session = Depends(get_db)):
@@ -96,13 +123,16 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), co
     db.commit()
 
     token = create_access_token({"sub": str(user.id)})
+    refresh = _issue_refresh_token(db, user.id)  # [WF4]
 
     # [SEC-02] Respuesta con HttpOnly cookie + token en body (backward compat)
     response = JSONResponse(content={
         "access_token": token,
+        "refresh_token": refresh,
         "token_type": "bearer",
         "user": {"id": user.id, "email": user.email, "nombre": user.nombre, "role": user.role, "permissions": user.permissions, "tenant": user.tenant, "has_pin": user.pin_hash is not None},
     })
+    _set_refresh_cookie(response, refresh)  # [WF4]
     response.set_cookie(
         key=COOKIE_NAME,
         value=token,
@@ -116,9 +146,69 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), co
     return response
 
 
+@router.post("/refresh")
+def refresh_token_endpoint(request: Request, refresh_token: Optional[str] = Form(None), db: Session = Depends(get_db)):
+    """[WF4] Renueva el access token usando el refresh token (cookie o body).
+    Aplica rotación (el refresh viejo se revoca) y detección de reuso
+    (si llega un refresh ya revocado, se revoca toda la cadena del usuario)."""
+    token = request.cookies.get(REFRESH_COOKIE_NAME) or refresh_token
+    if not token:
+        raise HTTPException(status_code=401, detail="No hay refresh token")
+    try:
+        payload = decode_token(token)
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Refresh inválido")
+    if payload.get("type") != "refresh":
+        raise HTTPException(status_code=401, detail="Token no es de tipo refresh")
+    jti = payload.get("jti")
+    user_id = payload.get("sub")
+    rec = db.query(RefreshToken).filter(RefreshToken.id == jti).first() if jti else None
+
+    if rec is None or user_id is None:
+        raise HTTPException(status_code=401, detail="Refresh inválido")
+    # Detección de reuso: un refresh ya revocado que se vuelve a usar = posible robo.
+    if rec.revoked:
+        _revoke_all_user_tokens(db, rec.user_id)
+        raise HTTPException(status_code=401, detail="Refresh reutilizado: sesión revocada")
+    if rec.expires_at and rec.expires_at < datetime.now(timezone.utc).replace(tzinfo=rec.expires_at.tzinfo):
+        raise HTTPException(status_code=401, detail="Refresh expirado")
+
+    user = db.query(User).filter(User.id == int(user_id), User.is_active == True).first()
+    if user is None:
+        raise HTTPException(status_code=401, detail="Usuario no válido")
+
+    # Rotación: revocar el actual y emitir uno nuevo.
+    new_refresh = _issue_refresh_token(db, user.id)
+    new_jti = decode_token(new_refresh).get("jti")
+    rec.revoked = True
+    rec.replaced_by = new_jti
+    db.commit()
+
+    new_access = create_access_token({"sub": str(user.id)})
+    response = JSONResponse(content={"access_token": new_access, "refresh_token": new_refresh, "token_type": "bearer"})
+    response.set_cookie(
+        key=COOKIE_NAME, value=new_access, httponly=True,
+        secure=settings.COOKIE_SECURE, samesite=settings.COOKIE_SAMESITE,
+        domain=settings.COOKIE_DOMAIN, path="/", max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    )
+    _set_refresh_cookie(response, new_refresh)
+    return response
+
+
 @router.post("/logout")
-def logout():
-    """[SEC-02] Borra la HttpOnly cookie (both legacy and subdomain-shared)."""
+def logout(request: Request, refresh_token: Optional[str] = Form(None), db: Session = Depends(get_db)):
+    """[SEC-02] Borra la HttpOnly cookie. [WF4] Revoca el refresh token activo."""
+    # [WF4] Revocar refresh token si viene en cookie o body
+    rt = request.cookies.get(REFRESH_COOKIE_NAME) or refresh_token
+    if rt:
+        try:
+            jti = decode_token(rt).get("jti")
+            rec = db.query(RefreshToken).filter(RefreshToken.id == jti).first() if jti else None
+            if rec and not rec.revoked:
+                rec.revoked = True
+                db.commit()
+        except JWTError:
+            pass
     response = JSONResponse(content={"detail": "Sesión cerrada"})
     # Must match ALL attributes of the original set_cookie for browser to delete it
     _del_kwargs = dict(
@@ -130,6 +220,9 @@ def logout():
     response.delete_cookie(key=COOKIE_NAME, path="/", domain=settings.COOKIE_DOMAIN, **_del_kwargs)
     # Also delete legacy cookie set without explicit domain (exact origin match)
     response.delete_cookie(key=COOKIE_NAME, path="/", **_del_kwargs)
+    # [WF4] borrar cookie de refresh
+    response.delete_cookie(key=REFRESH_COOKIE_NAME, path="/", domain=settings.COOKIE_DOMAIN, **_del_kwargs)
+    response.delete_cookie(key=REFRESH_COOKIE_NAME, path="/", **_del_kwargs)
     return response
 
 

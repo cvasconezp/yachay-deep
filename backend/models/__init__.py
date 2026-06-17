@@ -14,6 +14,7 @@ from .alert_event import AlertEvent
 from .practica_preprofesional import PracticaPreprofesional, EscuelaPractica
 from .enrollment import Enrollment
 from .system_setting import SystemSetting
+from .refresh_token import RefreshToken
 
 __all__ = [
     "User", "Student", "Course", "AvacAccess",
@@ -21,5 +22,5 @@ __all__ = [
     "CourseConfig", "SemesterConfig", "RecommendationLog", "MLModelStore",
     "DocenteTracking", "AlertEvent",
     "PracticaPreprofesional", "EscuelaPractica",
-    "Enrollment", "SystemSetting",
+    "Enrollment", "SystemSetting", "RefreshToken",
 ]
