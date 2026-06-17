@@ -39,6 +39,23 @@ def _user_2fa_flags(user) -> dict:
     }
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+def _norm_tenant(t):
+    return (t or "").strip().lower() or None
+
+
+def _assert_can_manage_tenant(actor: User, target_tenant):
+    """Un super-admin (global) gestiona cualquier tenant. Un admin de tenant
+    solo puede gestionar usuarios de SU propio tenant (ni globales ni de otros)."""
+    target = _norm_tenant(target_tenant)
+    if is_super_admin(actor):
+        return
+    actor_tenant = _norm_tenant(actor.tenant)
+    if target is None:
+        raise HTTPException(status_code=403, detail="Solo el super-admin puede gestionar usuarios globales")
+    if target != actor_tenant:
+        raise HTTPException(status_code=403, detail="No puedes gestionar usuarios de otra institución")
+
+
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -262,8 +279,13 @@ def me(current_user: User = Depends(get_current_user)):
     )
 
 
-@router.post("/users", response_model=UserResponse, dependencies=[Depends(require_admin)])
-def create_user(payload: UserCreate, db: Session = Depends(get_db)):
+@router.post("/users", response_model=UserResponse)
+def create_user(payload: UserCreate, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    # [RBAC] Un admin de tenant solo crea usuarios de su propia institución.
+    target_tenant = payload.tenant
+    if not is_super_admin(current_user):
+        target_tenant = _norm_tenant(current_user.tenant)  # forzar a su tenant
+    _assert_can_manage_tenant(current_user, target_tenant)
     if db.query(User).filter(User.email == payload.email.lower()).first():
         raise HTTPException(status_code=400, detail="El email ya está registrado")
     user = User(
@@ -272,7 +294,7 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db)):
         hashed_password=hash_password(payload.password),
         role=payload.role,
         permissions=payload.permissions,
-        tenant=payload.tenant,
+        tenant=target_tenant,
     )
     db.add(user)
     db.commit()
@@ -295,17 +317,26 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db)):
     return user
 
 
-@router.get("/users", response_model=list[UserResponse], dependencies=[Depends(require_admin)])
-def list_users(db: Session = Depends(get_db)):
-    return db.query(User).all()
+@router.get("/users", response_model=list[UserResponse])
+def list_users(current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    # [RBAC] super-admin ve todos; admin de tenant solo los de su institución.
+    q = db.query(User)
+    if not is_super_admin(current_user):
+        q = q.filter(User.tenant == _norm_tenant(current_user.tenant))
+    return q.all()
 
 
-@router.patch("/users/{user_id}", response_model=UserResponse, dependencies=[Depends(require_admin)])
-def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)):
+@router.patch("/users/{user_id}", response_model=UserResponse)
+def update_user(user_id: int, payload: UserUpdate, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    # [RBAC] el actor debe poder gestionar el tenant ACTUAL del usuario objetivo...
+    _assert_can_manage_tenant(current_user, user.tenant)
     updates = payload.model_dump(exclude_unset=True)
+    # ...y si se intenta cambiar el tenant, también el destino debe estar permitido.
+    if "tenant" in updates:
+        _assert_can_manage_tenant(current_user, updates["tenant"])
     if "is_active" in updates:
         user.is_active = updates["is_active"]
     if "role" in updates:
