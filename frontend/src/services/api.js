@@ -28,7 +28,7 @@ class ApiClient {
     if (this._refreshing) return this._refreshing;
     this._refreshing = (async () => {
       try {
-        const r = await fetch(`${this.baseUrl}/auth/refresh`, { method: "POST", credentials: "include" });
+        const r = await fetch(`${this.baseUrl}/auth/refresh`, { method: "POST", credentials: "include", cache: "no-store" });
         return r.ok;
       } catch {
         return false;
@@ -66,6 +66,7 @@ class ApiClient {
         ...options,
         headers,
         credentials: "include",
+        cache: "no-store",
         signal: options.signal || controller?.signal,
       });
     } catch (e) {
@@ -121,6 +122,7 @@ class ApiClient {
   async getBlob(path, _retried = false) {
     const response = await fetch(`${this.baseUrl}${path}`, {
       credentials: "include",
+      cache: "no-store",
     });
     if (response.status === 401) {
       if (!_retried) {
