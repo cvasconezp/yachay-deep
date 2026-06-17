@@ -1,8 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
+import { useParams, useNavigate } from "react-router-dom";
+import Seguridad2FA from "./Seguridad2FA";
 
-const TABS = ["Sistema", "Cursos", "Semestre", "Usuarios"];
+const TABS = ["Sistema", "Cursos", "Semestre", "Usuarios", "Seguridad"];
+const TAB_SLUGS = { Sistema: "sistema", Cursos: "cursos", Semestre: "semestre", Usuarios: "usuarios", Seguridad: "seguridad" };
+const SLUG_TO_TAB = Object.fromEntries(Object.entries(TAB_SLUGS).map(([k, v]) => [v, k]));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TAB: SISTEMA (ETL)
@@ -1742,6 +1746,7 @@ function PermissionCheckboxes({ selected, onChange, compact = false }) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 function TabUsuarios() {
+  const { isSuperAdmin, user: actor } = useAuth();
   const [users, setUsers] = useState([]);
   const [institutions, setInstitutions] = useState([]);
   const [newUser, setNewUser] = useState({ email: "", nombre: "", password: "", role: "monitor", permissions: null, tenant: null, send_welcome_email: true });
@@ -1752,6 +1757,7 @@ function TabUsuarios() {
 
   useEffect(() => { reload(); }, []);
   useEffect(() => { api.getInstitutions().then(setInstitutions).catch(() => {}); }, []);
+  useEffect(() => { if (!isSuperAdmin && actor?.tenant) setNewUser(u => ({ ...u, tenant: actor.tenant })); }, [isSuperAdmin, actor]);
 
   // Códigos de institución (subdominios) disponibles
   const tenantOptions = ["ups", "demo", ...institutions
@@ -1804,6 +1810,7 @@ function TabUsuarios() {
               <option key={k} value={k}>{v}</option>
             ))}
           </select>
+          {isSuperAdmin ? (
           <select value={newUser.tenant ?? ""} onChange={e => setNewUser(u => ({ ...u, tenant: e.target.value || null }))}
             title="Institución a la que pertenece el usuario"
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
@@ -1812,6 +1819,10 @@ function TabUsuarios() {
               <option key={c} value={c}>{c.toUpperCase()}</option>
             ))}
           </select>
+          ) : (
+            <input value={(actor?.tenant || "").toUpperCase()} disabled title="Tu institución"
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-gray-100 text-gray-600" />
+          )}
           <button type="submit"
             className="bg-brand text-white rounded-lg py-2 text-sm font-semibold hover:bg-brand-light">
             Crear usuario
@@ -1907,7 +1918,7 @@ function TabUsuarios() {
   );
 }
 
-function EditUserModal({ user, tenantOptions = [], onClose, onSaved, onError }) {
+function EditUserModal({ user, tenantOptions = [], isSuperAdmin = false, actorTenant = null, onClose, onSaved, onError }) {
   const [nombre, setNombre] = useState(user.nombre || "");
   const [role, setRole] = useState(user.role || "monitor");
   const [permissions, setPermissions] = useState(user.permissions ?? null);
@@ -1990,6 +2001,7 @@ function EditUserModal({ user, tenantOptions = [], onClose, onSaved, onError }) 
 
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Institución</label>
+            {isSuperAdmin ? (
             <select value={tenant ?? ""} onChange={(e) => setTenant(e.target.value || null)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
               <option value="">🌐 Global (todas)</option>
@@ -1997,6 +2009,10 @@ function EditUserModal({ user, tenantOptions = [], onClose, onSaved, onError }) 
                 <option key={c} value={c}>{c.toUpperCase()}</option>
               ))}
             </select>
+            ) : (
+              <input value={(actorTenant || "").toUpperCase()} disabled title="Tu institución"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-gray-100 text-gray-600" />
+            )}
             <p className="text-[11px] text-gray-400 mt-1">
               Al iniciar sesión en kapak.yachaydeep.com el usuario será dirigido a su institución.
             </p>
@@ -2048,7 +2064,10 @@ function EditUserModal({ user, tenantOptions = [], onClose, onSaved, onError }) 
 // PÁGINA PRINCIPAL ADMIN
 // ─────────────────────────────────────────────────────────────────────────────
 export default function Admin() {
-  const [activeTab, setActiveTab] = useState("Sistema");
+  const { tab: tabParam } = useParams();
+  const navigate = useNavigate();
+  const activeTab = SLUG_TO_TAB[(tabParam || "sistema").toLowerCase()] || "Sistema";
+  const setActiveTab = (t) => navigate(`/admin/${TAB_SLUGS[t] || "sistema"}`);
 
   // Polling de progreso del scraping cada 15s
   useEffect(() => {
@@ -2093,6 +2112,7 @@ export default function Admin() {
       {activeTab === "Cursos" && <TabCursos />}
       {activeTab === "Semestre" && <TabSemestre />}
       {activeTab === "Usuarios" && <TabUsuarios />}
+      {activeTab === "Seguridad" && <Seguridad2FA />}
     </div>
   );
 }

@@ -257,6 +257,14 @@ export default function App() {
                 </PrivateRoute>
               }
             />
+            <Route
+              path="/admin/:tab"
+              element={
+                <PrivateRoute adminOnly>
+                  <Admin />
+                </PrivateRoute>
+              }
+            />
             <Route path="*" element={<Navigate to={isSubdomain() ? "/login" : "/"} />} />
           </Routes>
         </BrowserRouter>
