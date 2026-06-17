@@ -13,6 +13,7 @@ class Student(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(String, nullable=True, index=True, comment="[WF5] código de institución; NULL = global/single-tenant")
     cedula = Column(String, unique=True, index=True, nullable=True)
     nombre = Column(String, index=True, nullable=True)
     correo = Column(String, index=True, nullable=True)

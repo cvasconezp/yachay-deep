@@ -8,6 +8,7 @@ class Intervention(Base):
     __tablename__ = "interventions"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(String, nullable=True, index=True, comment="[WF5] código de institución; NULL = global/single-tenant")
     student_id = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), index=True)
     monitor_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     monitor_nombre = Column(String, nullable=True)   # denormalized for history display

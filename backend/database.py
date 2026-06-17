@@ -102,6 +102,7 @@ def upgrade_tables():
         ],
         "institutions": [],  # new table, created by create_all()
     "students": [
+            ("tenant_id",      "VARCHAR"),
             ("whatsapp",       "VARCHAR"),
             ("nivel_academico", "INTEGER"),
             ("pais",           "VARCHAR"),
@@ -125,11 +126,13 @@ def upgrade_tables():
             ("es_especial", "BOOLEAN DEFAULT false"),
         ],
         "grades": [
+            ("tenant_id", "VARCHAR"),
             ("periodo", "VARCHAR"),
             ("numero_repitencias", "INTEGER"),
             ("nivel", "INTEGER"),
         ],
         "interventions": [
+            ("tenant_id", "VARCHAR"),
             ("derivar_bienestar", "BOOLEAN"),
             ("tipo_evento_critico", "VARCHAR"),
             ("reporte_bienestar", "TEXT"),

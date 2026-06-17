@@ -14,6 +14,7 @@ class TaskSubmission(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(String, nullable=True, index=True, comment="[WF5] código de institución; NULL = global/single-tenant")
     student_id = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), index=True)
     codigo_curso = Column(String, index=True, nullable=False)
     periodo = Column(String, nullable=True)             # "P67", "P68" — identifies which semester

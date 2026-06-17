@@ -15,6 +15,7 @@ class Grade(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(String, nullable=True, index=True, comment="[WF5] código de institución; NULL = global/single-tenant")
     student_id = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), index=True)
     asignatura = Column(String, index=True, nullable=False)
     carrera = Column(String, nullable=True)
