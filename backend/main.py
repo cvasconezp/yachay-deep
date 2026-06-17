@@ -347,6 +347,11 @@ async def tenant_routing_middleware(request: Request, call_next):
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
     response = await call_next(request)
+    # [CACHE] Evita que CDNs (Vercel) cacheen respuestas de API entre tenants.
+    # Sin esto, una respuesta de un tenant podía servirse a otro (envenenamiento de caché).
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Vary"] = "X-Tenant, Origin"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
