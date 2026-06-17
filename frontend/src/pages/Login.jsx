@@ -27,6 +27,8 @@ function goAfterLogin(u, navigate) {
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
+  const [needs2FA, setNeeds2FA] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const { login, user, loading: authLoading } = useAuth();
@@ -47,10 +49,16 @@ export default function Login() {
     setError("");
     setLoading(true);
     try {
-      const u = await login(email, password);
+      const u = await login(email, password, needs2FA ? code : null);
       goAfterLogin(u, navigate);
     } catch (err) {
-      setError(err.message || "Credenciales incorrectas");
+      if (err.message === "2FA_REQUIRED") {
+        // Primer paso correcto: ahora pedir el código del autenticador.
+        setNeeds2FA(true);
+        setError("");
+      } else {
+        setError(err.message || "Credenciales incorrectas");
+      }
     } finally {
       setLoading(false);
     }
@@ -109,6 +117,24 @@ export default function Login() {
             />
           </div>
 
+          {needs2FA && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Código de verificación (2FA)</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                value={code}
+                onChange={e => setCode(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm tracking-widest text-center focus:outline-none focus:ring-2 focus:ring-brand-gold"
+                placeholder="123456"
+                autoFocus
+                required
+              />
+              <p className="text-xs text-gray-400 mt-1">Ingresa el código de tu app autenticadora o un código de recuperación.</p>
+            </div>
+          )}
+
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
               {error}
@@ -120,7 +146,7 @@ export default function Login() {
             disabled={loading}
             className="w-full bg-brand-gold text-brand-dark rounded-lg py-3 font-semibold text-sm hover:bg-brand-gold-light transition-colors disabled:opacity-60"
           >
-            {loading ? "Ingresando..." : "Ingresar"}
+            {loading ? "Ingresando..." : (needs2FA ? "Verificar código" : "Ingresar")}
           </button>
         </form>
 

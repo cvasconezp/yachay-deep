@@ -43,8 +43,8 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener("yd:unauthorized", onUnauth);
   }, []);
 
-  const login = useCallback(async (email, password) => {
-    const data = await api.login(email, password);
+  const login = useCallback(async (email, password, code = null) => {
+    const data = await api.login(email, password, code);
     setUser(data.user);
     setLocked(false);
     return data.user;

@@ -19,6 +19,7 @@ import Alertas from "./pages/Alertas";
 import ResumenDatos from "./pages/ResumenDatos";
 import Admin from "./pages/Admin";
 import About from "./pages/About";
+import Seguridad2FA from "./pages/Seguridad2FA";
 import EntregasPendientes from "./pages/EntregasPendientes";
 import { isSubdomain, isAdminHost } from "./hooks/useTenant";
 import TenantPortal from "./pages/TenantPortal";
@@ -166,6 +167,14 @@ export default function App() {
               element={
                 <PrivateRoute>
                   <FichaEstudiante />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/seguridad"
+              element={
+                <PrivateRoute>
+                  <Seguridad2FA />
                 </PrivateRoute>
               }
             />

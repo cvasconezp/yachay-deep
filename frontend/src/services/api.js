@@ -95,14 +95,27 @@ class ApiClient {
   }
 
   // ── Auth ──
-  login(email, password) {
+  login(email, password, code = null) {
     const form = new FormData();
     form.append("username", email);
     form.append("password", password);
+    if (code) form.append("code", code);
     return this.request("/auth/login", { method: "POST", body: form, headers: {} });
   }
   logout() { return this.request("/auth/logout", { method: "POST" }); }
   me() { return this.get("/auth/me"); }
+
+  // ── 2FA (TOTP) ──
+  get2FAStatus() { return this.get("/auth/2fa/status"); }
+  setup2FA() { return this.request("/auth/2fa/setup", { method: "POST" }); }
+  verifySetup2FA(code) {
+    const form = new FormData(); form.append("code", code);
+    return this.request("/auth/2fa/verify-setup", { method: "POST", body: form, headers: {} });
+  }
+  disable2FA(password) {
+    const form = new FormData(); form.append("password", password);
+    return this.request("/auth/2fa/disable", { method: "POST", body: form, headers: {} });
+  }
 
   // PIN de desbloqueo
   setPin(pin, password) { return this.request("/auth/set-pin", { method: "POST", body: JSON.stringify({ pin, password }) }); }
