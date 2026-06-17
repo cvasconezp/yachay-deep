@@ -428,18 +428,39 @@ SUBJECTS = [
     "Pensamiento Crítico", "Realidad Nacional", "Antropología", "Pedagogía General",
     "Didáctica", "Evaluación Educativa", "Tecnologías Educativas", "Inglés I",
     "Inglés II", "Contabilidad Básica", "Derecho Constitucional", "Biología",
-    "Química General", "Física", "Filosofía", "Currículo", "Práctica Preprofesional",
+    "Química General", "Física", "Filosofía", "Currículo", "Práctica Preprofesional I",
     "Innovación Educativa", "Gestión del Talento", "Marketing Digital",
+    "Cálculo Integral", "Probabilidad", "Investigación de Operaciones", "Ecología",
+    "Historia del Pensamiento", "Comunicación Digital", "Liderazgo", "Inglés III",
+    "Inglés IV", "Estructura de Datos", "Redes y Comunicaciones", "Sistemas Operativos",
+    "Bioquímica", "Microbiología", "Derecho Laboral", "Finanzas",
+    "Gestión Ambiental", "Diseño Curricular", "Psicopedagogía", "Neurociencia Educativa",
+    "Práctica Preprofesional II", "Trabajo de Titulación", "Emprendimiento",
+    "Ética y Ciudadanía", "Cultura Física", "Realidad Socioeconómica",
+    "Tecnologías Emergentes", "Gestión de la Calidad", "Auditoría",
 ]
+
+# Banco para construir una malla determinista por carrera: 8 niveles x ≤6 materias.
+def _build_malla_por_carrera():
+    malla = {}
+    for ci, carrera in enumerate(DEMO_CARRERAS):
+        rnd = random.Random(1000 + ci)  # determinista por carrera (independiente del seed global)
+        pool = SUBJECTS.copy(); rnd.shuffle(pool)
+        idx = 0; niveles = {}
+        for nivel in range(1, 9):
+            k = rnd.randint(4, 6)        # ≤6 materias por nivel
+            niveles[nivel] = pool[idx:idx + k]; idx += k
+        malla[carrera] = niveles
+    return malla
 
 
 def _wipe_demo(demo_db):
     """Borra TODOS los datos del demo (respetando FKs). No toca usuarios/settings."""
     from ..models import (AlertEvent, Intervention, Grade, Enrollment, AvacAccess,
                           TaskSubmission, DocenteTracking, RecommendationLog, Student,
-                          CourseConfig, SemesterConfig)
+                          CourseConfig, SemesterConfig, ScrapingRun)
     for model in (AlertEvent, Intervention, RecommendationLog, DocenteTracking,
-                  Grade, Enrollment, AvacAccess, TaskSubmission, Student,
+                  Grade, Enrollment, AvacAccess, TaskSubmission, ScrapingRun, Student,
                   CourseConfig, SemesterConfig):
         try:
             demo_db.query(model).delete()
@@ -492,84 +513,118 @@ def demo_info(current_user=Depends(get_current_user)):
 
 @router.post("/regenerate-synthetic")
 def regenerate_synthetic(
-    n_estudiantes: int = Query(120, ge=10, le=600),
+    n_estudiantes: int = Query(1000, ge=10, le=2000),
     current_user=Depends(get_current_user),
 ):
     """[DEMO] Regenera la BD demo con datos 100% sintéticos (sin PII real).
-    Máximo 6 materias por estudiante/semestre. Solo super-admin."""
+    Malla por carrera con máx 6 materias por nivel; incluye historial de
+    calificaciones (para ML), alertas, intervenciones, seguimiento docente
+    y un historial de ejecuciones de scraping. Solo super-admin."""
     from ..auth.jwt import is_super_admin
     if not is_super_admin(current_user):
         raise HTTPException(status_code=403, detail="Se requiere super administrador (admin global)")
 
     from datetime import datetime, timezone, timedelta
     from ..models import (Student, Enrollment, Grade, AvacAccess, TaskSubmission,
-                          SemesterConfig)
+                          SemesterConfig, Intervention, DocenteTracking, ScrapingRun)
+
+    PERIODOS_HIST = ["P65", "P66", "P67"]  # niveles pasados → periodos históricos (para ML)
+    APROB = 70.0
 
     demo_db = _get_demo_db()
     try:
         _wipe_demo(demo_db)
+        malla = _build_malla_por_carrera()
+        docentes_pool = [_rn() for _ in range(25)]
 
-        # Semestre activo demo (fechas vigentes para que el período actual funcione)
         now = datetime.now(timezone.utc)
-        sem = SemesterConfig(
+        demo_db.add(SemesterConfig(
             semestre="P68", activo=True, bloque_actual="2",
             bloque1_inicio=now - timedelta(days=120), bloque1_fin=now - timedelta(days=40),
             bloque2_inicio=now - timedelta(days=39), bloque2_fin=now + timedelta(days=40),
-        )
-        demo_db.add(sem); demo_db.commit()
+        ))
+        demo_db.commit()
 
         creados = {"estudiantes": 0, "matriculas": 0, "calificaciones": 0,
-                   "accesos": 0, "tareas": 0}
+                   "accesos": 0, "tareas": 0, "intervenciones": 0,
+                   "seguimiento_docente": 0, "alertas": 0, "scraping_runs": 0}
 
-        for _ in range(n_estudiantes):
+        for _i in range(n_estudiantes):
             nom = random.choice(NOMBRES)
             ap1, ap2 = random.choice(APELLIDOS), random.choice(APELLIDOS)
+            carrera = random.choice(DEMO_CARRERAS)
+            niveles_malla = malla[carrera]
             nivel = random.randint(1, 8)
             dias = random.choice([0, 1, 3, 7, 12, 16, 20, 25, 30])
             comp = round(random.uniform(0.1, 1.0), 2)
-            tareas = round(random.uniform(20, 100), 1)
-            prom = round(random.uniform(45, 98), 1)
+            tareas_pct = round(random.uniform(20, 100), 1)
             riesgo = ("Alto" if (dias > 21 or comp < 0.3)
                       else "Medio" if (dias > 14 or comp < 0.5) else "Bajo")
-            carrera = random.choice(DEMO_CARRERAS)
+
             st = Student(
-                cedula=_ced(), nombre=f"{ap1} {ap2} {nom}", correo=_em(nom, ap1),
+                cedula=f"9{_i:09d}", nombre=f"{ap1} {ap2} {nom}", correo=_em(nom, ap1),
                 correo_institucional=_em(nom, ap1), telefono=_ph(), carrera=carrera,
                 nivel_academico=nivel, nivel_riesgo=riesgo, indice_compromiso=comp,
-                dias_sin_acceso=dias, porcentaje_tareas=tareas, promedio_calificaciones=prom,
+                dias_sin_acceso=dias, porcentaje_tareas=tareas_pct,
                 pais="Ecuador", provincia=random.choice(PROVINCIAS), ciudad=random.choice(CIUDADES),
                 genero=random.choice(["M", "F"]), periodo="P68", estado_matricula="Matriculado",
             )
             demo_db.add(st); demo_db.flush()
             creados["estudiantes"] += 1
 
-            # ≤6 materias por semestre
-            materias = random.sample(SUBJECTS, k=random.randint(4, 6))
-            for asig in materias:
+            notas_acum = []
+
+            # ── Historial: niveles 1..nivel-1 ya aprobados (para malla + ML) ──
+            for nv in range(1, nivel):
+                periodo_hist = PERIODOS_HIST[(nv - 1) % len(PERIODOS_HIST)]
+                for asig in niveles_malla[nv]:
+                    nota = round(random.uniform(70, 96), 1)  # historial mayormente aprobado
+                    notas_acum.append(nota)
+                    demo_db.add(Grade(student_id=st.id, asignatura=asig, carrera=carrera,
+                                      docente=random.choice(docentes_pool), nota_final=nota,
+                                      periodo=periodo_hist, nivel=nv))
+                    creados["calificaciones"] += 1
+
+            # ── Nivel actual (≤6 materias): matrículas + notas + tareas + docente ──
+            for asig in niveles_malla[nivel]:
                 codigo = f"DEMO{random.randint(100000, 999999)}"
-                docente = _rn()
+                docente = random.choice(docentes_pool)
                 demo_db.add(Enrollment(
                     student_id=st.id, codigo_grupo=codigo, asignatura=asig, carrera=carrera,
                     nivel=nivel, docente=docente, periodo="68", bloque=2,
                     estado_matriculado="MATRICULADO",
                 ))
                 creados["matriculas"] += 1
-                demo_db.add(Grade(
-                    student_id=st.id, asignatura=asig, carrera=carrera, docente=docente,
-                    nota_final=round(random.uniform(40, 100), 1), periodo="P68", nivel=nivel,
-                ))
+                # nota actual: sesgada por el riesgo del estudiante
+                base = 55 if riesgo == "Alto" else 68 if riesgo == "Medio" else 80
+                nota = round(min(100, max(0, random.gauss(base, 12))), 1)
+                notas_acum.append(nota)
+                demo_db.add(Grade(student_id=st.id, asignatura=asig, carrera=carrera,
+                                  docente=docente, nota_final=nota, periodo="P68", nivel=nivel))
                 creados["calificaciones"] += 1
-                # algunas tareas por materia
-                for u in range(1, random.randint(2, 5)):
-                    entregada = random.random() > 0.25
+                # tareas por materia
+                for u in range(1, random.randint(3, 5)):
+                    entregada = random.random() < (tareas_pct / 100.0)
                     demo_db.add(TaskSubmission(
                         student_id=st.id, codigo_curso=codigo, periodo="P68", unidad=str(u),
                         entregada=entregada, calificada=entregada,
                         calificacion=round(random.uniform(5, 10), 1) if entregada else None,
-                        calificacion_maxima=10.0,
+                        calificacion_maxima=10.0, retrasada=(not entregada and random.random() < 0.5),
                     ))
                     creados["tareas"] += 1
+                # seguimiento docente (puntualidad de calificación)
+                retraso = round(random.uniform(-3, 10), 1)
+                demo_db.add(DocenteTracking(
+                    codigo_curso=codigo, nombre_curso=asig, actividad=f"Tarea {random.randint(1,4)}",
+                    tipo_actividad="tarea", calificada=(retraso < 7), docente=docente,
+                    dias_retraso=retraso, semestre="P68", fuente="demo-sintetico",
+                ))
+                creados["seguimiento_docente"] += 1
 
+            # promedio del estudiante
+            st.promedio_calificaciones = round(sum(notas_acum) / len(notas_acum), 1) if notas_acum else None
+
+            # acceso AVAC
             demo_db.add(AvacAccess(
                 student_id=st.id, codigo_curso=f"DEMO{random.randint(100000, 999999)}",
                 periodo="P68", dias_sin_acceso=float(dias),
@@ -577,7 +632,45 @@ def regenerate_synthetic(
             ))
             creados["accesos"] += 1
 
+            if _i % 100 == 99:
+                demo_db.commit()
+
+            # intervención para algunos en riesgo
+            if riesgo in ("Alto", "Medio") and random.random() < 0.4:
+                demo_db.add(Intervention(
+                    student_id=st.id, monitor_nombre=random.choice(docentes_pool), carrera=carrera,
+                    medio=random.choice(["WhatsApp", "Llamada", "Email"]),
+                    motivo=random.choice(["Bajo rendimiento", "Inactividad", "Tareas atrasadas"]),
+                    estado=random.choice(["Activo", "SNA", "Cerrado"]),
+                    resultado=random.choice(["Contactado", "No contestó", "Comprometido"]),
+                    requiere_seguimiento=random.choice(["si", "no"]),
+                    observacion=random.choice(OBS), periodo="P68",
+                ))
+                creados["intervenciones"] += 1
+
         demo_db.commit()
+
+        # ── Historial de scraping (para que el panel no esté vacío) ──
+        for i in range(6):
+            d = now - timedelta(days=i)
+            demo_db.add(ScrapingRun(
+                tipo="full", status="success",
+                cursos_procesados=random.randint(600, 730), cursos_error=0,
+                registros_insertados=random.randint(60000, 71000),
+                descripcion="Pipeline ETL completo (demo sintético)",
+                triggered_by="demo", started_at=d, finished_at=d + timedelta(minutes=random.randint(20, 90)),
+            ))
+            creados["scraping_runs"] += 1
+        demo_db.commit()
+
+        # ── Alertas: reutiliza la lógica real de generación sobre la BD demo ──
+        try:
+            from ..services.alert_generator import generate_alerts_batch
+            res_al = generate_alerts_batch(demo_db)
+            creados["alertas"] = res_al.get("created", 0)
+        except Exception as e:
+            logger.warning(f"[DEMO] alertas: {e}")
+
         logger.info(f"[DEMO] Datos sintéticos regenerados: {creados}")
         return {"detail": "Datos demo regenerados", "creados": creados}
     finally:

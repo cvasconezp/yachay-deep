@@ -157,7 +157,12 @@ class ApiClient {
   createUser(data) { return this.post("/auth/users", data); }
   listUsers() { return this.get("/auth/users"); }
   resetUser2FA(userId) { return this.request(`/auth/users/${userId}/reset-2fa`, { method: "POST" }); }
-  regenerateDemoSynthetic(n = 120) { return this.request(`/admin/demo/regenerate-synthetic?n_estudiantes=${n}`, { method: "POST" }); }
+  regenerateDemoSynthetic(n = 1000) {
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), 180000); // hasta 3 min
+    return this.request(`/admin/demo/regenerate-synthetic?n_estudiantes=${n}`, { method: "POST", signal: controller.signal })
+      .finally(() => clearTimeout(t));
+  }
   updateUser(id, data) { return this.patch(`/auth/users/${id}`, data); }
 
   // ── Students (PERF-01: paginado) ──
