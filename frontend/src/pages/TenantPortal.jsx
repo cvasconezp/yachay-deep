@@ -30,7 +30,8 @@ const TENANT_CONFIGS = {
   },
 };
 
-function TenantCard({ tenant, code, onNavigate }) {
+function TenantCard({ tenant, code, onNavigate, isSuperAdmin = false }) {
+  const [viewAs, setViewAs] = useState("");
   const config = TENANT_CONFIGS[code] || {
     name: tenant?.nombre || code,
     short: code.toUpperCase(),
@@ -44,8 +45,9 @@ function TenantCard({ tenant, code, onNavigate }) {
   const subdomain = `https://${code}.yachaydeep.com`;
 
   return (
+    <div>
     <button
-      onClick={() => onNavigate(subdomain)}
+      onClick={() => onNavigate(subdomain, viewAs)}
       className="group relative bg-white rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden text-left w-full border border-gray-100 hover:border-gray-200 hover:-translate-y-1"
     >
       {/* Top gradient bar */}
@@ -82,11 +84,24 @@ function TenantCard({ tenant, code, onNavigate }) {
         </div>
       </div>
     </button>
+    {isSuperAdmin && (
+      <div className="mt-2 flex items-center gap-2 text-xs px-1">
+        <span className="text-gray-500">Ver como:</span>
+        <select value={viewAs} onChange={e => setViewAs(e.target.value)} onClick={e => e.stopPropagation()}
+          className="border border-gray-300 rounded px-2 py-1 text-xs bg-white">
+          <option value="">Admin (mi vista)</option>
+          <option value="coordinador">Coordinador</option>
+          <option value="docente">Docente (solo lectura)</option>
+          <option value="monitor">Monitor</option>
+        </select>
+      </div>
+    )}
+    </div>
   );
 }
 
 export default function TenantPortal() {
-  const { user, logout } = useAuth();
+  const { user, logout, realIsSuperAdmin } = useAuth();
   const [institutions, setInstitutions] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -97,8 +112,8 @@ export default function TenantPortal() {
       .finally(() => setLoading(false));
   }, []);
 
-  const handleNavigate = (url) => {
-    window.location.href = url;
+  const handleNavigate = (url, viewAs) => {
+    window.location.href = viewAs ? `${url}/dashboard?view_as=${viewAs}` : url;
   };
 
   // Merge API institutions with hardcoded tenant configs
@@ -156,6 +171,7 @@ export default function TenantPortal() {
                   code={code}
                   tenant={inst}
                   onNavigate={handleNavigate}
+                  isSuperAdmin={realIsSuperAdmin}
                 />
               );
             })}

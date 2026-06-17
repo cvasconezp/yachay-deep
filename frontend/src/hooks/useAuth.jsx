@@ -27,6 +27,7 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [locked, setLocked] = useState(false);
   const [viewAsRole, setViewAsRoleState] = useState(() => sessionStorage.getItem("yd_view_as") || null);
+  const pendingViewAsRef = useRef(typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("view_as") : null);
   const intervalRef = useRef(null);
 
   // Cargar usuario al montar (la cookie HttpOnly se envía automáticamente)
@@ -104,6 +105,22 @@ export function AuthProvider({ children }) {
   const isReadOnly = previewing && viewAsRole === "docente";
 
   useEffect(() => { api.setPreviewReadOnly && api.setPreviewReadOnly(isReadOnly); }, [isReadOnly]);
+
+  // [AUDIT] Aplicar ?view_as=<rol> al entrar desde el portal (cross-subdominio)
+  useEffect(() => {
+    const role = pendingViewAsRef.current;
+    if (role && user?.is_super_admin) {
+      pendingViewAsRef.current = null;
+      if (["monitor", "docente", "coordinador"].includes(role)) {
+        sessionStorage.setItem("yd_view_as", role);
+        setViewAsRoleState(role);
+      }
+      try {
+        const u = new URL(window.location.href); u.searchParams.delete("view_as");
+        window.history.replaceState({}, "", u.toString());
+      } catch { /* ignore */ }
+    }
+  }, [user]);
 
   return (
     <AuthContext.Provider value={{
