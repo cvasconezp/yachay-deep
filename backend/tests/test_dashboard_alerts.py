@@ -65,7 +65,7 @@ def sample_avac(db, sample_students, semester_config):
 @pytest.fixture
 def sample_alerts(db, sample_students):
     alerts = [
-        AlertEvent(student_id=1, tipo="inactividad", severidad="critico",
+        AlertEvent(student_id=1, tipo="inactividad", severidad="medio",
                    mensaje="25 dias sin acceso", leido=False),
         AlertEvent(student_id=1, tipo="compromiso_bajo", severidad="alto",
                    mensaje="Compromiso 0.2", leido=False),
@@ -209,18 +209,19 @@ class TestAlertCount:
         assert resp.status_code == 200
         data = resp.json()
         assert data["total"] == 2  # 2 unread
-        assert data["critico"] == 1
-        assert data["alto"] == 1
-        assert data["medio"] == 0  # the medio one is already read
+        # Taxonomía real de severidad: alto / medio / bajo (no "critico")
+        assert data["alto"] == 1   # compromiso_bajo (unread)
+        assert data["medio"] == 1  # inactividad (unread); el otro medio está leído
+        assert data["bajo"] == 0
 
     def test_no_alerts_returns_zeros(self, client, admin_token, semester_config):
         resp = client.get("/alerts/count", headers=auth(admin_token))
         assert resp.status_code == 200
         data = resp.json()
         assert data["total"] == 0
-        assert data["critico"] == 0
         assert data["alto"] == 0
         assert data["medio"] == 0
+        assert data["bajo"] == 0
 
 
 # ─── Alerts: /alerts/{id}/read ───────────────────────────────────────────────
@@ -275,22 +276,23 @@ class TestGenerateAlerts:
     def test_dedup_no_duplicates_within_7_days(
         self, client, admin_token, db, sample_students, sample_avac, semester_config
     ):
-        # First generation
+        # Primera generación
         resp1 = client.post("/alerts/generate", headers=auth(admin_token))
         assert resp1.status_code == 200
         first_count = resp1.json()["created"]
         assert first_count >= 1
 
-        # Mark all alerts as read so they survive the stale cleanup
-        db.query(AlertEvent).update({"leido": True})
-        db.commit()
-
-        # Second generation should not duplicate read alerts within 7 days
+        # Estrategia full-refresh: regenerar borra todas y recrea las que persisten.
+        # Como las condiciones siguen vigentes, el conteo es idempotente (no crece)
+        # y NO se acumulan duplicados por (student_id, tipo).
         resp2 = client.post("/alerts/generate", headers=auth(admin_token))
         assert resp2.status_code == 200
         second_count = resp2.json()["created"]
-        # Dedup: same student+tipo within 7 days should not be recreated
-        assert second_count == 0
+        assert second_count == first_count
+
+        rows = db.query(AlertEvent).all()
+        keys = [(a.student_id, a.tipo) for a in rows]
+        assert len(keys) == len(set(keys))  # sin duplicados
 
     def test_no_active_semester_returns_zero(
         self, client, admin_token, sample_students
