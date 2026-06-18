@@ -475,14 +475,22 @@ def whoami(db: Session = Depends(get_db), current_user=Depends(get_current_user)
     si ups está cayendo en la BD demo por error. Usa get_db (mismo que /courses)."""
     from ..database import get_current_tenant
     from ..models.course_config import CourseConfig, SemesterConfig
+    from sqlalchemy import func as _func
     bind = db.get_bind()
     sc = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
+    activo = sc.semestre if sc else None
+    # desglose: cuántos CourseConfig hay por cada valor de semestre (detecta mismatches)
+    por_sem = dict(db.query(CourseConfig.semestre, _func.count(CourseConfig.id))
+                     .group_by(CourseConfig.semestre).all())
     return {
         "resolved_tenant": get_current_tenant(),
         "db_host": getattr(bind.url, "host", None),
         "db_name": getattr(bind.url, "database", None),
-        "course_configs": db.query(CourseConfig).count(),
-        "semestre_activo": sc.semestre if sc else None,
+        "course_configs_total": db.query(CourseConfig).count(),
+        "semestre_activo": activo,
+        "cursos_en_semestre_activo": db.query(CourseConfig).filter(CourseConfig.semestre == activo).count() if activo else None,
+        "cursos_activos_en_semestre_activo": db.query(CourseConfig).filter(CourseConfig.semestre == activo, CourseConfig.activo == True).count() if activo else None,
+        "cursos_por_semestre": {str(k): v for k, v in por_sem.items()},
         "user": current_user.email,
     }
 
