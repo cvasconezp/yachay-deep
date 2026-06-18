@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { api } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
 import { useNavigate } from "react-router-dom";
+import { getTenant } from "../hooks/useTenant";
 
 /**
  * [WF3] Pantalla de gestión de 2FA (TOTP): enrolamiento con QR,
@@ -30,7 +31,7 @@ export default function Seguridad2FA() {
   const loadStatus = () => api.get2FAStatus().then(setStatus).catch(() => {});
   useEffect(() => { loadStatus(); }, []);
   useEffect(() => {
-    if (isAdmin) api.listUsers().then(setUsuarios).catch(() => setUsuarios([]));
+    if (isAdmin) api.listUsers(getTenant()).then(setUsuarios).catch(() => setUsuarios([]));
   }, [isAdmin]);
 
   const resetUsuario2FA = async () => {
@@ -39,7 +40,7 @@ export default function Seguridad2FA() {
     try {
       const r = await api.resetUser2FA(resetUserId);
       setResetMsg(r.detail || "2FA reseteado");
-      api.listUsers().then(setUsuarios).catch(() => {});
+      api.listUsers(getTenant()).then(setUsuarios).catch(() => {});
     } catch (e) { setResetMsg("Error: " + e.message); }
     finally { setBusy(false); }
   };

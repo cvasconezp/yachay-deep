@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { api } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
 import { useParams, useNavigate } from "react-router-dom";
+import { getTenant } from "../hooks/useTenant";
 import Seguridad2FA from "./Seguridad2FA";
 
 const TABS = ["Sistema", "Cursos", "Semestre", "Usuarios", "Seguridad"];
@@ -1720,7 +1721,7 @@ function TabUsuarios() {
   const [userMsg, setUserMsg] = useState("");
   const [editing, setEditing] = useState(null); // user being edited, or null
 
-  const reload = () => api.listUsers().then(setUsers).catch(() => setUserMsg("Error: No se pudieron cargar los usuarios"));
+  const reload = () => api.listUsers(getTenant()).then(setUsers).catch(() => setUserMsg("Error: No se pudieron cargar los usuarios"));
 
   useEffect(() => { reload(); }, []);
   useEffect(() => { api.getInstitutions().then(setInstitutions).catch(() => {}); }, []);

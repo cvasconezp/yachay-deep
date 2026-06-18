@@ -177,7 +177,7 @@ class ApiClient {
   verifyPin(pin) { return this.request("/auth/verify-pin", { method: "POST", body: JSON.stringify({ pin }) }); }
   removePin() { return this.request("/auth/pin", { method: "DELETE" }); }
   createUser(data) { return this.post("/auth/users", data); }
-  listUsers() { return this.get("/auth/users"); }
+  listUsers(scope = null) { return this.get(`/auth/users${scope ? "?scope=" + encodeURIComponent(scope) : ""}`); }
   resetUser2FA(userId) { return this.request(`/auth/users/${userId}/reset-2fa`, { method: "POST" }); }
   resetUserPassword(userId, new_password) { return this.request(`/auth/users/${userId}/reset-password`, { method: "POST", body: JSON.stringify({ new_password }) }); }
   regenerateDemoSynthetic(n = 1000) {

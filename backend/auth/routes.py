@@ -318,10 +318,18 @@ def create_user(payload: UserCreate, current_user: User = Depends(require_admin)
 
 
 @router.get("/users", response_model=list[UserResponse])
-def list_users(current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
-    # [RBAC] super-admin ve todos; admin de tenant solo los de su institución.
+def list_users(scope: Optional[str] = None, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    """[RBAC] Vista por instancia:
+    - super-admin en kapak (scope vacío): ve TODOS los usuarios (gestión global).
+    - super-admin dentro de una instancia (scope=ups/demo): ve los de esa institución + los globales.
+    - admin de tenant: solo los de su propia institución."""
+    from sqlalchemy import or_
     q = db.query(User)
-    if not is_super_admin(current_user):
+    if is_super_admin(current_user):
+        sc = _norm_tenant(scope)
+        if sc is not None:
+            q = q.filter(or_(User.tenant == sc, User.tenant.is_(None), User.tenant == ""))
+    else:
         q = q.filter(User.tenant == _norm_tenant(current_user.tenant))
     return q.all()
 
