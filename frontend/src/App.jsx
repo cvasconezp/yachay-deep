@@ -124,9 +124,9 @@ export default function App() {
               element={
                 isAdminHost() ? (
                   /* kapak.yachaydeep.com → panel de administración en la raíz */
-                  <PortalRoute>
+                  <PrivateRoute adminOnly>
                     <TenantPortal />
-                  </PortalRoute>
+                  </PrivateRoute>
                 ) : isSubdomain() ? (
                   <Navigate to="/login" replace />
                 ) : (
@@ -141,9 +141,9 @@ export default function App() {
                 isAdminHost() ? (
                   <Navigate to="/" replace />
                 ) : (
-                  <PortalRoute>
+                  <PrivateRoute adminOnly>
                     <TenantPortal />
-                  </PortalRoute>
+                  </PrivateRoute>
                 )
               }
             />

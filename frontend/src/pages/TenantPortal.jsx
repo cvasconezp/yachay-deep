@@ -125,7 +125,7 @@ function TenantCard({ tenant, code, onNavigate, isSuperAdmin = false }) {
 }
 
 export default function TenantPortal() {
-  const { user, logout, realIsSuperAdmin } = useAuth();
+  const { realIsSuperAdmin } = useAuth();
   const [institutions, setInstitutions] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -150,73 +150,40 @@ export default function TenantPortal() {
   });
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
-      {/* Header */}
-      <header className="bg-white/80 backdrop-blur border-b border-gray-200">
-        <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <a href="https://yachaydeep.com"><YachayLogo variant="light" className="h-10 w-auto" /></a>
-            <div className="hidden sm:block">
-              <span className="text-xs font-medium text-brand-gold bg-brand-gold/10 px-2 py-1 rounded">
-                KAPAK
-              </span>
-            </div>
-          </div>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-600">{user?.nombre}</span>
-            <button
-              onClick={logout}
-              className="text-sm text-gray-400 hover:text-red-500 transition-colors"
-            >
-              Cerrar sesión
-            </button>
-          </div>
+    <div>
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold text-gray-900">Portal de Administración</h1>
+        <p className="text-gray-500 mt-1">
+          Selecciona una instancia para gestionar. Cada subdominio opera con datos independientes.
+        </p>
+      </div>
+
+      {loading ? (
+        <div className="text-center py-20 text-gray-400">Cargando instancias...</div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {tenantCodes.map((code) => {
+            const inst = institutions.find((i) => i.codigo === code);
+            return (
+              <TenantCard
+                key={code}
+                code={code}
+                tenant={inst}
+                onNavigate={handleNavigate}
+                isSuperAdmin={realIsSuperAdmin}
+              />
+            );
+          })}
+
+          <button
+            onClick={() => { window.location.href = "/core/kapak"; }}
+            className="border-2 border-dashed border-gray-300 rounded-2xl p-6 flex flex-col items-center justify-center gap-2 text-gray-400 hover:border-brand-gold hover:text-brand-gold transition-colors min-h-[200px]"
+          >
+            <span className="text-4xl">+</span>
+            <span className="text-sm font-medium">Nueva instancia</span>
+          </button>
         </div>
-      </header>
-
-      {/* Main */}
-      <main className="max-w-5xl mx-auto px-6 py-12">
-        <div className="mb-10 flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Portal de Administración</h1>
-            <p className="text-gray-500 mt-2">
-              Selecciona una instancia para gestionar. Cada subdominio opera con datos independientes.
-            </p>
-          </div>
-          <a href="/admin/usuarios"
-            className="shrink-0 inline-flex items-center gap-2 bg-brand text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-dark transition-colors">
-            👥 Usuarios globales
-          </a>
-        </div>
-
-        {loading ? (
-          <div className="text-center py-20 text-gray-400">Cargando instancias...</div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {tenantCodes.map((code) => {
-              const inst = institutions.find((i) => i.codigo === code);
-              return (
-                <TenantCard
-                  key={code}
-                  code={code}
-                  tenant={inst}
-                  onNavigate={handleNavigate}
-                  isSuperAdmin={realIsSuperAdmin}
-                />
-              );
-            })}
-
-            {/* Add new tenant card */}
-            <button
-              onClick={() => { window.location.href = "/core/kapak"; }}
-              className="border-2 border-dashed border-gray-300 rounded-2xl p-6 flex flex-col items-center justify-center gap-2 text-gray-400 hover:border-brand-gold hover:text-brand-gold transition-colors min-h-[200px]"
-            >
-              <span className="text-4xl">+</span>
-              <span className="text-sm font-medium">Nueva instancia</span>
-            </button>
-          </div>
-        )}
-      </main>
+      )}
     </div>
   );
 }
