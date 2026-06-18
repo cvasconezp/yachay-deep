@@ -1725,8 +1725,10 @@ function TabUsuarios() {
 
   const deleteUsuario = async (u) => {
     if (!window.confirm(`¿Eliminar definitivamente al usuario "${u.email}"? Esta acción no se puede deshacer.`)) return;
+    const password = window.prompt("Para confirmar, ingresa TU contraseña de administrador:");
+    if (!password) return;
     try {
-      await api.deleteUser(u.id);
+      await api.deleteUser(u.id, password);
       setUserMsg("");
       reload();
     } catch (e) { setUserMsg("Error: " + e.message); }
