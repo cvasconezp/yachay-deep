@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { api } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
 import { useParams, useNavigate } from "react-router-dom";
-import { getTenant } from "../hooks/useTenant";
+import { getTenant, isAdminHost } from "../hooks/useTenant";
 import Seguridad2FA from "./Seguridad2FA";
 
 const TABS = ["Sistema", "Cursos", "Semestre", "Usuarios", "Seguridad"];
@@ -2051,8 +2051,13 @@ function EditUserModal({ user, tenantOptions = [], isSuperAdmin = false, actorTe
 export default function Admin() {
   const { tab: tabParam } = useParams();
   const navigate = useNavigate();
-  const activeTab = SLUG_TO_TAB[(tabParam || "sistema").toLowerCase()] || "Sistema";
-  const setActiveTab = (t) => navigate(`/admin/${TAB_SLUGS[t] || "sistema"}`);
+  const onKapak = isAdminHost();
+  // En kapak (core) solo Usuarios y Seguridad; en instancias, todas las pestañas.
+  const visibleTabs = onKapak ? TABS.filter(t => t === "Usuarios" || t === "Seguridad") : TABS;
+  const _default = onKapak ? "usuarios" : "sistema";
+  let activeTab = SLUG_TO_TAB[(tabParam || _default).toLowerCase()] || (onKapak ? "Usuarios" : "Sistema");
+  if (!visibleTabs.includes(activeTab)) activeTab = visibleTabs[0];
+  const setActiveTab = (t) => navigate(`/admin/${TAB_SLUGS[t] || _default}`);
 
   // Polling de progreso del scraping cada 15s
   useEffect(() => {
@@ -2078,7 +2083,7 @@ export default function Admin() {
 
       {/* Tab bar */}
       <div className="flex gap-1 border-b border-gray-200">
-        {TABS.map(tab => (
+        {visibleTabs.map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}

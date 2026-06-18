@@ -4,7 +4,7 @@ import { useAuth } from "../hooks/useAuth";
 import { api } from "../services/api";
 import { YachayLogo, YachayIcon } from "./YachayLogo";
 import NotificationBell from "./NotificationBell";
-import { useTenant } from "../hooks/useTenant";
+import { useTenant, isAdminHost } from "../hooks/useTenant";
 
 import PinSetupModal from "./PinSetupModal";
 const NAV_ITEMS = [
@@ -90,9 +90,18 @@ export function Layout({ children }) {
     window.location.href = "/login";
   };
 
+  // [KAPAK] El panel core (kapak) NO es una institución: menú mínimo, sin vistas institucionales.
+  const onKapak = isAdminHost();
+  const KAPAK_ITEMS = [
+    { path: "/", label: "Portal", icon: "🏠" },
+    { path: "/admin/usuarios", label: "Usuarios", icon: "👥" },
+    { path: "/admin/seguridad", label: "Seguridad", icon: "🔒" },
+  ];
   // Filtrar sidebar según permisos del usuario
   const allItems = isAdmin ? [...NAV_ITEMS, ...ADMIN_ITEMS] : NAV_ITEMS;
-  const navItems = user?.permissions
+  const navItems = onKapak
+    ? KAPAK_ITEMS
+    : user?.permissions
     ? allItems.filter(item => {
         // Admin tab always visible for admins
         if (item.path === "/admin") return true;
