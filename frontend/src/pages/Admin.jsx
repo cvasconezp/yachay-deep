@@ -1723,6 +1723,15 @@ function TabUsuarios() {
 
   const reload = () => api.listUsers(getTenant()).then(setUsers).catch(() => setUserMsg("Error: No se pudieron cargar los usuarios"));
 
+  const deleteUsuario = async (u) => {
+    if (!window.confirm(`¿Eliminar definitivamente al usuario "${u.email}"? Esta acción no se puede deshacer.`)) return;
+    try {
+      await api.deleteUser(u.id);
+      setUserMsg("");
+      reload();
+    } catch (e) { setUserMsg("Error: " + e.message); }
+  };
+
   useEffect(() => { reload(); }, []);
   useEffect(() => { api.getInstitutions().then(setInstitutions).catch(() => {}); }, []);
   useEffect(() => { if (!isSuperAdmin && actor?.tenant) setNewUser(u => ({ ...u, tenant: actor.tenant })); }, [isSuperAdmin, actor]);
@@ -1866,6 +1875,12 @@ function TabUsuarios() {
                     className="text-xs font-medium text-brand hover:text-brand-dark underline-offset-2 hover:underline">
                     Editar
                   </button>
+                  {u.id !== actor?.id && (
+                    <button onClick={() => deleteUsuario(u)}
+                      className="ml-3 text-xs font-medium text-red-600 hover:text-red-700 underline-offset-2 hover:underline">
+                      Eliminar
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}

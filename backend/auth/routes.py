@@ -395,6 +395,40 @@ def admin_reset_password(user_id: int, payload: ResetPasswordRequest, current_us
     return {"detail": f"Contraseña actualizada para {user.email}", "user_id": user.id, "email": user.email}
 
 
+@router.delete("/users/{user_id}")
+def delete_user(user_id: int, current_user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    """Elimina un usuario de la institución del admin (super-admin: cualquiera).
+    Resguardos: no puedes eliminarte; solo un super-admin elimina a otro super-admin
+    y nunca al último super-admin. Limpia referencias (intervenciones, recomendaciones, tokens)."""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    _assert_can_manage_tenant(current_user, user.tenant)
+    if user.id == current_user.id:
+        raise HTTPException(status_code=400, detail="No puedes eliminar tu propia cuenta")
+    if is_super_admin(user):
+        if not is_super_admin(current_user):
+            raise HTTPException(status_code=403, detail="Solo un super-admin puede eliminar a otro super-admin")
+        otros = db.query(User).filter(User.role == "admin", User.tenant.is_(None), User.id != user.id, User.is_active == True).count()
+        if otros == 0:
+            raise HTTPException(status_code=400, detail="No puedes eliminar al último super-admin")
+
+    # Limpiar referencias para no violar integridad referencial
+    from ..models.intervention import Intervention
+    from ..models.recommendation_log import RecommendationLog
+    from ..models.refresh_token import RefreshToken
+    db.query(Intervention).filter(Intervention.monitor_id == user.id).update({"monitor_id": None})
+    db.query(Intervention).filter(Intervention.asignado_a == user.id).update({"asignado_a": None})
+    db.query(RecommendationLog).filter(RecommendationLog.ejecutada_por == user.id).update({"ejecutada_por": None})
+    db.query(RefreshToken).filter(RefreshToken.user_id == user.id).delete()
+
+    email = user.email
+    db.delete(user)
+    db.commit()
+    logger.info("Admin %s eliminó al usuario %s", current_user.email, email)
+    return {"detail": f"Usuario {email} eliminado", "email": email}
+
+
 # ── PIN de desbloqueo rápido ─────────────────────────────────────────────
 
 class PinSetRequest(BaseModel):
