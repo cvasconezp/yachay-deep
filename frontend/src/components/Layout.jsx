@@ -326,22 +326,10 @@ export function Layout({ children }) {
       {/* Main content */}
       <main className="flex-1 overflow-auto">
         <div className="p-6 max-w-7xl mx-auto">
-          {realIsSuperAdmin && (
-            <div className={`mb-4 flex flex-wrap items-center gap-3 rounded-lg border px-4 py-2 text-sm ${viewAsRole ? "bg-amber-50 border-amber-300 text-amber-800" : "bg-gray-50 border-gray-200 text-gray-600"}`}>
-              <span className="font-medium">👁️ Ver como:</span>
-              <select value={viewAsRole || ""} onChange={e => setViewAsRole(e.target.value || null)}
-                className="border border-gray-300 rounded px-2 py-1 text-sm bg-white">
-                <option value="">Mi vista (Super-admin)</option>
-                <option value="coordinador">Coordinador</option>
-                <option value="docente">Docente (solo lectura)</option>
-                <option value="monitor">Monitor</option>
-              </select>
-              {viewAsRole && (
-                <span className="flex items-center gap-2">
-                  <strong>Vista previa de auditoría{isReadOnly ? " — solo lectura" : ""}.</strong>
-                  <button onClick={() => setViewAsRole(null)} className="underline font-medium">Salir</button>
-                </span>
-              )}
+          {realIsSuperAdmin && viewAsRole && (
+            <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+              <span>👁️ Estás viendo como <strong className="capitalize">{viewAsRole}</strong>{isReadOnly ? " (solo lectura)" : ""} — vista previa de auditoría.</span>
+              <button onClick={() => setViewAsRole(null)} className="underline font-medium ml-auto">Salir de la vista</button>
             </div>
           )}
           {children}

@@ -37,6 +37,12 @@ function PrivateRoute({ children, adminOnly = false, tabKey = null, allowDuringE
       </div>
     );
   if (!user) return <Navigate to="/login" />;
+  // [KAPAK] El core no es una instancia: solo permite portal (/), /admin* y /seguridad.
+  if (isAdminHost()) {
+    const p = window.location.pathname;
+    const allowed = p === "/" || p.startsWith("/admin") || p === "/seguridad";
+    if (!allowed) return <Navigate to="/" replace />;
+  }
   // [WF3] Enrolamiento 2FA forzado: si debe activar 2FA, solo puede ir a /seguridad.
   if (user.must_enroll_2fa && !allowDuringEnrollment) return <Navigate to="/seguridad" replace />;
   if (adminOnly && user.role !== "admin") return <Navigate to="/dashboard" />;

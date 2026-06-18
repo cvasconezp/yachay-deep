@@ -10,6 +10,7 @@
  */
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../services/api";
+import { isAdminHost } from "./useTenant";
 
 const AuthContext = createContext(null);
 const SESSION_CHECK_MS = 120_000; // verificar sesión cada 2 min
@@ -98,7 +99,7 @@ export function AuthProvider({ children }) {
   }, [user]);
 
   const realSuper = !!user?.is_super_admin;
-  const previewing = !!(viewAsRole && realSuper);
+  const previewing = !!(viewAsRole && realSuper && !isAdminHost());
   const effUser = previewing
     ? { ...user, role: viewAsRole, permissions: ROLE_PRESETS[viewAsRole] ?? null }
     : user;
