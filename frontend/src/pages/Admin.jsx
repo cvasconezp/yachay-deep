@@ -841,7 +841,7 @@ function TabCursos() {
         }
       }
       const qs = params.toString();
-      const data = await api.get(`/courses/${qs ? "?" + qs : ""}`);
+      const data = await api.get(`/courses${qs ? "?" + qs : ""}`);
       setCourses(data);
       setPage(1); // Reset page on filter change
     } catch { setCourses([]); }
@@ -873,7 +873,7 @@ function TabCursos() {
         await api.patch(`/courses/${editCourse.id}`, form);
         setMsg("Curso actualizado correctamente");
       } else {
-        await api.post("/courses/", form);
+        await api.post("/courses", form);
         setMsg("Curso creado correctamente");
       }
       loadCourses();

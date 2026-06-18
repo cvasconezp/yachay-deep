@@ -99,7 +99,8 @@ class SemesterConfigOut(BaseModel):
 
 # ─── Course Endpoints ─────────────────────────────────────────────────────────
 
-@router.get("/", response_model=list[CourseConfigOut])
+@router.get("", response_model=list[CourseConfigOut])
+@router.get("/", response_model=list[CourseConfigOut], include_in_schema=False)
 def list_courses(
     semestre: Optional[str] = None,
     activo: Optional[bool] = None,
@@ -114,7 +115,8 @@ def list_courses(
     return query.order_by(CourseConfig.carrera, CourseConfig.asignatura).all()
 
 
-@router.post("/", response_model=CourseConfigOut, dependencies=[Depends(require_admin)])
+@router.post("", response_model=CourseConfigOut, dependencies=[Depends(require_admin)])
+@router.post("/", response_model=CourseConfigOut, dependencies=[Depends(require_admin)], include_in_schema=False)
 def create_course(payload: CourseConfigCreate, db: Session = Depends(get_db)):
     course = CourseConfig(**payload.model_dump())
     db.add(course)
