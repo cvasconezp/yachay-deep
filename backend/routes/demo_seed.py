@@ -469,6 +469,24 @@ def _wipe_demo(demo_db):
     demo_db.commit()
 
 
+@router.get("/whoami")
+def whoami(db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    """[DIAG] Muestra a qué BD enruta ESTA petición (según X-Tenant), para detectar
+    si ups está cayendo en la BD demo por error. Usa get_db (mismo que /courses)."""
+    from ..database import get_current_tenant
+    from ..models.course_config import CourseConfig, SemesterConfig
+    bind = db.get_bind()
+    sc = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()
+    return {
+        "resolved_tenant": get_current_tenant(),
+        "db_host": getattr(bind.url, "host", None),
+        "db_name": getattr(bind.url, "database", None),
+        "course_configs": db.query(CourseConfig).count(),
+        "semestre_activo": sc.semestre if sc else None,
+        "user": current_user.email,
+    }
+
+
 @router.get("/info")
 def demo_info(current_user=Depends(get_current_user)):
     """[DEMO] Diagnóstico (super-admin): a qué BD apunta el demo vs producción
