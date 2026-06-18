@@ -176,11 +176,17 @@ export default function TenantPortal() {
 
       {/* Main */}
       <main className="max-w-5xl mx-auto px-6 py-12">
-        <div className="mb-10">
-          <h1 className="text-3xl font-bold text-gray-900">Portal de Administración</h1>
-          <p className="text-gray-500 mt-2">
-            Selecciona una instancia para gestionar. Cada subdominio opera con datos independientes.
-          </p>
+        <div className="mb-10 flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Portal de Administración</h1>
+            <p className="text-gray-500 mt-2">
+              Selecciona una instancia para gestionar. Cada subdominio opera con datos independientes.
+            </p>
+          </div>
+          <a href="/admin/usuarios"
+            className="shrink-0 inline-flex items-center gap-2 bg-brand text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-dark transition-colors">
+            👥 Usuarios globales
+          </a>
         </div>
 
         {loading ? (

@@ -1156,7 +1156,7 @@ function TabSemestre() {
   const handleCreate = async (e) => {
     e.preventDefault();
     try {
-      await api.post("/courses/semester/", newSem);
+      await api.post("/courses/semester", newSem);
       setMsg("Semestre creado");
       setNewSem({ semestre: "", bloque_actual: "1" });
       loadSemesters();

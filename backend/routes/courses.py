@@ -250,7 +250,8 @@ def list_semesters(db: Session = Depends(get_db), current_user: User = Depends(g
     return db.query(SemesterConfig).order_by(SemesterConfig.semestre.desc()).all()
 
 
-@router.post("/semester/", response_model=SemesterConfigOut, dependencies=[Depends(require_admin)])
+@router.post("/semester", response_model=SemesterConfigOut, dependencies=[Depends(require_admin)])
+@router.post("/semester/", response_model=SemesterConfigOut, dependencies=[Depends(require_admin)], include_in_schema=False)
 def create_semester(payload: SemesterConfigCreate, db: Session = Depends(get_db)):
     semester = SemesterConfig(**payload.model_dump())
     db.add(semester)
