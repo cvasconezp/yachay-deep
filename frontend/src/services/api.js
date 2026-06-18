@@ -62,7 +62,13 @@ class ApiClient {
 
     let response;
     try {
-      response = await fetch(`${this.baseUrl}${path}`, {
+      // [CACHE] Cache-busting en GET: garantiza MISS en el CDN (datos por-tenant nunca deben cachearse)
+      const _method = (options.method || "GET").toUpperCase();
+      let _url = `${this.baseUrl}${path}`;
+      if (_method === "GET") {
+        _url += (path.includes("?") ? "&" : "?") + "_=" + Date.now();
+      }
+      response = await fetch(_url, {
         ...options,
         headers,
         credentials: "include",
@@ -120,7 +126,8 @@ class ApiClient {
   delete(path) { return this.request(path, { method: "DELETE" }); }
 
   async getBlob(path, _retried = false) {
-    const response = await fetch(`${this.baseUrl}${path}`, {
+    const _u = `${this.baseUrl}${path}` + (path.includes("?") ? "&" : "?") + "_=" + Date.now();
+    const response = await fetch(_u, {
       credentials: "include",
       cache: "no-store",
     });
