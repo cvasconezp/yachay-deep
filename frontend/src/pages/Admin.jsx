@@ -1905,6 +1905,7 @@ function TabUsuarios() {
 
 function EditUserModal({ user, tenantOptions = [], isSuperAdmin = false, actorTenant = null, onClose, onSaved, onError }) {
   const [nombre, setNombre] = useState(user.nombre || "");
+  const [email, setEmail] = useState(user.email || "");
   const [role, setRole] = useState(user.role || "monitor");
   const [permissions, setPermissions] = useState(user.permissions ?? null);
   const [isActive, setIsActive] = useState(!!user.is_active);
@@ -1917,6 +1918,7 @@ function EditUserModal({ user, tenantOptions = [], isSuperAdmin = false, actorTe
     setSaving(true);
     try {
       const payload = {};
+      if (email.trim() && email.trim().toLowerCase() !== user.email) payload.email = email.trim();
       if (nombre !== user.nombre) payload.nombre = nombre;
       if (role !== user.role) payload.role = role;
       if (isActive !== !!user.is_active) payload.is_active = isActive;
@@ -1947,13 +1949,15 @@ function EditUserModal({ user, tenantOptions = [], isSuperAdmin = false, actorTe
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
         </div>
 
-        <p className="text-xs text-gray-500 mb-4">
-          <span className="font-medium text-gray-700">{user.email}</span>
-          <span className="text-gray-300"> • </span>
-          ID #{user.id}
-        </p>
+        <p className="text-xs text-gray-400 mb-4">ID #{user.id}</p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Correo</label>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="correo@dominio.com" required />
+          </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Nombre completo</label>
             <input value={nombre} onChange={(e) => setNombre(e.target.value)} required

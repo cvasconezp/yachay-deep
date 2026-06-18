@@ -74,6 +74,7 @@ class UserCreate(BaseModel):
 
 
 class UserUpdate(BaseModel):
+    email: Optional[EmailStr] = None
     is_active: Optional[bool] = None
     role: Optional[UserRole] = None
     nombre: Optional[str] = None
@@ -345,6 +346,11 @@ def update_user(user_id: int, payload: UserUpdate, current_user: User = Depends(
     # ...y si se intenta cambiar el tenant, también el destino debe estar permitido.
     if "tenant" in updates:
         _assert_can_manage_tenant(current_user, updates["tenant"])
+    if "email" in updates and updates["email"]:
+        nuevo = updates["email"].lower().strip()
+        if nuevo != user.email and db.query(User).filter(User.email == nuevo, User.id != user.id).first():
+            raise HTTPException(status_code=400, detail="Ese correo ya está en uso")
+        user.email = nuevo
     if "is_active" in updates:
         user.is_active = updates["is_active"]
     if "role" in updates:
