@@ -1,0 +1,668 @@
+"""
+Predictor — carga modelos entrenados (por carrera + global) y ejecuta
+predicciones para estudiantes del semestre actual.
+"""
+import json
+import logging
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Optional
+
+import joblib
+import numpy as np
+from sqlalchemy.orm import Session
+
+from .features import build_current_features, FEATURE_COLUMNS
+
+logger = logging.getLogger(__name__)
+
+MODELS_DIR = Path(__file__).parent / "models"
+
+# Features originales (8) para compatibilidad con modelos entrenados antes de v2
+_LEGACY_FEATURE_COLUMNS = [
+    "promedio_notas", "num_asignaturas", "num_reprobadas", "pct_reprobadas",
+    "nota_min", "nota_max", "std_notas", "num_zeros",
+]
+
+
+def _get_model_features(model) -> list[str]:
+    """Detecta cuántas features espera un modelo para compatibilidad legacy."""
+    try:
+        n = model.n_features_in_
+        if n == len(FEATURE_COLUMNS):
+            return FEATURE_COLUMNS
+        elif n == len(_LEGACY_FEATURE_COLUMNS):
+            return _LEGACY_FEATURE_COLUMNS
+        # Fallback: si no coincide con ninguno, usar el que tenga el mismo count
+        return FEATURE_COLUMNS[:n] if n <= len(FEATURE_COLUMNS) else FEATURE_COLUMNS
+    except AttributeError:
+        # Modelo viejo sin n_features_in_ — asumir legacy
+        return _LEGACY_FEATURE_COLUMNS
+
+
+FEATURE_LABELS = {
+    "promedio_notas": "Promedio de notas",
+    "num_asignaturas": "Cantidad de materias",
+    "num_reprobadas": "Materias reprobadas",
+    "pct_reprobadas": "Porcentaje reprobadas",
+    "nota_min": "Nota mínima",
+    "nota_max": "Nota máxima",
+    "std_notas": "Dispersión de notas",
+    "num_zeros": "Materias con nota cero",
+    # Features de contexto curricular y tendencia
+    "num_segundas_matriculas": "Materias en segunda matrícula",
+    "pct_avance_malla": "Avance en la malla curricular",
+    "nivel_actual": "Nivel académico actual",
+    "tendencia_academica": "Tendencia académica",
+    # [GAP-F2-01] Features conductuales
+    "dias_sin_acceso": "Días sin acceso al AVAC",
+    "porcentaje_tareas": "Porcentaje de tareas entregadas",
+    "indice_compromiso": "Índice de compromiso académico",
+}
+
+
+class Predictor:
+    _instance = None
+
+    def __init__(self):
+        self.models = {}  # key -> {"desercion": model, "reprobacion": model}
+        self.stats = {}   # key -> {"desercion": stats_dict, "reprobacion": stats_dict}
+        self.carrera_mapping = {}  # carrera -> key
+        self.metadata = None
+        self._loaded = False
+
+    @classmethod
+    def get_instance(cls) -> "Predictor":
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
+    def load_models(self) -> bool:
+        """
+        Carga modelos con prioridad:
+          1. Disco local (rápido, pero se pierde en redeploys)
+          2. PostgreSQL (persistente, [GAP-F2-02])
+        """
+        meta_path = MODELS_DIR / "metadata.json"
+        mapping_path = MODELS_DIR / "carrera_mapping.json"
+
+        if meta_path.exists():
+            self.metadata = json.loads(meta_path.read_text(encoding="utf-8"))
+
+        if mapping_path.exists():
+            self.carrera_mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
+
+        loaded_any = False
+
+        # 1) Intentar cargar desde disco
+        for joblib_file in MODELS_DIR.glob("*.joblib"):
+            name = joblib_file.stem
+            try:
+                model = joblib.load(joblib_file)
+            except (EOFError, Exception) as e:
+                logger.warning(f"Archivo de modelo corrupto, ignorando {joblib_file.name}: {e}")
+                continue
+            if name.endswith("_desercion"):
+                key = name[:-len("_desercion")]
+                self.models.setdefault(key, {})["desercion"] = model
+                loaded_any = True
+            elif name.endswith("_reprobacion"):
+                key = name[:-len("_reprobacion")]
+                self.models.setdefault(key, {})["reprobacion"] = model
+                loaded_any = True
+
+        for stats_file in MODELS_DIR.glob("*_stats.json"):
+            name = stats_file.stem[:-len("_stats")]
+            try:
+                stats_data = json.loads(stats_file.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, Exception) as e:
+                logger.warning(f"Stats corrupto, ignorando {stats_file.name}: {e}")
+                continue
+            if name.endswith("_desercion"):
+                key = name[:-len("_desercion")]
+                self.stats.setdefault(key, {})["desercion"] = stats_data
+            elif name.endswith("_reprobacion"):
+                key = name[:-len("_reprobacion")]
+                self.stats.setdefault(key, {})["reprobacion"] = stats_data
+
+        # 2) [GAP-F2-02] Si no hay modelos en disco, restaurar desde PostgreSQL
+        if not loaded_any:
+            loaded_any = self._load_from_db()
+
+        self._loaded = loaded_any
+        if loaded_any:
+            logger.info(f"Modelos cargados: {list(self.models.keys())} ({sum(len(v) for v in self.models.values())} total)")
+        return loaded_any
+
+    def _get_model_key(self, carrera: Optional[str]) -> str:
+        """Obtiene la key del modelo para una carrera dada."""
+        if carrera and carrera in self.carrera_mapping:
+            return self.carrera_mapping[carrera]
+        return "global"
+
+    def _load_from_db(self) -> bool:
+        """[GAP-F2-02] Restaura modelos desde PostgreSQL cuando el disco está vacío."""
+        try:
+            from ..database import SessionLocal
+            from ..models.ml_model_store import MLModelStore
+            import io
+
+            db = SessionLocal()
+            try:
+                rows = db.query(MLModelStore).all()
+                if not rows:
+                    return False
+
+                MODELS_DIR.mkdir(exist_ok=True)
+                loaded = False
+
+                for row in rows:
+                    name = row.name
+                    # Skip special metadata rows (handled separately below)
+                    if name.startswith("__"):
+                        continue
+                    # Restaurar .joblib a disco
+                    model_path = MODELS_DIR / f"{name}.joblib"
+                    model_path.write_bytes(row.model_data)
+                    model = joblib.load(model_path)
+
+                    if name.endswith("_desercion"):
+                        key = name[:-len("_desercion")]
+                        self.models.setdefault(key, {})["desercion"] = model
+                        loaded = True
+                    elif name.endswith("_reprobacion"):
+                        key = name[:-len("_reprobacion")]
+                        self.models.setdefault(key, {})["reprobacion"] = model
+                        loaded = True
+
+                    # Restaurar stats JSON
+                    if row.metadata_json:
+                        stats = json.loads(row.metadata_json)
+                        stats_path = MODELS_DIR / f"{name}_stats.json"
+                        stats_path.write_text(row.metadata_json)
+
+                        if name.endswith("_desercion"):
+                            key = name[:-len("_desercion")]
+                            self.stats.setdefault(key, {})["desercion"] = stats
+                        elif name.endswith("_reprobacion"):
+                            key = name[:-len("_reprobacion")]
+                            self.stats.setdefault(key, {})["reprobacion"] = stats
+
+                # Restaurar metadata.json y carrera_mapping.json desde BD
+                for special_name, attr in [("__metadata__", "metadata"), ("__carrera_mapping__", "carrera_mapping")]:
+                    row = db.query(MLModelStore).filter(MLModelStore.name == special_name).first()
+                    if row and row.metadata_json:
+                        data = json.loads(row.metadata_json)
+                        setattr(self, attr, data)
+                        # Also write to disk for future fast loads
+                        fname = "metadata.json" if attr == "metadata" else "carrera_mapping.json"
+                        (MODELS_DIR / fname).write_text(row.metadata_json)
+
+                if loaded:
+                    logger.info(f"[DB] Modelos restaurados desde PostgreSQL: {len(rows)} archivos")
+                return loaded
+            finally:
+                db.close()
+        except Exception as e:
+            logger.warning(f"[DB] No se pudo restaurar modelos desde BD: {e}")
+            return False
+
+    @property
+    def is_loaded(self) -> bool:
+        return self._loaded
+
+    def reset(self):
+        """Reinicia el estado del predictor para forzar recarga de modelos."""
+        self.models = {}
+        self.stats = {}
+        self.carrera_mapping = {}
+        self.metadata = None
+        self._loaded = False
+
+    def get_status(self) -> dict:
+        """Estado actual del predictor."""
+        if not self._loaded:
+            self.load_models()
+
+        return {
+            "loaded": self._loaded,
+            "models": {k: list(v.keys()) for k, v in self.models.items()},
+            "has_desercion": any("desercion" in v for v in self.models.values()),
+            "has_reprobacion": any("reprobacion" in v for v in self.models.values()),
+            "carrera_mapping": self.carrera_mapping,
+            "metadata": self.metadata,
+        }
+
+    def predict_batch(self, db: Session) -> dict:
+        """
+        Ejecuta predicciones para todos los estudiantes del semestre actual.
+        Usa modelo por carrera si existe, sino modelo global.
+        """
+        if not self._loaded:
+            if not self.load_models():
+                return {"status": "error", "message": "No hay modelos entrenados"}
+
+        features_df = build_current_features(db)
+        if features_df.empty:
+            return {"status": "error", "message": "No hay calificaciones del semestre actual"}
+
+        from ..models.student import Student
+
+        now = datetime.now(timezone.utc)
+        updated = 0
+        por_carrera_count = 0
+        global_count = 0
+
+        for _, row in features_df.iterrows():
+            sid = int(row["student_id"])
+            carrera = row.get("carrera")
+            model_key = self._get_model_key(carrera)
+            models = self.models.get(model_key) or self.models.get("global", {})
+
+            student = db.query(Student).filter(Student.id == sid).first()
+            if not student:
+                continue
+
+            if "desercion" in models:
+                cols = _get_model_features(models["desercion"])
+                X = np.array([[row.get(c, 0) for c in cols]])
+                student.prob_desercion = round(float(models["desercion"].predict_proba(X)[0, 1]), 4)
+            if "reprobacion" in models:
+                cols = _get_model_features(models["reprobacion"])
+                X = np.array([[row.get(c, 0) for c in cols]])
+                student.prob_reprobacion = round(float(models["reprobacion"].predict_proba(X)[0, 1]), 4)
+            student.prediccion_updated_at = now
+            updated += 1
+
+            if model_key != "global":
+                por_carrera_count += 1
+            else:
+                global_count += 1
+
+        db.commit()
+
+        logger.info(
+            f"Predicciones actualizadas: {updated} estudiantes "
+            f"({por_carrera_count} por carrera, {global_count} global)"
+        )
+        return {
+            "status": "ok",
+            "updated": updated,
+            "por_carrera": por_carrera_count,
+            "global_fallback": global_count,
+            "total_features": len(features_df),
+            "timestamp": now.isoformat(),
+        }
+
+    @staticmethod
+    def _generate_narrative(feature: str, valor: float, media: float, direccion: str, target: str) -> str:
+        """Genera una explicación contextual en español para un factor XAI."""
+        tipo = "abandono" if target == "desercion" else "reprobación"
+        sube = direccion == "incrementa"
+
+        # Comparación con la media
+        if media and media != 0:
+            diff_pct = abs(valor - media) / abs(media) * 100
+        else:
+            diff_pct = 0
+        arriba = valor > media
+        cerca = diff_pct < 10
+
+        narratives = {
+            "promedio_notas": (
+                f"Su promedio de {valor} está por debajo de la media ({media}). Históricamente, promedios bajos se asocian con mayor riesgo de {tipo}."
+                if sube else
+                f"Su promedio de {valor} es superior a la media ({media}), lo cual es un indicador protector contra {tipo}."
+            ),
+            "num_asignaturas": (
+                f"Cursa {int(valor)} materias (media: {media}). Tener menos materias que el promedio puede indicar carga reducida o posible retiro parcial."
+                if valor < media else
+                f"Cursa {int(valor)} materias (media: {media}). Una carga académica alta puede generar sobrecarga, pero también indica compromiso con la carrera."
+                if sube else
+                f"Cursa {int(valor)} materias, cerca del promedio ({media}). Su carga académica es adecuada."
+            ),
+            "num_reprobadas": (
+                f"Tiene {int(valor)} materia(s) reprobada(s) (media: {media}). Las reprobaciones previas son un predictor importante de {tipo}."
+                if valor > 0 else
+                f"No tiene materias reprobadas (media del grupo: {media}). Esto reduce significativamente su riesgo de {tipo}."
+            ),
+            "pct_reprobadas": (
+                f"Ha reprobado el {valor}% de sus materias (media: {media}%). Un porcentaje alto de reprobación incrementa el riesgo de {tipo}."
+                if sube else
+                f"Su porcentaje de reprobación ({valor}%) está por debajo de la media ({media}%), lo cual es favorable."
+            ),
+            "nota_min": (
+                f"Su nota más baja es {valor} (media: {media}). Una nota mínima baja puede indicar dificultad severa en alguna materia."
+                if sube else
+                f"Su nota más baja es {valor}, por encima de la media ({media}). No presenta materias con calificación crítica."
+            ),
+            "nota_max": (
+                f"Su nota más alta es {valor} (media: {media}). Aunque parece positivo, el modelo detecta que notas altas aisladas combinadas con otros indicadores débiles pueden asociarse con {tipo}."
+                if sube else
+                f"Su nota más alta es {valor} (media: {media}). Un buen rendimiento en al menos una materia es un factor protector."
+            ),
+            "std_notas": (
+                f"La variación entre sus notas es de {valor} (media: {media}). Alta dispersión indica rendimiento muy desigual entre materias, lo cual incrementa el riesgo."
+                if sube else
+                f"La variación entre sus notas ({valor}) es baja comparada con la media ({media}). Un rendimiento uniforme es un indicador positivo."
+            ),
+            "num_zeros": (
+                f"Tiene {int(valor)} materia(s) con nota cero (media: {media}). Las notas cero suelen indicar abandono de materia, un predictor fuerte de {tipo}."
+                if valor > 0 else
+                f"No tiene materias con nota cero (media: {media}). Esto indica que participa en todas sus asignaturas."
+            ),
+            "dias_sin_acceso": (
+                f"Lleva {int(valor)} día(s) sin entrar al AVAC (media: {media}). La inactividad prolongada es uno de los indicadores más fuertes de riesgo de {tipo}."
+                if sube else
+                f"Su último acceso al AVAC fue hace {int(valor)} día(s) (media: {media}). Se mantiene activo/a en la plataforma."
+            ),
+            "porcentaje_tareas": (
+                f"Ha entregado el {valor}% de sus tareas (media: {media}%). Un bajo porcentaje de entregas incrementa el riesgo de {tipo}."
+                if sube else
+                f"Ha entregado el {valor}% de sus tareas, por encima de la media ({media}%). Cumple con sus actividades académicas."
+            ),
+            "indice_compromiso": (
+                f"Su índice de compromiso es {valor} (media: {media}). Un compromiso bajo refleja poca interacción con la plataforma y las actividades, aumentando el riesgo de {tipo}."
+                if sube else
+                f"Su índice de compromiso es {valor}, superior a la media ({media}). Muestra participación activa en su proceso académico."
+            ),
+            "num_segundas_matriculas": (
+                f"Tiene {int(valor)} materia(s) en segunda matrícula (media: {media}). Repetir materias indica dificultades acumuladas que incrementan el riesgo de {tipo}."
+                if valor > 0 else
+                f"No tiene materias en segunda matrícula (media: {media}). Avanza sin repeticiones, lo cual es un indicador positivo."
+            ),
+            "pct_avance_malla": (
+                f"Ha completado el {valor}% de su malla curricular (media: {media}%). Un avance bajo respecto a sus compañeros puede indicar rezago académico."
+                if sube else
+                f"Ha completado el {valor}% de su malla curricular (media: {media}%). Un avance alto indica cercanía al egreso, lo cual reduce significativamente el riesgo de {tipo}."
+            ),
+            "nivel_actual": (
+                f"Se encuentra en nivel {int(valor)} (media: {media}). Los estudiantes en niveles iniciales tienen mayor vulnerabilidad al {tipo}."
+                if sube else
+                f"Se encuentra en nivel {int(valor)} (media: {media}). Estudiantes en niveles avanzados tienen menor probabilidad de {tipo} por la inversión acumulada en su carrera."
+            ),
+            "tendencia_academica": (
+                f"Su promedio bajó {abs(valor)} puntos respecto al periodo anterior (media de cambio: {media}). Una tendencia descendente incrementa el riesgo de {tipo}."
+                if sube else
+                f"Su promedio subió {abs(valor)} puntos respecto al periodo anterior (media de cambio: {media}). Una tendencia de recuperación es un factor protector contra {tipo}."
+            ),
+        }
+
+        if feature in narratives:
+            return narratives[feature]
+
+        # Fallback genérico
+        label = FEATURE_LABELS.get(feature, feature)
+        if sube:
+            return f"{label}: valor {valor} (media: {media}). Este indicador incrementa la probabilidad de {tipo} según el modelo."
+        return f"{label}: valor {valor} (media: {media}). Este indicador reduce la probabilidad de {tipo} según el modelo."
+
+    def _compute_explanations(
+        self, features: dict, model_key: str, target: str, top_n: int = 5
+    ) -> Optional[list]:
+        """
+        Calcula las contribuciones de cada feature a la prediccion (XAI).
+        - LogisticRegression: contribution = coef_i * (value_i - mean_i)
+        - RandomForest: contribution = importance_i * ((value_i - mean_i) / std_i)
+        Retorna lista ordenada por |contribucion| descendente.
+        """
+        stats_key = self.stats.get(model_key, {}).get(target)
+        if not stats_key:
+            # Intentar fallback a global
+            stats_key = self.stats.get("global", {}).get(target)
+        if not stats_key:
+            return None
+
+        model_type = stats_key.get("model_type")
+        means = stats_key.get("feature_means", {})
+        stds = stats_key.get("feature_stds", {})
+
+        # Usar las features del modelo entrenado (compatibilidad legacy)
+        model_features = stats_key.get("feature_columns", FEATURE_COLUMNS)
+
+        contributions = []
+
+        for col in model_features:
+            val = features.get(col, 0)
+            mean = means.get(col, 0)
+            std = stds.get(col, 1)
+
+            if model_type == "logistic":
+                coefs = stats_key.get("coefficients", {})
+                coef = coefs.get(col, 0)
+                contrib = coef * (val - mean)
+            elif model_type == "random_forest":
+                importances = stats_key.get("feature_importances", {})
+                imp = importances.get(col, 0)
+                safe_std = std if std > 0.001 else 1.0
+                contrib = imp * ((val - mean) / safe_std)
+            else:
+                continue
+
+            direction = "incrementa" if contrib > 0 else "reduce"
+            narrative = self._generate_narrative(
+                col, round(val, 2), round(mean, 2), direction, target
+            )
+            contributions.append({
+                "feature": col,
+                "label": FEATURE_LABELS.get(col, col),
+                "valor": round(val, 2),
+                "media_carrera": round(mean, 2),
+                "contribucion": round(float(contrib), 4),
+                "direccion": direction,
+                "explicacion": narrative,
+            })
+
+        # [GAP-F3-01] Filtrar factores con contribución insignificante
+        contributions = [c for c in contributions if abs(c["contribucion"]) >= 0.01]
+        contributions.sort(key=lambda x: abs(x["contribucion"]), reverse=True)
+        return contributions[:top_n]
+
+    def predict_single(self, db: Session, student_id: int) -> Optional[dict]:
+        """Prediccion individual con features detalladas y explicaciones XAI."""
+        if not self._loaded:
+            if not self.load_models():
+                return None
+
+        from sqlalchemy import text as sql_text
+        from .features import _get_active_periodo, _build_periodo_condition, _detect_current_periodo
+
+        # Obtener carrera del estudiante
+        from ..models.student import Student
+        student = db.query(Student).filter(Student.id == student_id).first()
+        carrera = student.carrera if student else None
+
+        active_periodo = _get_active_periodo(db)
+        periodo_cond = _build_periodo_condition(active_periodo)
+
+        query = sql_text(f"""
+            SELECT g.nota_final, g.numero_repitencias, g.nivel, g.asignatura
+            FROM grades g
+            WHERE g.student_id = :sid AND {periodo_cond}
+        """)
+        rows = db.execute(query, {"sid": student_id}).fetchall()
+
+        # Fallback 1: detectar periodo desde grades si SemesterConfig no coincide
+        if not rows and active_periodo:
+            detected = _detect_current_periodo(db)
+            if detected and detected != active_periodo:
+                periodo_cond2 = _build_periodo_condition(detected)
+                query2 = sql_text(f"""
+                    SELECT g.nota_final, g.numero_repitencias, g.nivel, g.asignatura
+                    FROM grades g
+                    WHERE g.student_id = :sid AND {periodo_cond2}
+                """)
+                rows = db.execute(query2, {"sid": student_id}).fetchall()
+
+        # Fallback 2: si no hay notas del periodo actual (ej. inicio de semestre),
+        # usar el periodo más reciente del estudiante para XAI/contrafactual
+        used_fallback_periodo = None
+        if not rows:
+            fallback_q = sql_text("""
+                SELECT g.nota_final, g.numero_repitencias, g.nivel, g.asignatura, g.periodo
+                FROM grades g
+                WHERE g.student_id = :sid AND g.periodo IS NOT NULL
+                ORDER BY g.periodo DESC
+            """)
+            fallback_rows = db.execute(fallback_q, {"sid": student_id}).fetchall()
+            if fallback_rows:
+                latest_periodo = fallback_rows[0][4]
+                rows = [(r[0], r[1], r[2], r[3]) for r in fallback_rows if r[4] == latest_periodo]
+                used_fallback_periodo = latest_periodo
+                logger.info(f"predict_single: sin notas actuales para student {student_id}, usando periodo fallback={latest_periodo}")
+
+        if not rows:
+            return None
+
+        notas = [float(r[0]) if r[0] is not None else 0.0 for r in rows]
+        notas_arr = np.array(notas)
+
+        # Segundas matrículas en periodo actual
+        num_seg_mat = sum(1 for r in rows if r[1] is not None and r[1] >= 1)
+
+        # Nivel actual: de Student o max nivel de grades
+        nivel_actual = int(student.nivel_academico or 0) if student and student.nivel_academico else 0
+        if nivel_actual == 0:
+            niveles = [int(r[2]) for r in rows if r[2] is not None and r[2] > 0]
+            nivel_actual = max(niveles) if niveles else 0
+
+        # pct_avance_malla: materias aprobadas históricas / total malla
+        from .features import _load_reference_malla, _normalize_asig
+        pct_avance = 0.0
+        try:
+            hist_q = sql_text("""
+                SELECT DISTINCT g.asignatura FROM grades g
+                WHERE g.student_id = :sid AND g.nota_final >= 70 AND g.asignatura IS NOT NULL
+            """)
+            hist_aprobadas = db.execute(hist_q, {"sid": student_id}).fetchall()
+            aprobadas_set = set(_normalize_asig(r[0]) for r in hist_aprobadas if r[0])
+            carrera_key = (carrera or "").strip().upper()
+            ref_malla = _load_reference_malla(carrera_key)
+            if ref_malla and len(ref_malla) > 0:
+                pct_avance = round(len(aprobadas_set & ref_malla) / len(ref_malla) * 100, 1)
+            elif len(aprobadas_set) > 0:
+                # Fallback: inferir total de grades históricos de la carrera
+                total_q = sql_text("""
+                    SELECT COUNT(DISTINCT g.asignatura) FROM grades g
+                    JOIN students s ON s.id = g.student_id
+                    WHERE s.carrera = :carrera AND g.asignatura IS NOT NULL
+                """)
+                total_row = db.execute(total_q, {"carrera": carrera}).fetchone()
+                total = total_row[0] if total_row else 0
+                if total > 0:
+                    pct_avance = round(len(aprobadas_set) / total * 100, 1)
+        except Exception as e:
+            logger.warning(f"predict_single: error calculando pct_avance_malla: {e}")
+
+        # tendencia_academica: promedio actual vs promedio del periodo anterior
+        tendencia = 0.0
+        try:
+            trend_q = sql_text("""
+                SELECT g.periodo, AVG(g.nota_final) as promedio
+                FROM grades g
+                WHERE g.student_id = :sid AND g.periodo IS NOT NULL
+                GROUP BY g.periodo
+                ORDER BY g.periodo
+            """)
+            trend_rows = db.execute(trend_q, {"sid": student_id}).fetchall()
+            if len(trend_rows) >= 2:
+                tendencia = round(float(trend_rows[-1][1]) - float(trend_rows[-2][1]), 2)
+        except Exception as e:
+            logger.warning(f"predict_single: error calculando tendencia: {e}")
+
+        features = {
+            "promedio_notas": float(notas_arr.mean()),
+            "num_asignaturas": len(notas),
+            "num_reprobadas": int((notas_arr < 70).sum()),
+            "pct_reprobadas": float((notas_arr < 70).mean()),
+            "nota_min": float(notas_arr.min()),
+            "nota_max": float(notas_arr.max()),
+            "std_notas": float(notas_arr.std()) if len(notas) > 1 else 0.0,
+            "num_zeros": int((notas_arr == 0).sum()),
+            "num_segundas_matriculas": num_seg_mat,
+            "pct_avance_malla": pct_avance,
+            "nivel_actual": nivel_actual,
+            "tendencia_academica": tendencia,
+        }
+
+        model_key = self._get_model_key(carrera)
+        models = self.models.get(model_key) or self.models.get("global", {})
+
+        result = {
+            "features": features,
+            "model_used": model_key,
+            "carrera": carrera,
+        }
+        if used_fallback_periodo:
+            result["periodo_usado"] = used_fallback_periodo
+            result["nota"] = "Predicción basada en notas del periodo anterior (aún no hay notas del semestre actual)"
+
+        xai = {}
+        if "desercion" in models:
+            cols = _get_model_features(models["desercion"])
+            X = np.array([[features.get(c, 0) for c in cols]])
+            result["prob_desercion"] = round(float(models["desercion"].predict_proba(X)[0, 1]), 4)
+            xai["desercion"] = self._compute_explanations(
+                features, model_key, "desercion"
+            )
+        if "reprobacion" in models:
+            cols = _get_model_features(models["reprobacion"])
+            X = np.array([[features.get(c, 0) for c in cols]])
+            result["prob_reprobacion"] = round(float(models["reprobacion"].predict_proba(X)[0, 1]), 4)
+            xai["reprobacion"] = self._compute_explanations(
+                features, model_key, "reprobacion"
+            )
+        if xai:
+            result["xai"] = xai
+
+        # [GAP-F3-02] Contexto conductual adicional (no depende del modelo ML)
+        # Enriquece las explicaciones con indicadores intuitivos para tutores.
+        # Al inicio del semestre (usando fallback), ajustar mensajes y umbrales.
+        if student:
+            contexto = []
+
+            # Obtener contexto del semestre para evaluar si alertas aplican
+            from .recommendations import _get_semester_context, get_dias_sin_acceso_bloque
+            sem_ctx = _get_semester_context(db)
+            dias_desde_inicio = sem_ctx.get("dias_desde_inicio", 0)
+            primera_entrega = sem_ctx.get("primera_entrega_pasada", False)
+
+            # Usar dias_sin_acceso filtrado por bloque (excluye cursos de bloque 2 durante bloque 1)
+            dias_bloque = get_dias_sin_acceso_bloque(db, student_id)
+            dias_acceso = dias_bloque if dias_bloque is not None else student.dias_sin_acceso
+
+            if dias_acceso is not None and dias_acceso > 7 and dias_desde_inicio >= 7:
+                sev = "critica" if dias_acceso >= 14 else "alerta"
+                contexto.append({
+                    "factor": "Inactividad AVAC",
+                    "descripcion": f"{int(dias_acceso)} dias sin acceder al aula virtual",
+                    "valor": dias_acceso,
+                    "severidad": sev,
+                })
+            if student.porcentaje_tareas is not None and student.porcentaje_tareas < 60 and primera_entrega:
+                sev = "critica" if student.porcentaje_tareas < 40 else "alerta"
+                contexto.append({
+                    "factor": "Entrega de tareas baja",
+                    "descripcion": f"Solo ha entregado el {round(student.porcentaje_tareas)}% de tareas",
+                    "valor": round(student.porcentaje_tareas, 1),
+                    "severidad": sev,
+                })
+            if student.indice_compromiso is not None and student.indice_compromiso < 0.55:
+                sev = "critica" if student.indice_compromiso < 0.3 else "alerta"
+                contexto.append({
+                    "factor": "Compromiso academico bajo",
+                    "descripcion": f"Indice de compromiso: {round(student.indice_compromiso * 100)}%",
+                    "valor": round(student.indice_compromiso, 3),
+                    "severidad": sev,
+                })
+            if student.estado_matricula and "matriculad" not in student.estado_matricula.lower():
+                contexto.append({
+                    "factor": "Matricula pendiente",
+                    "descripcion": f"Estado: {student.estado_matricula}",
+                    "valor": student.estado_matricula,
+                    "severidad": "critica",
+                })
+            if contexto:
+                result["contexto_conductual"] = contexto
+
+        return result

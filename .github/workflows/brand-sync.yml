@@ -1,0 +1,42 @@
+# Sincroniza tokens + logos de marca cuando yachaydeep-brand publica un cambio.
+# Disparado por: repository_dispatch (brand-updated) desde yachaydeep-brand,
+# o manualmente (workflow_dispatch). Requiere permiso de escritura (contents).
+name: Sync de marca
+
+on:
+  repository_dispatch:
+    types: [brand-updated]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Actualizar @yachaydeep/brand
+        run: npm install github:cvasconezp/yachaydeep-brand --no-audit --no-fund
+      - name: Copiar logos a public/brand
+        run: npm run sync-brand
+      - name: Verificar build
+        run: npm install --no-audit --no-fund && npm run build
+      - name: Commit y push si hay cambios
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          git config user.name "Carlos Vasconez"
+          git config user.email "cvasconezp@gmail.com"
+          if [ -n "$(git status --porcelain)" ]; then
+            git add -A
+            git commit -m "chore: sync de marca desde yachaydeep-brand"
+            git push
+          else
+            echo "Sin cambios de marca."
+          fi
