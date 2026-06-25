@@ -22,7 +22,7 @@ jobs:
 
     steps:
       - name: Checkout código
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Configurar DNS (Google DNS para evitar bloqueos)
         run: |
