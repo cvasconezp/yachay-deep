@@ -1,7 +1,0 @@
-{
-  "rewrites": [
-    { "source": "/ficha-institucional.html", "destination": "/ficha-institucional.html" },
-    { "source": "/api/:path*", "destination": "https://yachay-deep-production.up.railway.app/:path*" },
-    { "source": "/(.*)", "destination": "/index.html" }
-  ]
-}

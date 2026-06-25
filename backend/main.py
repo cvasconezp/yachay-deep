@@ -57,6 +57,7 @@ from .routes.workflow import router as workflow_router
 from .routes.ml_advanced import router as ml_advanced_router
 from .routes.institutions import router as institutions_router
 from .routes.demo_seed import router as demo_seed_router
+from .routes.public_stats import router as public_stats_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -310,6 +311,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
 # Routers
 app.include_router(auth_router)
+app.include_router(public_stats_router)
 app.include_router(students_router)
 app.include_router(interventions_router)
 app.include_router(dashboard_router)
