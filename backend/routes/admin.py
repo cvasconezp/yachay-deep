@@ -729,7 +729,14 @@ async def update_avac_cookie(
             if "login/index.php" in str(resp.url):
                 raise HTTPException(
                     status_code=400,
-                    detail="Cookie inválida o expirada — redirige a login. Inicia sesión en AVAC y copia una cookie nueva."
+                    detail=(
+                        f"La cookie no abre una sesión válida en {settings.AVAC_BASE_URL}/my/ "
+                        f"(redirigió a {resp.url}). Pasos: 1) abre {settings.AVAC_BASE_URL}/my/ "
+                        "en tu navegador e inicia sesión (Usuarios de la UPS); 2) confirma que "
+                        "carga tu tablero; 3) copia la cookie MoodleSession de ESA pestaña "
+                        "(F12 > Application > Cookies, Path /grado68) y guárdala enseguida, "
+                        "porque las sesiones caducan rápido."
+                    ),
                 )
     except httpx.HTTPError as e:
         raise HTTPException(status_code=502, detail=f"Error conectando a AVAC: {e}")
