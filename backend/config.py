@@ -60,6 +60,7 @@ class Settings(BaseSettings):
     COOKIE_DOMAIN: Optional[str] = ".yachaydeep.com"  # shared across *.yachaydeep.com (works because Vercel proxy makes it same-origin)
     COOKIE_SECURE: bool = True                    # False for localhost dev
     COOKIE_SAMESITE: str = "lax"                   # "lax" is safe since Vercel proxies API requests (same-origin)
+    PERSIST_COOKIES: bool = False                  # [SEC-03] False = cookies de sesión (se borran al cerrar el navegador); True = persistentes (max_age)
 
     # GitHub API — para disparar scraping desde la UI sin esperar al cron
     GITHUB_TOKEN: Optional[str] = None

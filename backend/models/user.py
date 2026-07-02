@@ -29,3 +29,5 @@ class User(Base):
     totp_secret = Column(String, nullable=True, comment="Secreto base32 TOTP")
     totp_enabled = Column(Boolean, default=False, nullable=False, server_default="false", comment="2FA activado")
     recovery_codes = Column(JSON, nullable=True, comment="Lista de hashes argon2 de códigos de recuperación de un solo uso")
+    # [SEC-03] Bloqueo por PIN enforced en servidor
+    pin_locked = Column(Boolean, default=False, nullable=False, server_default="false", comment="Sesión bloqueada por inactividad; requiere verificar PIN")

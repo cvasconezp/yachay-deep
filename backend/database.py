@@ -99,6 +99,7 @@ def upgrade_tables():
             ("totp_secret", "VARCHAR"),
             ("totp_enabled", "BOOLEAN DEFAULT false"),
             ("recovery_codes", "JSON"),
+            ("pin_locked", "BOOLEAN DEFAULT false"),
         ],
         "institutions": [],  # new table, created by create_all()
     "students": [
