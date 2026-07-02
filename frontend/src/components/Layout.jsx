@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, Fragment } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { api } from "../services/api";
@@ -36,6 +36,9 @@ export function Layout({ children }) {
   const [alertAltoCount, setAlertAltoCount] = useState(0);
   const [pinModalOpen, setPinModalOpen] = useState(false);
   const [scrapingProgress, setScrapingProgress] = useState(null);
+  // [DATA-REFRESH] Re-monta la página activa cuando termina un scraping.
+  const [dataVersion, setDataVersion] = useState(0);
+  const prevRunningRef = useRef(false);
 
   // Polling de progreso del scraping (cada 15s)
   useEffect(() => {
@@ -45,12 +48,24 @@ export function Layout({ children }) {
       try {
         const prog = await api.getScrapingProgress();
         setScrapingProgress(prog);
+        // [DATA-REFRESH] Al pasar de "corriendo" a "terminado", avisar a las páginas.
+        if (prevRunningRef.current && !prog?.running) {
+          window.dispatchEvent(new CustomEvent("yd:data-updated"));
+        }
+        prevRunningRef.current = !!prog?.running;
       } catch { /* ignore */ }
     };
     check();
     interval = setInterval(check, 15000);
     return () => clearInterval(interval);
   }, [isAdmin]);
+
+  // [DATA-REFRESH] Escucha el fin del scraping y re-monta la página activa (refetch).
+  useEffect(() => {
+    const onDataUpdated = () => setDataVersion((v) => v + 1);
+    window.addEventListener("yd:data-updated", onDataUpdated);
+    return () => window.removeEventListener("yd:data-updated", onDataUpdated);
+  }, []);
 
   // Sidebar open/closed con persistencia en localStorage
   const [sidebarOpen, setSidebarOpen] = useState(() => {
@@ -332,7 +347,7 @@ export function Layout({ children }) {
               <button onClick={() => setViewAsRole(null)} className="underline font-medium ml-auto">Salir de la vista</button>
             </div>
           )}
-          {children}
+          <Fragment key={dataVersion}>{children}</Fragment>
         </div>
       </main>
       <PinSetupModal open={pinModalOpen} onClose={() => setPinModalOpen(false)} />
