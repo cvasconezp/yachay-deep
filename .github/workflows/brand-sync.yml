@@ -18,13 +18,8 @@ jobs:
       run:
         working-directory: frontend
     steps:
-<<<<<<< HEAD
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
-=======
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
->>>>>>> origin/dependabot/github_actions/actions/setup-node-6
         with:
           node-version: 24
       - name: Actualizar @yachaydeep/brand
