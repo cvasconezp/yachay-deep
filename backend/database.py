@@ -100,6 +100,7 @@ def upgrade_tables():
             ("totp_enabled", "BOOLEAN DEFAULT false"),
             ("recovery_codes", "JSON"),
             ("pin_locked", "BOOLEAN DEFAULT false"),
+            ("totp_secret_cif", "TEXT"),
         ],
         "institutions": [],  # new table, created by create_all()
     "students": [
@@ -195,6 +196,16 @@ def upgrade_tables():
         ("institution_id", "INTEGER"),
             ("score_recuperabilidad", "FLOAT"),
             ("nivel_recuperabilidad", "VARCHAR"),
+            # [Cifrado en reposo — Fase 2 Expand] columnas cifradas + blind index
+            ("cedula_cif", "TEXT"), ("cedula_bidx", "VARCHAR(64)"),
+            ("nombre_cif", "TEXT"), ("nombre_bidx", "VARCHAR(64)"),
+            ("correo_cif", "TEXT"), ("correo_bidx", "VARCHAR(64)"),
+            ("correo_institucional_cif", "TEXT"), ("correo_institucional_bidx", "VARCHAR(64)"),
+            ("telefono_cif", "TEXT"), ("whatsapp_cif", "TEXT"),
+            ("genero_cif", "TEXT"), ("autoidentificacion_etnica_cif", "TEXT"),
+            ("fecha_nacimiento_cif", "TEXT"),
+            ("pais_cif", "TEXT"), ("provincia_cif", "TEXT"), ("ciudad_cif", "TEXT"),
+            ("parroquia_cif", "TEXT"), ("barrio_cif", "TEXT"),
         ],
         "enrollments": [
             ("es_tercera_matricula", "BOOLEAN DEFAULT false"),

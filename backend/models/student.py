@@ -65,6 +65,30 @@ class Student(Base):
     estado_matricula = Column(String, nullable=True)
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
+    # ── [Cifrado en reposo — Fase 2 Expand] ──────────────────────────────────
+    # Columnas cifradas (texto Fernet) + blind index (HMAC hex) para PII.
+    # Se llenan por el listener de doble escritura (backend/crypto_sync.py).
+    # NOTA: son columnas de texto planas a proposito; el ciphertext se asigna
+    # ya cifrado. En la fase Contract el atributo canonico pasara a EncryptedString.
+    cedula_cif = Column(Text, nullable=True)
+    cedula_bidx = Column(String(64), nullable=True, index=True)
+    nombre_cif = Column(Text, nullable=True)
+    nombre_bidx = Column(String(64), nullable=True, index=True)
+    correo_cif = Column(Text, nullable=True)
+    correo_bidx = Column(String(64), nullable=True, index=True)
+    correo_institucional_cif = Column(Text, nullable=True)
+    correo_institucional_bidx = Column(String(64), nullable=True, index=True)
+    telefono_cif = Column(Text, nullable=True)
+    whatsapp_cif = Column(Text, nullable=True)
+    genero_cif = Column(Text, nullable=True)
+    autoidentificacion_etnica_cif = Column(Text, nullable=True)
+    fecha_nacimiento_cif = Column(Text, nullable=True)
+    pais_cif = Column(Text, nullable=True)
+    provincia_cif = Column(Text, nullable=True)
+    ciudad_cif = Column(Text, nullable=True)
+    parroquia_cif = Column(Text, nullable=True)
+    barrio_cif = Column(Text, nullable=True)
+
     # Relationships
     avac_accesses = relationship("AvacAccess", back_populates="student", cascade="all, delete-orphan")
     task_submissions = relationship("TaskSubmission", back_populates="student", cascade="all, delete-orphan")

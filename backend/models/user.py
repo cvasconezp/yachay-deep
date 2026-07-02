@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum, JSON
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum, JSON, Text
 from sqlalchemy.sql import func
 import enum
 from ..database import Base
@@ -31,3 +31,5 @@ class User(Base):
     recovery_codes = Column(JSON, nullable=True, comment="Lista de hashes argon2 de códigos de recuperación de un solo uso")
     # [SEC-03] Bloqueo por PIN enforced en servidor
     pin_locked = Column(Boolean, default=False, nullable=False, server_default="false", comment="Sesión bloqueada por inactividad; requiere verificar PIN")
+    # [Cifrado en reposo — Fase 2 Expand] TOTP secret cifrado (se llena por dual-write)
+    totp_secret_cif = Column(Text, nullable=True)
