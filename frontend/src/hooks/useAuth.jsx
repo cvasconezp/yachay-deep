@@ -34,7 +34,7 @@ export function AuthProvider({ children }) {
   // Cargar usuario al montar (la cookie HttpOnly se envía automáticamente)
   useEffect(() => {
     api.me()
-      .then(setUser)
+      .then((u) => { setUser(u); if (u?.locked) setLocked(true); })  // [SEC-03] re-bloquear tras reload
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, []);
@@ -51,7 +51,12 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const onUnauth = () => { setUser(null); setLocked(false); };
     window.addEventListener("yd:unauthorized", onUnauth);
-    return () => window.removeEventListener("yd:unauthorized", onUnauth);
+    const onLocked = () => setLocked(true);  // [SEC-03] 423 desde el API
+    window.addEventListener("yd:locked", onLocked);
+    return () => {
+      window.removeEventListener("yd:unauthorized", onUnauth);
+      window.removeEventListener("yd:locked", onLocked);
+    };
   }, []);
 
   const login = useCallback(async (email, password, code = null) => {
@@ -75,7 +80,10 @@ export function AuthProvider({ children }) {
 
   // [SEC-03] Idle lock
   const lock = useCallback(() => {
-    if (user?.has_pin) setLocked(true);
+    if (user?.has_pin) {
+      api.lock().catch(() => {});  // [SEC-03] bloquear server-side; el 423 protege aunque falle la UI
+      setLocked(true);
+    }
   }, [user]);
 
   const unlock = useCallback(() => {

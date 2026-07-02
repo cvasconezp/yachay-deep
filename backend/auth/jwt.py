@@ -121,6 +121,14 @@ def get_current_user(
         _allowed = ("/auth/2fa", "/auth/me", "/auth/logout")
         if not any(path.startswith(p) for p in _allowed):
             raise HTTPException(status_code=403, detail="2FA_ENROLLMENT_REQUIRED")
+
+    # [SEC-03] Bloqueo por PIN enforced en servidor: si la sesión está bloqueada,
+    # solo se permiten las rutas de desbloqueo/sesión; el resto responde 423.
+    if getattr(user, "pin_locked", False):
+        _p = request.url.path
+        _pin_allowed = ("/auth/verify-pin", "/auth/lock", "/auth/me", "/auth/logout")
+        if not any(_p.startswith(a) for a in _pin_allowed):
+            raise HTTPException(status_code=423, detail="PIN_LOCKED")
     return user
 
 

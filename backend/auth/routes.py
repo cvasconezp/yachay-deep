@@ -99,6 +99,7 @@ class UserResponse(BaseModel):
     permissions: Optional[list[str]] = None
     tenant: Optional[str] = None
     has_pin: bool = False
+    locked: bool = False
     totp_enabled: bool = False
     must_enroll_2fa: bool = False
     is_super_admin: bool = False
@@ -107,11 +108,17 @@ class UserResponse(BaseModel):
         from_attributes = True
 
 
+def _cookie_max_age(seconds: int):
+    """[SEC-03] None -> cookie de sesión (se borra al cerrar el navegador)."""
+    return seconds if settings.PERSIST_COOKIES else None
+
+
 def _set_refresh_cookie(response, token: str):
     response.set_cookie(
         key=REFRESH_COOKIE_NAME, value=token, httponly=True,
         secure=settings.COOKIE_SECURE, samesite=settings.COOKIE_SAMESITE,
-        domain=settings.COOKIE_DOMAIN, path="/", max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400,
+        domain=settings.COOKIE_DOMAIN, path="/",
+        max_age=_cookie_max_age(settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400),
     )
 
 
@@ -157,6 +164,7 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), co
         user.hashed_password = hash_password(form_data.password)
 
     user.last_login = datetime.now(timezone.utc)
+    user.pin_locked = False  # [SEC-03] sesión nueva siempre desbloqueada
     db.commit()
 
     token = create_access_token({"sub": str(user.id)})
@@ -177,7 +185,7 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), co
         secure=settings.COOKIE_SECURE,
         samesite=settings.COOKIE_SAMESITE,
         domain=settings.COOKIE_DOMAIN,
-        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        max_age=_cookie_max_age(settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60),
         path="/",
     )
     return response
@@ -226,7 +234,7 @@ def refresh_token_endpoint(request: Request, refresh_token: Optional[str] = Form
     response.set_cookie(
         key=COOKIE_NAME, value=new_access, httponly=True,
         secure=settings.COOKIE_SECURE, samesite=settings.COOKIE_SAMESITE,
-        domain=settings.COOKIE_DOMAIN, path="/", max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        domain=settings.COOKIE_DOMAIN, path="/", max_age=_cookie_max_age(settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60),
     )
     _set_refresh_cookie(response, new_refresh)
     return response
@@ -276,6 +284,7 @@ def me(current_user: User = Depends(get_current_user)):
         permissions=current_user.permissions,
         tenant=current_user.tenant,
         has_pin=current_user.pin_hash is not None,
+        locked=bool(getattr(current_user, "pin_locked", False)),
         **_user_2fa_flags(current_user),
     )
 
@@ -474,7 +483,7 @@ def verify_pin(
     request: Request,
     payload: PinVerifyRequest,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_prod_db),
 ):
     """Verifica el PIN para desbloqueo rápido. Rate limited a 5/min."""
     if not current_user.pin_hash:
@@ -483,7 +492,24 @@ def verify_pin(
     if not verify_password(payload.pin, current_user.pin_hash):
         raise HTTPException(status_code=401, detail="PIN incorrecto")
 
+    # [SEC-03] El PIN es la barrera server-side: al validarlo, se desbloquea la sesión.
+    current_user.pin_locked = False
+    db.commit()
     return {"detail": "PIN verificado", "valid": True}
+
+
+@router.post("/lock")
+def lock_session(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_prod_db),
+):
+    """[SEC-03] Bloquea la sesión en el servidor. Hasta verificar el PIN, get_current_user
+    responde 423 en rutas protegidas (un reload ya no da acceso sin el PIN)."""
+    if not current_user.pin_hash:
+        return {"detail": "Sin PIN configurado; nada que bloquear", "locked": False}
+    current_user.pin_locked = True
+    db.commit()
+    return {"detail": "Sesión bloqueada", "locked": True}
 
 
 @router.delete("/pin")

@@ -103,6 +103,12 @@ class ApiClient {
       throw new Error("No autenticado");
     }
 
+    if (response.status === 423) {
+      // [SEC-03] Sesión bloqueada por PIN: avisar a la UI para mostrar la pantalla de bloqueo.
+      window.dispatchEvent(new CustomEvent("yd:locked"));
+      throw new Error("PIN_LOCKED");
+    }
+
     if (!response.ok) {
       const error = await response.json().catch(() => ({ detail: "Error desconocido" }));
       const detail = error.detail;
@@ -175,6 +181,7 @@ class ApiClient {
   // PIN de desbloqueo
   setPin(pin, password) { return this.request("/auth/set-pin", { method: "POST", body: JSON.stringify({ pin, password }) }); }
   verifyPin(pin) { return this.request("/auth/verify-pin", { method: "POST", body: JSON.stringify({ pin }) }); }
+  lock() { return this.request("/auth/lock", { method: "POST" }); }
   removePin() { return this.request("/auth/pin", { method: "DELETE" }); }
   createUser(data) { return this.post("/auth/users", data); }
   listUsers(scope = null) { return this.get(`/auth/users${scope ? "?scope=" + encodeURIComponent(scope) : ""}`); }
