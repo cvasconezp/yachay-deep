@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
 
-from ..database import get_db
+from ..database import get_db, get_prod_db
 from ..models.scraping_run import ScrapingRun
 from ..auth.jwt import require_admin, get_current_user
 from ..models.user import User
@@ -1110,3 +1110,34 @@ def debug_task_submissions(
         "summary_by_unidad": by_unidad,
         "records": records,
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CIFRADO EN REPOSO — Backfill del histórico (Fase 2 Migrate)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.post("/cifrado/backfill")
+def cifrado_backfill(
+    mode: str = "dry-run",
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_prod_db),
+):
+    """Rellena las columnas cifradas del histórico.
+
+    mode:
+      - "dry-run" (default): reporta cuántas filas cifraría, sin escribir.
+      - "apply": cifra las filas pendientes.
+      - "verify": descifra y compara contra el texto plano (integridad).
+    """
+    from ..crypto import is_configured
+    from ..services.cifrado_backfill import backfill, verify
+
+    if not is_configured():
+        raise HTTPException(status_code=400, detail="Cifrado no configurado: falta ENC_KEYS/BLIND_INDEX_KEY.")
+
+    if mode == "verify":
+        errs = verify(db)
+        return {"mode": "verify", "ok": len(errs) == 0, "total_errores": len(errs), "errores": errs[:50]}
+    if mode == "apply":
+        return {"mode": "apply", **backfill(db, dry_run=False)}
+    return {"mode": "dry-run", **backfill(db, dry_run=True)}
