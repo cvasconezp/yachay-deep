@@ -18,6 +18,9 @@ os.environ["SECRET_KEY"] = "test-secret-key-DO-NOT-USE-IN-PRODUCTION-abc123"
 os.environ["DEBUG"] = "True"
 os.environ["ADMIN_EMAIL"] = "admin@test.yachay.edu.ec"
 os.environ["ADMIN_PASSWORD"] = "TestPassword123!"
+# [Cifrado en reposo] Llaves de TEST (no usar en prod) para ejercitar el dual-write.
+os.environ["ENC_KEYS"] = "VmKKWyyCCl43l_U5AalkRRHVAXaRBVwAGq2jJQ9dvow="
+os.environ["BLIND_INDEX_KEY"] = "5d55e351c661de0aad9760dc68e95b074488a1d7ccbbb9d1f1fd3b5d6f2f70ce"
 
 from backend.database import Base, get_db, get_prod_db
 from backend.main import app

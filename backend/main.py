@@ -42,6 +42,7 @@ if settings.SENTRY_DSN:
     except ImportError:
         logging.getLogger(__name__).warning("sentry-sdk no instalado. pip install sentry-sdk[fastapi]")
 from .database import create_tables, upgrade_tables
+from . import crypto_sync  # noqa: F401  registra listeners de cifrado (Fase 2)
 from .auth.routes import router as auth_router
 from .routes.students import router as students_router
 from .routes.interventions import router as interventions_router
