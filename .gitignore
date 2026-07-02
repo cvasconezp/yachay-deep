@@ -50,3 +50,7 @@ coverage_html/
 frontend/coverage/
 .coverage
 htmlcov/
+
+# Variantes locales de entorno (no deben rastrearse)
+.env.local
+*.env.local
