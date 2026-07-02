@@ -85,7 +85,8 @@ describe("useAuth / AuthProvider", () => {
       screen.getByText("Login").click();
     });
 
-    expect(api.login).toHaveBeenCalledWith("a@b.com", "pass");
+    // login() pasa el 3er arg de 2FA (code=null cuando no se ingresa código)
+    expect(api.login).toHaveBeenCalledWith("a@b.com", "pass", null);
     expect(screen.getByTestId("user").textContent).toBe("new@test.com");
     expect(screen.getByTestId("isAdmin").textContent).toBe("false");
   });
