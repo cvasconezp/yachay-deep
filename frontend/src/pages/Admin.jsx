@@ -257,6 +257,7 @@ function TabSistema() {
 
         {/* Cookie AVAC */}
         <AvacCookieManager />
+        <CifradoBackfillManager />
 
         {/* Herramientas de Alertas */}
         <AlertTools />
@@ -582,6 +583,56 @@ function AlertTools() {
 
 // Gestión de Cookie AVAC (MoodleSession)
 // ─────────────────────────────────────────────────────────────────────────────
+function CifradoBackfillManager() {
+  const [loading, setLoading] = useState("");
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+
+  const run = async (mode) => {
+    if (mode === "apply" && !window.confirm("¿Cifrar el histórico ahora? Asegúrate de tener un BACKUP de la BD. No borra el texto plano.")) return;
+    setLoading(mode); setError(""); setResult(null);
+    try {
+      const r = await api.cifradoBackfill(mode);
+      setResult({ mode, data: r });
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading("");
+    }
+  };
+
+  return (
+    <div className="mt-4 pt-4 border-t border-gray-100">
+      <div className="flex items-center justify-between mb-1">
+        <label className="text-sm font-semibold text-gray-700">Cifrado en reposo (histórico)</label>
+        <div className="flex gap-2">
+          <button onClick={() => run("dry-run")} disabled={!!loading}
+            className="text-xs px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors disabled:opacity-50">
+            {loading === "dry-run" ? "Simulando..." : "Dry-run"}
+          </button>
+          <button onClick={() => run("apply")} disabled={!!loading}
+            className="text-xs px-3 py-1.5 rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-700 transition-colors disabled:opacity-50">
+            {loading === "apply" ? "Cifrando..." : "Aplicar"}
+          </button>
+          <button onClick={() => run("verify")} disabled={!!loading}
+            className="text-xs px-3 py-1.5 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-700 transition-colors disabled:opacity-50">
+            {loading === "verify" ? "Verificando..." : "Verificar"}
+          </button>
+        </div>
+      </div>
+      <p className="text-xs text-gray-400 mb-2">
+        Rellena el cifrado de los registros previos. Orden seguro: Dry-run &rarr; Aplicar &rarr; Verificar. Haz un backup antes de Aplicar.
+      </p>
+      {error && <div className="text-xs p-2 rounded-lg mb-2 bg-red-50 text-red-700">Error: {error}</div>}
+      {result && (
+        <div className="text-xs bg-gray-50 rounded-lg p-3 max-h-64 overflow-auto font-mono whitespace-pre-wrap">
+          {JSON.stringify(result.data, null, 2)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AvacCookieManager() {
   const [cookieValue, setCookieValue] = useState("");
   const [cookieStatus, setCookieStatus] = useState(null); // {configured, valid, message, cookie_preview}
