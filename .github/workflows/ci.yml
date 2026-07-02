@@ -53,6 +53,10 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: "20"
+      - name: Permitir clonar dep pública @yachaydeep/brand por HTTPS (npm ci la pide por ssh)
+        run: |
+          git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
       - run: cd frontend && npm ci
       - name: Run tests with coverage
         run: cd frontend && npx vitest run --coverage
@@ -72,4 +76,8 @@ jobs:
       - run: pip install pip-audit
       - run: pip-audit -r backend/requirements.txt --ignore-vuln PYSEC-2024-* || true
       # [SEC-09] npm audit
+      - name: Permitir clonar dep pública @yachaydeep/brand por HTTPS (npm ci la pide por ssh)
+        run: |
+          git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
       - run: cd frontend && npm ci && npm audit --audit-level=high || true
