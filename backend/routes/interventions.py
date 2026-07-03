@@ -132,7 +132,7 @@ class InterventionResponse(BaseModel):
         from_attributes = True
 
 
-@router.post("/", response_model=InterventionResponse)
+@router.post("", response_model=InterventionResponse)
 def create_intervention(
     payload: InterventionCreate,
     db: Session = Depends(get_db),
@@ -401,7 +401,7 @@ def delete_intervention(
     return {"message": "Intervención eliminada", "id": intervention_id}
 
 
-@router.get("/", response_model=list[InterventionResponse])
+@router.get("", response_model=list[InterventionResponse])
 def list_interventions(
     student_id: Optional[int] = None,
     monitor_id: Optional[int] = None,
