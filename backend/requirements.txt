@@ -20,7 +20,7 @@ selenium==4.44.0
 beautifulsoup4==4.15.0
 lxml==6.1.1
 aiofiles==25.1.0
-scikit-learn==1.8.0
+scikit-learn==1.9.0
 joblib==1.5.3
 slowapi==0.1.9
 httpx==0.28.1
