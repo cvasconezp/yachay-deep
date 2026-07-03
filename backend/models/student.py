@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, DateTime, Float, Text, Date, Boo
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from ..database import Base
+from ..crypto import EncryptedString
 
 
 class Student(Base):
@@ -13,7 +14,7 @@ class Student(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
-    cedula = Column(String, unique=True, index=True, nullable=True)
+    cedula = Column("cedula_cif", EncryptedString, nullable=True)  # [2.3a] lee/escribe cifrado; búsqueda por cedula_bidx
     nombre = Column(String, index=True, nullable=True)
     correo = Column(String, index=True, nullable=True)
     correo_institucional = Column(String, index=True, nullable=True)
@@ -34,16 +35,16 @@ class Student(Base):
     promedio_calificaciones = Column(Float, nullable=True)
 
     # Residence (reporte.xlsx > DatosEspecificos)
-    pais = Column(String, nullable=True)               # país de domicilio
-    provincia = Column(String, nullable=True)          # provincia
-    ciudad = Column(String, nullable=True)             # ciudad / cantón
-    parroquia = Column(String, nullable=True)          # parroquia (solo DatosEspecificos)
-    barrio = Column(String, nullable=True)             # barrio o comunidad
+    pais = Column("pais_cif", EncryptedString, nullable=True)       # país de domicilio (cifrado)
+    provincia = Column("provincia_cif", EncryptedString, nullable=True)  # provincia (cifrado)
+    ciudad = Column("ciudad_cif", EncryptedString, nullable=True)   # ciudad / cantón (cifrado)
+    parroquia = Column("parroquia_cif", EncryptedString, nullable=True)  # parroquia (cifrado)
+    barrio = Column("barrio_cif", EncryptedString, nullable=True)   # barrio o comunidad (cifrado)
 
     # Personal demographics (from 2505060014_reporte.xlsx)
     fecha_nacimiento = Column(Date, nullable=True)
-    genero = Column(String, nullable=True)
-    autoidentificacion_etnica = Column(String, nullable=True)
+    genero = Column("genero_cif", EncryptedString, nullable=True)
+    autoidentificacion_etnica = Column("autoidentificacion_etnica_cif", EncryptedString, nullable=True)
 
     # Academic group from institutional reporte (NOMBRE_GRUPO → "3")
     grupo = Column(String, nullable=True)
@@ -70,7 +71,6 @@ class Student(Base):
     # Se llenan por el listener de doble escritura (backend/crypto_sync.py).
     # NOTA: son columnas de texto planas a proposito; el ciphertext se asigna
     # ya cifrado. En la fase Contract el atributo canonico pasara a EncryptedString.
-    cedula_cif = Column(Text, nullable=True)
     cedula_bidx = Column(String(64), nullable=True, index=True)
     nombre_cif = Column(Text, nullable=True)
     nombre_bidx = Column(String(64), nullable=True, index=True)
@@ -80,14 +80,7 @@ class Student(Base):
     correo_institucional_bidx = Column(String(64), nullable=True, index=True)
     telefono_cif = Column(Text, nullable=True)
     whatsapp_cif = Column(Text, nullable=True)
-    genero_cif = Column(Text, nullable=True)
-    autoidentificacion_etnica_cif = Column(Text, nullable=True)
     fecha_nacimiento_cif = Column(Text, nullable=True)
-    pais_cif = Column(Text, nullable=True)
-    provincia_cif = Column(Text, nullable=True)
-    ciudad_cif = Column(Text, nullable=True)
-    parroquia_cif = Column(Text, nullable=True)
-    barrio_cif = Column(Text, nullable=True)
 
     # Relationships
     avac_accesses = relationship("AvacAccess", back_populates="student", cascade="all, delete-orphan")

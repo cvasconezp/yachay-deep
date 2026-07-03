@@ -1,73 +1,43 @@
 """
-[Cifrado en reposo — Fase 2 Migrate] Backfill del histórico.
+[Cifrado en reposo — Contract 2.3a] Mantenimiento del blind index.
 
-Rellena las columnas *_cif / *_bidx de los registros que existían antes de
-activar la doble escritura (Expand). Idempotente: solo toca filas donde la
-columna cifrada está NULL y el texto plano no. No borra ni modifica el texto
-plano (eso ocurre en Contract).
-
-Reutiliza los mapas de campos de crypto_sync para no duplicar la definición.
+Tras el remapeo a EncryptedString, el ORM cifra/descifra de forma transparente.
+Lo único que queda por mantener a mano es `cedula_bidx` (búsqueda exacta por
+cédula). Este servicio:
+  - backfill(): rellena cedula_bidx faltante/incorrecto.
+  - verify():   comprueba que cada fila descifra y que cedula_bidx coincide.
+Se dispara desde el panel Admin (POST /admin/cifrado/backfill).
 """
 from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from ..crypto import blind_index, decrypt, encrypt
-from ..crypto_sync import _STUDENT_MAP, _USER_MAP
+from ..crypto import blind_index
 from ..models.student import Student
-from ..models.user import User
-
-_TARGETS = [("students", Student, _STUDENT_MAP), ("users", User, _USER_MAP)]
-
-
-def _txt(v):
-    return None if v is None else (v if isinstance(v, str) else str(v))
 
 
 def backfill(db: Session, dry_run: bool = True) -> dict:
-    """Cifra las filas pendientes. Devuelve conteos por tabla."""
-    report = {}
-    for key, Model, mapping in _TARGETS:
-        revisados = actualizados = campos = 0
-        for row in db.query(Model).all():
-            revisados += 1
-            row_changed = False
-            for plano, (cif, bidx) in mapping.items():
-                if getattr(row, cif, None) is not None:
-                    continue  # ya cifrado
-                val = _txt(getattr(row, plano, None))
-                if val is None:
-                    continue
-                campos += 1
-                row_changed = True
-                if not dry_run:
-                    setattr(row, cif, encrypt(val))
-                    if bidx:
-                        setattr(row, bidx, blind_index(val))
-            if row_changed:
-                actualizados += 1
-        if not dry_run:
-            db.commit()
-        report[key] = {"revisados": revisados, "filas_pendientes": actualizados, "campos_cifrados": campos}
-    return report
+    revisados = pendientes = 0
+    for s in db.query(Student).all():
+        revisados += 1
+        expected = blind_index(s.cedula)  # s.cedula ya viene descifrado
+        if s.cedula_bidx != expected:
+            pendientes += 1
+            if not dry_run:
+                s.cedula_bidx = expected
+    if not dry_run:
+        db.commit()
+    return {"students": {"revisados": revisados, "filas_pendientes": pendientes}}
 
 
 def verify(db: Session) -> list[str]:
-    """Descifra cada *_cif y lo compara con el texto plano; recomputa cada bidx."""
     errores: list[str] = []
-    for key, Model, mapping in _TARGETS:
-        for row in db.query(Model).all():
-            for plano, (cif, bidx) in mapping.items():
-                val = _txt(getattr(row, plano, None))
-                cifv = getattr(row, cif, None)
-                if val is None:
-                    if cifv is not None and decrypt(cifv) not in (None, ""):
-                        errores.append(f"{key}#{row.id}.{plano}: plano NULL pero _cif tiene dato")
-                    continue
-                if cifv is None:
-                    errores.append(f"{key}#{row.id}.{plano}: sin cifrar (_cif NULL)")
-                elif decrypt(cifv) != val:
-                    errores.append(f"{key}#{row.id}.{plano}: descifrado != plano")
-                if bidx and getattr(row, bidx, None) != blind_index(val):
-                    errores.append(f"{key}#{row.id}.{bidx}: blind index no coincide")
+    for s in db.query(Student).all():
+        try:
+            ced = s.cedula  # fuerza descifrado
+        except Exception as exc:  # noqa: BLE001
+            errores.append(f"students#{s.id}.cedula: no descifra ({exc})")
+            continue
+        if ced and s.cedula_bidx != blind_index(ced):
+            errores.append(f"students#{s.id}.cedula_bidx: no coincide")
     return errores

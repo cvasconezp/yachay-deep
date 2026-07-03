@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from ..models.practica_preprofesional import EscuelaPractica, PracticaPreprofesional
 from ..models.student import Student
+from ..crypto import blind_index
 
 logger = logging.getLogger(__name__)
 
@@ -259,7 +260,8 @@ def run_practicas_etl(db: Session, data_path: str) -> dict:
 
     cedula_to_student = {}
     if all_cedulas:
-        students = db.query(Student).filter(Student.cedula.in_(all_cedulas)).all()
+        _bidx = [blind_index(c) for c in all_cedulas if c]
+        students = db.query(Student).filter(Student.cedula_bidx.in_(_bidx)).all()
         for s in students:
             if s.cedula:
                 cedula_to_student[s.cedula] = s.id

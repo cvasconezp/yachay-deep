@@ -25,6 +25,7 @@ from ..auth.jwt import get_current_user
 from ..models.user import User
 from ..constants import EIB_GRUPO_SEDE_STR as SEDE_MAPPING
 
+from ..crypto import blind_index
 router = APIRouter(prefix="/students", tags=["students"])
 
 # ── Caché en memoria para malla canónica por carrera (evita recalcular por cada estudiante) ──
@@ -475,7 +476,7 @@ def search_students(
                 or_(
                     func.lower(Student.nombre).contains(tok),
                     func.lower(Student.correo_institucional).contains(tok),
-                    Student.cedula == q_stripped,
+                    Student.cedula_bidx == blind_index(q_stripped),
                     func.lower(Student.telefono).contains(tok),
                 )
             )

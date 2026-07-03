@@ -15,6 +15,7 @@ from typing import Optional
 from datetime import datetime
 
 from ..database import get_db, get_prod_db
+from ..crypto import blind_index
 from ..models.scraping_run import ScrapingRun
 from ..auth.jwt import require_admin, get_current_user
 from ..models.user import User
@@ -913,7 +914,7 @@ def debug_student_search(
     students = db.query(Student).filter(
         sqlfunc.lower(Student.nombre).contains(q.lower())
         | sqlfunc.lower(Student.correo_institucional).contains(q.lower())
-        | sqlfunc.lower(Student.cedula).contains(q.lower())
+        | (Student.cedula_bidx == blind_index(q))  # [2.3a] cédula cifrada: igualdad exacta
     ).limit(10).all()
     
     return {"results": [

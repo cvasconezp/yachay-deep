@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum, JSON, T
 from sqlalchemy.sql import func
 import enum
 from ..database import Base
+from ..crypto import EncryptedString
 
 
 class UserRole(str, enum.Enum):
@@ -26,10 +27,8 @@ class User(Base):
     pin_hash = Column(String, nullable=True, comment="BCrypt hash del PIN de 6 dígitos para desbloqueo rápido")
     tenant = Column(String, nullable=True, comment="Código de institución (subdominio) del usuario, ej: 'ups', 'demo'. NULL = acceso global (admins)")
     # [WF3] 2FA (TOTP)
-    totp_secret = Column(String, nullable=True, comment="Secreto base32 TOTP")
+    totp_secret = Column("totp_secret_cif", EncryptedString, nullable=True, comment="Secreto base32 TOTP (cifrado)")
     totp_enabled = Column(Boolean, default=False, nullable=False, server_default="false", comment="2FA activado")
     recovery_codes = Column(JSON, nullable=True, comment="Lista de hashes argon2 de códigos de recuperación de un solo uso")
     # [SEC-03] Bloqueo por PIN enforced en servidor
     pin_locked = Column(Boolean, default=False, nullable=False, server_default="false", comment="Sesión bloqueada por inactividad; requiere verificar PIN")
-    # [Cifrado en reposo — Fase 2 Expand] TOTP secret cifrado (se llena por dual-write)
-    totp_secret_cif = Column(Text, nullable=True)
