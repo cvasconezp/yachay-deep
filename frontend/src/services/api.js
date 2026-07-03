@@ -287,6 +287,7 @@ class ApiClient {
   triggerETL() { return this.post("/admin/etl/run", {}); }
     triggerScraping(mode = "full") { return this.post(`/admin/etl/trigger-scraping?mode=${encodeURIComponent(mode)}`, {}); }
     getScrapingProgress() { return this.get("/admin/etl/scraping-progress"); }
+    cifradoBackfill(mode = "dry-run") { return this.post(`/admin/cifrado/backfill?mode=${encodeURIComponent(mode)}`, {}); }
   getETLRuns(page = 1, pageSize = 10) { return this.get(`/admin/etl/runs?page=${page}&page_size=${pageSize}`); }
   getSystemStatus() { return this.get("/admin/system/status"); }
   uploadAndRunETL(file) {
