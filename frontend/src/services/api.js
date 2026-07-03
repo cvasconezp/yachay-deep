@@ -213,9 +213,9 @@ class ApiClient {
   getStudentComparativa(studentId) { return this.get(`/students/${studentId}/comparativa`); }
 
   // ── Interventions ──
-  createIntervention(data) { return this.post("/interventions/", data); }
+  createIntervention(data) { return this.post("/interventions", data); }
   bulkCreateInterventions(data) { return this.post("/interventions/bulk", data); }
-  listInterventions(studentId) { return this.get(`/interventions/?student_id=${studentId}`); }
+  listInterventions(studentId) { return this.get(`/interventions?student_id=${studentId}`); }
   interventionStats() { return this.get("/interventions/stats"); }
   updateIntervention(id, data) { return this.patch(`/interventions/${id}`, data); }
   deleteIntervention(id) { return this.delete(`/interventions/${id}`); }
