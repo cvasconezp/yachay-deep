@@ -1,0 +1,14 @@
+{
+  "GHSA-4r6h-8v6p-xvw6": {
+    "active": true,
+    "notes": "xlsx (SheetJS) Prototype Pollution — sin fix en registro npm. La vuln requiere PARSEAR un archivo malicioso; aqui xlsx SOLO se usa para EXPORTAR (ExportExcelButton.jsx), nunca para leer entrada no confiable. Riesgo real nulo."
+  },
+  "GHSA-5pgg-2g8v-p4x9": {
+    "active": true,
+    "notes": "xlsx (SheetJS) ReDoS — sin fix en registro npm. Solo se exporta, no se parsea entrada no confiable. Riesgo real nulo."
+  },
+  "GHSA-fx2h-pf6j-xcff": {
+    "active": true,
+    "notes": "vite server.fs.deny bypass (SOLO dev-server, SOLO Windows). vite es devDependency: no va al bundle de produccion. El unico fix es vite 8 (major/breaking) -> diferido a PR propio de upgrade. Sin exposicion en prod/CI."
+  }
+}
