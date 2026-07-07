@@ -22,6 +22,7 @@ from .jwt import (verify_password, create_access_token, create_refresh_token, de
                   require_super_admin, is_super_admin,
                   COOKIE_NAME, REFRESH_COOKIE_NAME)
 from ..models.refresh_token import RefreshToken
+from ..services.telemetry import track
 from jose import JWTError
 
 import logging
@@ -188,6 +189,8 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), co
         max_age=_cookie_max_age(settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60),
         path="/",
     )
+    # [Telemetría de uso] evento login pseudonimizado (sin PII). Best-effort.
+    track(db, "login", user_id=user.id, role=user.role, tenant=user.tenant)
     return response
 
 

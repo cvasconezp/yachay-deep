@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from ..config import settings
+from .logsafe import mask_email
 from ..models import Student, ScrapingRun
 from ..models.alert_event import AlertEvent
 from ..models.course_config import SemesterConfig
@@ -312,11 +313,11 @@ def send_daily_digest(db: Session, recipient_email: Optional[str] = None) -> dic
                 server.sendmail(msg["From"], [email_addr], msg.as_string())
 
             sent_to.append(email_addr)
-            logger.info(f"Daily Digest enviado a {email_addr}")
+            logger.info(f"Daily Digest enviado a {mask_email(email_addr)}")
 
         except Exception as e:
             failed.append({"email": email_addr, "error": str(e)})
-            logger.error(f"Error enviando Daily Digest a {email_addr}: {e}")
+            logger.error(f"Error enviando Daily Digest a {mask_email(email_addr)}: {e}")
 
     return {
         "sent_to": sent_to,

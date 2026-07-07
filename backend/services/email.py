@@ -10,6 +10,7 @@ from datetime import datetime
 from html import escape as html_escape
 
 from ..config import settings
+from .logsafe import mask_email
 
 logger = logging.getLogger(__name__)
 
@@ -213,7 +214,7 @@ def send_tutoria_notification(
             server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
             server.sendmail(msg["From"], [correo_estudiante], msg.as_string())
 
-        logger.info(f"Notificación de tutoría enviada a {correo_estudiante} ({asignatura})")
+        logger.info(f"Notificación de tutoría enviada a {mask_email(correo_estudiante)} ({asignatura})")
         return True
     except Exception as e:
         logger.error(f"Error enviando notificación de tutoría: {e}")
@@ -409,7 +410,7 @@ def send_welcome_email(
                 server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
             server.sendmail(msg["From"], [to_email], msg.as_string())
 
-        logger.info(f"Email de bienvenida enviado a {to_email}")
+        logger.info(f"Email de bienvenida enviado a {mask_email(to_email)}")
         return True
     except Exception as e:
         logger.error(f"Error enviando email de bienvenida: {e}")

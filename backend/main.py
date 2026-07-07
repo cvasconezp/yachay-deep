@@ -58,6 +58,7 @@ from .routes.workflow import router as workflow_router
 from .routes.ml_advanced import router as ml_advanced_router
 from .routes.institutions import router as institutions_router
 from .routes.demo_seed import router as demo_seed_router
+from .routes.metrics import router as metrics_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -302,9 +303,11 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
         cors_headers["Access-Control-Allow-Origin"] = origin
         cors_headers["Access-Control-Allow-Credentials"] = "true"
         cors_headers["Vary"] = "Origin"
+    # [SEC] No divulgar tipo/mensaje interno de la excepción al cliente.
+    # El traceback completo queda solo en logs (logger.exception arriba).
     return JSONResponse(
         status_code=500,
-        content={"detail": f"{type(exc).__name__}: {str(exc)[:300]}"},
+        content={"detail": "Error interno"},
         headers=cors_headers,
     )
 
@@ -325,6 +328,7 @@ app.include_router(workflow_router)
 app.include_router(ml_advanced_router)
 app.include_router(institutions_router)
 app.include_router(demo_seed_router)
+app.include_router(metrics_router)
 
 
 @app.middleware("http")

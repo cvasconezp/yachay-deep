@@ -439,4 +439,35 @@ Se aplica **decaimiento exponencial por inactividad**: a mayor días sin acceso,
 
 ---
 
+## 8. Diccionario de Métricas (estándar de la casa)
+
+*Añadido en `chore/estandar-casa` (punto 6). Cada métrica declara: definición · fórmula · fuente · cadencia · dueño · clase · versión. Clases: **Uso** (telemetría) · **Dominio** (interpretación de datos cargados) · **Impacto** (marca).*
+
+**Definiciones de estado (fijadas):**
+
+- **Estudiante "monitoreado"** = estudiante presente en `students` (cada registro proviene de ingesta real). Base de las cifras de impacto.
+- **Estudiante "en riesgo"** = `prob_desercion` **o** `prob_reprobacion` por encima del umbral del modelo de su carrera (umbral configurable; no hardcodear en frontend).
+- **Actor "activo" (uso)** ≠ monitoreado. En telemetría, actor con ≥1 evento en la ventana (p. ej. 7 días). Vive en la capa de uso, separado del dominio.
+
+| Nombre | Clase | Definición | Fórmula / cálculo | Fuente (código) | Cadencia | Dueño | Versión |
+|---|---|---|---|---|---|---|---|
+| `prob_desercion` | Dominio | Probabilidad de deserción en el periodo | Clasificador por carrera (LogReg/RF) sobre features del ETL | `ml/predict.py` + `.pkl` por carrera | Cada predicción; retrain cada N ETLs | ML | 1.0 |
+| `prob_reprobacion` | Dominio | Probabilidad de reprobación | Modelo de reprobación por carrera | `ml/predict.py` | Idem | ML | 1.0 |
+| `nivel_riesgo` | Dominio | Nivel de riesgo (Alto/Medio/Bajo) | Regla sobre señales + umbrales del `SemesterConfig` | ETL + `ml/recommendations.py` | Post-ETL | ML | 1.0 |
+| `indice_compromiso` | Dominio | 0.0–1.0 (acceso 30% + tareas 30% + rendimiento 25% + admin 15%) | Ver §7 | ETL | Post-ETL | Analítica | 1.0 |
+| `docente_effectiveness` | Dominio | Efectividad docente por resultados de sus estudiantes | Agregación por docente | `routes/analytics/docentes` | Por consulta | Analítica | 1.0 |
+| `efectividad_intervencion` | Dominio | Cambio de riesgo antes/después de intervenir | Δ entre snapshots pre/post | `models/intervention.py`, `services/*` | Al cerrar intervención | Analítica | 1.0 |
+| `estudiantes_monitoreados` | Impacto | Estudiantes en la base (ingesta real) | `COUNT(students)` | `routes/metrics.py::/metrics/impact` | Tiempo real (BD) | Producto | 1.0 |
+| `programas_activos` | Impacto | Carreras distintas con ≥1 estudiante monitoreado | `COUNT(DISTINCT students.carrera)` | `routes/metrics.py::/metrics/impact` | Tiempo real (BD) | Producto | 1.0 |
+| `login`, `dashboard_view`, `ficha360_view`, `alerta_vista`, `recomendacion_vista`, `intervencion_creada`, `intervencion_cerrada`, `export_generado` | Uso | Eventos de telemetría pseudonimizada (actor por HMAC, sin PII) | Inserción en `usage_events` vía `track()` | `services/telemetry.py`, `models/usage_event.py` | Tiempo real por evento | Producto | 1.0 |
+
+**Reglas:**
+
+- **Impacto se lee, no se reescribe:** landings y pitches consumen `/metrics/impact`; prohibido teclear la cifra (la landing ya la lee, ver `Landing.jsx`).
+- **Dominio siempre en backend**, recalculable; las `prob_*` deben poder reproducirse fijando la versión del modelo (ver `ml_model_stores` / punto 12 del plan).
+- **Uso siempre pseudonimizado** (HMAC), aislado de tablas de dominio, sin PII en `props`.
+- **Formato canónico de la casa:** miles con punto, decimales con coma, probabilidades como % con 1 decimal (`es_EC`).
+
+---
+
 *Documento interno — Yachay Deep / PachaTech*

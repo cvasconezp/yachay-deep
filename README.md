@@ -1,6 +1,8 @@
-# Yachay Deep
+# Core — Yachay Deep
 
 **Sistema de Alerta Temprana Académica basado en Learning Analytics**
+
+> **Core** · un producto de Yachay Deep Labs · Badge de ciclo de vida: **`INSIGNIA`** — *Fase 6 (integración LMS en tiempo real) en curso; no es un producto "100 % terminado".*
 
 [![CI/CD](https://github.com/cvasconezp/yachay-deep/actions/workflows/daily_scraping.yml/badge.svg)](https://github.com/cvasconezp/yachay-deep/actions)
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/downloads/release/python-3110/)
@@ -34,7 +36,7 @@ Yachay Deep es un sistema de inteligencia académica preventiva diseñado para l
 | Scraping | Selenium · BeautifulSoup · SSO + TOTP |
 | CI/CD | GitHub Actions (tests + scraping diario) |
 | Hosting | Railway (backend + BD) · Vercel (frontend) |
-| Calidad | Ruff · pre-commit · pytest (330+ tests) |
+| Calidad | Ruff · pre-commit · pytest (cobertura mínima 60% forzada) · `pip-audit`/`npm audit` bloqueantes en CI |
 
 ---
 
@@ -62,8 +64,8 @@ yachay-deep/
 │   ├── auth/           # Autenticación JWT + RBAC (4 roles)
 │   ├── etl/            # Pipeline ETL (4,046 líneas, 11 pasos)
 │   ├── ml/             # ML: entrenamiento, predicción, XAI, contrafactuales (2,503 líneas)
-│   ├── models/         # 16+ modelos SQLAlchemy ORM
-│   ├── routes/         # 14 módulos de rutas (125 endpoints)
+│   ├── models/         # Modelos SQLAlchemy ORM (conteo autogenerado en CI)
+│   ├── routes/         # Módulos de rutas REST (conteo autogenerado en CI)
 │   │   └── analytics/  # 13 sub-módulos de analítica
 │   ├── scraping/       # Scraping Moodle con Selenium (1,158 líneas)
 │   └── services/       # Email, utilidades
@@ -73,13 +75,13 @@ yachay-deep/
 │       ├── components/ # Componentes React reutilizables
 │       ├── hooks/      # useAuth, useIdleTimer, useDebounce, useUrlFilters
 │       └── services/   # Cliente API
-├── docs/               # Documentación técnica completa
-│   ├── ARCHITECTURE.md
-│   ├── API.md
-│   ├── DATA_DICTIONARY.md
-│   ├── MODULES.md
-│   ├── SECURITY_FRAMEWORK.md
-│   └── DEPLOY.md
+├── docs/               # Documentación (ver carta de navegación en PRODUCT.md)
+│   ├── PRODUCT.md · ROADMAP.md
+│   ├── ARCHITECTURE.md · API.md · MODULES.md · DATA_DICTIONARY.md
+│   ├── SECURITY.md · SECURITY_INFRA_CHECKLIST.md · DEPLOYMENT.md
+│   ├── USER_GUIDE.md · ADMIN_GUIDE.md
+│   ├── AUDITS/          # auditorías e inventarios
+│   └── (deprecados: SECURITY_FRAMEWORK.md, DEPLOY.md)
 ├── Dockerfile          # Build de producción (Railway)
 ├── docker-compose.yml  # Entorno de desarrollo local
 ├── requirements.txt    # Dependencias Python
@@ -147,39 +149,56 @@ npm run dev
 ## Testing
 
 ```bash
-pytest -v                     # Suite completa (330+ tests)
-pytest tests/test_security*   # Solo tests de seguridad (5 suites)
-pytest --cov=backend          # Con cobertura
+pytest -v                     # Suite completa
+pytest tests/test_security*   # Solo tests de seguridad
+pytest --cov=backend --cov-fail-under=60   # Con cobertura (umbral mínimo 60%)
 ```
 
 ---
 
-## Documentación
+## Documentación — carta de navegación
 
-La documentación técnica completa está en [`docs/`](./docs/):
+Punto de entrada: **[docs/PRODUCT.md](./docs/PRODUCT.md)** (qué es Core y a futuro).
 
-| Documento | Contenido |
-|---|---|
-| [ARCHITECTURE.md](./docs/ARCHITECTURE.md) | Arquitectura del sistema, stack, esquema BD, decisiones técnicas |
-| [API.md](./docs/API.md) | Referencia de los 125 endpoints con métodos, rutas y roles |
-| [DATA_DICTIONARY.md](./docs/DATA_DICTIONARY.md) | 18 tablas documentadas columna por columna |
-| [MODULES.md](./docs/MODULES.md) | 17 módulos funcionales con páginas, APIs y features |
-| [SECURITY_FRAMEWORK.md](./docs/SECURITY_FRAMEWORK.md) | Autenticación, RBAC, cifrado, protección contra ataques |
-| [DEPLOY.md](./docs/DEPLOY.md) | Guía paso a paso para Railway + Vercel |
+| Documento | Contenido | Estado |
+|---|---|---|
+| [PRODUCT.md](./docs/PRODUCT.md) | Qué es el producto, motor, capas, límites | ✅ vigente |
+| [ROADMAP.md](./docs/ROADMAP.md) | Fases, pendientes y visión | ✅ vigente |
+| [ARCHITECTURE.md](./docs/ARCHITECTURE.md) | Arquitectura, stack, esquema BD, decisiones | ✅ vigente |
+| [API.md](./docs/API.md) | Referencia de endpoints (métodos, rutas, roles) | ✅ vigente |
+| [MODULES.md](./docs/MODULES.md) | Módulos funcionales | ✅ vigente |
+| [DATA_DICTIONARY.md](./docs/DATA_DICTIONARY.md) | Tablas + §8 diccionario de métricas | ✅ vigente |
+| [SECURITY.md](./docs/SECURITY.md) | Seguridad, auth, cifrado, OWASP, LOPDP | ✅ vigente |
+| [SECURITY_INFRA_CHECKLIST.md](./docs/SECURITY_INFRA_CHECKLIST.md) | Checklist de infraestructura | ✅ vigente |
+| [DEPLOYMENT.md](./docs/DEPLOYMENT.md) | Despliegue Railway + Vercel + env vars | ✅ vigente |
+| [USER_GUIDE.md](./docs/USER_GUIDE.md) | Guía de monitores/coordinadores/docentes | ✅ vigente |
+| [ADMIN_GUIDE.md](./docs/ADMIN_GUIDE.md) | Guía de administradores (usuarios, ETL, config) | ✅ vigente |
+| [AUDITS/](./docs/AUDITS/) | Auditorías (técnica, marca) e inventario de métricas | ✅ vigente |
+| [CHANGELOG.md](./CHANGELOG.md) · [CONTRIBUTING.md](./CONTRIBUTING.md) · [LICENSE](./LICENSE) | Cambios · contribución · licencia | ✅ vigente |
+| ~~[SECURITY_FRAMEWORK.md](./docs/SECURITY_FRAMEWORK.md)~~ | **DEPRECADO** → usar SECURITY.md | ⚠️ retirado |
+| ~~[DEPLOY.md](./docs/DEPLOY.md)~~ | **DEPRECADO** → usar DEPLOYMENT.md | ⚠️ retirado |
 
 ---
 
-## Seguridad
-
-- JWT en cookies `HttpOnly` + `Secure` + `SameSite`
-- BCrypt para hashing de contraseñas y PINs
-- RBAC con 4 roles y aislamiento de datos por contexto
-- Rate limiting en endpoints de autenticación
-- Security headers (CSP, HSTS, X-Frame-Options)
-- PIN de bloqueo por inactividad (5 min)
-- 5 suites de tests de seguridad automatizados
+- JWT en cookies `HttpOnly` + `Secure` + `SameSite`; access 30 min + refresh 30 días rotativo con detección de reuso
+- **argon2id** para hashing de contraseñas (bcrypt legacy con rehash transparente); PIN de bloqueo por inactividad
+- **2FA TOTP** con códigos de recuperación hasheados (`REQUIRE_2FA` / `REQUIRE_ADMIN_2FA`)
+- **Cifrado en reposo** de PII sensible (Fernet field-level + blind index): cédula, etnia, domicilio, `totp_secret`. ⚠️ Contract 2.3b (drop del texto plano huérfano) **pendiente** — requiere backup verificado.
+- RBAC con 4 roles y aislamiento multi-tenant por contexto
+- Security headers (CSP, HSTS, X-Frame-Options, nosniff, Referrer-Policy, Permissions-Policy)
+- Rate limiting en endpoints de autenticación *(pendiente: extender a refresh/uploads con store persistente)*
+- **Logging seguro:** correos enmascarados en logs; el cliente recibe error genérico (`{"detail":"Error interno"}`), la traza solo va a logs
+- **CI:** `pip-audit` / `npm audit` bloqueantes
 
 Ver [SECURITY_FRAMEWORK.md](./docs/SECURITY_FRAMEWORK.md) para detalles completos.
+
+---
+
+## Métricas (estándar de la casa)
+
+- **Cifra de impacto (fuente única):** `GET /metrics/impact` computa `estudiantes_monitoreados` y `programas_activos` desde la BD. La landing **lee** esa cifra (`frontend/src/pages/Landing.jsx`); no hay número de impacto hardcodeado como "cifra oficial".
+- **Telemetría de uso:** pseudonimizada (actor por HMAC, sin PII), en tabla aislada `usage_events` (`backend/services/telemetry.py`). Eventos: `login`, `dashboard_view`, `ficha360_view`, `alerta_vista`, `recomendacion_vista`, `intervencion_creada`, `intervencion_cerrada`, `export_generado`.
+- **Diccionario de métricas versionado:** `docs/DATA_DICTIONARY.md` §8 (nombre · definición · fórmula · fuente · cadencia · dueño · clase · versión).
 
 ---
 

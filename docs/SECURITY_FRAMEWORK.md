@@ -1,3 +1,5 @@
+> ⚠️ **DEPRECADO / DESACTUALIZADO.** Este documento fue reemplazado por **[SECURITY.md](./SECURITY.md)**. Se conserva solo como referencia histórica; no lo uses ni lo actualices. (chore/estandar-casa, 2026-07)
+
 # Framework de Seguridad y Protección de Datos
 
 **Yachay Deep — Sistema de Alerta Temprana Académica**

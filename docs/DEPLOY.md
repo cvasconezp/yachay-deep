@@ -1,3 +1,5 @@
+> ⚠️ **DEPRECADO / DESACTUALIZADO.** Este documento fue reemplazado por **[DEPLOYMENT.md](./DEPLOYMENT.md)**. Se conserva solo como referencia histórica; no lo uses ni lo actualices. (chore/estandar-casa, 2026-07)
+
 # Yachay Deep — Guía de Deployment
 
 ## Resumen del stack

@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     #   BLIND_INDEX_KEY -> openssl rand -hex 32
     ENC_KEYS: Optional[str] = None
     BLIND_INDEX_KEY: Optional[str] = None
+    # [Telemetría de uso] Llave para pseudonimizar el actor (HMAC). Si no se define,
+    # cae a SECRET_KEY. Generar: openssl rand -hex 32
+    TELEMETRY_KEY: Optional[str] = None
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30   # [WF4] access corto; renovación vía refresh token
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30     # [WF4] vida del refresh token
     REQUIRE_ADMIN_2FA: bool = False  # [WF3] si True, los admin deben tener 2FA activo para usar /admin/*
