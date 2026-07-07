@@ -386,4 +386,4 @@ Todos los endpoints autenticados requieren una cookie `access_token` válida. Lo
 
 ---
 
-*Documento interno — Yachay Deep / PachaTech*
+*Documento interno — Yachay Deep*

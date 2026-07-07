@@ -48,7 +48,7 @@ docs/, scripts/
 
 ### Flujo (cliente → API → lógica → BD → externos)
 ```
-Navegador (Vercel SPA, ups.yachaydeep.com)
+Navegador (Vercel SPA, cliente.yachaydeep.com)
    │  fetch /api/* con cookie HttpOnly (credentials: include)
    ▼
 Vercel rewrite /api/* → Railway (FastAPI)   [vercel.json]
@@ -59,7 +59,7 @@ Routers (routes/*) → services/ / ml/ / etl/
    ▼
 SQLAlchemy ORM → PostgreSQL (Railway)   [EncryptedString descifra PII al leer]
    ▲
-Externos: AVAC (Selenium/httpx, avac.ups.edu.ec), Microsoft OAuth (scraping),
+Externos: AVAC (Selenium/httpx, avac.institucion.edu.ec), Microsoft OAuth (scraping),
           SMTP (email a Bienestar), GitHub API (disparar scraping)
 ```
 
@@ -97,7 +97,7 @@ Externos: AVAC (Selenium/httpx, avac.ups.edu.ec), Microsoft OAuth (scraping),
 - **Validación de entradas.** Cuerpos de request validados con modelos pydantic (`routes/*`); búsquedas van por ORM. Sanitización adicional en ETL (`etl/transformers.py:22-111`).
 - **XSS — bajo.** Frontend sin `dangerouslySetInnerHTML` (grep vacío); React escapa por defecto. CSP presente (`main.py:365`).
 - **CSRF — mitigado por SameSite, sin tokens.** Cookies con `SameSite=lax` (`config.py:69`); **no hay tokens CSRF**. Aceptable para SPA same-origin vía proxy Vercel, pero es una dependencia implícita.
-- **SSRF — bajo.** Peticiones `httpx`/`requests` a URLs fijas (AVAC `avac.ups.edu.ec`, `login.microsoftonline.com`; `main.py:395,403`); `AVAC_BASE_URL` de env. No se encontró fetch de URL controlada por el usuario.
+- **SSRF — bajo.** Peticiones `httpx`/`requests` a URLs fijas (AVAC `avac.institucion.edu.ec`, `login.microsoftonline.com`; `main.py:395,403`); `AVAC_BASE_URL` de env. No se encontró fetch de URL controlada por el usuario.
 - **CORS — correcto.** `allow_origins=CORS_ORIGINS` + `allow_origin_regex=https://[a-zA-Z0-9-]+\.yachaydeep\.com` + `allow_credentials=True` (`main.py:273-277`). No es wildcard `*`.
 - **Cabeceras de seguridad — buenas.** `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Content-Security-Policy`, `Strict-Transport-Security` (condicional), `Referrer-Policy`, `Permissions-Policy` (`main.py:349-375`). `/docs` y `/redoc` deshabilitados si no DEBUG (`main.py:263-264`).
 - **Rate limiting — PARCIAL.** slowapi `5/minute` **solo** en login (`routes.py:140`) y verify-pin (`routes.py:481`). Refresh, endpoints admin, uploads y demás **sin rate limit**.

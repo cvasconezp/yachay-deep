@@ -10,7 +10,7 @@
 | Frente/segmento | Educación (instituciones) | Arquitectura §2, §13 |
 | Madurez esperada | **INSIGNIA** (uno a la vez; Fase 6 aún en curso) | Arquitectura §2, §7 |
 | Color asignado | "Color **diferenciado propio**" (aún sin definir); el sitio usa `brand-gold` de la casa | Arquitectura §8 |
-| Dominio | Ruta interna `/core` (marketing) + app por subdominio de tenant `ups.yachaydeep.com` | Arquitectura §5, §13; Auditoría Técnica §1 (flujo) |
+| Dominio | Ruta interna `/core` (marketing) + app por subdominio de tenant `cliente.yachaydeep.com` | Arquitectura §5, §13; Auditoría Técnica §1 (flujo) |
 
 ### Alcance y límites de evidencia (declaración honesta)
 
@@ -60,7 +60,7 @@
 
 ## 5. Consistencia de dominio y meta
 
-**🟡 Subdominio vs ruta — desviación consciente, decisión pendiente.** El patrón de la casa es subdominio (`ancora.`, `kullki.`); Core vive en **ruta `/core`** para marketing y su **app corre en subdominios de tenant** (`ups.yachaydeep.com`), sin un canónico `core.yachaydeep.com`. La arquitectura §5 lo reconoce como decisión abierta (mantener `/core` por ser insignia integrada, o alinear al patrón). Identidad pública partida en dos. *Evidencia: Arquitectura §5, §13; Auditoría Técnica §1 (flujo: "Navegador … ups.yachaydeep.com").*
+**🟡 Subdominio vs ruta — desviación consciente, decisión pendiente.** El patrón de la casa es subdominio (`ancora.`, `kullki.`); Core vive en **ruta `/core`** para marketing y su **app corre en subdominios de tenant** (`cliente.yachaydeep.com`), sin un canónico `core.yachaydeep.com`. La arquitectura §5 lo reconoce como decisión abierta (mantener `/core` por ser insignia integrada, o alinear al patrón). Identidad pública partida en dos. *Evidencia: Arquitectura §5, §13; Auditoría Técnica §1 (flujo: "Navegador … cliente.yachaydeep.com").*
 
 **🔴 Metadatos SEO genéricos heredados de la casa.** Confirmado en vivo: `/core` sirve **exactamente el mismo** `title`, `meta description`, `og:title/description/image` que el home, y peor, **`og:url` apunta a `https://www.yachaydeep.com/`** (la home, no a `/core`). Core no tiene title/description/OG propios. *Evidencia: `web_fetch` yachaydeep.com/core → `title: "Yachay Deep — Convertimos datos en conocimiento"`, `meta-og:url: https://www.yachaydeep.com/`.*
 
@@ -85,7 +85,7 @@ Ordenada por impacto en la percepción de "ecosistema coherente" (mayor primero)
 | 3 | Meta SEO propios (§5) | 🔴 | title/description/OG idénticos al home; `og:url`→home | title/description/OG propios de Core; `og:url`=`/core` | Escribir head propio de la ruta `/core` (title "Core — …", description, OG, canonical) | Bajo-Medio |
 | 4 | Nombre en título/favicon (§1) | 🔴 | `<title>` = "Yachay Deep — …"; sin "Core" | Nombre "Core" consistente en título, meta, footer, favicon | Incluir "Core" en title/meta de la ruta; fijar uso de nombre largo | Bajo |
 | 5 | Color primario propio (§2) | 🟡 | `brand-gold` (oro de la casa) | Color diferenciado propio (parte del rito de graduación) | Definir y aplicar color propio de Core distinto del oro-casa | Medio |
-| 6 | Dominio (§5) | 🟡 | Ruta `/core` + app en `ups.yachaydeep.com` | Subdominio `core.yachaydeep.com` (o decisión explícita de excepción) | Resolver la decisión §5 y unificar identidad de dominio | Medio |
+| 6 | Dominio (§5) | 🟡 | Ruta `/core` + app en `cliente.yachaydeep.com` | Subdominio `core.yachaydeep.com` (o decisión explícita de excepción) | Resolver la decisión §5 y unificar identidad de dominio | Medio |
 | 7 | Cifra canónica de impacto (§6) | 🟡 | "3.040+/25" solo en tarjeta Labs | Cifra canónica única, misma en toda la casa | Fijar la cifra en una fuente única y referenciarla | Bajo |
 | 8 | Lockup / logo propio (§1) | 🟡 | *Shell* usa logo de la casa; propio no verificable | Logo propio + endoso subordinado ≤30% | Verificar en render que Core tiene logo-lockup propio | Bajo-Medio |
 | 9 | Emoji/símbolo único (§2) | 🟡 | No verificable / no asignado | Un emoji/símbolo consistente landing-app-catálogo | Asignar y aplicar símbolo de Core | Bajo |

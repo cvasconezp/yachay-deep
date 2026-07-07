@@ -309,4 +309,4 @@ Página de presentación del sistema con información sobre funcionalidades, equ
 
 ---
 
-*Documento interno — Yachay Deep / PachaTech*
+*Documento interno — Yachay Deep*

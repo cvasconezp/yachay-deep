@@ -29,7 +29,7 @@ Fuentes: **scraping AVAC/Moodle** (Selenium), **uploads** Excel/CSV/ZIP, y formu
 3. Tras N ejecuciones de ETL, los modelos ML se **reentrenan** (configurable).
 4. Revisa `scraping_runs` para el estado de cada corrida.
 
-> Cuidado: la ingesta asume plantillas AVAC/UPS. Portar a otra institución requiere ajuste (ver ROADMAP: conectores estándar).
+> Cuidado: la ingesta asume plantillas AVAC institucionales. Portar a otra institución requiere ajuste (ver ROADMAP: conectores estándar).
 
 ## Configuración del semestre
 

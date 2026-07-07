@@ -201,4 +201,4 @@ Ver [SECURITY.md](./docs/SECURITY.md) para detalles completos.
 
 ## Licencia
 
-Software propietario. © 2026 [PachaTech](mailto:cvasconezp@gmail.com). Todos los derechos reservados.
+Software propietario. © 2026 [Yachay Deep](mailto:cvasconezp@gmail.com). Todos los derechos reservados.

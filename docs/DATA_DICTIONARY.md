@@ -470,4 +470,4 @@ Se aplica **decaimiento exponencial por inactividad**: a mayor días sin acceso,
 
 ---
 
-*Documento interno — Yachay Deep / PachaTech*
+*Documento interno — Yachay Deep*

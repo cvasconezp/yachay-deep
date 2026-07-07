@@ -268,4 +268,4 @@ Paso  Operacion                          Fuente
 
 ---
 
-*Yachay Deep v2.0 - PachaTech*
+*Yachay Deep v2.0*
