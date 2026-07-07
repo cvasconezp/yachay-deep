@@ -1,6 +1,6 @@
 # SECURITY — Core (Yachay Deep)
 
-Documento canónico de seguridad. Refleja el estado real del código (julio 2026). Sustituye a `SECURITY_FRAMEWORK.md` (marcado como deprecado). Ver también [SECURITY_INFRA_CHECKLIST.md](./SECURITY_INFRA_CHECKLIST.md) y [AUDITS/](./AUDITS/).
+Documento canónico de seguridad. Refleja el estado real del código (julio 2026). Ver también [SECURITY_INFRA_CHECKLIST.md](./SECURITY_INFRA_CHECKLIST.md) y [AUDITS/](./AUDITS/).
 
 Sensibilidad: **Alta** — PII de estudiantes incluida **categoría especial** (autoidentificación étnica), bajo **LOPDP (Ecuador)**.
 

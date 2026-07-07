@@ -20,9 +20,9 @@ Versionado semántico cuando aplique.
 - **Landing** lee la cifra de impacto desde `/metrics/impact` en vez de un número estático (`frontend/src/pages/Landing.jsx`).
 - **README** alineado a los hallazgos de auditoría; se retiraron conteos hardcodeados; endoso canónico + badge `INSIGNIA`.
 
-### Deprecated
-- `docs/DEPLOY.md` → reemplazado por `docs/DEPLOYMENT.md`.
-- `docs/SECURITY_FRAMEWORK.md` → reemplazado por `docs/SECURITY.md`.
+### Removed
+- `docs/DEPLOY.md` (estaba deprecado) → eliminado; su reemplazo es `docs/DEPLOYMENT.md`. Contenido histórico en el historial de git.
+- `docs/SECURITY_FRAMEWORK.md` (estaba deprecado) → eliminado; su reemplazo es `docs/SECURITY.md`. Contenido histórico en el historial de git.
 
 ### Pending (no incluido aún)
 - Alembic (retirar `create_all`/`upgrade_tables`), rate limiting con store persistente, versionado de modelos ML.

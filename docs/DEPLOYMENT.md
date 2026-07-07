@@ -1,6 +1,6 @@
 # DEPLOYMENT — Core (Yachay Deep)
 
-Documento canónico de despliegue. Sustituye a `DEPLOY.md` (marcado como deprecado).
+Documento canónico de despliegue.
 
 Stack de hosting: **Backend en Railway**, **Frontend en Vercel**, **PostgreSQL en Railway**.
 

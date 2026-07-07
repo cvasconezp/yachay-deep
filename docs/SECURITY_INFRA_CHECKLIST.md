@@ -1,7 +1,7 @@
 # Checklist de Infraestructura de Seguridad — Yachay Deep
 
 Pasos que se realizan en los **paneles de Railway / Vercel / Cloudflare**, no en código.
-Complementa `SECURITY_FRAMEWORK.md` y el Runbook. Marca cada casilla al completarla.
+Complementa [SECURITY.md](./SECURITY.md) y el Runbook. Marca cada casilla al completarla.
 
 > Lo implementable en código (hashing argon2, 2FA, refresh tokens, CORS, multi-tenant)
 > ya vive en el repo. Este documento cubre **solo lo que requiere acción manual en consola**.

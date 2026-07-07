@@ -81,7 +81,6 @@ yachay-deep/
 │   ├── SECURITY.md · SECURITY_INFRA_CHECKLIST.md · DEPLOYMENT.md
 │   ├── USER_GUIDE.md · ADMIN_GUIDE.md
 │   ├── AUDITS/          # auditorías e inventarios
-│   └── (deprecados: SECURITY_FRAMEWORK.md, DEPLOY.md)
 ├── Dockerfile          # Build de producción (Railway)
 ├── docker-compose.yml  # Entorno de desarrollo local
 ├── requirements.txt    # Dependencias Python
@@ -175,8 +174,6 @@ Punto de entrada: **[docs/PRODUCT.md](./docs/PRODUCT.md)** (qué es Core y a fut
 | [ADMIN_GUIDE.md](./docs/ADMIN_GUIDE.md) | Guía de administradores (usuarios, ETL, config) | ✅ vigente |
 | [AUDITS/](./docs/AUDITS/) | Auditorías (técnica, marca) e inventario de métricas | ✅ vigente |
 | [CHANGELOG.md](./CHANGELOG.md) · [CONTRIBUTING.md](./CONTRIBUTING.md) · [LICENSE](./LICENSE) | Cambios · contribución · licencia | ✅ vigente |
-| ~~[SECURITY_FRAMEWORK.md](./docs/SECURITY_FRAMEWORK.md)~~ | **DEPRECADO** → usar SECURITY.md | ⚠️ retirado |
-| ~~[DEPLOY.md](./docs/DEPLOY.md)~~ | **DEPRECADO** → usar DEPLOYMENT.md | ⚠️ retirado |
 
 ---
 
@@ -190,7 +187,7 @@ Punto de entrada: **[docs/PRODUCT.md](./docs/PRODUCT.md)** (qué es Core y a fut
 - **Logging seguro:** correos enmascarados en logs; el cliente recibe error genérico (`{"detail":"Error interno"}`), la traza solo va a logs
 - **CI:** `pip-audit` / `npm audit` bloqueantes
 
-Ver [SECURITY_FRAMEWORK.md](./docs/SECURITY_FRAMEWORK.md) para detalles completos.
+Ver [SECURITY.md](./docs/SECURITY.md) para detalles completos.
 
 ---
 
