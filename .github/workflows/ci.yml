@@ -73,10 +73,13 @@ jobs:
         with:
           node-version: "20"
       # [SEC-09] pip-audit — BLOQUEANTE (chore/estandar-casa punto 4).
-      # El allowlist explícito PYSEC-2024-* documenta las vulns aceptadas;
-      # cualquier hallazgo NUEVO fuera de ese allowlist hace fallar el build.
+      # Allowlist explícito de vulns aceptadas (documentadas); cualquier hallazgo
+      # NUEVO fuera del allowlist hace fallar el build.
+      #   PYSEC-2024-*    : heredadas, aceptadas.
+      #   PYSEC-2026-1325 : ecdsa 0.19.2 — transitiva de python-jose; SIN fix upstream.
+      #                     TODO: migrar python-jose -> PyJWT para eliminar ecdsa.
       - run: pip install pip-audit
-      - run: pip-audit -r backend/requirements.txt --ignore-vuln PYSEC-2024-*
+      - run: pip-audit -r backend/requirements.txt --ignore-vuln PYSEC-2024-* --ignore-vuln PYSEC-2026-1325
       # [SEC-09] npm audit — BLOQUEANTE
       - name: Permitir clonar dep pública @yachaydeep/brand por HTTPS (npm ci la pide por ssh)
         run: |

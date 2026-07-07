@@ -25,7 +25,8 @@ Versionado semántico cuando aplique.
 - `docs/SECURITY_FRAMEWORK.md` → reemplazado por `docs/SECURITY.md`.
 
 ### Pending (no incluido aún)
-- Alembic (retirar `create_all`/`upgrade_tables`), rate limiting con store persistente, Google OAuth, versionado de modelos ML.
+- Alembic (retirar `create_all`/`upgrade_tables`), rate limiting con store persistente, versionado de modelos ML.
+- (Google OAuth queda **descartado en Core por diseño** — no es un pendiente.)
 - 🔒 Contract 2.3b (drop del texto plano de PII) — requiere backup verificado + confirmación explícita.
 
 ---

@@ -14,7 +14,7 @@ Sensibilidad: **Alta** — PII de estudiantes incluida **categoría especial** (
 - **Hash de contraseñas: argon2id** (bcrypt legacy con rehash transparente).
 - **2FA TOTP** (pyotp) con códigos de recuperación hasheados; flags `REQUIRE_2FA` / `REQUIRE_ADMIN_2FA`.
 - **RBAC** con 4 roles (admin/coordinador/docente/monitor) + aislamiento multi-tenant por contexto.
-- **Google OAuth**: ⏳ pendiente (ver [ROADMAP.md](./ROADMAP.md)).
+- **Google OAuth**: no aplica en Core (por diseño). Cuentas provisionadas por admin + login contraseña/2FA; el login con Google es patrón de Áncora, no de Core.
 
 ## Datos y cifrado
 

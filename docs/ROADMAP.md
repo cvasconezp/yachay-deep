@@ -31,7 +31,7 @@ Pendiente (preparado, no aplicado):
 
 - ⏳ **Alembic** — retirar `create_all`/`upgrade_tables` artesanal; migración inicial + rollback.
 - ⏳ **Rate limiting** completo (refresh, uploads, escritura admin) con store persistente (Postgres/Redis).
-- ⏳ **Google OAuth** (`POST /auth/google`) emitiendo el JWT interno.
+- ❌ **Google OAuth** — **descartado en Core por diseño**. Las cuentas las provisiona el admin y la auth es contraseña + 2FA + PIN; el login con Google es patrón de Áncora (docentes), no de Core.
 - ⏳ **Reproducibilidad ML** — versionar los `.pkl` por carrera; instalar SHAP real o fijar el fallback con test de regresión.
 - 🔒 **Contract 2.3b** — drop del texto plano de PII (cédula, etnia, domicilio). Requiere backup verificado + confirmación explícita. NO ejecutar sin OK.
 
