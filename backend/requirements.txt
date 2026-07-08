@@ -22,7 +22,7 @@ lxml==6.1.1
 aiofiles==25.1.0
 scikit-learn==1.8.0
 joblib==1.5.3
-slowapi==0.1.9
+slowapi==0.1.10
 httpx==0.28.1
 requests==2.34.2
 qrcode[pil]==7.4.2
