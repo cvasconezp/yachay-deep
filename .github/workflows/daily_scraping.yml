@@ -88,6 +88,10 @@ jobs:
           # Base de datos Railway
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
 
+          # Cifrado en reposo — deben coincidir EXACTAMENTE con los de Railway
+          ENC_KEYS: ${{ secrets.ENC_KEYS }}
+          BLIND_INDEX_KEY: ${{ secrets.BLIND_INDEX_KEY }}
+
           # Rutas de datos
           DATA_PATH_INGRESOS: ./data/IngresosAVAC
           DATA_PATH_TAREAS: ./data/Tareas
