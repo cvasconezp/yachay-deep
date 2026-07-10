@@ -55,8 +55,8 @@ jobs:
           node-version: "20"
       - name: Permitir clonar dep pública @yachaydeep/brand por HTTPS (npm ci la pide por ssh)
         run: |
-          git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
-          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          git config --global --add url."https://github.com/".insteadOf "ssh://git@github.com/"
+          git config --global --add url."https://github.com/".insteadOf "git@github.com:"
       - run: cd frontend && npm ci
       - name: Run tests with coverage
         run: cd frontend && npx vitest run --coverage
@@ -87,6 +87,6 @@ jobs:
       #                           fix = vite 8 (breaking), diferido a PR de upgrade.
       - name: Permitir clonar dep pública @yachaydeep/brand por HTTPS (npm ci la pide por ssh)
         run: |
-          git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
-          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          git config --global --add url."https://github.com/".insteadOf "ssh://git@github.com/"
+          git config --global --add url."https://github.com/".insteadOf "git@github.com:"
       - run: cd frontend && npm ci && npx --yes better-npm-audit@3 audit --level high
