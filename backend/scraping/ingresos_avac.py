@@ -10,6 +10,8 @@ import logging
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
+
+from .avac_courses import extraer_candidatos, shortname_desde_titulo, resolver_course_id
 from urllib.parse import urlparse, parse_qs
 from pathlib import Path
 
@@ -945,17 +947,18 @@ def scrape_ingresos(output_dir: str, codigos: list = None,
 
             resp = _get_with_retry(session, f"{base_url}/course/search.php?areaids=core_course-course&q={codigo_curso}")
             soup = BeautifulSoup(resp.content, "html.parser", from_encoding="utf-8")
-            enlace = (
-                soup.select_one(".coursebox a[href*='view.php?id=']") or
-                soup.select_one("a[href*='/course/view.php?id=']")
-            )
+            candidatos = extraer_candidatos(soup)
 
-            if not enlace:
+            if not candidatos:
                 no_encontrados.append(codigo_curso)
                 logger.warning(f"⚠️  [{index}/{len(codigos)}] Curso {codigo_curso} no encontrado en AVAC")
                 continue
 
-            course_id = parse_qs(urlparse(enlace.get("href")).query).get("id", [None])[0]
+            def _shortname(cid, _s=session, _b=base_url):
+                r = _get_with_retry(_s, f"{_b}/user/index.php?id={cid}&perpage=1")
+                return shortname_desde_titulo(BeautifulSoup(r.content, "html.parser", from_encoding="utf-8"))
+
+            course_id = resolver_course_id(codigo_curso, candidatos, _shortname)
 
             resp_part = _get_with_retry(session, f"{base_url}/user/index.php?id={course_id}&perpage=5000")
             soup_part = BeautifulSoup(resp_part.content, "html.parser", from_encoding="utf-8")
