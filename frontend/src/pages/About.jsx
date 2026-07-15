@@ -3,12 +3,6 @@ import { YachayLogo } from "../components/YachayLogo";
 
 const PODCASTS = [
   {
-    title: "El Excel que frena el abandono universitario",
-    description:
-      "El origen de Yachay Deep: como un sistema construido en Excel con macros VBA evolucionó hacia una plataforma web de inteligencia académica preventiva.",
-    file: "/El_Excel_que_frena_el_abandono_universitario_02.mp3",
-  },
-  {
     title: "IA para evitar el abandono universitario",
     description:
       "Cómo la inteligencia artificial y la analítica del aprendizaje pueden anticipar el riesgo de deserción y activar intervenciones oportunas en educación superior.",

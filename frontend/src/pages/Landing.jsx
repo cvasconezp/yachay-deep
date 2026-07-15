@@ -103,25 +103,7 @@ const NIVELES = [
   { level: "Intervención", emoji: "\uD83E\uDD1D", desc: "Acciones institucionales, colas de trabajo, seguimiento e impacto" },
 ];
 
-const EVOLUTION = [
-  {
-    period: "2023 - 2025",
-    title: "MonitorP67 en Excel",
-    desc: "Sistema de inteligencia académica con 41 hojas, 57 consultas Power Query, 31 tablas estructuradas, macros VBA, dashboard FichaEst con resolución automática de identidad, árbol de decisión de riesgo y 11 formatos condicionales.",
-  },
-  {
-    period: "2025 - 2026",
-    title: "Plataforma web Yachay Deep",
-    desc: "Migración a FastAPI + React + PostgreSQL. Pipeline ETL automatizado, 125+ endpoints REST, modelos predictivos por carrera, XAI, recomendaciones automáticas, ciclo cerrado de intervención, reportes ejecutivos, seguimiento docente y soporte multi-institución.",
-  },
-];
-
 const PODCASTS = [
-  {
-    title: "El Excel que frena el abandono universitario",
-    description: "El origen de Yachay Deep: un sistema en Excel con macros VBA que evolucionó hacia una plataforma web.",
-    file: "/El_Excel_que_frena_el_abandono_universitario_02.mp3",
-  },
   {
     title: "IA para evitar el abandono universitario",
     description: "Cómo la inteligencia artificial y la analítica del aprendizaje pueden anticipar el riesgo de deserción.",
@@ -846,25 +828,6 @@ export default function Landing() {
                       </div>
                     );
                   })}
-                </div>
-              </div>
-
-              {/* Evolución */}
-              <div>
-                <SectionHeader
-                  title="De Excel a plataforma web"
-                  subtitle="Yachay Deep nació como un sistema en Excel con Power Query y macros VBA. Hoy es una plataforma web completa."
-                />
-                <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {EVOLUTION.map((e, i) => (
-                    <div key={i} className={`rounded-2xl p-6 border ${i === 0 ? "bg-white border-gray-200" : "bg-gradient-to-br from-brand to-brand-light text-white border-transparent"}`}>
-                      <div className={`text-xs font-semibold uppercase tracking-wider mb-2 ${i === 0 ? "text-brand-gold" : "text-brand-ice"}`}>
-                        {e.period}
-                      </div>
-                      <h3 className={`text-xl font-bold mb-3 ${i === 0 ? "text-gray-900" : "text-white"}`}>{e.title}</h3>
-                      <p className={`text-sm leading-relaxed ${i === 0 ? "text-gray-500" : "text-blue-100"}`}>{e.desc}</p>
-                    </div>
-                  ))}
                 </div>
               </div>
 
