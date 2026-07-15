@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models.student import Student
+from ..auth.jwt import get_current_user
 
 router = APIRouter(prefix="/metrics", tags=["metrics"])
 
@@ -37,8 +38,15 @@ IMPACT_DEFINITIONS = {
 
 
 @router.get("/impact")
-def impact(db: Session = Depends(get_db)):
-    """Cifra canónica de impacto de Core. Pública, solo lectura, sin PII."""
+def impact(db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    """Cifra de impacto de Core (conteos agregados, sin PII).
+
+    REQUIERE AUTENTICACIÓN. Antes era pública y la landing comercial la leía en vivo:
+    cualquiera podía pedir /api/metrics/impact y obtener el conteo real de estudiantes
+    y carreras de la institución. No es dato personal, pero sí dato institucional, y
+    publicarlo con fines comerciales exige convenio firmado. Mientras no exista, esta
+    cifra es de uso interno y la landing no la muestra.
+    """
     estudiantes = int(db.query(func.count(Student.id)).scalar() or 0)
     programas = int(
         db.query(func.count(func.distinct(Student.carrera)))

@@ -42,15 +42,13 @@ function useCountUp(end, duration = 2000, startOnView = true) {
 
 /* ── Data ─────────────────────────────────────────────── */
 
-// [chore/estandar-casa punto 5] La cifra de impacto se LEE de GET /metrics/impact
-// (fuente única de verdad). Estos valores son solo un FALLBACK de resiliencia si
-// la API no responde; no son la fuente. No editar a mano como "cifra oficial".
-const STATS = [
-  { key: "estudiantes", target: 3040, suffix: "+", label: "Estudiantes monitoreados" },
-  { key: "carreras", target: 25, suffix: "", label: "Carreras analizadas" },
-  { key: "asignaturas", target: 334, suffix: "", label: "Asignaturas analizadas" },
-  { key: "cursos", target: 740, suffix: "+", label: "Cursos en el LMS" },
-];
+// Los contadores de impacto se retiraron a propósito.
+// Las cuatro cifras (estudiantes, carreras, asignaturas, cursos) derivan de datos
+// institucionales de la UPS extraídos de AVAC. Publicarlas en una página comercial
+// sin convenio firmado no es defendible, así que la landing NO muestra métricas de
+// operación real. Para reponerlas hace falta convenio por escrito; si en su lugar se
+// usan cifras de demo, deben ir rotuladas como tales (un número inventado sin rótulo
+// cambia un problema de permisos por uno de publicidad engañosa).
 
 const CAPAS = [
   {
@@ -318,26 +316,6 @@ export default function Landing() {
   const [period, setPeriod] = useState("firstYear");
   const [openFaq, setOpenFaq] = useState(null);
   const [showTech, setShowTech] = useState(false);
-  // [chore/estandar-casa punto 5] Lee la cifra de impacto canónica del backend.
-  const [stats, setStats] = useState(STATS);
-  useEffect(() => {
-    const base = import.meta.env.VITE_API_URL || "/api";
-    fetch(`${base}/metrics/impact`, { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (!d) return;
-        setStats((prev) =>
-          prev.map((s) => {
-            if (s.key === "estudiantes" && d.estudiantes_monitoreados != null)
-              return { ...s, target: d.estudiantes_monitoreados };
-            if (s.key === "carreras" && d.programas_activos != null)
-              return { ...s, target: d.programas_activos };
-            return s;
-          })
-        );
-      })
-      .catch(() => {});
-  }, []);
   const plans = segment === "inst" ? PLANS_INST : PLANS_UNI;
 
   const ctaLabel = user ? "Ir al Dashboard" : "Iniciar sesión";
@@ -404,12 +382,6 @@ export default function Landing() {
             </a>
           </div>
 
-          {/* Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-3xl mx-auto">
-            {stats.map((s, i) => (
-              <AnimatedStat key={s.key || i} target={s.target} suffix={s.suffix} label={s.label} delay={i * 150} />
-            ))}
-          </div>
         </div>
       </section>
 
