@@ -79,3 +79,77 @@ def test_sin_candidatos_devuelve_none():
 def test_shortname_none_no_rompe_la_seleccion():
     elegido = resolver_course_id("408456", ["5013", "7718"], lambda cid: None if cid == "5013" else "408456")
     assert elegido == "7718"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Reporte de aulas a las que no se logró entrar
+# ─────────────────────────────────────────────────────────────────────────────
+import pandas as pd
+from unittest.mock import patch, MagicMock
+from backend.scraping import ingresos_avac
+
+
+def _resp(html, url):
+    r = MagicMock()
+    r.content = html.encode("utf-8")
+    r.url = url
+    return r
+
+
+PARTICIPANTES_OK = """<html><head><title>408456: Participantes | Grado 68</title></head><body>
+<table class="generaltable"><thead><tr><th>Nombre</th><th>Dirección de correo</th></tr></thead>
+<tbody><tr><td>ANA LOPEZ</td><td>alopez@est.ups.edu.ec</td></tr></tbody></table></body></html>"""
+
+# no matriculado: Moodle redirige a /enrol/index.php y no hay tabla
+ENROL_REDIRECT = """<html><head><title>405109/408456 | Grado 68</title></head><body>
+<h1>(A) INTEGRACIÓN CURRICULAR GRUPO - 1 TUTORIA</h1></body></html>"""
+
+BUSQUEDA_1 = """<div class="coursebox" data-courseid="7718">
+<div class="coursename"><a href="/course/view.php?id=7718">X</a></div></div>"""
+
+
+def _correr(tmp_path, respuestas):
+    """respuestas: dict url-substring -> (html, url_final)"""
+    def _fake_get(session, url, **kw):
+        for frag, (html, final) in respuestas.items():
+            if frag in url:
+                return _resp(html, final)
+        raise AssertionError(f"URL inesperada: {url}")
+
+    from backend.config import settings
+
+    with patch.object(ingresos_avac, "_get_with_retry", _fake_get), \
+         patch.object(ingresos_avac, "get_session_cookie", lambda *a, **k: MagicMock()), \
+         patch.object(settings, "AVAC_SESSION_COOKIE", "fake-cookie"):
+        return ingresos_avac.scrape_ingresos(
+            output_dir=str(tmp_path), codigos=["408456"], base_url="https://avac.ups.edu.ec/grado68",
+        )
+
+
+def test_reporta_sin_acceso_cuando_no_hay_matricula(tmp_path):
+    res = _correr(tmp_path, {
+        "search.php": (BUSQUEDA_1, "https://a/course/search.php"),
+        "user/index.php": (ENROL_REDIRECT, "https://avac.ups.edu.ec/grado68/enrol/index.php?id=7718"),
+    })
+    assert res["procesados"] == 0
+    assert [a["motivo"] for a in res["no_accedidas"]] == ["sin_acceso"]
+    df = pd.read_csv(tmp_path / "aulas_no_accedidas.csv")
+    assert df.iloc[0]["motivo"] == "sin_acceso"
+
+
+def test_no_encontrado_queda_reportado(tmp_path):
+    res = _correr(tmp_path, {
+        "search.php": ("<div>Sin resultados</div>", "https://a/course/search.php"),
+    })
+    assert res["no_encontrados"] == ["408456"]
+    assert [a["motivo"] for a in res["no_accedidas"]] == ["no_encontrado"]
+
+
+def test_aula_ok_no_aparece_en_el_reporte(tmp_path):
+    res = _correr(tmp_path, {
+        "search.php": (BUSQUEDA_1, "https://a/course/search.php"),
+        "user/index.php": (PARTICIPANTES_OK, "https://avac.ups.edu.ec/grado68/user/index.php?id=7718"),
+    })
+    assert res["procesados"] == 1
+    assert res["no_accedidas"] == []
+    assert not (tmp_path / "aulas_no_accedidas.csv").exists()

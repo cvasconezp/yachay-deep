@@ -940,6 +940,7 @@ def scrape_ingresos(output_dir: str, codigos: list = None,
         session = get_session_manual(base_url)
 
     procesados, no_encontrados, errores = 0, [], []
+    no_accedidas = []   # aulas a las que no se logró entrar, con el motivo
 
     for index, codigo_curso in enumerate(codigos, 1):
         try:
@@ -951,6 +952,8 @@ def scrape_ingresos(output_dir: str, codigos: list = None,
 
             if not candidatos:
                 no_encontrados.append(codigo_curso)
+                no_accedidas.append({"codigo": codigo_curso, "motivo": "no_encontrado",
+                                     "detalle": "La búsqueda en AVAC no devolvió ningún aula"})
                 logger.warning(f"⚠️  [{index}/{len(codigos)}] Curso {codigo_curso} no encontrado en AVAC")
                 continue
 
@@ -963,6 +966,16 @@ def scrape_ingresos(output_dir: str, codigos: list = None,
             resp_part = _get_with_retry(session, f"{base_url}/user/index.php?id={course_id}&perpage=5000")
             soup_part = BeautifulSoup(resp_part.content, "html.parser", from_encoding="utf-8")
 
+            # Si no estamos matriculados, Moodle redirige a /enrol/index.php y no hay tabla.
+            # Es un problema distinto a "el aula está vacía": conviene no confundirlos.
+            if "/enrol/" in str(getattr(resp_part, "url", "")):
+                sn = shortname_desde_titulo(soup_part)
+                no_accedidas.append({"codigo": codigo_curso, "motivo": "sin_acceso",
+                                     "detalle": f"Sin matrícula en el aula id={course_id}"
+                                                + (f" (shortname '{sn}')" if sn else "")})
+                logger.warning(f"[{index}/{len(codigos)}] 🚫 {codigo_curso}: sin acceso al aula id={course_id} (no matriculado)")
+                continue
+
             # FIX: parseo robusto por nombre de columna, no por posición
             registros = _parse_participants_table(soup_part)
 
@@ -974,17 +987,34 @@ def scrape_ingresos(output_dir: str, codigos: list = None,
                 procesados += 1
                 logger.info(f"[{index}/{len(codigos)}] ✅ {codigo_curso}: {len(registros)} alumnos en {round(time.time()-start_time, 2)}s")
             else:
+                no_accedidas.append({"codigo": codigo_curso, "motivo": "sin_alumnos",
+                                     "detalle": f"Aula id={course_id} accesible pero sin alumnos con correo"})
                 logger.warning(f"[{index}/{len(codigos)}] ⚠️  {codigo_curso}: tabla vacía o sin alumnos con correo")
 
         except Exception as e:
             logger.error(f"❌ Error en {codigo_curso}: {e}")
             errores.append({"curso": codigo_curso, "error": str(e)})
+            no_accedidas.append({"codigo": codigo_curso, "motivo": "error", "detalle": str(e)[:300]})
 
     if no_encontrados:
         pd.DataFrame({"codigo": no_encontrados}).to_csv(output_path / "cursos_no_encontrados.csv", index=False)
 
-    logger.info(f"🏁 Completado: {procesados} OK, {len(errores)} errores, {len(no_encontrados)} no encontrados")
-    return {"procesados": procesados, "errores": errores, "no_encontrados": no_encontrados}
+    if no_accedidas:
+        pd.DataFrame(no_accedidas).to_csv(output_path / "aulas_no_accedidas.csv", index=False, encoding="utf-8-sig")
+        resumen = {}
+        for a in no_accedidas:
+            resumen[a["motivo"]] = resumen.get(a["motivo"], 0) + 1
+        logger.warning(f"🚨 {len(no_accedidas)} aulas sin datos — desglose: {resumen}")
+        for motivo in ("sin_acceso", "no_encontrado", "sin_alumnos", "error"):
+            codigos_m = [a["codigo"] for a in no_accedidas if a["motivo"] == motivo]
+            if codigos_m:
+                logger.warning(f"   • {motivo} ({len(codigos_m)}): {', '.join(map(str, codigos_m[:40]))}"
+                               + (" …" if len(codigos_m) > 40 else ""))
+
+    logger.info(f"🏁 Completado: {procesados} OK, {len(errores)} errores, "
+                f"{len(no_encontrados)} no encontrados, {len(no_accedidas)} aulas sin datos")
+    return {"procesados": procesados, "errores": errores, "no_encontrados": no_encontrados,
+            "no_accedidas": no_accedidas}
 
 
 if __name__ == "__main__":
