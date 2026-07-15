@@ -82,6 +82,9 @@ def get_etl_runs(
 ):
     """Historial de ejecuciones del ETL con paginación."""
     from sqlalchemy import func as sqlfunc
+    # Auto-sanea runs zombi (quedaron en 'running' porque el job fue cancelado)
+    from ..services.etl_maintenance import cleanup_stale_etl_runs
+    cleanup_stale_etl_runs(db)
     total = db.query(sqlfunc.count(ScrapingRun.id)).scalar()
     pages = max(1, (total + page_size - 1) // page_size)
     page = max(1, min(page, pages))
