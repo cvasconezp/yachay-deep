@@ -34,6 +34,9 @@ class TestCalcularEfectividadIntervencion:
         inv.snapshot_compromiso = kw.get("snapshot_compromiso", 0.3)
         inv.snapshot_porcentaje_tareas = kw.get("snapshot_porcentaje_tareas", 40.0)
         inv.snapshot_prob_desercion = kw.get("snapshot_prob_desercion", 0.7)
+        # Debe declararse explícitamente: MagicMock inventaría un Mock y rompería
+        # la comparación con el umbral.
+        inv.snapshot_dias_sin_acceso = kw.get("snapshot_dias_sin_acceso", None)
         return inv
 
     def _make_student(self, **kw):
@@ -41,6 +44,7 @@ class TestCalcularEfectividadIntervencion:
         s.indice_compromiso = kw.get("indice_compromiso", 0.6)
         s.porcentaje_tareas = kw.get("porcentaje_tareas", 70.0)
         s.prob_desercion = kw.get("prob_desercion", 0.3)
+        s.dias_sin_acceso = kw.get("dias_sin_acceso", None)
         return s
 
     def test_exitosa_mejora_compromiso(self):
@@ -88,9 +92,9 @@ class TestAgruparPor:
 
     def test_agrupar_por_medio(self):
         datos = [
-            {"medio": "WhatsApp", "exitosa": True, "delta_compromiso": 0.1},
-            {"medio": "WhatsApp", "exitosa": False, "delta_compromiso": -0.05},
-            {"medio": "Llamada", "exitosa": True, "delta_compromiso": 0.2},
+            {"medio": "WhatsApp", "exitosa": True, "concluyente": True, "delta_compromiso": 0.1},
+            {"medio": "WhatsApp", "exitosa": False, "concluyente": True, "delta_compromiso": -0.05},
+            {"medio": "Llamada", "exitosa": True, "concluyente": True, "delta_compromiso": 0.2},
         ]
         result = _agrupar_por(datos, "medio")
         assert len(result) == 2
@@ -100,13 +104,25 @@ class TestAgruparPor:
         assert wa["tasa_exito"] == 50.0
 
     def test_campo_none(self):
-        datos = [{"medio": None, "exitosa": True, "delta_compromiso": 0.1}]
+        datos = [{"medio": None, "exitosa": True, "concluyente": True, "delta_compromiso": 0.1}]
         result = _agrupar_por(datos, "medio")
         assert result[0]["medio"] == "Sin especificar"
 
     def test_vacio(self):
         result = _agrupar_por([], "medio")
         assert result == []
+
+    def test_sin_datos_no_cuenta_como_fracaso(self):
+        """Una intervención sin datos no es un fracaso: no entra al denominador."""
+        datos = [
+            {"medio": "WhatsApp", "exitosa": True, "concluyente": True, "delta_compromiso": 0.1},
+            {"medio": "WhatsApp", "exitosa": False, "concluyente": False, "delta_compromiso": None},
+        ]
+        wa = _agrupar_por(datos, "medio")[0]
+        assert wa["total"] == 2
+        assert wa["concluyentes"] == 1
+        assert wa["tasa_exito"] == 100.0        # 1 de 1 concluyente, no 1 de 2
+        assert wa["muestra_suficiente"] is False
 
 
 # ══════════════════════════════════════════════════════════════════
