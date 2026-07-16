@@ -601,6 +601,23 @@ function CifradoBackfillManager() {
     }
   };
 
+  const runDrop = async (apply) => {
+    if (apply) {
+      if (!window.confirm("2.3b — BORRAR el texto plano. Es IRREVERSIBLE. ¿Ya hiciste backup de la BD?")) return;
+      const t = window.prompt("Escribe BORRAR para confirmar el borrado del texto plano:");
+      if (t !== "BORRAR") return;
+    }
+    setLoading(apply ? "drop-apply" : "drop-dry"); setError(""); setResult(null);
+    try {
+      const r = await api.cifradoDropPlaintext(apply ? "apply" : "dry-run", apply ? "BORRAR" : "");
+      setResult({ mode: apply ? "drop-apply" : "drop-dry-run", data: r });
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading("");
+    }
+  };
+
   return (
     <div className="mt-4 pt-4 border-t border-gray-100">
       <div className="flex items-center justify-between mb-1">
@@ -617,6 +634,15 @@ function CifradoBackfillManager() {
           <button onClick={() => run("verify")} disabled={!!loading}
             className="text-xs px-3 py-1.5 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-700 transition-colors disabled:opacity-50">
             {loading === "verify" ? "Verificando..." : "Verificar"}
+          </button>
+          <span className="w-px bg-gray-200 mx-1" />
+          <button onClick={() => runDrop(false)} disabled={!!loading}
+            className="text-xs px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors disabled:opacity-50">
+            {loading === "drop-dry" ? "..." : "Ver qué se borra"}
+          </button>
+          <button onClick={() => runDrop(true)} disabled={!!loading}
+            className="text-xs px-3 py-1.5 rounded-lg bg-red-100 hover:bg-red-200 text-red-700 transition-colors disabled:opacity-50">
+            {loading === "drop-apply" ? "Borrando..." : "Borrar texto plano (2.3b)"}
           </button>
         </div>
       </div>

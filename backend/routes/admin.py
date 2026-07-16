@@ -1145,3 +1145,52 @@ def cifrado_backfill(
     if mode == "apply":
         return {"mode": "apply", **backfill(db, dry_run=False)}
     return {"mode": "dry-run", **backfill(db, dry_run=True)}
+
+
+# Columnas de texto plano huérfanas (ya no mapeadas; su dato vive cifrado en *_cif).
+_PLAINTEXT_ORPHANS = {
+    "students": ["cedula", "genero", "autoidentificacion_etnica",
+                 "pais", "provincia", "ciudad", "parroquia", "barrio"],
+    "users": ["totp_secret"],
+}
+
+
+@router.post("/cifrado/drop-plaintext")
+def cifrado_drop_plaintext(
+    mode: str = "dry-run",
+    confirm: str = "",
+    current_user: User = Depends(require_admin),
+    db: Session = Depends(get_prod_db),
+):
+    """[Cifrado en reposo — Contract 2.3b] Borra las columnas de texto plano ya
+    cifradas. IRREVERSIBLE. Requiere backup previo.
+
+    mode: "dry-run" (lista qué columnas se borrarían) | "apply" (borra).
+    En "apply" hay que enviar confirm=BORRAR.
+    """
+    from sqlalchemy import inspect as _sa_inspect, text as _sa_text
+
+    insp = _sa_inspect(db.get_bind())
+    tablas = set(insp.get_table_names())
+    presentes = {}
+    for tabla, cols in _PLAINTEXT_ORPHANS.items():
+        if tabla not in tablas:
+            continue
+        existentes = {c["name"] for c in insp.get_columns(tabla)}
+        presentes[tabla] = [c for c in cols if c in existentes]
+
+    if mode != "apply":
+        return {"mode": "dry-run", "se_borrarian": presentes,
+                "nota": "IRREVERSIBLE. Haz backup y envía mode=apply&confirm=BORRAR."}
+
+    if confirm != "BORRAR":
+        raise HTTPException(status_code=400, detail="Para borrar envía confirm=BORRAR (tras hacer backup).")
+
+    borradas = {}
+    for tabla, cols in presentes.items():
+        borradas[tabla] = []
+        for c in cols:
+            db.execute(_sa_text(f'ALTER TABLE "{tabla}" DROP COLUMN "{c}"'))
+            borradas[tabla].append(c)
+    db.commit()
+    return {"mode": "apply", "borradas": borradas}
