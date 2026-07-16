@@ -191,7 +191,12 @@ class TestParseNivelAcademico:
 
 class TestCalcularIndiceCompromiso:
     def test_high_engagement_low_risk(self):
-        """Active student, many tasks done, good grades, enrolled."""
+        """Active student, many tasks done, good grades, enrolled.
+
+        Con el 4º nivel ("Sin riesgo", índice >= 0.80) este perfil ya no es "Bajo": entró
+        ayer, entregó el 80% y tiene 87 de nota → índice 0.844. Es justamente el caso que
+        motivó el nivel nuevo — antes no había forma de decir "este no necesita atención".
+        """
         result = calcular_indice_compromiso(
             dias_sin_acceso=1.0,
             tareas_entregadas=8,
@@ -199,6 +204,19 @@ class TestCalcularIndiceCompromiso:
             notas=[85.0, 90.0],
             bloque_actual=1,
             promedio_calificaciones=87.0,
+            estado_matricula="Matriculado",
+        )
+        assert result["nivel_riesgo"] == "Sin riesgo"
+        assert result["color_riesgo"] == "#3B82F6"
+
+    def test_buen_estudiante_pero_no_perfecto_es_bajo(self):
+        """La frontera del nivel nuevo: bien pero no impecable → sigue en "Bajo"."""
+        result = calcular_indice_compromiso(
+            dias_sin_acceso=3.0,
+            tareas_entregadas=7,
+            tareas_totales=10,
+            notas=[],
+            promedio_calificaciones=72.0,
             estado_matricula="Matriculado",
         )
         assert result["nivel_riesgo"] == "Bajo"
