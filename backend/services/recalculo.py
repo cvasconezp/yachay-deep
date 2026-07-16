@@ -97,19 +97,25 @@ def recalcular_indicadores(db: Session, periodo: str = None) -> dict:
 
     # ── Tareas del último snapshot, solo unidades vencidas ──
     snap_tar = _ultimo_snapshot(db, TaskSubmission, periodo)
-    tq = db.query(TaskSubmission.student_id, TaskSubmission.unidad, TaskSubmission.entregada).filter(
-        TaskSubmission.periodo.in_(variantes)
-    )
+    tq = db.query(
+        TaskSubmission.student_id, TaskSubmission.unidad, TaskSubmission.entregada,
+        TaskSubmission.codigo_curso,
+    ).filter(TaskSubmission.periodo.in_(variantes))
     if snap_tar:
         tq = tq.filter(TaskSubmission.snapshot_date == snap_tar)
 
     tareas = {}
-    descartadas_futuras = 0
+    descartadas_futuras = descartadas_tareas_bloque = 0
     filas_tareas = tq.all()
     # Si aún no venció ninguna unidad, no se filtra: dejar a todos a cero sería peor
     aplicar_vencidas = bool(vencidas)
-    for sid, unidad, entregada in filas_tareas:
+    for sid, unidad, entregada, cod_tarea in filas_tareas:
         if sid is None:
+            continue
+        # Las tareas del bloque cerrado tampoco cuentan: se estaban sumando como "no
+        # entregadas" y hundían el % (bajó de 31% a 20% en el primer recálculo).
+        if str(cod_tarea).strip() in cerrados:
+            descartadas_tareas_bloque += 1
             continue
         if aplicar_vencidas and str(unidad) not in vencidas:
             descartadas_futuras += 1
@@ -163,6 +169,7 @@ def recalcular_indicadores(db: Session, periodo: str = None) -> dict:
             "aulas_fantasma": descartados_fantasma,
             "cursos_de_bloque_cerrado": descartados_bloque,
             "tareas_aun_no_vencidas": descartadas_futuras,
+            "tareas_de_bloque_cerrado": descartadas_tareas_bloque,
         },
         "tope_dias_bloque": tope_dias,
         "unidades_vencidas": sorted(vencidas) if vencidas else None,

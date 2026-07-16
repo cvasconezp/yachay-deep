@@ -165,3 +165,27 @@ def test_el_endpoint_responde_y_regenera_alertas(db, client):
     assert d["ok"] is True
     assert "alertas" in d
     assert d["estudiantes_actualizados"] >= 1
+
+
+def test_las_tareas_del_bloque_cerrado_no_hunden_el_porcentaje(db):
+    """EL BUG: el primer recálculo bajó las tareas de 31% a 20% porque contaba como "no
+    entregadas" las de las 620 aulas del bloque ya cerrado."""
+    _semestre(db)
+    s = _est(db)
+    _matricula(db, s.id, "B2")
+    _acceso(db, s.id, "B2", 2)
+    # El bloque 1 está cerrado: sus tareas no cuentan
+    db.add(Enrollment(student_id=s.id, codigo_grupo="B1_VIEJA", asignatura="Vieja",
+                      bloque=1, periodo="68"))
+    db.add_all([
+        TaskSubmission(student_id=s.id, codigo_curso="B2", periodo=PER, snapshot_date=SNAP,
+                       unidad="1", entregada=True),
+        TaskSubmission(student_id=s.id, codigo_curso="B1_VIEJA", periodo=PER, snapshot_date=SNAP,
+                       unidad="1", entregada=False),
+    ])
+    db.commit()
+
+    r = recalcular_indicadores(db)
+    db.refresh(s)
+    assert r["registros_descartados"]["tareas_de_bloque_cerrado"] == 1
+    assert s.porcentaje_tareas == 100.0, "solo cuenta la tarea del bloque en curso"

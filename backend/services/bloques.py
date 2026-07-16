@@ -76,6 +76,22 @@ def cursos_del_bloque_cerrado(db: Session, semconfig) -> set[str]:
     for (cod,) in db.query(CourseConfig.codigo_avac).filter(CourseConfig.bloque == otro).all():
         if cod:
             codigos.add(str(cod))
+
+    # Enrollment.bloque es MÁS COMPLETO que CourseConfig.bloque, que en la práctica está
+    # sin poblar: mirando solo CourseConfig salían 0 cursos a excluir cuando en realidad
+    # eran 620. El generador de alertas ya usaba las dos fuentes; este servicio no.
+    from ..models.enrollment import Enrollment
+    try:
+        otro_int = int(otro)
+    except (TypeError, ValueError):
+        otro_int = None
+    if otro_int is not None:
+        for (cod,) in db.query(Enrollment.codigo_grupo).filter(
+            Enrollment.codigo_grupo.isnot(None), Enrollment.bloque == otro_int,
+        ).distinct().all():
+            if cod:
+                codigos.add(str(cod).strip())
+
     return codigos
 
 

@@ -92,6 +92,27 @@ def test_sin_configuracion_no_excluye_nada(db):
     assert cursos_del_bloque_cerrado(db, None) == set()
 
 
+def test_excluye_tambien_por_enrollment_bloque(db):
+    """EL BUG: CourseConfig.bloque está sin poblar en producción. Mirando solo esa fuente
+    salían 0 cursos a excluir cuando el generador de alertas encontraba 620 usando
+    Enrollment.bloque, que es más completo."""
+    from backend.models.enrollment import Enrollment
+    db.add(Enrollment(student_id=None, codigo_grupo="999", asignatura="VIEJA",
+                      bloque=1, periodo="68"))
+    db.commit()
+
+    cerrados = cursos_del_bloque_cerrado(db, _sem(bloque="2"))
+    assert "999" in cerrados, "debe excluirse aunque CourseConfig no tenga el bloque"
+
+
+def test_une_las_dos_fuentes(db):
+    from backend.models.enrollment import Enrollment
+    db.add(CourseConfig(codigo_avac="AAA", asignatura="A", bloque="1", activo=True))
+    db.add(Enrollment(student_id=None, codigo_grupo="BBB", asignatura="B", bloque=1, periodo="68"))
+    db.commit()
+    assert {"AAA", "BBB"} <= cursos_del_bloque_cerrado(db, _sem(bloque="2"))
+
+
 def test_fechas_naive_no_revientan():
     """Postgres puede devolver datetimes sin zona horaria."""
     sem = SemesterConfig(semestre="P68", activo=True, bloque_actual="2",
