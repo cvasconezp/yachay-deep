@@ -387,6 +387,7 @@ class ApiClient {
   markAlertRead(id) { return this.patch(`/alerts/${id}/read`, {}); }
   generateAlerts() { return this.post("/alerts/generate", {}); }
   recalcularIndicadores() { return this.post("/admin/recalcular-indicadores", {}); }
+  getDiagnosticoRiesgo() { return this.get("/admin/diagnostico-riesgo"); }
   debugAlertConditions() { return this.get("/alerts/debug/conditions"); }
   getStudentTasksDetail(studentId) { return this.get(`/alerts/student-tasks-detail/${studentId}`); }
 

@@ -539,6 +539,7 @@ function AlertTools() {
     setLoading(false);
   };
 
+  const [diag, setDiag] = useState(null);
   const [recalcLoading, setRecalcLoading] = useState(false);
   const [recalcResult, setRecalcResult] = useState(null);
 
@@ -592,8 +593,37 @@ function AlertTools() {
             title="Recalcula días sin acceso, % de tareas y nivel de riesgo desde los datos ya guardados, sin volver a scrapear">
             {recalcLoading ? "Recalculando..." : "♻️ Recalcular riesgo (sin scraping)"}
           </button>
+          <button onClick={async () => { setDiag(await api.getDiagnosticoRiesgo()); }}
+            className="text-xs px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
+            title="Mide qué componente hunde la clasificación de riesgo">
+            🔬 Diagnóstico de riesgo
+          </button>
         </div>
       </div>
+
+      {diag && (
+        <div className="text-xs p-3 rounded-lg mb-2 bg-slate-50 border border-slate-200 text-slate-800">
+          <div className="font-semibold mb-2">🔬 Por qué sale ese nivel de riesgo</div>
+          <div className="mb-1">
+            Acceso AVAC (vale 0.30 del índice): con el <strong>máximo</strong> entre asignaturas vale{" "}
+            <strong className="text-red-700">{diag.acceso?.puntaje_con_maximo}</strong>{" "}
+            (prom. {diag.acceso?.promedio_maximo_dias}d) · con el <strong>último acceso real</strong> valdría{" "}
+            <strong className="text-emerald-700">{diag.acceso?.puntaje_con_ultimo_acceso}</strong>{" "}
+            (prom. {diag.acceso?.promedio_ultimo_acceso_dias}d).
+          </div>
+          <div className="mb-1">
+            Índice promedio: <strong>{diag.indice?.promedio}</strong> · umbral para "Bajo": {diag.indice?.umbral_bajo} ·
+            Tareas: {diag.tareas?.promedio_pct}%
+          </div>
+          <div className="text-slate-500 mt-2">{diag.acceso?.explicacion}</div>
+          <div className="text-slate-500 mt-1">{diag.que_mirar}</div>
+          <details className="mt-2"><summary className="cursor-pointer text-slate-600">Ver distribuciones</summary>
+            <pre className="mt-1 text-[10px] overflow-auto">{JSON.stringify(
+              { maximo: diag.acceso?.distribucion_maximo, ultimo_acceso: diag.acceso?.distribucion_ultimo_acceso, niveles: diag.niveles },
+              null, 1)}</pre>
+          </details>
+        </div>
+      )}
 
       {recalcResult && (
         <div className={`text-xs p-3 rounded-lg mb-2 ${recalcResult.error ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-900"}`}>

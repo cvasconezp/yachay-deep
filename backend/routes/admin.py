@@ -1166,3 +1166,88 @@ def recalcular_indicadores_endpoint(
         from ..services.alert_generator import generate_alerts_batch
         resultado["alertas"] = generate_alerts_batch(db)
     return resultado
+
+
+@router.get("/diagnostico-riesgo")
+def diagnostico_riesgo(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Por qué el 93% sale en riesgo. Mide, no supone.
+
+    El índice pondera 30% acceso + 30% tareas + 25% notas + 15% matrícula, y "Bajo" exige
+    >= 0.65. Aquí se ve qué componente está hundiendo la clasificación y cuánto margen deja.
+    """
+    from sqlalchemy import func as f
+    from ..models.student import Student
+    import math
+
+    activos = (Student.retirado == False) | (Student.retirado.is_(None))  # noqa: E712
+
+    def _pct(cond):
+        return db.query(f.count(Student.id)).filter(activos, cond).scalar() or 0
+
+    total = _pct(Student.id.isnot(None))
+
+    # MÁXIMO (el que usa el modelo) vs MÍNIMO (último acceso real a la plataforma)
+    maximo = db.query(f.avg(Student.dias_sin_acceso)).filter(
+        activos, Student.dias_sin_acceso.isnot(None)).scalar()
+    minimo = db.query(f.avg(Student.dias_desde_ultimo_acceso)).filter(
+        activos, Student.dias_desde_ultimo_acceso.isnot(None)).scalar()
+    con_min = _pct(Student.dias_desde_ultimo_acceso.isnot(None))
+
+    def _dist(col):
+        return {
+            "0-7d": _pct(col <= 7),
+            "8-14d": _pct((col > 7) & (col <= 14)),
+            "15-30d": _pct((col > 14) & (col <= 30)),
+            ">30d": _pct(col > 30),
+            "sin_dato": _pct(col.is_(None)),
+        }
+
+    # Cuánto vale el componente de acceso con cada estadístico
+    def _puntaje(d):
+        return round(0.30 * math.exp(-max(d or 0, 0) / 10), 4)
+
+    return {
+        "total_activos": total,
+        "acceso": {
+            "explicacion": (
+                "El modelo usa el MÁXIMO entre asignaturas ('la más descuidada'). Con varias "
+                "materias, casi todo el mundo tiene alguna sin tocar desde el inicio del "
+                "bloque, así que el componente de acceso (30% del índice) se anula para casi "
+                "todos — aunque entren a diario."
+            ),
+            "promedio_maximo_dias": round(float(maximo), 1) if maximo is not None else None,
+            "promedio_ultimo_acceso_dias": round(float(minimo), 1) if minimo is not None else None,
+            "estudiantes_con_ultimo_acceso": con_min,
+            "puntaje_con_maximo": _puntaje(maximo),
+            "puntaje_con_ultimo_acceso": _puntaje(minimo),
+            "de_un_maximo_de": 0.30,
+            "distribucion_maximo": _dist(Student.dias_sin_acceso),
+            "distribucion_ultimo_acceso": _dist(Student.dias_desde_ultimo_acceso),
+        },
+        "tareas": {
+            "promedio_pct": round(float(db.query(f.avg(Student.porcentaje_tareas)).filter(
+                activos, Student.porcentaje_tareas.isnot(None)).scalar() or 0), 1),
+            "sin_dato": _pct(Student.porcentaje_tareas.is_(None)),
+        },
+        "indice": {
+            "promedio": round(float(db.query(f.avg(Student.indice_compromiso)).filter(
+                activos, Student.indice_compromiso.isnot(None)).scalar() or 0), 3),
+            "umbral_bajo": 0.65,
+            "umbral_medio": 0.35,
+        },
+        "niveles": {
+            "Alto": _pct(Student.nivel_riesgo == "Alto"),
+            "Medio": _pct(Student.nivel_riesgo == "Medio"),
+            "Bajo": _pct(Student.nivel_riesgo == "Bajo"),
+            "sin_clasificar": _pct(Student.nivel_riesgo.is_(None)),
+        },
+        "que_mirar": (
+            "Si 'puntaje_con_ultimo_acceso' es MUY superior a 'puntaje_con_maximo', el "
+            "problema es el estadístico: se está midiendo la materia más abandonada, no el "
+            "uso de la plataforma. Si ambos son casi cero, la inactividad es real y lo que "
+            "hay que revisar son los umbrales."
+        ),
+    }
