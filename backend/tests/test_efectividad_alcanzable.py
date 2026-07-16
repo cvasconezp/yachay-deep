@@ -138,3 +138,56 @@ def test_desmarcar_revierte_a_pendiente(db, client):
     db.refresh(i)
     assert i.estado_workflow == "pendiente"
     assert i.fecha_resolucion is None
+
+
+# ── coherencia aritmética de las tarjetas ──
+def test_los_numeros_cuadran_entre_si(db, client):
+    """El bug visible: 'No exitosas' salía 45 con 48 analizadas y tasa 3/47.
+
+    La tarjeta restaba sobre el total y la tasa dividía entre las concluyentes, así que
+    la intervención sin datos contaba como fracaso en una y no existía en la otra.
+    """
+    a = _admin(db)
+    # 3 medibles (con snapshot) + 1 sin datos suficientes
+    for _ in range(3):
+        _intervencion(db, _est(db).id, dias_atras=30, uid=a.id)
+    s_sin = _est(db)
+    i = _intervencion(db, s_sin.id, dias_atras=30, uid=a.id)
+    i.snapshot_compromiso = None; i.snapshot_porcentaje_tareas = None
+    i.snapshot_dias_sin_acceso = None; i.snapshot_prob_desercion = None
+    db.commit()
+
+    d = client.get("/analytics/effectiveness?periodo=P68", headers=_headers(a)).json()
+
+    assert d["total_analizadas"] == 4
+    assert d["analizadas_concluyentes"] == 3
+    assert d["sin_datos_suficientes"] == 1
+    # exitosas + no_exitosas debe sumar las CONCLUYENTES, no el total
+    assert d["exitosas"] + d["no_exitosas"] == d["analizadas_concluyentes"]
+    # y la tasa debe ser coherente con esos dos
+    esperada = round(d["exitosas"] / d["analizadas_concluyentes"] * 100, 1)
+    assert d["tasa_exito_global"] == esperada
+
+
+def test_informa_de_las_excluidas_por_recientes(db, client):
+    """70 en Intervenciones y 48 aquí: el usuario debe poder ver dónde fueron las otras."""
+    a = _admin(db)
+    _intervencion(db, _est(db).id, dias_atras=30, uid=a.id)   # se mide
+    _intervencion(db, _est(db).id, dias_atras=2, uid=a.id)    # muy reciente
+
+    d = client.get("/analytics/effectiveness?periodo=P68", headers=_headers(a)).json()
+    assert d["total_periodo"] == 2
+    assert d["total_analizadas"] == 1
+    assert d["excluidas_por_recientes"] == 1
+
+
+def test_desglose_explica_los_fracasos(db, client):
+    """Distinguir 'el criterio es exigente' de 'no está funcionando'."""
+    a = _admin(db)
+    s = _est(db, compromiso=0.60, tareas=90.0, dias=1)   # mejora en todo
+    _intervencion(db, s.id, dias_atras=30, uid=a.id)
+
+    d = client.get("/analytics/effectiveness?periodo=P68", headers=_headers(a)).json()
+    dg = d["desglose_no_exitosas"]
+    assert set(dg) == {"mejoro_pero_empeoro_en_otro", "sin_cambios_significativos", "solo_empeoro"}
+    assert sum(dg.values()) == d["no_exitosas"]

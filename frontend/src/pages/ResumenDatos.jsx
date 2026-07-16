@@ -1903,12 +1903,44 @@ export default function ResumenDatos() {
                 </div>
               ) : (
                 <>
-                  {/* KPI Cards */}
+                  {/* KPI Cards — todas sobre el MISMO denominador (las concluyentes).
+                      Antes "No exitosas" restaba sobre total_analizadas y la tasa se
+                      calculaba sobre las concluyentes: los números no cuadraban entre sí. */}
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    <KPICard label="Total analizadas" value={effData.total_analizadas} icon="📋" accent={PBI.navy} />
+                    <KPICard label="Medidas" value={effData.analizadas_concluyentes ?? effData.total_analizadas}
+                      sub={effData.sin_datos_suficientes ? `${effData.sin_datos_suficientes} sin datos suficientes` : null}
+                      icon="📋" accent={PBI.navy} />
                     <KPICard label="Exitosas" value={effData.exitosas} sub={`${effData.tasa_exito_global}% de éxito`} icon="✅" accent={PBI.green} />
-                    <KPICard label="No exitosas" value={effData.total_analizadas - effData.exitosas} icon="⚠️" accent={PBI.coral} />
+                    <KPICard label="No exitosas" value={effData.no_exitosas ?? ((effData.analizadas_concluyentes ?? effData.total_analizadas) - effData.exitosas)} icon="⚠️" accent={PBI.coral} />
                     <KPICard label="Tasa de éxito" value={`${effData.tasa_exito_global}%`} icon="🎯" accent={effData.tasa_exito_global >= 50 ? PBI.green : PBI.coral} />
+                  </div>
+
+                  {/* De dónde salen los números: sin esto se ven 70 en Intervenciones y 48 aquí */}
+                  <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-4 text-xs text-gray-600 space-y-1">
+                    <p>
+                      <strong className="text-gray-800">Qué se está midiendo:</strong>{" "}
+                      {effData.total_periodo != null && <>de {effData.total_periodo} intervenciones del período, </>}
+                      {effData.excluidas_por_recientes > 0 && (
+                        <>{effData.excluidas_por_recientes} se excluyen por tener menos de {effData.dias_minimos} días
+                        (aún no hay un “después” que comparar), </>
+                      )}
+                      quedan {effData.total_analizadas} y se miden {effData.analizadas_concluyentes ?? effData.total_analizadas}
+                      {effData.sin_datos_suficientes > 0 && <> ({effData.sin_datos_suficientes} sin indicadores suficientes)</>}.
+                    </p>
+                    {effData.criterio_exito && (
+                      <p><strong className="text-gray-800">Criterio de éxito:</strong> {effData.criterio_exito}</p>
+                    )}
+                    {effData.desglose_no_exitosas && (
+                      <p>
+                        <strong className="text-gray-800">Por qué no fueron exitosas:</strong>{" "}
+                        {effData.desglose_no_exitosas.mejoro_pero_empeoro_en_otro} mejoraron en algo pero empeoraron en otro indicador ·{" "}
+                        {effData.desglose_no_exitosas.sin_cambios_significativos} sin cambios significativos ·{" "}
+                        {effData.desglose_no_exitosas.solo_empeoro} solo empeoraron.
+                      </p>
+                    )}
+                    {effData.advertencia && (
+                      <p className="text-amber-700 pt-1">⚠️ {effData.advertencia}</p>
+                    )}
                   </div>
 
                   {/* Ranking de medios más efectivos */}

@@ -102,6 +102,14 @@ def get_effectiveness(
 
     intervenciones = q.all()
 
+    # Cuántas quedaron fuera y por qué. Sin esto, el usuario ve 70 en Intervenciones y 48
+    # aquí, y no tiene forma de saber qué pasó con las otras 22.
+    q_todas = db.query(Intervention)
+    if periodo:
+        q_todas = q_todas.filter(Intervention.periodo == periodo)
+    total_periodo = q_todas.count()
+    excluidas_recientes = total_periodo - q.count() if not solo_cerradas else None
+
     if not intervenciones:
         return {
             "total_analizadas": 0,
@@ -133,6 +141,12 @@ def get_effectiveness(
     total = len(resultados)
     concluyentes = [r for r in resultados if r.get("concluyente")]
     exitosas = sum(1 for r in concluyentes if r["exitosa"])
+    # Sin este desglose no se distingue "el criterio es exigente" de "no está funcionando"
+    con_empeoramiento = sum(1 for r in concluyentes if r.get("empeoramientos", 0) > 0)
+    sin_mejora = sum(1 for r in concluyentes
+                     if r.get("mejoras", 0) == 0 and r.get("empeoramientos", 0) == 0)
+    mejora_parcial = sum(1 for r in concluyentes
+                         if r.get("mejoras", 0) > 0 and r.get("empeoramientos", 0) > 0)
     # Denominador = solo las que tienen datos suficientes. Una intervención sin datos
     # no es un fracaso; contarla como tal hundiría la tasa artificialmente.
     tasa_global = round(exitosas / len(concluyentes) * 100, 1) if concluyentes else 0
@@ -153,11 +167,25 @@ def get_effectiveness(
 
     return {
         "total_analizadas": total,
+        "total_periodo": total_periodo,
+        "excluidas_por_recientes": excluidas_recientes,
         "dias_minimos": dias_minimos,
         "solo_cerradas": solo_cerradas,
         "analizadas_concluyentes": len(concluyentes),
+        "sin_datos_suficientes": total - len(concluyentes),
         "tasa_exito_global": tasa_global,
         "exitosas": exitosas,
+        "no_exitosas": len(concluyentes) - exitosas,
+        "desglose_no_exitosas": {
+            "mejoro_pero_empeoro_en_otro": mejora_parcial,
+            "sin_cambios_significativos": sin_mejora,
+            "solo_empeoro": con_empeoramiento - mejora_parcial,
+        },
+        "criterio_exito": (
+            "Al menos una mejora por encima del umbral Y ningún empeoramiento por encima "
+            "del umbral. Es un criterio exigente a propósito: mejorar un indicador mientras "
+            "otro se hunde no es un éxito."
+        ),
         "por_medio": por_medio,
         "por_motivo": por_motivo,
         "por_carrera": por_carrera,
