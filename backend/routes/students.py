@@ -22,6 +22,7 @@ from ..database import get_db
 from ..models import Student, AvacAccess, TaskSubmission, Grade, Intervention, PracticaPreprofesional, EscuelaPractica, Enrollment
 from ..models.course_config import CourseConfig
 from ..auth.jwt import get_current_user
+from ..services.scope import filtrar_carrera, asegurar_acceso_carrera
 from ..models.user import User
 from ..constants import EIB_GRUPO_SEDE_STR as SEDE_MAPPING
 
@@ -450,7 +451,8 @@ def search_students(
     Búsqueda triple: nombre / correo / cédula.
     Si se pasa carrera, filtra por carrera (y permite q vacío para listar).
     """
-    query = db.query(Student)
+    # Ámbito por carrera del usuario (el admin no se ve afectado)
+    query = filtrar_carrera(db.query(Student), current_user)
 
     # Filtro por carrera
     if carrera.strip():
@@ -932,6 +934,8 @@ def get_ficha(
     student = db.query(Student).filter(Student.id == student_id).first()
     if not student:
         raise HTTPException(status_code=404, detail="Estudiante no encontrado")
+    # Sin esto, bastaba con adivinar el id para leer la ficha de otra carrera
+    asegurar_acceso_carrera(current_user, student.carrera)
 
     # ── Determinar si el periodo solicitado es el activo ──
     from ..models.course_config import SemesterConfig as _SC
@@ -1456,6 +1460,7 @@ def get_student_comparative(
     student = db.query(Student).filter(Student.id == student_id).first()
     if not student:
         raise HTTPException(status_code=404, detail="Estudiante no encontrado")
+    asegurar_acceso_carrera(current_user, student.carrera)
 
     # Calificaciones actuales del estudiante
     student_grades = (
@@ -1581,6 +1586,7 @@ def get_recovery_score(student_id: int, db: Session = Depends(get_db), current_u
     student = db.query(Student).filter(Student.id == student_id).first()
     if not student:
         raise HTTPException(status_code=404, detail="Estudiante no encontrado")
+    asegurar_acceso_carrera(current_user, student.carrera)
 
     from ..services.recovery_score import calcular_score_estudiante
     result = calcular_score_estudiante(student, db)

@@ -99,6 +99,7 @@ def upgrade_tables():
             ("totp_secret", "VARCHAR"),
             ("totp_enabled", "BOOLEAN DEFAULT false"),
             ("recovery_codes", "JSON"),
+            ("carreras", "JSON"),
             ("pin_locked", "BOOLEAN DEFAULT false"),
             ("totp_secret_cif", "TEXT"),
         ],
