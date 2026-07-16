@@ -328,18 +328,11 @@ def get_student_inactivity_by_course(
     else:
         periodo_variants = (pf, f"P{pf}")
 
-    # Max dias posible desde inicio del bloque
-    max_dias_periodo = None
-    if semconfig:
-        bloque_inicio = None
-        if semconfig.bloque_actual == "2" and semconfig.bloque2_inicio:
-            bloque_inicio = semconfig.bloque2_inicio
-        elif semconfig.bloque1_inicio:
-            bloque_inicio = semconfig.bloque1_inicio
-        if bloque_inicio:
-            if bloque_inicio.tzinfo is None:
-                bloque_inicio = bloque_inicio.replace(tzinfo=timezone.utc)
-            max_dias_periodo = (datetime.now(timezone.utc) - bloque_inicio).days
+    # Tope de días desde el inicio del bloque — misma fuente que el ETL y las alertas.
+    # Estaba duplicado en tres sitios con lógicas distintas: por eso Dashboard y Ficha
+    # mostraban números diferentes del mismo estudiante.
+    from ..services.bloques import dias_maximos_del_bloque
+    max_dias_periodo = dias_maximos_del_bloque(semconfig)
 
     # Excluir cursos del bloque contrario
     excluded_courses = _active_bloque_courses(db, semconfig)

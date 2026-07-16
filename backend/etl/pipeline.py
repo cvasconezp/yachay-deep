@@ -466,6 +466,33 @@ class ETLPipeline:
                         f"aulas donde el estudiante ya no está matriculado"
                     )
 
+                # ── Descartar cursos de un bloque que ya cerró ───────────────────────
+                # Un curso de Bloque 1 que terminó hace un mes acumula días sin acceso
+                # indefinidamente: el estudiante no entra porque la materia YA NO EXISTE.
+                # Contarlo genera alertas cuya gravedad crece sola con el calendario.
+                from ..services.bloques import cursos_del_bloque_cerrado, acotar_dias
+                cerrados = cursos_del_bloque_cerrado(self.db, semconfig)
+                if cerrados and "codigo_curso" in df_ingresos.columns:
+                    antes_bloque = len(df_ingresos)
+                    df_ingresos = df_ingresos[
+                        ~df_ingresos["codigo_curso"].astype(str).str.strip().isin(cerrados)
+                    ]
+                    if antes_bloque != len(df_ingresos):
+                        logs.append(
+                            f"  → {antes_bloque - len(df_ingresos)} registros AVAC descartados: "
+                            f"cursos del bloque que ya cerró"
+                        )
+
+                # Nadie puede llevar más días sin acceso que los que el bloque lleva abierto
+                tope_bloque = None
+                if semconfig and "dias_sin_acceso" in df_ingresos.columns:
+                    from ..services.bloques import dias_maximos_del_bloque
+                    tope_bloque = dias_maximos_del_bloque(semconfig)
+                    if tope_bloque is not None:
+                        df_ingresos = df_ingresos.copy()
+                        df_ingresos["dias_sin_acceso"] = df_ingresos["dias_sin_acceso"].clip(upper=tope_bloque)
+                        logs.append(f"  → Días sin acceso acotados al bloque actual (máx {tope_bloque}d)")
+
                 # 2b. Calcular indicadores
                 logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Calculando indicadores de riesgo...")
                 df_master = calcular_indicadores_estudiantes(

@@ -195,12 +195,12 @@ def generate_alerts_batch(db: Session) -> dict:
         bloque_inicio = semconfig.bloque1_inicio
 
     now = datetime.now(timezone.utc)
-    max_dias_periodo = None
-    if bloque_inicio:
-        if bloque_inicio.tzinfo is None:
-            from datetime import timezone as tz
-            bloque_inicio = bloque_inicio.replace(tzinfo=tz.utc)
-        max_dias_periodo = (now - bloque_inicio).days
+    # El tope venía de (now - inicio_bloque), que SIGUE CRECIENDO aunque el bloque haya
+    # cerrado: un bloque terminado hace un mes seguía "permitiendo" 30 días más de
+    # inactividad, y la gravedad de la alerta crecía sola con el calendario. El servicio
+    # detiene el reloj en el fin del bloque.
+    from .bloques import dias_maximos_del_bloque
+    max_dias_periodo = dias_maximos_del_bloque(semconfig, now)
 
     # Calendario académico: ¿ya se esperan notas?
     calendario = _get_calendario(semconfig)
