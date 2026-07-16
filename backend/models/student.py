@@ -30,7 +30,13 @@ class Student(Base):
     # Computed risk indicators (updated by ETL)
     nivel_riesgo = Column(String, nullable=True)       # Alto / Medio / Bajo
     indice_compromiso = Column(Float, nullable=True)   # 0.0 - 1.0
-    dias_sin_acceso = Column(Integer, nullable=True)   # días desde último acceso AVAC
+    # OJO con la semántica de estos dos campos: NO son lo mismo.
+    #   dias_sin_acceso      = MÁXIMO entre asignaturas = "la asignatura más descuidada".
+    #   dias_desde_ultimo_acceso = MÍNIMO = "cuándo pisó AVAC por última vez".
+    # Llamar "Días sin AVAC: 99d" al máximo es FALSO si el estudiante entró hace 2 días a
+    # otra asignatura. El mínimo ya se calculaba en el ETL y se descartaba sin guardarse.
+    dias_sin_acceso = Column(Integer, nullable=True)   # MÁXIMO entre asignaturas
+    dias_desde_ultimo_acceso = Column(Integer, nullable=True)  # MÍNIMO: último acceso real a AVAC
     porcentaje_tareas = Column(Float, nullable=True)   # % tareas entregadas
     promedio_calificaciones = Column(Float, nullable=True)
 

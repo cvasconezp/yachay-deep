@@ -1424,6 +1424,11 @@ class ETLPipeline:
             # ── Indicadores de riesgo (siempre desde df_master) ────────────────
             dias = _nan_to_none(row.get("dias_sin_acceso_max"))
             student.dias_sin_acceso = int(dias) if dias is not None else None
+            # El mínimo es el dato honesto: cuándo entró por última vez a AVAC. Se venía
+            # calculando en el transformer y se descartaba, así que la app solo conocía el
+            # "peor caso" y lo mostraba como si fuera el último acceso del estudiante.
+            dias_min = _nan_to_none(row.get("dias_sin_acceso_min"))
+            student.dias_desde_ultimo_acceso = int(dias_min) if dias_min is not None else None
             student.porcentaje_tareas = _nan_to_none(row.get("porcentaje_tareas"))
 
             # Promedio de calificaciones (del transformer, escala 0-100)

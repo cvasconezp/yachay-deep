@@ -108,6 +108,7 @@ def upgrade_tables():
         # silencio: sus columnas nunca se migraban y cualquier consulta que las tocara
         # reventaba en producción con "column does not exist". Ver test_migracion_sin_claves_duplicadas.
         "students": [
+            ("dias_desde_ultimo_acceso", "INTEGER"),
             ("retirado", "BOOLEAN DEFAULT false"),
             ("fecha_retiro", "TIMESTAMP"),
             ("motivo_retiro", "VARCHAR"),

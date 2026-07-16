@@ -375,30 +375,42 @@ def get_student_inactivity_by_course(
 
     records = records.order_by(AvacAccess.dias_sin_acceso.desc()).all()
 
-    # Dedup: un solo registro por codigo_curso (el de mayor dias_sin_acceso)
-    seen = set()
+    # Dedup por ASIGNATURA, no por código de curso.
+    #
+    # Una misma asignatura puede tener varios códigos AVAC para el mismo estudiante
+    # (cambio de grupo: AVAC lo sigue listando en el aula vieja, que nunca vuelve a pisar).
+    # Deduplicando solo por codigo_curso, "PANADERÍA BÁSICA" salía dos veces: una con 2
+    # días (el aula real) y otra con 99 (el aula fantasma). Se conserva el acceso MÁS
+    # RECIENTE: si entró hace 2 días a esa asignatura, decir que lleva 99 sin entrar es falso.
+    seen_asig = {}
     output = []
     for r in records:
-        if r.codigo_curso in seen:
-            continue
-        seen.add(r.codigo_curso)
+        cc = db.query(CourseConfig).filter(CourseConfig.codigo_avac == r.codigo_curso).first()
+        asignatura = cc.asignatura if cc else None
 
         dias = int(r.dias_sin_acceso)
         if max_dias_periodo is not None:
             dias = min(dias, max_dias_periodo)
 
-        # Buscar nombre de asignatura en CourseConfig
-        cc = db.query(CourseConfig).filter(CourseConfig.codigo_avac == r.codigo_curso).first()
-        asignatura = cc.asignatura if cc else None
-
-        output.append(CourseInactivityOut(
+        item = CourseInactivityOut(
             codigo_curso=r.codigo_curso,
             asignatura=asignatura,
             dias_sin_acceso=dias,
             ultimo_acceso_texto=r.ultimo_acceso_texto,
             estado_avac=r.estado_avac,
-        ))
+        )
 
+        clave = (asignatura or "").strip().upper() or f"__cod__{r.codigo_curso}"
+        anterior = seen_asig.get(clave)
+        if anterior is None:
+            seen_asig[clave] = item
+            output.append(item)
+        elif dias < anterior.dias_sin_acceso:
+            # Gana el acceso más reciente: sustituye al aula abandonada
+            output[output.index(anterior)] = item
+            seen_asig[clave] = item
+
+    output.sort(key=lambda x: x.dias_sin_acceso, reverse=True)
     return output
 
 
