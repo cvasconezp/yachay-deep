@@ -23,6 +23,7 @@ from ..models import Student, AvacAccess, TaskSubmission, Grade, Intervention, P
 from ..models.course_config import CourseConfig
 from ..auth.jwt import get_current_user
 from ..services.scope import filtrar_carrera, asegurar_acceso_carrera
+from ..services.retiro import filtrar_activos, marcar_retirado, reactivar
 from ..models.user import User
 from ..constants import EIB_GRUPO_SEDE_STR as SEDE_MAPPING
 
@@ -441,6 +442,7 @@ def search_students(
     q: str = Query("", description="Nombre, correo institucional, cédula o teléfono"),
     carrera: str = Query("", description="Filtrar por carrera (vacío = todas)"),
     nivel_riesgo: str = Query("", description="Filtrar por nivel de riesgo: Alto, Medio, Bajo"),
+    incluir_retirados: bool = Query(False, description="Incluir estudiantes retirados"),
     page: int = Query(1, ge=1, description="Página (empieza en 1)"),
     limit: int = Query(50, ge=1, le=200, description="Resultados por página"),
     db: Session = Depends(get_db),
@@ -453,6 +455,11 @@ def search_students(
     """
     # Ámbito por carrera del usuario (el admin no se ve afectado)
     query = filtrar_carrera(db.query(Student), current_user)
+
+    # Los retirados salen del seguimiento por defecto: ya no están, y sus indicadores
+    # congelados falsean cualquier estadística. Se consultan en /students/retirados.
+    if not incluir_retirados:
+        query = filtrar_activos(query)
 
     # Filtro por carrera
     if carrera.strip():
@@ -1609,3 +1616,67 @@ def batch_recovery_scores(db: Session = Depends(get_db), current_user: dict = De
     from ..services.recovery_score import calcular_scores_batch
     result = calcular_scores_batch(db)
     return RecoveryBatchResponse(**result)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Retiros
+# ─────────────────────────────────────────────────────────────────────────────
+class RetiradoOut(BaseModel):
+    id: int
+    nombre: str
+    carrera: Optional[str] = None
+    fecha_retiro: Optional[datetime] = None
+    motivo_retiro: Optional[str] = None
+    dias_sin_acceso_al_retirarse: Optional[int] = None
+    compromiso_al_retirarse: Optional[float] = None
+    porcentaje_tareas_al_retirarse: Optional[float] = None
+    nivel_riesgo_al_retirarse: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
+@router.get("/retirados", response_model=list[RetiradoOut])
+def listar_retirados(
+    carrera: str = Query("", description="Filtrar por carrera"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Estudiantes retirados, con la foto de sus indicadores al momento del retiro.
+
+    Están fuera de alertas y estadísticas: sus días sin acceso seguirían creciendo
+    mecánicamente y falsearían cualquier promedio. Aquí quedan consultables, con el
+    estado en que se fueron — que es el dato útil para analizar por qué se fueron.
+    """
+    q = filtrar_carrera(db.query(Student), current_user).filter(Student.retirado == True)  # noqa: E712
+    if carrera.strip():
+        q = q.filter(func.lower(Student.carrera) == carrera.strip().lower())
+
+    return [
+        RetiradoOut(
+            id=s.id, nombre=s.nombre, carrera=s.carrera,
+            fecha_retiro=s.fecha_retiro, motivo_retiro=s.motivo_retiro,
+            dias_sin_acceso_al_retirarse=s.retiro_snapshot_dias_sin_acceso,
+            compromiso_al_retirarse=s.retiro_snapshot_compromiso,
+            porcentaje_tareas_al_retirarse=s.retiro_snapshot_porcentaje_tareas,
+            nivel_riesgo_al_retirarse=s.retiro_snapshot_nivel_riesgo,
+        )
+        for s in q.order_by(Student.fecha_retiro.desc()).all()
+    ]
+
+
+@router.post("/{student_id}/reactivar")
+def reactivar_estudiante(
+    student_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Deshace un retiro marcado por error, o registra que el estudiante volvió."""
+    student = db.query(Student).filter(Student.id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Estudiante no encontrado")
+    asegurar_acceso_carrera(current_user, student.carrera)
+
+    if not reactivar(db, student):
+        raise HTTPException(status_code=400, detail="El estudiante no está retirado")
+    db.commit()
+    return {"ok": True, "student_id": student_id, "retirado": False}

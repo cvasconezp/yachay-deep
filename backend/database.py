@@ -105,6 +105,13 @@ def upgrade_tables():
         ],
         "institutions": [],  # new table, created by create_all()
     "students": [
+            ("retirado", "BOOLEAN DEFAULT false"),
+            ("fecha_retiro", "TIMESTAMP"),
+            ("motivo_retiro", "VARCHAR"),
+            ("retiro_snapshot_dias_sin_acceso", "INTEGER"),
+            ("retiro_snapshot_compromiso", "FLOAT"),
+            ("retiro_snapshot_porcentaje_tareas", "FLOAT"),
+            ("retiro_snapshot_nivel_riesgo", "VARCHAR"),
             ("whatsapp",       "VARCHAR"),
             ("nivel_academico", "INTEGER"),
             ("pais",           "VARCHAR"),

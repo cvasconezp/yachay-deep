@@ -223,11 +223,15 @@ def generate_alerts_batch(db: Session) -> dict:
         raw_p = pf
         periodo_variants = (pf, f"P{pf}")
 
+    # Los retirados dejan de generar alertas: sus días sin acceso siguen creciendo
+    # mecánicamente y llenarían de ruido a los monitores, que ya saben que se fueron.
+    from .retiro import filtrar_activos
+
     period_sids = _active_period_student_ids(db)
     if period_sids:
-        students = db.query(Student).filter(Student.id.in_(period_sids)).all()
+        students = filtrar_activos(db.query(Student).filter(Student.id.in_(period_sids))).all()
     else:
-        students = db.query(Student).all()
+        students = filtrar_activos(db.query(Student)).all()
 
     # Filtrar cursos por bloque actual
     excluded_course_codes = set()

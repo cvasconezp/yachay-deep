@@ -12,7 +12,7 @@ from ...database import get_db
 from ...models.student import Student
 from ...models.intervention import Intervention
 from ...auth.jwt import get_current_user
-from ...services.intervention_metrics import evaluar, INDICADORES
+from ...services.intervention_metrics import evaluar, clasificar, INDICADORES
 
 router = APIRouter(prefix="/analytics/effectiveness", tags=["analytics-effectiveness"])
 
@@ -132,10 +132,16 @@ def get_effectiveness(
         students = db.query(Student).filter(Student.id.in_(student_ids)).all()
         students_map = {s.id: s for s in students}
 
-    # Calcular efectividad individual
+    # El retiro es un DESENLACE, no un fracaso de la intervención: el estudiante ya no
+    # está, así que sus indicadores nunca van a mejorar. Contarlos como "no exitosas"
+    # hundía la tasa por un motivo que no tiene que ver con la calidad del contacto.
     resultados = []
+    retirados = 0
     for inv in intervenciones:
         student = students_map.get(inv.student_id)
+        if student is not None and getattr(student, "retirado", False):
+            retirados += 1
+            continue
         resultados.append(_calcular_efectividad_intervencion(inv, student))
 
     total = len(resultados)
@@ -150,6 +156,52 @@ def get_effectiveness(
     # Denominador = solo las que tienen datos suficientes. Una intervención sin datos
     # no es un fracaso; contarla como tal hundiría la tasa artificialmente.
     tasa_global = round(exitosas / len(concluyentes) * 100, 1) if concluyentes else 0
+
+    # ── Por indicador: la lectura honesta ────────────────────────────────────────
+    # El binario "exitosa" miente en los dos sentidos: sin umbral cuenta ruido; con
+    # "cero empeoramientos" basta un indicador ruidoso para tumbar un caso que mejoró en
+    # todo lo demás. Reportar indicador por indicador dice la verdad sin resumirla mal.
+    por_indicador = {}
+    for ind, campo in (("dias_sin_acceso", "delta_dias_sin_acceso"),
+                       ("compromiso", "delta_compromiso"),
+                       ("porcentaje_tareas", "delta_tareas"),
+                       ("prob_desercion", "delta_prob_desercion")):
+        mejoraron = empeoraron = igual = sin_datos = 0
+        for r in resultados:
+            c = clasificar(ind, r.get(campo))
+            if c == "mejora": mejoraron += 1
+            elif c == "empeora": empeoraron += 1
+            elif c == "sin_cambio": igual += 1
+            else: sin_datos += 1
+        medidos = mejoraron + empeoraron + igual
+        por_indicador[ind] = {
+            "mejoraron": mejoraron, "empeoraron": empeoraron,
+            "sin_cambio": igual, "sin_datos": sin_datos, "medidos": medidos,
+            "pct_mejoraron": round(mejoraron / medidos * 100, 1) if medidos else None,
+        }
+
+    # Al menos una mejora significativa (sin exigir que nada empeore)
+    con_alguna_mejora = sum(1 for r in concluyentes if r.get("mejoras", 0) > 0)
+
+    # ── Matriz de transición de riesgo ───────────────────────────────────────────
+    # "¿Cuántos se recuperaron?" en el lenguaje que todo el mundo entiende.
+    NIVELES = ["Alto", "Medio", "Bajo"]
+    _orden = {n.lower(): i for i, n in enumerate(NIVELES)}
+    matriz, mejoraron_nivel, empeoraron_nivel, se_mantuvieron = {}, 0, 0, 0
+    for inv in intervenciones:
+        st = students_map.get(inv.student_id)
+        antes = (inv.snapshot_nivel_riesgo or "").strip().capitalize()
+        ahora = ((st.nivel_riesgo if st else None) or "").strip().capitalize()
+        if antes not in NIVELES or ahora not in NIVELES:
+            continue
+        clave = f"{antes}->{ahora}"
+        matriz[clave] = matriz.get(clave, 0) + 1
+        if _orden[ahora.lower()] > _orden[antes.lower()]:
+            mejoraron_nivel += 1      # Alto(0) -> Medio(1) = mejora
+        elif _orden[ahora.lower()] < _orden[antes.lower()]:
+            empeoraron_nivel += 1
+        else:
+            se_mantuvieron += 1
 
     # Agrupación por medio
     por_medio = _agrupar_por(resultados, "medio")
@@ -167,6 +219,7 @@ def get_effectiveness(
 
     return {
         "total_analizadas": total,
+        "retirados_excluidos": retirados,
         "total_periodo": total_periodo,
         "excluidas_por_recientes": excluidas_recientes,
         "dias_minimos": dias_minimos,
@@ -190,6 +243,15 @@ def get_effectiveness(
         "por_motivo": por_motivo,
         "por_carrera": por_carrera,
         "ranking_medios": ranking,
+        "con_alguna_mejora": con_alguna_mejora,
+        "por_indicador": por_indicador,
+        "transicion_riesgo": {
+            "matriz": matriz,
+            "bajaron_de_nivel": mejoraron_nivel,
+            "subieron_de_nivel": empeoraron_nivel,
+            "se_mantuvieron": se_mantuvieron,
+            "total": mejoraron_nivel + empeoraron_nivel + se_mantuvieron,
+        },
         "umbrales": {k: v["umbral"] for k, v in INDICADORES.items()},
         "advertencia": (
             "Mide la evolución de los estudiantes intervenidos, NO el efecto causal de "

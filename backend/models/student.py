@@ -61,6 +61,20 @@ class Student(Base):
     score_recuperabilidad = Column(Float, nullable=True)       # 0-100
     nivel_recuperabilidad = Column(String, nullable=True)      # alto / medio / bajo
 
+    # ── Retiro: congela la foto del estudiante ──────────────────────────────
+    # Un retirado seguía sumando días sin acceso mecánicamente, generando alertas y
+    # contando como intervención "no exitosa" para siempre — nunca iba a mejorar, porque
+    # ya no está. Eso contaminaba las métricas de impacto y llenaba de ruido a los
+    # monitores. Al marcar el retiro se congelan los indicadores del momento.
+    retirado = Column(Boolean, default=False, nullable=False, server_default="false", index=True)
+    fecha_retiro = Column(DateTime(timezone=True), nullable=True)
+    motivo_retiro = Column(String, nullable=True)
+    # Indicadores en el instante del retiro (a partir de aquí no se actualizan)
+    retiro_snapshot_dias_sin_acceso = Column(Integer, nullable=True)
+    retiro_snapshot_compromiso = Column(Float, nullable=True)
+    retiro_snapshot_porcentaje_tareas = Column(Float, nullable=True)
+    retiro_snapshot_nivel_riesgo = Column(String, nullable=True)
+
     # Metadata
     periodo = Column(String, nullable=True)            # e.g. "2026-1"
     estado_matricula = Column(String, nullable=True)

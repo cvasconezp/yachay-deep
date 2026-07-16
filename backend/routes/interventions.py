@@ -13,6 +13,7 @@ from ..models.alert_event import AlertEvent
 from ..models.enrollment import Enrollment
 from ..models.user import User
 from ..auth.jwt import get_current_user
+from ..services.retiro import es_estado_de_retiro, marcar_retirado
 
 router = APIRouter(prefix="/interventions", tags=["interventions"])
 
@@ -183,6 +184,11 @@ def create_intervention(
         snapshot_prob_reprobacion=student.prob_reprobacion,
         snapshot_nivel_riesgo=student.nivel_riesgo,
     )
+    # Registrar el retiro congela la foto del estudiante: deja de acumular días sin
+    # acceso, de generar alertas y de contar como intervención fallida para siempre.
+    if es_estado_de_retiro(payload.estado):
+        marcar_retirado(db, student, motivo=payload.motivo)
+
     db.add(intervention)
     db.flush()
 
@@ -353,6 +359,11 @@ def update_intervention(
     # Como estado_workflow no se escribe desde ninguna pantalla, se quedaba en
     # "pendiente" para siempre y la vista de Efectividad (que filtra por él) no podía
     # mostrar nada nunca. Se sincroniza aquí.
+    # Marcar el retiro al editar también congela la foto
+    if "estado" in update_data and es_estado_de_retiro(update_data["estado"]):
+        _st = db.query(Student).filter(Student.id == intervention.student_id).first()
+        marcar_retirado(db, _st, motivo=intervention.motivo)
+
     if "resultado" in update_data:
         _mapa = {"resuelto": "resuelto", "cerrado": "cerrado", "contactado": "contactado"}
         _nuevo = _mapa.get((update_data["resultado"] or "").strip().lower())
