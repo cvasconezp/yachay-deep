@@ -146,18 +146,38 @@ def unidades_vencidas(semconfig, ahora=None) -> set | None:
     from datetime import datetime as _dt, timezone as _tz
 
     ahora = ahora or _dt.now(_tz.utc)
+
+    # El calendario tiene las entregas de TODOS los bloques mezcladas. Hay que quedarse
+    # solo con las del bloque en curso y numerarlas DENTRO de él: la 1ª entrega del
+    # bloque 2 es la unidad 1, no la quinta del semestre.
+    #
+    # Antes se enumeraban todas seguidas y se incluía "paso_notas" como si fuera una
+    # entrega. Con el calendario real (4 entregas de B1 + paso de notas + 4 de B2), al
+    # 16/07 daba "unidades 1..7 vencidas" — y como las unidades reales son 1-4, TODAS
+    # contaban como vencidas y el filtro no descartaba nada.
+    inicio, _ = ventana_bloque(semconfig, ahora)
+    fin_bloque = _aware(
+        semconfig.bloque2_fin if str(semconfig.bloque_actual or "1") == "2"
+        else semconfig.bloque1_fin
+    ) if semconfig else None
+
     entregas = []
     for e in _calendario(semconfig):
-        if e.get("tipo") not in ("entrega", "paso_notas"):
+        if e.get("tipo") != "entrega":        # el paso de notas no es una entrega
             continue
         try:
-            f = _dt.fromisoformat(str(e.get("fecha")).replace("Z", "+00:00"))
+            f = _aware(_dt.fromisoformat(str(e.get("fecha")).replace("Z", "+00:00")))
         except (ValueError, TypeError):
             continue
-        entregas.append(_aware(f))
+        # Solo las de este bloque
+        if inicio and f < inicio:
+            continue
+        if fin_bloque and f > fin_bloque:
+            continue
+        entregas.append(f)
 
     if not entregas:
-        return None          # sin calendario configurado: no se filtra nada
+        return None          # sin fechas para este bloque: no se filtra nada
 
     entregas.sort()
     return {str(i) for i, f in enumerate(entregas, start=1) if f <= ahora}

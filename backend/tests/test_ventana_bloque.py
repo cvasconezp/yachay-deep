@@ -194,3 +194,71 @@ def test_df_vacio_no_revienta():
     sem = _sem_con_calendario(-10)
     assert len(filtrar_tareas_vencidas(pd.DataFrame(), sem, AHORA)) == 0
     assert filtrar_tareas_vencidas(None, sem, AHORA) is None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# El calendario real de la UPS (P68) — mezcla los dos bloques
+# ─────────────────────────────────────────────────────────────────────────────
+CALENDARIO_UPS = json.dumps([
+    {"fecha": "2026-04-06", "tipo": "inicio", "label": "Inicio primer bloque"},
+    {"fecha": "2026-04-19", "tipo": "entrega", "label": "Entrega actividades 1"},
+    {"fecha": "2026-05-03", "tipo": "entrega", "label": "Entrega actividades 2"},
+    {"fecha": "2026-05-17", "tipo": "entrega", "label": "Entrega actividades 3"},
+    {"fecha": "2026-05-29", "tipo": "entrega", "label": "Entrega actividades 4"},
+    {"fecha": "2026-05-30", "tipo": "paso_notas", "label": "Paso de notas primer bloque"},
+    {"fecha": "2026-06-08", "tipo": "inicio", "label": "Inicio segundo bloque"},
+    {"fecha": "2026-06-21", "tipo": "entrega", "label": "Entrega actividades 1"},
+    {"fecha": "2026-07-05", "tipo": "entrega", "label": "Entrega actividades 2"},
+    {"fecha": "2026-07-19", "tipo": "entrega", "label": "Entrega actividades 3"},
+    {"fecha": "2026-07-31", "tipo": "entrega", "label": "Entrega actividades 4"},
+    {"fecha": "2026-08-01", "tipo": "paso_notas", "label": "Paso de notas segundo bloque"},
+])
+
+
+def _sem_ups(bloque="2"):
+    return SemesterConfig(
+        semestre="P68", activo=True, bloque_actual=bloque,
+        bloque1_inicio=datetime(2026, 4, 6, tzinfo=timezone.utc),
+        bloque1_fin=datetime(2026, 6, 7, tzinfo=timezone.utc),
+        bloque2_inicio=datetime(2026, 6, 8, tzinfo=timezone.utc),
+        bloque2_fin=datetime(2026, 8, 15, tzinfo=timezone.utc),
+        calendario_academico=CALENDARIO_UPS,
+    )
+
+
+def test_calendario_real_solo_cuenta_las_entregas_del_bloque_2():
+    # EL BUG: se enumeraban las entregas de AMBOS bloques seguidas y se incluía el paso de
+    # notas. Al 16/07 daba "unidades 1..7 vencidas"; como las unidades reales son 1-4,
+    # todas contaban y el filtro no descartaba nada (0 tareas descartadas en producción).
+    venc = unidades_vencidas(_sem_ups("2"), AHORA)   # AHORA = 16/07/2026
+    assert venc == {"1", "2"}, (
+        f"solo vencieron las entregas del 21/06 y 05/07; las del 19/07 y 31/07 no. Dio {venc}"
+    )
+
+
+def test_en_el_bloque_1_cuenta_sus_propias_entregas():
+    # Numeradas DENTRO del bloque: la 1a de B1 es la unidad 1, no la del semestre.
+    venc = unidades_vencidas(_sem_ups("1"), datetime(2026, 5, 10, tzinfo=timezone.utc))
+    assert venc == {"1", "2"}, "al 10/05 vencieron las del 19/04 y 03/05"
+
+
+def test_el_paso_de_notas_no_cuenta_como_entrega():
+    venc = unidades_vencidas(_sem_ups("2"), datetime(2026, 8, 2, tzinfo=timezone.utc))
+    assert venc == {"1", "2", "3", "4"}, "4 entregas en B2 (el paso de notas no es una)"
+
+
+def test_al_empezar_el_bloque_no_ha_vencido_nada():
+    venc = unidades_vencidas(_sem_ups("2"), datetime(2026, 6, 10, tzinfo=timezone.utc))
+    assert venc == set(), "el 10/06 aun no vencia ninguna entrega del bloque 2"
+
+
+def test_el_porcentaje_con_el_calendario_real():
+    # Entrego las 2 vencidas y no las 2 futuras: 100%, no 50%.
+    df = pd.DataFrame({
+        "correo": ["a@t.ec"] * 4,
+        "unidad": ["1", "2", "3", "4"],
+        "entregada": [True, True, False, False],
+    })
+    out = filtrar_tareas_vencidas(df, _sem_ups("2"), AHORA)
+    assert set(out["unidad"]) == {"1", "2"}
+    assert out["entregada"].mean() * 100 == 100.0
