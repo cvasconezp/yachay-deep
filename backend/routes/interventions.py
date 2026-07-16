@@ -365,22 +365,37 @@ def update_intervention(
         marcar_retirado(db, _st, motivo=intervention.motivo)
 
     if "resultado" in update_data:
-        _mapa = {"resuelto": "resuelto", "cerrado": "cerrado", "contactado": "contactado"}
-        _nuevo = _mapa.get((update_data["resultado"] or "").strip().lower())
-        if _nuevo:
-            intervention.estado_workflow = _nuevo
-            if _nuevo in ("resuelto", "cerrado"):
-                if not intervention.fecha_resolucion:
-                    from datetime import datetime as _dt, timezone as _tz
-                    intervention.fecha_resolucion = _dt.now(_tz.utc)
-                # Un caso resuelto no puede seguir "pendiente de seguimiento": la columna
-                # SEG. quedaba en "Pend." para siempre porque nadie limpiaba esta bandera.
-                if "requiere_seguimiento" not in update_data:
-                    intervention.requiere_seguimiento = "no"
-        elif not (update_data.get("resultado") or "").strip():
-            # Se desmarcó el casillero: vuelve a estar pendiente
-            intervention.estado_workflow = "pendiente"
+        _res = (update_data["resultado"] or "").strip()
+        _low = _res.lower()
+
+        # `resultado`, `estado_workflow` y `requiere_seguimiento` son tres campos que el
+        # usuario percibe como un único estado del caso. Mantenerlos a mano por separado
+        # ya causó dos incoherencias (Efectividad inalcanzable, SEG. eterno en "Pend.").
+        # Aquí el resultado manda y los otros dos se derivan.
+        if _low == "resuelto":
+            _wf, _seg = "resuelto", "no"
+        elif _low.startswith("contactado"):
+            # Contactado pero no resuelto: hubo conversación y hay que volver
+            _wf, _seg = "contactado", "si"
+        elif _low in ("no contestó", "no contesto", "buzón de voz", "buzon de voz",
+                      "mensaje enviado sin respuesta"):
+            _wf, _seg = "sin_respuesta", "si"
+        elif not _res:
+            _wf, _seg = "pendiente", None      # sin resultado: vuelve a pendiente
+        else:
+            _wf, _seg = "en_progreso", "si"
+
+        intervention.estado_workflow = _wf
+        if _wf in ("resuelto", "cerrado"):
+            if not intervention.fecha_resolucion:
+                from datetime import datetime as _dt, timezone as _tz
+                intervention.fecha_resolucion = _dt.now(_tz.utc)
+        else:
             intervention.fecha_resolucion = None
+
+        # Lo que el usuario indique explícitamente gana sobre lo derivado
+        if _seg is not None and "requiere_seguimiento" not in update_data:
+            intervention.requiere_seguimiento = _seg
 
     db.commit()
     db.refresh(intervention)
@@ -498,6 +513,7 @@ def interventions_dashboard(
     estado: Optional[str] = None,
     resultado: Optional[str] = None,
     seguimiento: Optional[str] = None,
+    solo_retirados: bool = False,
     periodo: Optional[str] = None,
     limit: int = 500,
     db: Session = Depends(get_db),
@@ -539,7 +555,8 @@ def interventions_dashboard(
 
     # --- Query principal: intervenciones + datos de estudiante ---
     query = (
-        db.query(Intervention, Student.nombre, Student.carrera, Student.nivel_riesgo)
+        db.query(Intervention, Student.nombre, Student.carrera, Student.nivel_riesgo,
+                 Student.retirado, Student.fecha_retiro)
         .join(Student, Intervention.student_id == Student.id)
         .filter(Intervention.student_id.in_(period_sq))
     )
@@ -553,17 +570,24 @@ def interventions_dashboard(
         query = query.filter(Intervention.resultado == resultado)
     if seguimiento:
         query = query.filter(Intervention.requiere_seguimiento == seguimiento)
+    # `estado="Retirado"` filtra por lo que se registró en la intervención; esto filtra por
+    # el estado REAL del estudiante, que es lo que el usuario espera al pedir "los retirados".
+    if solo_retirados:
+        query = query.filter(Student.retirado == True)  # noqa: E712
 
     rows = query.order_by(Intervention.created_at.desc()).limit(limit).all()
 
     items = []
-    for inv, nombre, car, riesgo in rows:
+    for inv, nombre, car, riesgo, retirado, fecha_retiro in rows:
         items.append({
             "id": inv.id,
             "student_id": inv.student_id,
             "nombre": nombre,
             "carrera": car or inv.carrera,
             "nivel_riesgo": riesgo,
+            # Estado real del estudiante: marcar el retiro no se veía en ninguna parte
+            "estudiante_retirado": bool(retirado),
+            "fecha_retiro": fecha_retiro.isoformat() if fecha_retiro else None,
             "medio": inv.medio,
             "motivo": inv.motivo,
             "estado": inv.estado,

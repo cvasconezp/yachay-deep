@@ -19,6 +19,7 @@ export default function Intervenciones() {
     estado: "",
     resultado: "",
     seguimiento: "",
+    solo_retirados: "",
     periodo: "",
   });
 
@@ -43,8 +44,7 @@ export default function Intervenciones() {
     ["resuelto", "cerrado"].includes((inv.estado_workflow || "").toLowerCase()) ||
     (inv.resultado || "").trim().toLowerCase() === "resuelto";
 
-  const toggleResuelta = async (inv) => {
-    const nuevo = esResuelta(inv) ? "" : "Resuelto";
+  const cambiarResultado = async (inv, nuevo) => {
     setSavingId(inv.id);
     try {
       const actualizada = await api.updateIntervention(inv.id, { resultado: nuevo });
@@ -307,6 +307,7 @@ export default function Intervenciones() {
                   filtros.estado && `Estado: ${filtros.estado}`,
                   filtros.resultado && `Resultado: ${filtros.resultado}`,
                   filtros.seguimiento && "Solo pendientes",
+                  filtros.solo_retirados && "Solo retirados",
                 ].filter(Boolean).join(" | ")}
               </span>
             ) : (
@@ -431,6 +432,15 @@ export default function Intervenciones() {
           <span className="text-gray-600">Solo pendientes</span>
         </label>
 
+        {/* Distinto del filtro "Estado: Retirado", que mira lo que se anotó en la
+            intervención. Este mira el estado REAL del estudiante. */}
+        <label className="flex items-center gap-2 border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white shadow-sm cursor-pointer">
+          <input type="checkbox" checked={filtros.solo_retirados === true}
+            onChange={e => updateFiltro("solo_retirados", e.target.checked ? true : "")}
+            className="accent-brand" />
+          <span className="text-gray-600">Solo retirados</span>
+        </label>
+
         <input
           type="text"
           value={search}
@@ -479,7 +489,21 @@ export default function Intervenciones() {
                     onClick={() => navigate(`/ficha/${inv.student_id}`)}
                   >
                     <td className="px-4 py-2.5">
-                      <div className="font-medium text-gray-900 text-sm">{inv.nombre || "—"}</div>
+                      <div className="font-medium text-gray-900 text-sm flex items-center gap-2">
+                        <span className={inv.estudiante_retirado ? "text-gray-500 line-through" : ""}>
+                          {inv.nombre || "—"}
+                        </span>
+                        {inv.estudiante_retirado && (
+                          <span
+                            className="bg-gray-200 text-gray-700 text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap"
+                            title={inv.fecha_retiro
+                              ? `Retirado el ${new Date(inv.fecha_retiro).toLocaleDateString("es-EC")}. Sus indicadores quedaron congelados.`
+                              : "Estudiante retirado: indicadores congelados"}
+                          >
+                            RETIRADO
+                          </span>
+                        )}
+                      </div>
                       {inv.observacion && (
                         <div className="text-[11px] text-gray-400 truncate max-w-[200px]" title={inv.observacion}>
                           {inv.observacion}
@@ -506,22 +530,26 @@ export default function Intervenciones() {
                       </span>
                     </td>
                     <td className="px-3 py-2.5">
-                      <label
+                      {/* Desplegable, no casillero: el resultado no es binario. Un check
+                          obligaba a que todo fuera "Resuelto" o nada, y se perdían los
+                          matices ("No contestó", "Contactado - situación compleja"...). */}
+                      <select
+                        value={inv.resultado || ""}
+                        disabled={savingId === inv.id}
                         onClick={(e) => e.stopPropagation()}
-                        className="flex items-center gap-1.5 cursor-pointer select-none"
-                        title={esResuelta(inv) ? "Marcar como no resuelta" : "Marcar como resuelta"}
+                        onChange={(e) => cambiarResultado(inv, e.target.value)}
+                        className={`text-[11px] rounded-lg border px-2 py-1 w-full max-w-[190px] bg-white cursor-pointer
+                          focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 ${
+                          esResuelta(inv)
+                            ? "border-emerald-300 text-emerald-700 font-medium"
+                            : inv.resultado
+                              ? "border-gray-300 text-gray-700"
+                              : "border-gray-200 text-gray-400"
+                        }`}
                       >
-                        <input
-                          type="checkbox"
-                          checked={esResuelta(inv)}
-                          disabled={savingId === inv.id}
-                          onChange={() => toggleResuelta(inv)}
-                          className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer disabled:opacity-40"
-                        />
-                        <span className={`text-[11px] font-medium ${esResuelta(inv) ? "text-emerald-700" : "text-gray-400"}`}>
-                          {savingId === inv.id ? "Guardando…" : esResuelta(inv) ? "Resuelto" : (inv.resultado || "Pendiente")}
-                        </span>
-                      </label>
+                        <option value="">{savingId === inv.id ? "Guardando…" : "Pendiente"}</option>
+                        {RESULTADOS.map((r) => <option key={r} value={r}>{r}</option>)}
+                      </select>
                     </td>
                     <td className="px-3 py-2.5 text-center">
                       {inv.requiere_seguimiento === "si" ? (

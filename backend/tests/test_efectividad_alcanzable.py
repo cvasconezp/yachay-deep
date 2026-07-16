@@ -191,3 +191,50 @@ def test_desglose_explica_los_fracasos(db, client):
     dg = d["desglose_no_exitosas"]
     assert set(dg) == {"mejoro_pero_empeoro_en_otro", "sin_cambios_significativos", "solo_empeoro"}
     assert sum(dg.values()) == d["no_exitosas"]
+
+
+# ── el resultado manda: los otros dos campos se derivan ──
+def test_no_contesto_deja_seguimiento_pendiente(db, client):
+    a = _admin(db); s = _est(db)
+    i = _intervencion(db, s.id, dias_atras=30, uid=a.id)
+
+    client.patch(f"/interventions/{i.id}", json={"resultado": "No contestó"}, headers=_headers(a))
+    db.refresh(i)
+    assert i.estado_workflow == "sin_respuesta"
+    assert i.requiere_seguimiento == "si", "si no contestó, hay que volver a intentarlo"
+    assert i.fecha_resolucion is None
+
+
+def test_contactado_no_resuelto_sigue_abierto(db, client):
+    a = _admin(db); s = _est(db)
+    i = _intervencion(db, s.id, dias_atras=30, uid=a.id)
+
+    client.patch(f"/interventions/{i.id}",
+                 json={"resultado": "Contactado - situación compleja"}, headers=_headers(a))
+    db.refresh(i)
+    assert i.estado_workflow == "contactado"
+    assert i.requiere_seguimiento == "si"
+
+
+def test_buzon_de_voz_requiere_seguimiento(db, client):
+    a = _admin(db); s = _est(db)
+    i = _intervencion(db, s.id, dias_atras=30, uid=a.id)
+    client.patch(f"/interventions/{i.id}", json={"resultado": "Buzón de voz"}, headers=_headers(a))
+    db.refresh(i)
+    assert i.requiere_seguimiento == "si"
+
+
+def test_cambiar_de_resuelto_a_no_contesto_reabre(db, client):
+    """El desplegable permite corregirse: el caso debe reabrirse de verdad."""
+    a = _admin(db); s = _est(db)
+    i = _intervencion(db, s.id, dias_atras=30, uid=a.id)
+
+    client.patch(f"/interventions/{i.id}", json={"resultado": "Resuelto"}, headers=_headers(a))
+    db.refresh(i)
+    assert i.fecha_resolucion is not None
+
+    client.patch(f"/interventions/{i.id}", json={"resultado": "No contestó"}, headers=_headers(a))
+    db.refresh(i)
+    assert i.estado_workflow == "sin_respuesta"
+    assert i.fecha_resolucion is None, "reabrir debe limpiar la fecha de resolución"
+    assert i.requiere_seguimiento == "si"
