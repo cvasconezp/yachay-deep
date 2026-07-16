@@ -41,6 +41,19 @@ const ACCIONES_SUGERIDAS = {
   deterioro_progresivo: "Intervención inmediata: contactar estudiante + docente + coordinador",
 };
 
+// Tipo de alerta → motivo de la intervención. Deben ser valores de constants/interventions.js
+const TIPO_A_MOTIVO = {
+  inactividad: "Inactividad en AVAC",
+  compromiso_bajo: "No ingresa regularmente al AVAC",
+  nota_cero: "Nota cero",
+  tareas_bajas: "Tareas no entregadas",
+  notas_bajas_tareas: "Bajas calificaciones",
+  calificacion_docente_pendiente: "Paso de notas",
+  segunda_matricula: "Seguimiento regular",
+  tercera_matricula: "Derivación",
+  deterioro_progresivo: "No ingresa regularmente al AVAC",
+};
+
 const MOTIVO_ESTUDIANTE = {
   inactividad: "no has ingresado al Aula Virtual (AVAC) en varios días",
   compromiso_bajo: "tu nivel de participación en las actividades del aula virtual ha disminuido",
@@ -433,11 +446,44 @@ export default function Alertas() {
   const [copyingStudentId, setCopyingStudentId] = useState(null);
   const [copiedEmailId, setCopiedEmailId] = useState(null);
   const [copyingEmailId, setCopyingEmailId] = useState(null);
+  const [autoRegistrado, setAutoRegistrado] = useState(null);   // { id, medio }
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [individualTarget, setIndividualTarget] = useState(null); // { student, prefill }
   const [carreras, setCarreras] = useState([]);
   const [asignaturas, setAsignaturas] = useState([]);
   const { user } = useAuth();
+
+  /**
+   * Registra la intervención al copiar el mensaje de contacto.
+   *
+   * Copiar no es exactamente lo mismo que haber contactado (el monitor podría no llegar a
+   * enviarlo), pero obligar a registrarlo aparte hacía que muchos contactos no quedaran
+   * nunca en el sistema. Sin registro no hay snapshot, y sin snapshot el impacto no se
+   * puede medir. Por eso se registra como contacto realizado, con el resultado en blanco:
+   * queda "pendiente" hasta que el monitor diga si respondió.
+   */
+  const registrarContactoAuto = async (group, medio) => {
+    const tipoPrincipal = group.alerts?.[0]?.tipo;
+    try {
+      const creada = await api.createIntervention({
+        student_id: group.student_id,
+        medio,
+        motivo: TIPO_A_MOTIVO[tipoPrincipal] || "Seguimiento regular",
+        estado: "En riesgo",
+        observacion: `Mensaje de contacto enviado desde Alertas (${TIPO_LABELS[tipoPrincipal] || "alerta"}). Registrado automáticamente al copiar la plantilla.`,
+        requiere_seguimiento: "si",
+      });
+      setAutoRegistrado({ id: group.student_id, medio });
+      setTimeout(() => setAutoRegistrado(null), 4000);
+      return creada;
+    } catch (err) {
+      // El copiado ya funcionó: no se le arruina la acción al monitor por esto.
+      console.error("No se pudo registrar la intervención automáticamente:", err);
+      setAutoRegistrado({ id: group.student_id, medio, error: true });
+      setTimeout(() => setAutoRegistrado(null), 5000);
+      return null;
+    }
+  };
   const navigate = useNavigate();
 
 
@@ -984,6 +1030,9 @@ export default function Alertas() {
                                     await navigator.clipboard.writeText(msg);
                                     setCopiedStudentId(group.student_id);
                                     setTimeout(() => setCopiedStudentId(null), 2500);
+                                    // Deja constancia del contacto (y su snapshot) sin pasos extra
+                                    await registrarContactoAuto(group, "WhatsApp");
+                                    loadAlerts();
                                   } finally {
                                     setCopyingStudentId(null);
                                   }
@@ -1018,6 +1067,8 @@ export default function Alertas() {
                                     await navigator.clipboard.writeText(msg);
                                     setCopiedEmailId(group.student_id);
                                     setTimeout(() => setCopiedEmailId(null), 2500);
+                                    await registrarContactoAuto(group, "Email");
+                                    loadAlerts();
                                   } finally {
                                     setCopyingEmailId(null);
                                   }
@@ -1038,6 +1089,17 @@ export default function Alertas() {
                                   <><svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg> Correo</>
                                 )}
                               </button>
+                              {autoRegistrado?.id === group.student_id && (
+                                <span className={`text-xs px-3 py-1.5 rounded-lg border flex items-center gap-1 ${
+                                  autoRegistrado.error
+                                    ? "bg-red-50 text-red-700 border-red-300"
+                                    : "bg-emerald-50 text-emerald-700 border-emerald-300"
+                                }`}>
+                                  {autoRegistrado.error
+                                    ? "⚠ Copiado, pero no se pudo registrar la intervención"
+                                    : `✓ Intervención registrada (${autoRegistrado.medio})`}
+                                </span>
+                              )}
                               <button onClick={() => handleMarkStudentRead(group.alerts)}
                                 className="text-xs px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-600 rounded-lg transition-colors">
                                 ✓ Marcar todas como leídas
