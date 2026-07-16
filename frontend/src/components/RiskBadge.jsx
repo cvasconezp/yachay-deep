@@ -1,13 +1,41 @@
 // 4 niveles. "Sin riesgo" saca del radar a quien va bien: con solo tres y ninguno neutro,
 // todo estudiante llevaba etiqueta de riesgo y "Medio" era el cajón de sastre.
-// Qué significa cada nivel, en lenguaje de acción: sin esto el usuario ve una etiqueta
-// de color y tiene que adivinar si le toca hacer algo.
-export const RISK_DESCRIPTIONS = {
-  Alto: "Requiere contacto ahora. Índice de compromiso bajo 0.35: no entra al aula, no entrega o va reprobando.",
-  Medio: "Vigilar. Índice entre 0.35 y 0.65: hay señales de alerta pero aún no es crítico.",
-  Bajo: "Va bien, seguimiento de rutina. Índice entre 0.65 y 0.80.",
-  "Sin riesgo": "No requiere atención. Índice sobre 0.80: entra al aula, entrega y rinde.",
+// CÓMO se calcula el riesgo, no solo qué implica. Sin esto el usuario ve una etiqueta de
+// color y no puede saber por qué el sistema clasificó así a ese estudiante — ni discutirlo.
+// Los valores salen de calcular_indice_compromiso() en backend/etl/transformers.py.
+export const RISK_FORMULA = `Índice de compromiso (0 a 1), suma de 4 factores:
+
+• Acceso al aula (hasta 0.30) — días desde su ÚLTIMO acceso a AVAC
+    hoy=0.30 · 2d=0.25 · 7d=0.15 · 14d=0.07 · 30d=0.01
+• Tareas entregadas (hasta 0.30) — solo de las unidades YA VENCIDAS
+    100%=0.30 · 50%=0.15 · 0%=0.00
+• Promedio de notas (hasta 0.25) — curva centrada en 70 (nota de aprobación)
+    95=0.22 · 80=0.17 · 70=0.13 · 60=0.08 · 40=0.02
+• Matrícula (hasta 0.15) — matriculado=0.15 · estado irregular=0.05
+
+Sin datos en un factor, se asigna un valor bajo (señal de alerta, no cero).
+Con menos de 2 factores con datos, no se clasifica.`;
+
+const RISK_UMBRAL = {
+  Alto: "índice < 0.35",
+  Medio: "índice 0.35 – 0.65",
+  Bajo: "índice 0.65 – 0.80",
+  "Sin riesgo": "índice ≥ 0.80",
 };
+
+const RISK_ACCION = {
+  Alto: "Requiere contacto ahora.",
+  Medio: "Vigilar: hay señales, aún no es crítico.",
+  Bajo: "Va bien. Seguimiento de rutina.",
+  "Sin riesgo": "No requiere atención.",
+};
+
+export const RISK_DESCRIPTIONS = Object.fromEntries(
+  Object.keys(RISK_UMBRAL).map((n) => [
+    n,
+    `${RISK_ACCION[n]} (${RISK_UMBRAL[n]})\n\n${RISK_FORMULA}`,
+  ])
+);
 
 const RISK_CONFIG = {
   Alto:         { bg: "bg-red-100",    text: "text-red-700",    dot: "bg-red-500",    label: "Alto" },
@@ -19,9 +47,10 @@ const RISK_CONFIG = {
 export function RiskBadge({ nivel, showDot = true, size = "sm" }) {
   const config = RISK_CONFIG[nivel] || { bg: "bg-gray-100", text: "text-gray-600", dot: "bg-gray-400", label: nivel || "—" };
   const padding = size === "lg" ? "px-3 py-1.5 text-sm" : "px-2 py-0.5 text-xs";
-  const desc = RISK_DESCRIPTIONS[nivel] || "Datos insuficientes para clasificar el riesgo.";
+  const desc = RISK_DESCRIPTIONS[nivel]
+    || `Sin clasificar: menos de 2 factores con datos.\n\n${RISK_FORMULA}`;
   return (
-    <span title={`${config.label}: ${desc}`}
+    <span title={`RIESGO ${(config.label || "").toUpperCase()} — ${desc}`}
       className={`inline-flex items-center gap-1.5 rounded-full font-semibold cursor-help ${config.bg} ${config.text} ${padding}`}>
       {showDot && <span className={`w-2 h-2 rounded-full ${config.dot}`} />}
       {config.label}
