@@ -1235,6 +1235,7 @@ def diagnostico_riesgo(
         "indice": {
             "promedio": round(float(db.query(f.avg(Student.indice_compromiso)).filter(
                 activos, Student.indice_compromiso.isnot(None)).scalar() or 0), 3),
+            "umbral_sin_riesgo": 0.80,
             "umbral_bajo": 0.65,
             "umbral_medio": 0.35,
         },
@@ -1242,6 +1243,7 @@ def diagnostico_riesgo(
             "Alto": _pct(Student.nivel_riesgo == "Alto"),
             "Medio": _pct(Student.nivel_riesgo == "Medio"),
             "Bajo": _pct(Student.nivel_riesgo == "Bajo"),
+            "Sin riesgo": _pct(Student.nivel_riesgo == "Sin riesgo"),
             "sin_clasificar": _pct(Student.nivel_riesgo.is_(None)),
         },
         "que_mirar": (

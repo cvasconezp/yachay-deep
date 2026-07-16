@@ -245,12 +245,13 @@ def get_risk_dashboard(
     if tercera_matricula is not None:
         query = query.filter(Student.es_tercera_matricula == tercera_matricula)
 
-    # Ordenar: riesgo Alto primero, luego Medio, luego Bajo
+    # Ordenar: de más urgente a menos. "Sin riesgo" al final, que es el punto de tenerlo.
     risk_order = case(
         (Student.nivel_riesgo == "Alto", 0),
         (Student.nivel_riesgo == "Medio", 1),
         (Student.nivel_riesgo == "Bajo", 2),
-        else_=3,
+        (Student.nivel_riesgo == "Sin riesgo", 3),
+        else_=4,
     )
     results = (
         query

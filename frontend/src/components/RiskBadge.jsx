@@ -1,14 +1,28 @@
+// 4 niveles. "Sin riesgo" saca del radar a quien va bien: con solo tres y ninguno neutro,
+// todo estudiante llevaba etiqueta de riesgo y "Medio" era el cajón de sastre.
+// Qué significa cada nivel, en lenguaje de acción: sin esto el usuario ve una etiqueta
+// de color y tiene que adivinar si le toca hacer algo.
+export const RISK_DESCRIPTIONS = {
+  Alto: "Requiere contacto ahora. Índice de compromiso bajo 0.35: no entra al aula, no entrega o va reprobando.",
+  Medio: "Vigilar. Índice entre 0.35 y 0.65: hay señales de alerta pero aún no es crítico.",
+  Bajo: "Va bien, seguimiento de rutina. Índice entre 0.65 y 0.80.",
+  "Sin riesgo": "No requiere atención. Índice sobre 0.80: entra al aula, entrega y rinde.",
+};
+
 const RISK_CONFIG = {
-  Alto:  { bg: "bg-red-100",    text: "text-red-700",    dot: "bg-red-500",    label: "Alto" },
-  Medio: { bg: "bg-yellow-100", text: "text-yellow-700", dot: "bg-yellow-500", label: "Medio" },
-  Bajo:  { bg: "bg-green-100",  text: "text-green-700",  dot: "bg-green-500",  label: "Bajo" },
+  Alto:         { bg: "bg-red-100",    text: "text-red-700",    dot: "bg-red-500",    label: "Alto" },
+  Medio:        { bg: "bg-yellow-100", text: "text-yellow-700", dot: "bg-yellow-500", label: "Medio" },
+  Bajo:         { bg: "bg-green-100",  text: "text-green-700",  dot: "bg-green-500",  label: "Bajo" },
+  "Sin riesgo": { bg: "bg-blue-100",   text: "text-blue-700",   dot: "bg-blue-500",   label: "Sin riesgo" },
 };
 
 export function RiskBadge({ nivel, showDot = true, size = "sm" }) {
   const config = RISK_CONFIG[nivel] || { bg: "bg-gray-100", text: "text-gray-600", dot: "bg-gray-400", label: nivel || "—" };
   const padding = size === "lg" ? "px-3 py-1.5 text-sm" : "px-2 py-0.5 text-xs";
+  const desc = RISK_DESCRIPTIONS[nivel] || "Datos insuficientes para clasificar el riesgo.";
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full font-semibold ${config.bg} ${config.text} ${padding}`}>
+    <span title={`${config.label}: ${desc}`}
+      className={`inline-flex items-center gap-1.5 rounded-full font-semibold cursor-help ${config.bg} ${config.text} ${padding}`}>
       {showDot && <span className={`w-2 h-2 rounded-full ${config.dot}`} />}
       {config.label}
     </span>

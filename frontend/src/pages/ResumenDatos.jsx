@@ -22,7 +22,7 @@ const PBI = {
   // Treemap & chart palette (varied, high contrast)
   palette: ["#2B5EA7","#0F9B8D","#7B61FF","#EB5757","#F2C94C","#14B8A6","#6366F1","#F97316","#EC4899","#06B6D4","#84CC16","#8B5CF6","#0EA5E9","#F43F5E","#10B981","#A855F7","#EAB308","#3B82F6"],
 };
-const RISK_COLORS = { Alto: PBI.coral, Medio: PBI.gold, Bajo: PBI.teal };
+const RISK_COLORS = { Alto: PBI.coral, Medio: PBI.gold, Bajo: PBI.teal, "Sin riesgo": PBI.navy };
 const CHART_COLORS = PBI.palette;
 const GENDER_COLORS = { Masculino: PBI.blue, Femenino: "#EC4899", "Sin dato": PBI.slate };
 
@@ -1186,7 +1186,7 @@ export default function ResumenDatos() {
             <select value={exportRiesgo} onChange={e => setExportRiesgo(e.target.value)}
               className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500">
               <option value="">Todos los riesgos</option>
-              {["Alto", "Medio", "Bajo"].map(r => <option key={r} value={r}>{r}</option>)}
+              {["Alto", "Medio", "Bajo", "Sin riesgo"].map(r => <option key={r} value={r}>{r}</option>)}
             </select>
             <select value={exportAsignatura} onChange={e => setExportAsignatura(e.target.value)}
               className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 min-w-[200px]"
@@ -1353,7 +1353,7 @@ export default function ResumenDatos() {
                 {/* Risk donut */}
                 <DonutSection title="Distribución de Riesgo" data={riskData} colors={riskColors} total={g.total_estudiantes}
                   onItemClick={(name) => {
-                    const map = { Alto: "riesgo_alto", Medio: "riesgo_medio", Bajo: "riesgo_bajo" };
+                    const map = { Alto: "riesgo_alto", Medio: "riesgo_medio", Bajo: "riesgo_bajo", "Sin riesgo": "sin_riesgo" };
                     if (map[name]) openStudentList(map[name]);
                   }} />
 

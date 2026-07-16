@@ -135,7 +135,9 @@ def test_un_buen_estudiante_deja_de_estar_en_riesgo_alto(db):
 
     recalcular_indicadores(db)
     db.refresh(s)
-    assert s.nivel_riesgo == "Bajo", f"debería salir del riesgo alto, quedó {s.nivel_riesgo}"
+    assert s.nivel_riesgo in ("Bajo", "Sin riesgo"), (
+        f"debería salir del riesgo alto, quedó {s.nivel_riesgo}"
+    )
 
 
 def test_los_retirados_no_se_recalculan(db):

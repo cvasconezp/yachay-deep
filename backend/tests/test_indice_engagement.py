@@ -23,7 +23,7 @@ def test_el_caso_tenesaca_deja_de_estar_condenado(db):
     """Entra a diario pero tiene una materia abandonada hace 99 días."""
     r = _ind(dias_sin_acceso=99, dias_desde_ultimo_acceso=2)
     assert r["puntaje_acceso"] > 0.24, "entró hace 2 días: el componente debe estar casi lleno"
-    assert r["nivel_riesgo"] == "Bajo"
+    assert r["nivel_riesgo"] in ("Bajo", "Sin riesgo")
 
 
 def test_sin_el_arreglo_el_mismo_estudiante_sale_alto(db):
@@ -73,4 +73,4 @@ def test_un_buen_estudiante_puede_ser_bajo(db):
     """Antes era aritméticamente imposible para el promedio."""
     r = _ind(dias_sin_acceso=30, dias_desde_ultimo_acceso=1,
              tareas_entregadas=8, tareas_totales=10, promedio_calificaciones=75.0)
-    assert r["nivel_riesgo"] == "Bajo", f"quedó {r['indice_compromiso']}"
+    assert r["nivel_riesgo"] in ("Bajo", "Sin riesgo"), f"quedó {r['indice_compromiso']}"

@@ -576,7 +576,7 @@ export default function Alertas() {
 
     // Compute max severity + urgency score per student
     const sevScore = { alto: 30, medio: 15, bajo: 5 };
-    const riesgoScore = { Alto: 25, Medio: 10, Bajo: 0 };
+    const riesgoScore = { Alto: 25, Medio: 10, Bajo: 0, "Sin riesgo": 0 };
 
     const groups = [...map.values()].map(g => {
       const maxSev = getMaxSeverity(g.alerts);

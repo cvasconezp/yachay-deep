@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../services/api";
-import { RiskBadge, CompromisoBar, PredictionBadge } from "../components/RiskBadge";
+import { RiskBadge, CompromisoBar, PredictionBadge , RISK_DESCRIPTIONS } from "../components/RiskBadge";
 import { PeriodSelector } from "../components/PeriodSelector";
 import ExportExcelButton from "../components/ExportExcelButton";
 import BulkInterventionModal from "../components/BulkInterventionModal";
 import { useStudentListModal } from "../components/StudentListModal";
 import DashboardCharts from "../components/DashboardCharts";
 
-const RISK_ORDER = { Alto: 0, Medio: 1, Bajo: 2 };
+const RISK_ORDER = { Alto: 0, Medio: 1, Bajo: 2, "Sin riesgo": 3 };
 
 /** Sub-row: desglose de inactividad por asignatura */
 function InactivityDetail({ studentId, periodo }) {
@@ -150,7 +150,9 @@ export default function Dashboard() {
     switch (cardFilter) {
       case "alto": return students.filter(s => s.nivel_riesgo === "Alto");
       case "medio": return students.filter(s => s.nivel_riesgo === "Medio");
-      case "bajo": return students.filter(s => s.nivel_riesgo === "Bajo" || !s.nivel_riesgo);
+      // "Bajo" ya no arrastra a los sin clasificar: no tener datos no es ir bien.
+      case "bajo": return students.filter(s => s.nivel_riesgo === "Bajo");
+      case "sin_riesgo": return students.filter(s => s.nivel_riesgo === "Sin riesgo");
       case "intervenciones": return students.filter(s => s.total_intervenciones > 0);
       default: return students;
     }
@@ -186,8 +188,10 @@ export default function Dashboard() {
 
   const cards = [
     { key: null, label: "Total monitoreados", value: stats?.total_estudiantes ?? "—", color: "text-blue-700", bg: "bg-blue-50 border-blue-200" },
-    { key: "alto", label: "Riesgo Alto", value: riskCounts["Alto"] ?? 0, color: "text-red-700", bg: "bg-red-50 border-red-200" },
-    { key: "medio", label: "Riesgo Medio", value: riskCounts["Medio"] ?? 0, color: "text-yellow-700", bg: "bg-yellow-50 border-yellow-200" },
+    { key: "alto", label: "Riesgo Alto", value: riskCounts["Alto"] ?? 0, color: "text-red-700", bg: "bg-red-50 border-red-200", desc: RISK_DESCRIPTIONS["Alto"] },
+    { key: "medio", label: "Riesgo Medio", value: riskCounts["Medio"] ?? 0, color: "text-yellow-700", bg: "bg-yellow-50 border-yellow-200", desc: RISK_DESCRIPTIONS["Medio"] },
+    { key: "bajo", label: "Riesgo Bajo", value: riskCounts["Bajo"] ?? 0, color: "text-green-700", bg: "bg-green-50 border-green-200", desc: RISK_DESCRIPTIONS["Bajo"] },
+    { key: "sin_riesgo", label: "Sin riesgo", value: riskCounts["Sin riesgo"] ?? 0, color: "text-blue-700", bg: "bg-blue-50 border-blue-200", desc: RISK_DESCRIPTIONS["Sin riesgo"] },
     { key: "repitentes", label: "Repitentes", value: stats?.total_repitentes ?? 0, color: "text-orange-700", bg: "bg-orange-50 border-orange-200", modal: true },
     { key: "condicionados", label: "Condicionados", value: stats?.total_terceras_matriculas ?? 0, color: "text-purple-700", bg: "bg-purple-50 border-purple-200", modal: true },
     { key: "intervenciones", label: "Intervenciones", value: stats?.total_intervenciones ?? 0, color: "text-green-700", bg: "bg-green-50 border-green-200" },
@@ -252,7 +256,12 @@ export default function Dashboard() {
               className={`rounded-xl border px-4 py-3 cursor-pointer transition-all duration-200
                 ${isActive ? "ring-2 ring-blue-500 shadow-md scale-[1.02]" : "hover:shadow-sm"}
                 ${card.bg}`}
-              title={isModal ? `Click para ver listado de ${card.label.toLowerCase()}` : isActive ? "Click para quitar filtro" : card.key ? `Click para filtrar por ${card.label}` : ""}
+              title={[
+                card.desc,                       // qué significa el nivel, primero
+                isModal ? `Click para ver listado de ${card.label.toLowerCase()}`
+                  : isActive ? "Click para quitar filtro"
+                  : card.key ? `Click para filtrar por ${card.label}` : "",
+              ].filter(Boolean).join("\n\n")}
             >
               <div className="flex items-center justify-between">
                 <div className={`text-2xl font-bold ${card.color}`}>{card.value}</div>
@@ -319,9 +328,9 @@ export default function Dashboard() {
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">Todos</option>
-            <option value="Alto">Alto</option>
-            <option value="Medio">Medio</option>
-            <option value="Bajo">Bajo</option>
+            {["Alto", "Medio", "Bajo", "Sin riesgo"].map(n => (
+              <option key={n} value={n} title={RISK_DESCRIPTIONS[n]}>{n}</option>
+            ))}
           </select>
         </div>
 

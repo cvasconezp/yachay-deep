@@ -454,6 +454,16 @@ def transform_calificaciones(ruta_csv: str) -> pd.DataFrame:
 # (Reemplaza CalcularCompromiso() VBA + fórmulas de FichaEst)
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Umbrales del índice de compromiso (0-1). Fuente única: los usan el ETL, el recálculo,
+# los analytics y el frontend. Estaban repetidos como literales por todo el código.
+UMBRAL_SIN_RIESGO = 0.80   # va bien: fuera del radar
+UMBRAL_BAJO = 0.65         # vigilar de lejos
+UMBRAL_MEDIO = 0.35        # atender
+# < 0.35 = Alto
+
+NIVELES_RIESGO = ["Alto", "Medio", "Bajo", "Sin riesgo"]   # de peor a mejor
+
+
 def calcular_indice_compromiso(
     dias_sin_acceso: Optional[float],
     tareas_entregadas: int,
@@ -548,13 +558,20 @@ def calcular_indice_compromiso(
     # [P4-FIX] Clasificación con umbrales ajustados para mayor sensibilidad
     # 0.65 y 0.35 en vez de 0.7 y 0.4 — detecta riesgo antes
     # PERO: con menos de 2 fuentes de datos, no clasificar (datos insuficientes)
+    # Cuatro niveles. Con solo tres y ninguno neutro, TODO estudiante llevaba etiqueta de
+    # riesgo y "Medio" acababa siendo el cajón de sastre (51.8% del total): inútil para
+    # priorizar, que es su único propósito. "Sin riesgo" saca del radar a quien va bien y
+    # devuelve a "Bajo" su sentido de "vigilar de lejos".
     if data_points < 2:
         nivel = None       # datos insuficientes para clasificar
         color = "#94a3b8"  # gris
-    elif indice >= 0.65:
+    elif indice >= UMBRAL_SIN_RIESGO:
+        nivel = "Sin riesgo"
+        color = "#3B82F6"   # azul
+    elif indice >= UMBRAL_BAJO:
         nivel = "Bajo"
         color = "#00B050"   # verde
-    elif indice >= 0.35:
+    elif indice >= UMBRAL_MEDIO:
         nivel = "Medio"
         color = "#FFC000"   # amarillo
     else:

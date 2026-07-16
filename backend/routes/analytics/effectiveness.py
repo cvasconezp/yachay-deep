@@ -209,7 +209,7 @@ def get_effectiveness(
 
     # ── Matriz de transición de riesgo ───────────────────────────────────────────
     # "¿Cuántos se recuperaron?" en el lenguaje que todo el mundo entiende.
-    NIVELES = ["Alto", "Medio", "Bajo"]
+    from ...etl.transformers import NIVELES_RIESGO as NIVELES   # incluye "Sin riesgo"
     _orden = {n.lower(): i for i, n in enumerate(NIVELES)}
     matriz, mejoraron_nivel, empeoraron_nivel, se_mantuvieron = {}, 0, 0, 0
     for inv in intervenciones:
