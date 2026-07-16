@@ -1519,6 +1519,9 @@ class ETLPipeline:
                 promedio_calificaciones=promedio_cal,
                 estado_matricula=student.estado_matricula,
                 bloque_actual=_bloque_num,
+                # El engagement con la plataforma es el ÚLTIMO acceso, no la materia más
+                # abandonada: esta última sigue viva en la alerta por curso.
+                dias_desde_ultimo_acceso=student.dias_desde_ultimo_acceso,
             )
             student.indice_compromiso = ind.get("indice_compromiso")
             student.nivel_riesgo = ind.get("nivel_riesgo")

@@ -143,6 +143,7 @@ def recalcular_indicadores(db: Session, periodo: str = None) -> dict:
             bloque_actual=bloque_num,
             promedio_calificaciones=student.promedio_calificaciones,
             estado_matricula=student.estado_matricula,
+            dias_desde_ultimo_acceso=student.dias_desde_ultimo_acceso,
         )
         student.indice_compromiso = ind.get("indice_compromiso")
         student.nivel_riesgo = ind.get("nivel_riesgo")

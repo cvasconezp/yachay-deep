@@ -462,6 +462,7 @@ def calcular_indice_compromiso(
     bloque_actual: int = 1,   # 1 o 2
     promedio_calificaciones: Optional[float] = None,
     estado_matricula: Optional[str] = None,
+    dias_desde_ultimo_acceso: Optional[float] = None,
 ) -> dict:
     """
     Modelo de riesgo ponderado multinivel (Framework Capa 5) — v2 MEJORADO.
@@ -482,14 +483,31 @@ def calcular_indice_compromiso(
     """
     import math
 
-    # ── Componente AVAC (30%) — función continua decreciente ──
-    # [P1-FIX] Exponencial decreciente: f(d) = 0.30 * exp(-d/10)
+    # ── Componente AVAC (30%) — engagement con la PLATAFORMA ──
+    # Exponencial decreciente: f(d) = 0.30 * exp(-d/10)
     # d=0 → 0.30 (máximo), d=7 → 0.15, d=14 → 0.07, d=30 → 0.01, d>40 → ~0
-    if dias_sin_acceso is None:
+    #
+    # [FIX] Se usa `dias_desde_ultimo_acceso` (MÍNIMO entre asignaturas), no
+    # `dias_sin_acceso` (MÁXIMO). El componente dice medir "engagement con la plataforma",
+    # y para eso el dato es CUÁNDO PISÓ AVAC POR ÚLTIMA VEZ, no cuál es su materia más
+    # abandonada. Medido sobre datos reales (5.996 estudiantes):
+    #
+    #     máximo entre asignaturas:  prom. 34.9 días → puntaje 0.0091
+    #     último acceso real:        prom.  4.2 días → puntaje 0.1977   (22x)
+    #
+    # 2.485 estudiantes habían entrado en los últimos 7 días, pero 2.379 tenían alguna
+    # materia sin tocar hace más de 30. Con varias materias eso es casi inevitable, así
+    # que el 30% del índice se anulaba para casi todos y solo 33 de 3.493 podían salir
+    # "Bajo". El modelo no discriminaba: condenaba.
+    #
+    # La materia más descuidada NO se pierde: sigue generando su alerta por curso, que es
+    # donde esa información es accionable.
+    _dias_engagement = dias_desde_ultimo_acceso if dias_desde_ultimo_acceso is not None else dias_sin_acceso
+    if _dias_engagement is None:
         # [P3-FIX] Sin datos de acceso = señal de alerta (no 0 absoluto)
         puntaje_acceso = 0.03  # peor que 30 días, mejor que nunca
     else:
-        puntaje_acceso = round(0.30 * math.exp(-max(dias_sin_acceso, 0) / 10), 4)
+        puntaje_acceso = round(0.30 * math.exp(-max(_dias_engagement, 0) / 10), 4)
 
     # ── Componente actividades (30%) — lineal proporcional ──
     if tareas_totales == 0:
@@ -521,7 +539,7 @@ def calcular_indice_compromiso(
 
     # Contar cuántos componentes tienen datos reales (no defaults por ausencia)
     data_points = sum([
-        dias_sin_acceso is not None,
+        _dias_engagement is not None,
         tareas_totales > 0,
         promedio_calificaciones is not None and promedio_calificaciones > 0,
         estado_matricula is not None,
