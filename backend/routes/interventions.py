@@ -348,6 +348,20 @@ def update_intervention(
     for field, value in update_data.items():
         setattr(intervention, field, value)
 
+    # `resultado` y `estado_workflow` son dos campos distintos que el usuario percibe
+    # como uno solo: marcaba resultado="Resuelto" y el workflow seguía en "pendiente".
+    # Como estado_workflow no se escribe desde ninguna pantalla, se quedaba en
+    # "pendiente" para siempre y la vista de Efectividad (que filtra por él) no podía
+    # mostrar nada nunca. Se sincroniza aquí.
+    if "resultado" in update_data:
+        _mapa = {"resuelto": "resuelto", "cerrado": "cerrado", "contactado": "contactado"}
+        _nuevo = _mapa.get((update_data["resultado"] or "").strip().lower())
+        if _nuevo:
+            intervention.estado_workflow = _nuevo
+            if _nuevo in ("resuelto", "cerrado") and not intervention.fecha_resolucion:
+                from datetime import datetime as _dt, timezone as _tz
+                intervention.fecha_resolucion = _dt.now(_tz.utc)
+
     db.commit()
     db.refresh(intervention)
 

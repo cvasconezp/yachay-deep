@@ -34,6 +34,32 @@ export default function Intervenciones() {
   const [editForm, setEditForm] = useState({});
   const [saving, setSaving] = useState(false);
 
+  // Marcar resuelto en un clic desde la lista (sin abrir "Editar")
+  const [savingId, setSavingId] = useState(null);
+
+  // El backend sincroniza estado_workflow al recibir resultado="Resuelto"; aquí se mira
+  // cualquiera de los dos porque los registros antiguos solo tienen `resultado`.
+  const esResuelta = (inv) =>
+    ["resuelto", "cerrado"].includes((inv.estado_workflow || "").toLowerCase()) ||
+    (inv.resultado || "").trim().toLowerCase() === "resuelto";
+
+  const toggleResuelta = async (inv) => {
+    const nuevo = esResuelta(inv) ? "" : "Resuelto";
+    setSavingId(inv.id);
+    try {
+      const actualizada = await api.updateIntervention(inv.id, { resultado: nuevo });
+      // Actualiza solo esa fila; recargar toda la tabla haría saltar el scroll.
+      setData((d) => !d ? d : ({
+        ...d,
+        items: (d.items || []).map((x) => (x.id === inv.id ? { ...x, ...actualizada } : x)),
+      }));
+    } catch (err) {
+      alert(`No se pudo actualizar: ${err.message}`);
+    } finally {
+      setSavingId(null);
+    }
+  };
+
   // Impact modal
   const [impactData, setImpactData] = useState(null);
   const [impactLoading, setImpactLoading] = useState(false);
@@ -480,15 +506,22 @@ export default function Intervenciones() {
                       </span>
                     </td>
                     <td className="px-3 py-2.5">
-                      {inv.resultado ? (
-                        <span className={`text-[11px] font-medium ${
-                          inv.resultado.includes("comprometido") ? "text-green-700"
-                          : inv.resultado.includes("No contestó") || inv.resultado.includes("Buzón") ? "text-red-600"
-                          : "text-gray-600"
-                        }`}>
-                          {inv.resultado}
+                      <label
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex items-center gap-1.5 cursor-pointer select-none"
+                        title={esResuelta(inv) ? "Marcar como no resuelta" : "Marcar como resuelta"}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={esResuelta(inv)}
+                          disabled={savingId === inv.id}
+                          onChange={() => toggleResuelta(inv)}
+                          className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer disabled:opacity-40"
+                        />
+                        <span className={`text-[11px] font-medium ${esResuelta(inv) ? "text-emerald-700" : "text-gray-400"}`}>
+                          {savingId === inv.id ? "Guardando…" : esResuelta(inv) ? "Resuelto" : (inv.resultado || "Pendiente")}
                         </span>
-                      ) : <span className="text-gray-300 text-xs">—</span>}
+                      </label>
                     </td>
                     <td className="px-3 py-2.5 text-center">
                       {inv.requiere_seguimiento === "si" ? (

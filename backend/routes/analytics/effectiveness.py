@@ -71,22 +71,45 @@ def _calcular_efectividad_intervencion(inv, student) -> dict:
 @router.get("")
 def get_effectiveness(
     periodo: str = Query(None),
+    dias_minimos: int = Query(14, ge=0, le=180,
+                             description="Antigüedad mínima de la intervención para poder medirla"),
+    solo_cerradas: bool = Query(False,
+                                description="Restringir a intervenciones marcadas resueltas/cerradas"),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """Análisis de efectividad de intervenciones cerradas/resueltas."""
+    """Evolución de los estudiantes intervenidos, con umbrales de significancia.
 
-    q = db.query(Intervention).filter(
-        Intervention.estado_workflow.in_(["resuelto", "cerrado"])
-    )
+    Se miden las intervenciones con al menos `dias_minimos` de antigüedad: sin tiempo
+    transcurrido no hay "después" que comparar. No se exige que estén cerradas.
+    """
+
+    # Antes se exigía estado_workflow in ("resuelto","cerrado"). Pero ese campo NO se
+    # escribe desde ninguna pantalla de la app: se quedaba en "pendiente" siempre, así que
+    # esta vista estaba condenada a salir vacía hiciera lo que hiciera el usuario (que
+    # marcaba `resultado`, otro campo distinto).
+    #
+    # Lo que hace medible una intervención es el TIEMPO transcurrido y tener una foto del
+    # antes, no el trámite administrativo de cerrarla. Se mide por ahí.
+    from datetime import datetime, timedelta, timezone
+    corte = datetime.now(timezone.utc) - timedelta(days=dias_minimos)
+
+    q = db.query(Intervention).filter(Intervention.created_at <= corte)
     if periodo:
         q = q.filter(Intervention.periodo == periodo)
+    if solo_cerradas:
+        q = q.filter(Intervention.estado_workflow.in_(["resuelto", "cerrado"]))
 
     intervenciones = q.all()
 
     if not intervenciones:
         return {
             "total_analizadas": 0,
+            "motivo_vacio": (
+                f"No hay intervenciones con al menos {dias_minimos} días de antigüedad"
+                + (" y marcadas como resueltas/cerradas" if solo_cerradas else "")
+                + ". El impacto necesita tiempo transcurrido para poder medirse."
+            ),
             "tasa_exito_global": 0,
             "por_medio": [],
             "por_motivo": [],
@@ -130,6 +153,8 @@ def get_effectiveness(
 
     return {
         "total_analizadas": total,
+        "dias_minimos": dias_minimos,
+        "solo_cerradas": solo_cerradas,
         "analizadas_concluyentes": len(concluyentes),
         "tasa_exito_global": tasa_global,
         "exitosas": exitosas,
