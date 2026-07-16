@@ -493,6 +493,21 @@ class ETLPipeline:
                         df_ingresos["dias_sin_acceso"] = df_ingresos["dias_sin_acceso"].clip(upper=tope_bloque)
                         logs.append(f"  → Días sin acceso acotados al bloque actual (máx {tope_bloque}d)")
 
+                # ── Solo las tareas cuya entrega ya venció ──────────────────────────
+                # `porcentaje_tareas` contaba TODAS las tareas del curso, incluidas las que
+                # aún no vencen: a mitad de bloque, quien entregó puntualmente todo lo
+                # exigible salía con 33% si el curso tiene 12 tareas y solo vencieron 4.
+                # Eso no mide incumplimiento, mide el calendario — y hundía a todos por
+                # igual (promedio institucional: 29%).
+                from ..services.bloques import filtrar_tareas_vencidas
+                antes_tareas = len(df_tareas) if df_tareas is not None else 0
+                df_tareas = filtrar_tareas_vencidas(df_tareas, semconfig)
+                if antes_tareas and antes_tareas != len(df_tareas):
+                    logs.append(
+                        f"  → {antes_tareas - len(df_tareas)} registros de tareas descartados: "
+                        f"unidades que aún no vencen"
+                    )
+
                 # 2b. Calcular indicadores
                 logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Calculando indicadores de riesgo...")
                 df_master = calcular_indicadores_estudiantes(
@@ -1280,6 +1295,14 @@ class ETLPipeline:
           DatosEspecificos gana en ciudad (Cantón es más granular que CIUDAD_DOM)
           y agrega parroquia que el reporte no tiene.
         """
+        # El modelo de riesgo recibía bloque_actual por defecto (1) porque nadie se lo
+        # pasaba: era un parámetro muerto. Se resuelve del semestre activo.
+        _semcfg = self._get_active_semester()
+        try:
+            _bloque_num = int(_semcfg.bloque_actual) if _semcfg and _semcfg.bloque_actual else 1
+        except (TypeError, ValueError):
+            _bloque_num = 1
+
         import math
 
         def _nan_to_none(val):
@@ -1495,6 +1518,7 @@ class ETLPipeline:
                 notas=[],
                 promedio_calificaciones=promedio_cal,
                 estado_matricula=student.estado_matricula,
+                bloque_actual=_bloque_num,
             )
             student.indice_compromiso = ind.get("indice_compromiso")
             student.nivel_riesgo = ind.get("nivel_riesgo")

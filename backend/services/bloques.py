@@ -100,3 +100,75 @@ def acotar_dias(dias, semconfig, ahora=None):
     if tope is None:
         return dias
     return min(int(dias), tope)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Unidades vencidas
+# ─────────────────────────────────────────────────────────────────────────────
+def _calendario(semconfig) -> list:
+    import json
+    if not semconfig or not semconfig.calendario_academico:
+        return []
+    try:
+        return json.loads(semconfig.calendario_academico)
+    except (json.JSONDecodeError, TypeError):
+        return []
+
+
+def unidades_vencidas(semconfig, ahora=None) -> set | None:
+    """Unidades cuya fecha de entrega ya pasó. None = sin calendario → no filtrar.
+
+    EL PROBLEMA: `porcentaje_tareas` = entregadas / TODAS las tareas del curso, incluidas
+    las que aún no vencen. A mitad de bloque, un estudiante que entregó puntualmente todo
+    lo exigible aparece con un 33% si el curso tiene 12 tareas y solo han vencido 4.
+    Eso no mide incumplimiento: mide el calendario. Y hunde el índice de todos por igual
+    (el promedio institucional era 29%).
+
+    Se usan las fechas de entrega del calendario académico ya configurado: la N-ésima
+    fecha de entrega corresponde a la unidad N.
+    """
+    from datetime import datetime as _dt, timezone as _tz
+
+    ahora = ahora or _dt.now(_tz.utc)
+    entregas = []
+    for e in _calendario(semconfig):
+        if e.get("tipo") not in ("entrega", "paso_notas"):
+            continue
+        try:
+            f = _dt.fromisoformat(str(e.get("fecha")).replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            continue
+        entregas.append(_aware(f))
+
+    if not entregas:
+        return None          # sin calendario configurado: no se filtra nada
+
+    entregas.sort()
+    return {str(i) for i, f in enumerate(entregas, start=1) if f <= ahora}
+
+
+def filtrar_tareas_vencidas(df_tareas, semconfig, ahora=None):
+    """Deja solo las tareas de unidades cuya entrega ya venció.
+
+    Conservador: sin calendario, o si no quedaría ninguna unidad, devuelve el df intacto.
+    Es preferible un porcentaje pesimista a dejar a todos sin datos de tareas.
+    """
+    if df_tareas is None or len(df_tareas) == 0 or "unidad" not in getattr(df_tareas, "columns", []):
+        return df_tareas
+    vencidas = unidades_vencidas(semconfig, ahora)
+    if vencidas is None:
+        return df_tareas
+    if not vencidas:
+        logger.info("Ninguna unidad ha vencido todavía: no se filtran tareas (se evita dejar todo a cero)")
+        return df_tareas
+
+    filtrado = df_tareas[df_tareas["unidad"].astype(str).isin(vencidas)]
+    if len(filtrado) == 0:
+        return df_tareas
+    descartadas = len(df_tareas) - len(filtrado)
+    if descartadas:
+        logger.info(
+            "📅 %d registros de tareas descartados: unidades que aún no vencen "
+            "(antes contaban como no entregadas y hundían el %% de todos)", descartadas,
+        )
+    return filtrado
