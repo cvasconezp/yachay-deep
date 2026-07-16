@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, text as sa_text, or_
 
 from .transformers import (
+    filtrar_aulas_matriculadas,
     transform_ingresos_avac,
     transform_estado_tareas,
     transform_calificaciones,
@@ -378,6 +379,7 @@ class ETLPipeline:
                 logger.error(f"Error en _sync_course_configs: {e}", exc_info=True)
 
             # 2c. Cargar asignaturas matriculadas (enrollments) desde reporte
+            df_enrollments = pd.DataFrame()   # se usa más abajo para filtrar aulas fantasma
             try:
                 df_enrollments = transform_enrollments(settings.DATA_PATH_REPORTE)
                 if not df_enrollments.empty:
@@ -447,9 +449,28 @@ class ETLPipeline:
                 logger.error(f"Error en _upsert_resumen_general: {e}", exc_info=True)
 
             if semestre_vigente:
+                # ── Descartar aulas fantasma ANTES de cualquier uso ──────────────────
+                # AVAC sigue listando al estudiante en aulas de las que salió (cambio de
+                # grupo). Nunca vuelve a entrar, así que sus días sin acceso crecen sin
+                # freno y, como el indicador del estudiante es el MÁXIMO entre aulas, esa
+                # aula muerta lo dispara a 99 días aunque entre a diario.
+                #
+                # Se filtra aquí y no solo dentro del cálculo de indicadores porque estas
+                # filas también alimentan avac_accesses, y desde ahí las alertas por curso
+                # ("Inactivo 38 días en PANADERÍA BÁSICA") seguirían siendo falsas.
+                antes_filtro = len(df_ingresos)
+                df_ingresos = filtrar_aulas_matriculadas(df_ingresos, df_enrollments)
+                if antes_filtro != len(df_ingresos):
+                    logs.append(
+                        f"  → {antes_filtro - len(df_ingresos)} registros AVAC descartados: "
+                        f"aulas donde el estudiante ya no está matriculado"
+                    )
+
                 # 2b. Calcular indicadores
                 logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Calculando indicadores de riesgo...")
-                df_master = calcular_indicadores_estudiantes(df_ingresos, df_tareas, df_calificaciones)
+                df_master = calcular_indicadores_estudiantes(
+                    df_ingresos, df_tareas, df_calificaciones, df_enrollments,
+                )
 
                 # 3. Upsert estudiantes con indicadores (actualiza los ya creados)
                 logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Actualizando indicadores de estudiantes...")

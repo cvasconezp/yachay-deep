@@ -1251,15 +1251,84 @@ def transform_calificaciones_historico(carpeta: str) -> pd.DataFrame:
     return df_all.reset_index(drop=True)
 
 
+def filtrar_aulas_matriculadas(df_ingresos: pd.DataFrame, df_enrollments: pd.DataFrame) -> pd.DataFrame:
+    """Descarta las aulas AVAC en las que el estudiante NO está matriculado.
+
+    AULAS FANTASMA: AVAC lista al estudiante en aulas de las que ya salió (cambio de grupo,
+    típicamente). Nunca vuelve a entrar, así que sus días sin acceso crecen sin parar y,
+    como el indicador del estudiante es el MÁXIMO entre aulas, esa aula muerta secuestra
+    el indicador entero.
+
+    Caso real: un estudiante marcado "99 días sin acceso" (RIESGO ALTO) que en realidad
+    había entrado hacía 2 días. El 99 venía de un aula de PANADERÍA BÁSICA que ni siquiera
+    aparecía en su ficha, porque no estaba matriculado.
+
+    El cruce es `Enrollment.codigo_grupo` == `AvacAccess.codigo_curso`: CODIGO_GRUPO es el
+    identificador del aula en AVAC.
+
+    Conservador a propósito: si no hay matrículas, o si un estudiante no aparece en el
+    reporte, se le deja tal cual. Es preferible una alerta de más que borrar a alguien del
+    seguimiento por un fallo de datos.
+    """
+    if df_ingresos.empty or df_enrollments is None or df_enrollments.empty:
+        return df_ingresos
+    if "codigo_grupo" not in df_enrollments.columns or "codigo_curso" not in df_ingresos.columns:
+        return df_ingresos
+
+    col_correo = "correo_institucional" if "correo_institucional" in df_enrollments.columns else None
+    if not col_correo or "correo" not in df_ingresos.columns:
+        return df_ingresos
+
+    matriculas = set(
+        zip(
+            df_enrollments[col_correo].astype(str).str.strip().str.lower(),
+            df_enrollments["codigo_grupo"].astype(str).str.strip(),
+        )
+    )
+    matriculas.discard(("", ""))
+    if not matriculas:
+        return df_ingresos
+
+    correos_con_matricula = {c for c, _ in matriculas}
+    claves = list(zip(
+        df_ingresos["correo"].astype(str).str.strip().str.lower(),
+        df_ingresos["codigo_curso"].astype(str).str.strip(),
+    ))
+    # Se conserva la fila si: el estudiante no está en el reporte (no sabemos nada de él),
+    # o si esa aula concreta es una de sus matrículas.
+    mantener = [
+        (correo not in correos_con_matricula) or ((correo, cod) in matriculas)
+        for correo, cod in claves
+    ]
+
+    df_out = df_ingresos[pd.Series(mantener, index=df_ingresos.index)]
+    descartadas = len(df_ingresos) - len(df_out)
+    if descartadas:
+        logger.info(
+            "🧹 %d registros AVAC descartados por aulas no matriculadas (aulas fantasma "
+            "de cambios de grupo). Antes secuestraban el indicador de días sin acceso.",
+            descartadas,
+        )
+    return df_out
+
+
 def calcular_indicadores_estudiantes(
     df_ingresos: pd.DataFrame,
     df_tareas: pd.DataFrame,
     df_calificaciones: pd.DataFrame,
+    df_enrollments: pd.DataFrame = None,
 ) -> pd.DataFrame:
     """
     Construye la tabla maestra de estudiantes con sus indicadores de riesgo.
     Join por correo (llave principal) y nombre (fallback).
+
+    `df_enrollments` (opcional) descarta las aulas en las que el estudiante ya no está.
     """
+    if df_ingresos.empty:
+        return pd.DataFrame()
+
+    # Sin esto, un aula abandonada dispara el máximo y falsea el riesgo del estudiante
+    df_ingresos = filtrar_aulas_matriculadas(df_ingresos, df_enrollments)
     if df_ingresos.empty:
         return pd.DataFrame()
 
