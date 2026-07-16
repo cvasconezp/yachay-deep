@@ -159,11 +159,33 @@ def recalcular_indicadores(db: Session, periodo: str = None) -> dict:
 
     db.commit()
 
+    # Cuántos tienen realmente datos de tareas. Sin este número no se puede saber si un
+    # 12% de promedio significa "no entregan" o "no tenemos el dato".
+    #
+    # Importa porque el componente de tareas vale 0.30 y su valor por defecto cuando falta
+    # es 0.05: con eso, el TECHO del índice es 0.30+0.05+0.23+0.15 = 0.729 — por debajo del
+    # 0.80 de "Sin riesgo". Un estudiante perfecto en todo lo demás queda excluido del nivel
+    # solo por no tener datos de tareas.
+    con_tareas = len(tareas)
+    total_alumnos = actualizados or 1
+
     resumen = {
         "ok": True,
         "periodo": periodo,
         "bloque": bloque_num,
         "estudiantes_actualizados": actualizados,
+        "tareas": {
+            "estudiantes_con_datos": con_tareas,
+            "estudiantes_sin_datos": max(actualizados - con_tareas, 0),
+            "pct_con_datos": round(con_tareas / total_alumnos * 100, 1),
+            "tareas_contadas": sum(len(v) for v in tareas.values()),
+            "por_que_importa": (
+                "El componente de tareas vale 0.30 del índice y sin datos se le asigna 0.05. "
+                "Con ese valor el techo del índice es 0.729, así que quien no tenga datos de "
+                "tareas NUNCA puede llegar a 'Sin riesgo' (>= 0.80), por bien que vaya en todo "
+                "lo demás."
+            ) if con_tareas < actualizados * 0.5 else None,
+        },
         "cambiaron_de_nivel": cambios_nivel,
         "registros_descartados": {
             "aulas_fantasma": descartados_fantasma,

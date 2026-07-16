@@ -639,6 +639,15 @@ function AlertTools() {
                 cursos de bloque cerrado · {recalcResult.registros_descartados?.tareas_aun_no_vencidas} tareas
                 que aún no vencen.
               </div>
+              {recalcResult.tareas?.por_que_importa && (
+                <div className="mt-2 pt-2 border-t border-amber-200">
+                  <strong className="text-amber-900">
+                    ⚠️ Solo {recalcResult.tareas.estudiantes_con_datos} de {recalcResult.estudiantes_actualizados} estudiantes
+                    ({recalcResult.tareas.pct_con_datos}%) tienen datos de tareas.
+                  </strong>
+                  <div className="text-amber-800 mt-1">{recalcResult.tareas.por_que_importa}</div>
+                </div>
+              )}
               {recalcResult.alertas && (
                 <div className="text-amber-800 mt-1">
                   Alertas: {recalcResult.alertas.created} creadas ({recalcResult.alertas.cleaned} eliminadas).
