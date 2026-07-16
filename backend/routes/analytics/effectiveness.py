@@ -183,6 +183,30 @@ def get_effectiveness(
     # Al menos una mejora significativa (sin exigir que nada empeore)
     con_alguna_mejora = sum(1 for r in concluyentes if r.get("mejoras", 0) > 0)
 
+    # ── ¿Hubo contacto de verdad? ────────────────────────────────────────────────
+    # "No contestó" o "Buzón de voz" no son intervenciones fallidas: son intentos que no
+    # llegaron. Contarlos como "la intervención no funcionó" es como contar una carta
+    # devuelta al remitente como "la carta no convenció".
+    #
+    # Se reportan las dos lecturas, que es lo estándar al evaluar:
+    #   - por intención de tratar: todos los intentos. No alcanzar a la gente TAMBIÉN es
+    #     un fallo del proceso, y esconderlo maquilla el resultado.
+    #   - por contacto efectivo: solo quienes respondieron. Mide si hablar sirve.
+    # La diferencia entre ambas dice si el problema es el mensaje o la capacidad de llegar.
+    SIN_RESPUESTA = {"no contestó", "no contesto", "buzón de voz", "buzon de voz",
+                     "mensaje enviado sin respuesta"}
+    def _hubo_contacto(r):
+        res = (r.get("resultado") or "").strip().lower()
+        if not res:
+            return None                      # aún sin registrar
+        return res not in SIN_RESPUESTA
+
+    contactados = [r for r in concluyentes if _hubo_contacto(r) is True]
+    sin_respuesta = sum(1 for r in resultados if _hubo_contacto(r) is False)
+    sin_registrar = sum(1 for r in resultados if _hubo_contacto(r) is None)
+    exitosas_contactadas = sum(1 for r in contactados if r["exitosa"])
+    con_mejora_contactadas = sum(1 for r in contactados if r.get("mejoras", 0) > 0)
+
     # ── Matriz de transición de riesgo ───────────────────────────────────────────
     # "¿Cuántos se recuperaron?" en el lenguaje que todo el mundo entiende.
     NIVELES = ["Alto", "Medio", "Bajo"]
@@ -244,6 +268,27 @@ def get_effectiveness(
         "por_carrera": por_carrera,
         "ranking_medios": ranking,
         "con_alguna_mejora": con_alguna_mejora,
+        "contacto": {
+            "sin_respuesta": sin_respuesta,
+            "sin_registrar": sin_registrar,
+            "contactados_medidos": len(contactados),
+            "tasa_contacto_efectivo": (
+                round(len(contactados) / (len(contactados) + sin_respuesta) * 100, 1)
+                if (len(contactados) + sin_respuesta) else None
+            ),
+            # Solo entre quienes SÍ respondieron
+            "exitosas_entre_contactados": exitosas_contactadas,
+            "con_mejora_entre_contactados": con_mejora_contactadas,
+            "tasa_exito_entre_contactados": (
+                round(exitosas_contactadas / len(contactados) * 100, 1) if contactados else None
+            ),
+            "como_leerlo": (
+                "'tasa_exito_global' cuenta todos los intentos (intención de tratar); "
+                "'tasa_exito_entre_contactados' solo a quienes respondieron. Si la primera "
+                "es mucho peor que la segunda, el problema no es el mensaje: es que no se "
+                "está logrando contactar a los estudiantes."
+            ),
+        },
         "por_indicador": por_indicador,
         "transicion_riesgo": {
             "matriz": matriz,
@@ -310,3 +355,19 @@ def get_effectiveness_comparado(
     """
     from ...services.cohort_comparison import comparar_cohortes
     return comparar_cohortes(db, periodo=periodo, dias_seguimiento=dias_seguimiento)
+
+
+@router.get("/desenlaces")
+def get_desenlaces(
+    periodo: str = Query(..., description="Período a evaluar, ej. P68"),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    """Qué pasó DE VERDAD: aprobó, reprobó, continuó o no.
+
+    El resto de la vista de impacto se apoya en prob_desercion / prob_reprobacion, que son
+    PREDICCIONES. Esto mira hechos: notas finales y matrícula del período siguiente.
+    Solo hay datos al cierre del período; si no los hay, se dice.
+    """
+    from ...services.outcomes import desenlaces_intervenidos
+    return desenlaces_intervenidos(db, periodo)

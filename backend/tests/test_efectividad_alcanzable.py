@@ -238,3 +238,45 @@ def test_cambiar_de_resuelto_a_no_contesto_reabre(db, client):
     assert i.estado_workflow == "sin_respuesta"
     assert i.fecha_resolucion is None, "reabrir debe limpiar la fecha de resolución"
     assert i.requiere_seguimiento == "si"
+
+
+# ── contacto efectivo: intención de tratar vs. per-protocol ──
+def test_no_contesto_no_es_una_intervencion_fallida(db, client):
+    """Un mensaje que nunca llegó no probó nada; contarlo como fracaso maquilla al revés."""
+    a = _admin(db)
+    s1 = _est(db); i1 = _intervencion(db, s1.id, dias_atras=30, uid=a.id)
+    i1.resultado = "No contestó"
+    s2 = _est(db); i2 = _intervencion(db, s2.id, dias_atras=30, uid=a.id)
+    i2.resultado = "Contactado - comprometido a mejorar"
+    db.commit()
+
+    c = client.get("/analytics/effectiveness?periodo=P68", headers=_headers(a)).json()["contacto"]
+    assert c["sin_respuesta"] == 1
+    assert c["contactados_medidos"] == 1
+    assert c["tasa_contacto_efectivo"] == 50.0
+
+
+def test_las_dos_lecturas_conviven(db, client):
+    a = _admin(db)
+    for res in ("No contestó", "Buzón de voz", "Mensaje enviado sin respuesta"):
+        i = _intervencion(db, _est(db).id, dias_atras=30, uid=a.id)
+        i.resultado = res
+    i = _intervencion(db, _est(db).id, dias_atras=30, uid=a.id)
+    i.resultado = "Resuelto"
+    db.commit()
+
+    d = client.get("/analytics/effectiveness?periodo=P68", headers=_headers(a)).json()
+    # 1 de 4 respondió
+    assert d["contacto"]["tasa_contacto_efectivo"] == 25.0
+    # la global (intención de tratar) mira las 4; la de contactados solo 1
+    assert d["contacto"]["contactados_medidos"] == 1
+    assert d["analizadas_concluyentes"] == 4
+
+
+def test_sin_resultado_registrado_no_cuenta_como_sin_respuesta(db, client):
+    a = _admin(db)
+    _intervencion(db, _est(db).id, dias_atras=30, uid=a.id)   # resultado vacío
+
+    c = client.get("/analytics/effectiveness?periodo=P68", headers=_headers(a)).json()["contacto"]
+    assert c["sin_registrar"] == 1
+    assert c["sin_respuesta"] == 0

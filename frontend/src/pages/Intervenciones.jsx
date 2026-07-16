@@ -60,6 +60,33 @@ export default function Intervenciones() {
     }
   };
 
+  const cambiarEstado = async (inv, nuevo) => {
+    const esRetiro = ["retirado", "retiro"].includes(nuevo.trim().toLowerCase());
+    if (esRetiro && !window.confirm(
+      `¿Marcar a ${inv.nombre} como RETIRADO?\n\n` +
+      "Se congelarán sus indicadores tal como están ahora y dejará de aparecer en " +
+      "alertas, estadísticas y métricas de impacto.\n\nSe puede deshacer."
+    )) return;
+
+    setSavingId(inv.id);
+    try {
+      const actualizada = await api.updateIntervention(inv.id, { estado: nuevo });
+      setData((d) => !d ? d : ({
+        ...d,
+        items: (d.items || []).map((x) =>
+          x.id === inv.id
+            ? { ...x, ...actualizada, estudiante_retirado: esRetiro || x.estudiante_retirado }
+            // El retiro afecta al ESTUDIANTE: sus otras intervenciones también cambian
+            : (esRetiro && x.student_id === inv.student_id ? { ...x, estudiante_retirado: true } : x)
+        ),
+      }));
+    } catch (err) {
+      alert(`No se pudo actualizar: ${err.message}`);
+    } finally {
+      setSavingId(null);
+    }
+  };
+
   // Impact modal
   const [impactData, setImpactData] = useState(null);
   const [impactLoading, setImpactLoading] = useState(false);
@@ -476,6 +503,7 @@ export default function Intervenciones() {
                   <SortHeader field="motivo" className="text-left">Motivo</SortHeader>
                   <SortHeader field="medio" className="text-left">Medio</SortHeader>
                   <SortHeader field="resultado" className="text-left">Resultado</SortHeader>
+                  <SortHeader field="estado" className="text-left">Estado</SortHeader>
                   <th className="text-center px-3 py-2.5 font-semibold text-gray-600 text-xs uppercase tracking-wider">Seg.</th>
                   <SortHeader field="monitor" className="text-left">Monitor</SortHeader>
                   <SortHeader field="fecha" className="text-left">Fecha</SortHeader>
@@ -549,6 +577,30 @@ export default function Intervenciones() {
                       >
                         <option value="">{savingId === inv.id ? "Guardando…" : "Pendiente"}</option>
                         {RESULTADOS.map((r) => <option key={r} value={r}>{r}</option>)}
+                      </select>
+                    </td>
+
+                    {/* Estado del ESTUDIANTE (no del contacto). Marcar "Retirado" congela
+                        su fotografía, así que pide confirmación — pero vive aquí y no
+                        escondido en "Editar": si marcarlo cuesta, no se marca, y los
+                        retirados siguen falseando alertas y métricas. */}
+                    <td className="px-3 py-2.5">
+                      <select
+                        value={inv.estado || ""}
+                        disabled={savingId === inv.id}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => cambiarEstado(inv, e.target.value)}
+                        className={`text-[11px] rounded-lg border px-2 py-1 w-full max-w-[150px] bg-white cursor-pointer
+                          focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 ${
+                          inv.estudiante_retirado
+                            ? "border-gray-400 text-gray-700 font-medium bg-gray-50"
+                            : inv.estado
+                              ? "border-gray-300 text-gray-700"
+                              : "border-gray-200 text-gray-400"
+                        }`}
+                      >
+                        <option value="">Sin estado</option>
+                        {ESTADOS.map((e) => <option key={e} value={e}>{e}</option>)}
                       </select>
                     </td>
                     <td className="px-3 py-2.5 text-center">

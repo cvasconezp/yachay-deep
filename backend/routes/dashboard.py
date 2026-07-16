@@ -15,6 +15,7 @@ from ..models.enrollment import Enrollment
 from ..models.course_config import SemesterConfig, CourseConfig
 from ..auth.jwt import get_current_user
 from ..models.user import User
+from ..services.retiro import filtrar_activos
 
 
 def _active_bloque_courses(db: Session, semconfig) -> set[str] | None:
@@ -412,7 +413,9 @@ def get_stats(
     from sqlalchemy import or_ as _or
 
     period_sq, pf = _period_student_ids(db, periodo)
-    base = db.query(Student).filter(Student.id.in_(period_sq))
+    # Los retirados falsean todo KPI: sus días sin acceso siguen creciendo
+    # mecánicamente y nunca van a mejorar. Se consultan en /students/retirados.
+    base = filtrar_activos(db.query(Student).filter(Student.id.in_(period_sq)))
 
     if carrera:
         base = base.filter(func.lower(Student.carrera).contains(carrera.lower()))

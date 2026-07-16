@@ -989,6 +989,8 @@ export default function ResumenDatos() {
   const [execLoading, setExecLoading] = useState(false);
   const [effData, setEffData] = useState(null);
   const [effLoading, setEffLoading] = useState(false);
+  const [desenlaces, setDesenlaces] = useState(null);
+  const [comparado, setComparado] = useState(null);
 
   useEffect(() => {
     api.getCarreras().then(setCarreras).catch(() => {});
@@ -1070,6 +1072,11 @@ export default function ResumenDatos() {
       .then(d => setEffData(d))
       .catch(() => setEffData(null))
       .finally(() => setEffLoading(false));
+    // Desenlaces reales y efecto estimado: fallan sin romper la vista principal
+    if (filtroPeriodo) {
+      api.getEffectivenessDesenlaces(filtroPeriodo).then(setDesenlaces).catch(() => setDesenlaces(null));
+      api.getEffectivenessComparado(filtroPeriodo).then(setComparado).catch(() => setComparado(null));
+    }
   }, [activeTab, filtroPeriodo]);
 
   const toggleCol = (key) => {
@@ -1942,6 +1949,207 @@ export default function ResumenDatos() {
                       <p className="text-amber-700 pt-1">⚠️ {effData.advertencia}</p>
                     )}
                   </div>
+
+                  {/* ── Por indicador ──────────────────────────────────────────────
+                      La lectura honesta. El binario "exitosa" mentía en los dos sentidos:
+                      sin umbral contaba ruido; con "cero empeoramientos" un solo indicador
+                      ruidoso tumbaba casos que mejoraron en todo lo demás. */}
+                  {effData.por_indicador && (
+                    <div className="mt-4 rounded-lg p-5" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
+                      <h3 className="text-sm font-semibold mb-1" style={{ color: PBI.navy }}>Qué pasó con cada indicador</h3>
+                      <p className="text-xs text-gray-500 mb-4">
+                        Un caso puede mejorar en unos indicadores y empeorar en otros. Aquí se ve sin resumirlo en una sola cifra.
+                        {effData.con_alguna_mejora != null && (
+                          <> <strong className="text-gray-700">{effData.con_alguna_mejora}</strong> mejoraron en al menos un indicador.</>
+                        )}
+                      </p>
+                      <div className="space-y-3">
+                        {Object.entries({
+                          dias_sin_acceso: "Días sin acceso",
+                          compromiso: "Compromiso",
+                          porcentaje_tareas: "Tareas entregadas",
+                          prob_desercion: "Riesgo de deserción (predicho)",
+                        }).map(([k, label]) => {
+                          const d = effData.por_indicador[k];
+                          if (!d || !d.medidos) return null;
+                          const pct = (n) => (n / d.medidos) * 100;
+                          return (
+                            <div key={k}>
+                              <div className="flex justify-between text-xs mb-1">
+                                <span className="font-medium text-gray-700">{label}</span>
+                                <span className="text-gray-500">
+                                  <strong style={{ color: PBI.green }}>{d.mejoraron} mejoraron</strong>
+                                  {" · "}{d.sin_cambio} sin cambio{" · "}
+                                  <span style={{ color: PBI.coral }}>{d.empeoraron} empeoraron</span>
+                                  {" "}(de {d.medidos})
+                                </span>
+                              </div>
+                              <div className="flex h-2.5 rounded-full overflow-hidden bg-gray-100">
+                                <div style={{ width: `${pct(d.mejoraron)}%`, background: PBI.green }} />
+                                <div style={{ width: `${pct(d.sin_cambio)}%`, background: "#D1D5DB" }} />
+                                <div style={{ width: `${pct(d.empeoraron)}%`, background: PBI.coral }} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Matriz de transición de riesgo ───────────────────────────── */}
+                  {effData.transicion_riesgo?.total > 0 && (
+                    <div className="mt-4 rounded-lg p-5" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
+                      <h3 className="text-sm font-semibold mb-1" style={{ color: PBI.navy }}>Cambio de nivel de riesgo</h3>
+                      <p className="text-xs text-gray-500 mb-4">Comparando el nivel al crear la intervención con el actual.</p>
+                      <div className="grid grid-cols-3 gap-4 mb-4">
+                        <div className="text-center rounded-lg p-3" style={{ background: "#ECFDF5" }}>
+                          <div className="text-2xl font-bold" style={{ color: PBI.green }}>{effData.transicion_riesgo.bajaron_de_nivel}</div>
+                          <div className="text-xs text-gray-600 mt-1">bajaron de riesgo</div>
+                        </div>
+                        <div className="text-center rounded-lg p-3 bg-gray-50">
+                          <div className="text-2xl font-bold text-gray-500">{effData.transicion_riesgo.se_mantuvieron}</div>
+                          <div className="text-xs text-gray-600 mt-1">se mantuvieron</div>
+                        </div>
+                        <div className="text-center rounded-lg p-3" style={{ background: "#FEF2F2" }}>
+                          <div className="text-2xl font-bold" style={{ color: PBI.coral }}>{effData.transicion_riesgo.subieron_de_nivel}</div>
+                          <div className="text-xs text-gray-600 mt-1">subieron de riesgo</div>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {Object.entries(effData.transicion_riesgo.matriz || {})
+                          .sort((a, b) => b[1] - a[1])
+                          .map(([k, v]) => (
+                            <span key={k} className="text-xs bg-white border border-gray-200 rounded-full px-3 py-1 text-gray-600">
+                              {k.replace("->", " → ")}: <strong className="text-gray-800">{v}</strong>
+                            </span>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ── Contacto efectivo ─────────────────────────────────────────── */}
+                  {effData.contacto?.tasa_contacto_efectivo != null && (
+                    <div className="mt-4 rounded-lg p-5" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
+                      <h3 className="text-sm font-semibold mb-1" style={{ color: PBI.navy }}>¿Se logró contactar?</h3>
+                      <p className="text-xs text-gray-500 mb-4">
+                        Un mensaje sin respuesta no es una intervención fallida: es un intento que no llegó.
+                      </p>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div><div className="text-2xl font-bold" style={{ color: PBI.navy }}>{effData.contacto.tasa_contacto_efectivo}%</div>
+                          <div className="text-xs text-gray-500">respondieron</div></div>
+                        <div><div className="text-2xl font-bold text-gray-500">{effData.contacto.sin_respuesta}</div>
+                          <div className="text-xs text-gray-500">sin respuesta</div></div>
+                        <div><div className="text-2xl font-bold" style={{ color: PBI.green }}>
+                          {effData.contacto.tasa_exito_entre_contactados ?? "—"}{effData.contacto.tasa_exito_entre_contactados != null && "%"}</div>
+                          <div className="text-xs text-gray-500">éxito entre contactados</div></div>
+                        <div><div className="text-2xl font-bold text-gray-400">{effData.contacto.sin_registrar}</div>
+                          <div className="text-xs text-gray-500">sin resultado registrado</div></div>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-4 pt-3 border-t border-gray-100">{effData.contacto.como_leerlo}</p>
+                    </div>
+                  )}
+
+                  {/* ── Desenlace REAL: lo que responde al coordinador ────────────
+                      Todo lo demás mira predicciones (prob_desercion). Esto mira hechos:
+                      notas finales y matrícula del período siguiente. */}
+                  {desenlaces && (
+                    <div className="mt-4 rounded-lg p-5" style={{ background: PBI.card, border: `2px solid ${PBI.navy}` }}>
+                      <h3 className="text-sm font-semibold mb-1" style={{ color: PBI.navy }}>
+                        Desenlace real al cierre — ¿aprobaron? ¿continuaron?
+                      </h3>
+                      <p className="text-xs text-gray-500 mb-4">
+                        El resto de la vista usa la probabilidad que predice el modelo. Esto mira lo que de verdad pasó:
+                        nota final &lt; {desenlaces.umbral_aprobacion} = reprobó; sin rastro en {desenlaces.periodo_siguiente} = no continuó.
+                      </p>
+
+                      {!desenlaces.disponible ? (
+                        <div className="rounded-lg bg-amber-50 border border-amber-200 p-4 text-xs text-amber-800">
+                          ⏳ {desenlaces.motivo_no_disponible}
+                        </div>
+                      ) : (
+                        <>
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="text-gray-500 border-b border-gray-200">
+                                <th className="text-left py-2 font-semibold">GRUPO</th>
+                                <th className="text-right py-2 font-semibold">ESTUDIANTES</th>
+                                <th className="text-right py-2 font-semibold">REPROBARON</th>
+                                <th className="text-right py-2 font-semibold">NO CONTINUARON</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {[desenlaces.intervenidos, desenlaces.no_intervenidos].map((g) => (
+                                <tr key={g.grupo} className="border-b border-gray-100">
+                                  <td className="py-2 font-medium text-gray-800">
+                                    {g.grupo === "intervenidos" ? "Intervenidos" : "No intervenidos"}
+                                  </td>
+                                  <td className="text-right text-gray-600">{g.total}</td>
+                                  <td className="text-right">
+                                    {g.tasa_reprobacion != null
+                                      ? <><strong style={{ color: PBI.coral }}>{g.tasa_reprobacion}%</strong>
+                                          <span className="text-gray-400"> ({g.reprobaron}/{g.con_notas_cerradas})</span></>
+                                      : <span className="text-gray-400">sin notas</span>}
+                                  </td>
+                                  <td className="text-right">
+                                    {g.tasa_no_continuidad != null
+                                      ? <><strong style={{ color: PBI.coral }}>{g.tasa_no_continuidad}%</strong>
+                                          <span className="text-gray-400"> ({g.no_continuaron}/{g.evaluados_continuidad})</span></>
+                                      : <span className="text-gray-400">sin datos de {desenlaces.periodo_siguiente}</span>}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                          <p className="text-xs text-amber-700 mt-4 pt-3 border-t border-gray-100">⚠️ {desenlaces.advertencia}</p>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ── Efecto estimado contra comparables ────────────────────────── */}
+                  {comparado && (
+                    <div className="mt-4 rounded-lg p-5" style={{ background: PBI.card, border: `1px solid ${PBI.border}` }}>
+                      <h3 className="text-sm font-semibold mb-1" style={{ color: PBI.navy }}>
+                        Efecto estimado frente a estudiantes comparables
+                      </h3>
+                      <p className="text-xs text-gray-500 mb-4">
+                        Descuenta lo que habría pasado igualmente: compara contra no intervenidos de la misma carrera
+                        y punto de partida similar. Es lo único que permite hablar de efecto atribuible.
+                      </p>
+                      {!comparado.disponible ? (
+                        <div className="rounded-lg bg-amber-50 border border-amber-200 p-4 text-xs text-amber-800">
+                          ⏳ {comparado.motivo}
+                        </div>
+                      ) : (
+                        <>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {[["dias_sin_acceso", "Días sin acceso"], ["porcentaje_tareas", "Tareas entregadas"]].map(([k, label]) => {
+                              const e = comparado[k];
+                              if (!e) return null;
+                              return (
+                                <div key={k} className="rounded-lg bg-gray-50 p-4">
+                                  <div className="text-xs font-medium text-gray-700 mb-2">{label}</div>
+                                  <div className="flex justify-between text-xs text-gray-500 mb-1">
+                                    <span>Intervenidos: <strong className="text-gray-800">{e.intervenidos}</strong></span>
+                                    <span>Comparables: <strong className="text-gray-800">{e.no_intervenidos}</strong></span>
+                                  </div>
+                                  <div className="text-lg font-bold mt-2" style={{ color: e.favorable ? PBI.green : PBI.coral }}>
+                                    {e.efecto_estimado > 0 ? "+" : ""}{e.efecto_estimado}
+                                    <span className="text-xs font-normal text-gray-500"> de efecto atribuible</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <p className="text-xs text-gray-500 mt-3">
+                            {comparado.parejas_analizadas} intervenciones con comparación válida ·
+                            {" "}{comparado.controles_por_caso_promedio} controles por caso · seguimiento a {comparado.dias_seguimiento} días
+                          </p>
+                          <p className="text-xs text-amber-700 mt-3 pt-3 border-t border-gray-100">⚠️ {comparado.advertencia}</p>
+                        </>
+                      )}
+                    </div>
+                  )}
 
                   {/* Ranking de medios más efectivos */}
                   {effData.ranking_medios?.length > 0 && (

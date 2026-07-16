@@ -17,6 +17,7 @@ from ..models.course_config import SemesterConfig, CourseConfig
 from ..models.intervention import Intervention
 from ..auth.jwt import get_current_user
 from ..models.user import User
+from ..services.retiro import filtrar_activos
 from .analytics._helpers import get_umbrales
 
 
@@ -232,7 +233,9 @@ def get_pending_alerts(
         pass  # Fallback: use Student.dias_sin_acceso below
 
     if student_ids:
-        for s in db.query(Student).filter(Student.id.in_(student_ids)).all():
+        # No basta con dejar de GENERAR alertas: las ya generadas seguían saliendo
+        # en la lista y el monitor volvía a ver a quien ya sabe que se fue.
+        for s in filtrar_activos(db.query(Student).filter(Student.id.in_(student_ids))).all():
             # Use bloque-filtered dias_sin_acceso; if student has no courses
             # in the current bloque, show None instead of stale data from other bloque
             if bloque_course_codes:

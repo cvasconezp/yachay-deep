@@ -17,6 +17,7 @@ from ...database import get_db
 from ...models.student import Student
 from ...models.intervention import Intervention
 from ...auth.jwt import get_current_user
+from ...services.retiro import filtrar_activos
 
 router = APIRouter(prefix="/analytics/executive", tags=["analytics-executive"])
 
@@ -30,7 +31,7 @@ def get_executive_dashboard(
     """KPIs institucionales para el dashboard ejecutivo."""
 
     # Filtro base por período
-    student_q = db.query(Student)
+    student_q = filtrar_activos(db.query(Student))
     intervention_q = db.query(Intervention)
     if periodo:
         student_q = student_q.filter(Student.periodo == periodo)

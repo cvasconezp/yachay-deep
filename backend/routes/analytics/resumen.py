@@ -16,6 +16,7 @@ from ...models import Student, Grade, Intervention, Enrollment, AvacAccess
 from ...models.course_config import CourseConfig, SemesterConfig
 from ...auth.jwt import get_current_user
 from ...models.user import User
+from ...services.retiro import filtrar_activos
 from ._helpers import apply_periodo_filter, get_umbrales
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
@@ -191,7 +192,9 @@ def get_resumen_datos(
     # Union: estudiantes con grades O enrollments O accesos AVAC
     all_period_sids = grade_student_ids | enroll_student_ids | avac_student_ids
 
-    base_q = db.query(Student)
+    # Los retirados quedan fuera del análisis institucional: sus indicadores
+    # congelados falsearían promedios y distribuciones de riesgo.
+    base_q = filtrar_activos(db.query(Student))
     if carrera:
         base_q = base_q.filter(func.lower(Student.carrera).contains(carrera.lower()))
     if periodo_filter != "todos":
@@ -493,7 +496,9 @@ def get_estudiantes_listado(
     union_sq, periodo_filter = _resumen_period_student_ids(db, periodo, _carrera_sids)
     all_period_sids = set(r[0] for r in union_sq.all())
 
-    base_q = db.query(Student)
+    # Los retirados quedan fuera del análisis institucional: sus indicadores
+    # congelados falsearían promedios y distribuciones de riesgo.
+    base_q = filtrar_activos(db.query(Student))
     if carrera:
         base_q = base_q.filter(func.lower(Student.carrera).contains(carrera.lower()))
     if periodo_filter != "todos":

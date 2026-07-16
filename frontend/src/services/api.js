@@ -445,6 +445,8 @@ class ApiClient {
   // Analytics Ejecutivo (Fase 4)
   getExecutiveDashboard(periodo) { const qs = periodo ? `?periodo=${periodo}` : ""; return this.get(`/analytics/executive${qs}`); }
   getEffectiveness(periodo) { const qs = periodo ? `?periodo=${periodo}` : ""; return this.get(`/analytics/effectiveness${qs}`); }
+  getEffectivenessDesenlaces(periodo) { return this.get(`/analytics/effectiveness/desenlaces?periodo=${periodo}`); }
+  getEffectivenessComparado(periodo, dias = 30) { const qs = periodo ? `?periodo=${periodo}&dias_seguimiento=${dias}` : `?dias_seguimiento=${dias}`; return this.get(`/analytics/effectiveness/comparado${qs}`); }
   getHistoricalAsignaturas(carrera) { const qs = carrera ? `?carrera=${encodeURIComponent(carrera)}` : ""; return this.get(`/analytics/historical/asignaturas${qs}`); }
   getAbandonoAsignaturas(periodo) { const qs = periodo ? `?periodo=${periodo}` : ""; return this.get(`/analytics/historical/abandono-asignaturas${qs}`); }
   getDocenteEffectiveness(periodo, carrera) { const params = []; if(periodo) params.push(`periodo=${periodo}`); if(carrera) params.push(`carrera=${encodeURIComponent(carrera)}`); const qs = params.length ? `?${params.join("&")}` : ""; return this.get(`/analytics/docente-effectiveness${qs}`); }

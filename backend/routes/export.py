@@ -14,6 +14,7 @@ from ..models import Student, AvacAccess, TaskSubmission, Grade, Intervention
 from ..models.enrollment import Enrollment
 from ..auth.jwt import get_current_user
 from ..models.user import User
+from ..services.retiro import filtrar_activos
 
 router = APIRouter(prefix="/export", tags=["export"])
 
@@ -352,7 +353,7 @@ def export_estudiantes_excel(
         eq = eq.order_by(Student.carrera, Enrollment.asignatura, Student.nombre)
         export_rows = [(s, e.asignatura, e.docente) for (e, s) in eq.all()]
     else:
-        query = db.query(Student)
+        query = filtrar_activos(db.query(Student))
         if carrera:
             query = query.filter(func.lower(Student.carrera).contains(carrera.lower()))
         if nivel:
