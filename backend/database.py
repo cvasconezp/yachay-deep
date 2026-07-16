@@ -104,7 +104,10 @@ def upgrade_tables():
             ("totp_secret_cif", "TEXT"),
         ],
         "institutions": [],  # new table, created by create_all()
-    "students": [
+        # ⚠️ UNA SOLA clave "students". Había dos y Python descartaba la primera en
+        # silencio: sus columnas nunca se migraban y cualquier consulta que las tocara
+        # reventaba en producción con "column does not exist". Ver test_migracion_sin_claves_duplicadas.
+        "students": [
             ("retirado", "BOOLEAN DEFAULT false"),
             ("fecha_retiro", "TIMESTAMP"),
             ("motivo_retiro", "VARCHAR"),
@@ -128,6 +131,20 @@ def upgrade_tables():
             ("prob_desercion",         "FLOAT"),
             ("prob_reprobacion",       "FLOAT"),
             ("prediccion_updated_at",  "TIMESTAMP"),
+            ("es_tercera_matricula", "BOOLEAN DEFAULT false"),
+        ("institution_id", "INTEGER"),
+            ("score_recuperabilidad", "FLOAT"),
+            ("nivel_recuperabilidad", "VARCHAR"),
+            # [Cifrado en reposo — Fase 2 Expand] columnas cifradas + blind index
+            ("cedula_cif", "TEXT"), ("cedula_bidx", "VARCHAR(64)"),
+            ("nombre_cif", "TEXT"), ("nombre_bidx", "VARCHAR(64)"),
+            ("correo_cif", "TEXT"), ("correo_bidx", "VARCHAR(64)"),
+            ("correo_institucional_cif", "TEXT"), ("correo_institucional_bidx", "VARCHAR(64)"),
+            ("telefono_cif", "TEXT"), ("whatsapp_cif", "TEXT"),
+            ("genero_cif", "TEXT"), ("autoidentificacion_etnica_cif", "TEXT"),
+            ("fecha_nacimiento_cif", "TEXT"),
+            ("pais_cif", "TEXT"), ("provincia_cif", "TEXT"), ("ciudad_cif", "TEXT"),
+            ("parroquia_cif", "TEXT"), ("barrio_cif", "TEXT"),
         ],
         "course_configs": [
             ("nivel", "INTEGER"),
@@ -198,22 +215,6 @@ def upgrade_tables():
         ],
         "alert_events": [
             ("codigo_curso", "VARCHAR"),
-        ],
-        "students": [
-            ("es_tercera_matricula", "BOOLEAN DEFAULT false"),
-        ("institution_id", "INTEGER"),
-            ("score_recuperabilidad", "FLOAT"),
-            ("nivel_recuperabilidad", "VARCHAR"),
-            # [Cifrado en reposo — Fase 2 Expand] columnas cifradas + blind index
-            ("cedula_cif", "TEXT"), ("cedula_bidx", "VARCHAR(64)"),
-            ("nombre_cif", "TEXT"), ("nombre_bidx", "VARCHAR(64)"),
-            ("correo_cif", "TEXT"), ("correo_bidx", "VARCHAR(64)"),
-            ("correo_institucional_cif", "TEXT"), ("correo_institucional_bidx", "VARCHAR(64)"),
-            ("telefono_cif", "TEXT"), ("whatsapp_cif", "TEXT"),
-            ("genero_cif", "TEXT"), ("autoidentificacion_etnica_cif", "TEXT"),
-            ("fecha_nacimiento_cif", "TEXT"),
-            ("pais_cif", "TEXT"), ("provincia_cif", "TEXT"), ("ciudad_cif", "TEXT"),
-            ("parroquia_cif", "TEXT"), ("barrio_cif", "TEXT"),
         ],
         "enrollments": [
             ("es_tercera_matricula", "BOOLEAN DEFAULT false"),
