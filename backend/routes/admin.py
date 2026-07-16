@@ -1145,3 +1145,24 @@ def cifrado_backfill(
     if mode == "apply":
         return {"mode": "apply", **backfill(db, dry_run=False)}
     return {"mode": "dry-run", **backfill(db, dry_run=True)}
+
+
+@router.post("/recalcular-indicadores")
+def recalcular_indicadores_endpoint(
+    regenerar_alertas: bool = True,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Recalcula riesgo y alertas desde la BD, SIN volver a scrapear.
+
+    El scraping tarda ~2h. Los datos crudos ya están guardados: lo que hacía falta era
+    volver a aplicarles las reglas correctas (aulas fantasma, ventana de bloque, tareas
+    aún no vencidas). No trae datos nuevos de AVAC — recalcula sobre la última foto.
+    """
+    from ..services.recalculo import recalcular_indicadores
+
+    resultado = recalcular_indicadores(db)
+    if resultado.get("ok") and regenerar_alertas:
+        from ..services.alert_generator import generate_alerts_batch
+        resultado["alertas"] = generate_alerts_batch(db)
+    return resultado

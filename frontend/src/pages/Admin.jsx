@@ -539,6 +539,27 @@ function AlertTools() {
     setLoading(false);
   };
 
+  const [recalcLoading, setRecalcLoading] = useState(false);
+  const [recalcResult, setRecalcResult] = useState(null);
+
+  const recalcular = async () => {
+    if (!confirm(
+      "¿Recalcular riesgo y alertas desde los datos ya guardados?\n\n" +
+      "NO vuelve a scrapear (eso tarda ~2h). Recalcula sobre la última foto de AVAC " +
+      "aplicando las reglas actuales: descarta aulas donde el estudiante ya no está " +
+      "matriculado, cursos de bloques cerrados y tareas que aún no vencen.\n\n" +
+      "Los niveles de riesgo van a cambiar."
+    )) return;
+    setRecalcLoading(true);
+    setRecalcResult(null);
+    try {
+      setRecalcResult(await api.recalcularIndicadores());
+    } catch (e) {
+      setRecalcResult({ error: e.message });
+    }
+    setRecalcLoading(false);
+  };
+
   const loadDebug = async () => {
     setShowDebug(!showDebug);
     if (!showDebug && !debugData) {
@@ -564,8 +585,40 @@ function AlertTools() {
             className="text-xs px-3 py-1.5 rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-700 transition-colors disabled:opacity-50">
             {loading ? "Regenerando..." : "Regenerar Alertas"}
           </button>
+          {/* Regenerar alertas NO recalcula el riesgo: días, % de tareas y nivel los
+              computa el ETL desde el scraping. Esto los recalcula desde la BD. */}
+          <button onClick={recalcular} disabled={recalcLoading}
+            className="text-xs px-3 py-1.5 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-800 font-medium transition-colors disabled:opacity-50"
+            title="Recalcula días sin acceso, % de tareas y nivel de riesgo desde los datos ya guardados, sin volver a scrapear">
+            {recalcLoading ? "Recalculando..." : "♻️ Recalcular riesgo (sin scraping)"}
+          </button>
         </div>
       </div>
+
+      {recalcResult && (
+        <div className={`text-xs p-3 rounded-lg mb-2 ${recalcResult.error ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-900"}`}>
+          {recalcResult.error ? `Error: ${recalcResult.error}` : !recalcResult.ok ? recalcResult.motivo : (
+            <>
+              <div className="font-semibold mb-1">
+                ✅ {recalcResult.estudiantes_actualizados} estudiantes recalculados ·{" "}
+                {recalcResult.cambiaron_de_nivel} cambiaron de nivel de riesgo
+              </div>
+              <div className="text-amber-800">
+                Descartado: {recalcResult.registros_descartados?.aulas_fantasma} registros de aulas
+                sin matrícula · {recalcResult.registros_descartados?.cursos_de_bloque_cerrado} de
+                cursos de bloque cerrado · {recalcResult.registros_descartados?.tareas_aun_no_vencidas} tareas
+                que aún no vencen.
+              </div>
+              {recalcResult.alertas && (
+                <div className="text-amber-800 mt-1">
+                  Alertas: {recalcResult.alertas.created} creadas ({recalcResult.alertas.cleaned} eliminadas).
+                </div>
+              )}
+              <div className="text-gray-500 mt-1">{recalcResult.nota}</div>
+            </>
+          )}
+        </div>
+      )}
       {result && (
         <div className={`text-xs p-2 rounded-lg mb-2 ${result.error ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
           {result.error ? `Error: ${result.error}` : `✅ ${result.created} alertas creadas (${result.cleaned} anteriores eliminadas)`}
