@@ -213,8 +213,39 @@ def _create_default_admin():
         )
         return
 
+    admin_reset = os.environ.get("ADMIN_RESET", "").lower() in ("1", "true", "yes")
+
     db = SessionLocal()
     try:
+        # ADMIN_RESET se comprueba ANTES que nada: es la ÚNICA vía de recuperación si se
+        # pierde la contraseña (no hay servicio de correo, así que no hay enlace de
+        # restablecimiento). Antes esta comprobación iba después de un `return` temprano
+        # que se disparaba cuando el correo del admin coincidía con ADMIN_EMAIL — es decir,
+        # en el caso normal. La recuperación era inalcanzable justo cuando hacía falta.
+        if admin_reset:
+            objetivo = (
+                db.query(User).filter(User.email == admin_email).first()
+                or db.query(User).filter(User.role == UserRole.admin).first()
+            )
+            if objetivo:
+                objetivo.email = admin_email
+                objetivo.hashed_password = hash_password(admin_pass)
+                objetivo.is_active = True
+                objetivo.role = UserRole.admin
+                # Sin esto, quien perdió la contraseña Y el segundo factor seguiría fuera:
+                # la recuperación tiene que devolver el acceso de verdad.
+                objetivo.totp_enabled = False
+                objetivo.totp_secret = None
+                objetivo.recovery_codes = None
+                objetivo.pin_locked = False
+                db.commit()
+                logger.warning(
+                    "[ADMIN_RESET] Credenciales de admin reseteadas a %s y 2FA desactivado. "
+                    "QUITA ADMIN_RESET de las variables de entorno y vuelve a activar el 2FA.",
+                    admin_email,
+                )
+                return
+
         # Si ya existe el usuario con ese email, no hacer nada
         existing = db.query(User).filter(User.email == admin_email).first()
         if existing:
@@ -222,7 +253,6 @@ def _create_default_admin():
             return
 
         admin = db.query(User).filter(User.role == UserRole.admin).first()
-        admin_reset = os.environ.get("ADMIN_RESET", "").lower() in ("1", "true", "yes")
 
         if admin and not admin_reset:
             # [Opción B] Ya hay un admin: NO sobrescribir (respeta cambios de correo/clave
@@ -233,13 +263,6 @@ def _create_default_admin():
             )
             return
 
-        if admin and admin_reset:
-            # Recuperación explícita: resetear credenciales del primer admin a las del env.
-            admin.email = admin_email
-            admin.hashed_password = hash_password(admin_pass)
-            admin.is_active = True
-            db.commit()
-            logger.warning(f"[ADMIN_RESET] Credenciales de admin reseteadas a {admin_email}")
         else:
             # No existe ningún admin → crear uno nuevo (bootstrap inicial)
             new_admin = User(
