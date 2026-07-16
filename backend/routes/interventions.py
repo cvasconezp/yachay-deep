@@ -358,9 +358,18 @@ def update_intervention(
         _nuevo = _mapa.get((update_data["resultado"] or "").strip().lower())
         if _nuevo:
             intervention.estado_workflow = _nuevo
-            if _nuevo in ("resuelto", "cerrado") and not intervention.fecha_resolucion:
-                from datetime import datetime as _dt, timezone as _tz
-                intervention.fecha_resolucion = _dt.now(_tz.utc)
+            if _nuevo in ("resuelto", "cerrado"):
+                if not intervention.fecha_resolucion:
+                    from datetime import datetime as _dt, timezone as _tz
+                    intervention.fecha_resolucion = _dt.now(_tz.utc)
+                # Un caso resuelto no puede seguir "pendiente de seguimiento": la columna
+                # SEG. quedaba en "Pend." para siempre porque nadie limpiaba esta bandera.
+                if "requiere_seguimiento" not in update_data:
+                    intervention.requiere_seguimiento = "no"
+        elif not (update_data.get("resultado") or "").strip():
+            # Se desmarcó el casillero: vuelve a estar pendiente
+            intervention.estado_workflow = "pendiente"
+            intervention.fecha_resolucion = None
 
     db.commit()
     db.refresh(intervention)

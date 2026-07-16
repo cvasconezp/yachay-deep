@@ -102,3 +102,39 @@ def test_tras_marcar_resuelto_aparece_en_solo_cerradas(db, client):
     client.patch(f"/interventions/{i.id}", json={"resultado": "Resuelto"}, headers=_headers(a))
     d = client.get("/analytics/effectiveness?periodo=P68&solo_cerradas=true", headers=_headers(a)).json()
     assert d["total_analizadas"] == 1
+
+
+# ── coherencia entre las 3 columnas que el usuario percibe como un estado ──
+def test_marcar_resuelto_limpia_la_columna_seguimiento(db, client):
+    """SEG. mostraba 'Pend.' aunque el caso estuviera resuelto: nadie limpiaba la bandera."""
+    a = _admin(db); s = _est(db)
+    i = _intervencion(db, s.id, dias_atras=30, uid=a.id, requiere_seguimiento="si")
+
+    client.patch(f"/interventions/{i.id}", json={"resultado": "Resuelto"}, headers=_headers(a))
+    db.refresh(i)
+    assert i.requiere_seguimiento == "no", "un caso resuelto no puede seguir pendiente de seguimiento"
+
+
+def test_seguimiento_explicito_gana(db, client):
+    """Si el usuario pide seguimiento en la misma edición, se respeta."""
+    a = _admin(db); s = _est(db)
+    i = _intervencion(db, s.id, dias_atras=30, uid=a.id, requiere_seguimiento="si")
+
+    client.patch(f"/interventions/{i.id}",
+                 json={"resultado": "Resuelto", "requiere_seguimiento": "si"}, headers=_headers(a))
+    db.refresh(i)
+    assert i.requiere_seguimiento == "si"
+
+
+def test_desmarcar_revierte_a_pendiente(db, client):
+    a = _admin(db); s = _est(db)
+    i = _intervencion(db, s.id, dias_atras=30, uid=a.id)
+
+    client.patch(f"/interventions/{i.id}", json={"resultado": "Resuelto"}, headers=_headers(a))
+    db.refresh(i)
+    assert i.estado_workflow == "resuelto"
+
+    client.patch(f"/interventions/{i.id}", json={"resultado": ""}, headers=_headers(a))
+    db.refresh(i)
+    assert i.estado_workflow == "pendiente"
+    assert i.fecha_resolucion is None
