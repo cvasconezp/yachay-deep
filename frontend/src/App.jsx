@@ -24,6 +24,9 @@ import EntregasPendientes from "./pages/EntregasPendientes";
 import { isSubdomain, isAdminHost } from "./hooks/useTenant";
 import TenantPortal from "./pages/TenantPortal";
 
+// Lazy: echarts (~1MB) solo se carga al visitar el piloto, no para todos.
+const AnalyticsPiloto = lazy(() => import("./pages/AnalyticsPiloto"));
+
 function PrivateRoute({ children, adminOnly = false, tabKey = null, allowDuringEnrollment = false }) {
   const { user, loading } = useAuth();
 
@@ -260,6 +263,16 @@ export default function App() {
               element={
                 <PrivateRoute adminOnly>
                   <Admin />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/admin/analytics-piloto"
+              element={
+                <PrivateRoute adminOnly>
+                  <Suspense fallback={<div className="p-8 text-gray-400">Cargando analytics…</div>}>
+                    <AnalyticsPiloto />
+                  </Suspense>
                 </PrivateRoute>
               }
             />
