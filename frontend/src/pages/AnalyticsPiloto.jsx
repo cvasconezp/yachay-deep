@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Dashboard, configureAnalytics } from "@yachaydeep-yd/dashboard";
+import "./analytics-piloto.css";
 
 /**
  * PILOTO — Track C de la integración con Yachay Deep Analytics.
@@ -86,7 +87,7 @@ export default function AnalyticsPiloto() {
           </p>
         </div>
       ) : (
-        <div style={{ ["--yd-accent"]: "#E8A838" }}>
+        <div className="yd-analytics-embed">
           {configurado && (
             <QueryClientProvider client={qc}>
               <Dashboard spec={VISTA_GENERAL_SPEC} attributionTheme="light" />

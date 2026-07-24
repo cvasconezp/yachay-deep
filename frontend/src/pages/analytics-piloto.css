@@ -1,0 +1,24 @@
+/* Estilos del tablero embebido (paquete @yachaydeep-yd/dashboard no trae CSS).
+   Todo scopeado bajo .yd-analytics-embed para no filtrar al resto de Core. */
+.yd-analytics-embed{
+  --brand-primary:#1B3A6B; --brand-accent:#E8A838; --surface:#fff;
+  --ink:#11182a; --muted:#6B7280; --yd-accent:#E8A838;
+}
+.yd-analytics-embed .yd-dashboard__head{display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:4px;}
+.yd-analytics-embed .yd-dashboard__head h2{font-size:19px;font-weight:800;letter-spacing:-.2px;margin:0;color:var(--ink);}
+.yd-analytics-embed .yd-dashboard__hint{font-size:12px;color:var(--muted);}
+.yd-analytics-embed .yd-dashboard__filtros{display:flex;gap:8px;flex-wrap:wrap;}
+.yd-analytics-embed .yd-chip{font-size:12px;background:#fff;border:1px solid #e5e7eb;border-radius:9px;padding:5px 10px;color:#374151;cursor:pointer;}
+.yd-analytics-embed .yd-chip--reset{background:#f8fafc;font-weight:600;}
+.yd-analytics-embed .yd-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:14px;}
+.yd-analytics-embed .yd-cell{min-width:0;}
+.yd-analytics-embed .yd-cell--sm{grid-column:span 1;}
+.yd-analytics-embed .yd-cell--md{grid-column:span 2;}
+.yd-analytics-embed .yd-cell--lg{grid-column:span 4;}
+.yd-analytics-embed .yd-kpi{background:var(--surface);border:1px solid #eceef1;border-radius:14px;padding:14px 16px;min-height:74px;display:flex;flex-direction:column;justify-content:center;}
+.yd-analytics-embed .yd-kpi__value{font-size:26px;font-weight:800;line-height:1;letter-spacing:-.5px;color:var(--ink);}
+.yd-analytics-embed .yd-kpi__label{font-size:12px;color:var(--muted);margin-top:6px;font-weight:500;}
+.yd-analytics-embed .yd-panel{background:var(--surface);border:1px solid #eceef1;border-radius:14px;padding:16px 18px;}
+.yd-analytics-embed .yd-panel__head h3{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:0 0 10px;}
+.yd-analytics-embed .yd-panel--loading,.yd-analytics-embed .yd-panel--error{background:var(--surface);border:1px solid #eceef1;border-radius:14px;padding:16px;color:var(--muted);font-size:13px;}
+@media(max-width:900px){.yd-analytics-embed .yd-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.yd-analytics-embed .yd-cell--md,.yd-analytics-embed .yd-cell--lg{grid-column:span 2;}}
