@@ -1,0 +1,61 @@
+{
+  "name": "@yachaydeep-yd/dashboard",
+  "version": "0.4.0",
+  "description": "Yachay Deep Analytics — la cara del sistema: componentes React/ECharts para tableros interactivos, redes y mapas, embebibles en tus apps.",
+  "license": "MIT",
+  "author": "Yachay Deep",
+  "homepage": "https://analytics.yachaydeep.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cvasconezp/yachaydeep-analytics.git",
+    "directory": "packages/dashboard"
+  },
+  "keywords": [
+    "analytics",
+    "dashboard",
+    "bi",
+    "react",
+    "echarts",
+    "embeddable",
+    "yachaydeep"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --clean --external react,echarts,echarts-for-react,zustand,@tanstack/react-query",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "echarts": ">=5.4",
+    "echarts-for-react": ">=3.0",
+    "zustand": ">=4",
+    "@tanstack/react-query": ">=5"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.0",
+    "react": "^18.3.0",
+    "echarts": "^5.5.0",
+    "echarts-for-react": "^3.0.2",
+    "zustand": "^4.5.0",
+    "@tanstack/react-query": "^5.51.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.5.0"
+  }
+}

@@ -33,16 +33,16 @@ const VISTA_GENERAL_SPEC = {
   titulo: "Análisis Institucional — Vista General",
   filtrosGlobales: ["periodo", "carrera"],
   paneles: [
-    { id: "est", metric: "total_estudiantes", chartHint: "kpi", size: "sm" },
-    { id: "doc", metric: "total_docentes", chartHint: "kpi", size: "sm" },
-    { id: "car", metric: "total_carreras", chartHint: "kpi", size: "sm" },
-    { id: "mat", metric: "total_matriculas", chartHint: "kpi", size: "sm" },
-    { id: "prom", metric: "promedio_calificaciones", chartHint: "kpi", size: "sm" },
-    { id: "asig", metric: "total_asignaturas", chartHint: "kpi", size: "sm" },
-    { id: "sec", metric: "total_secciones", chartHint: "kpi", size: "sm" },
-    { id: "aul", metric: "total_aulas_virtuales", chartHint: "kpi", size: "sm" },
+    { id: "est", metric: "total_estudiantes", titulo: "Total estudiantes", chartHint: "kpi", size: "sm" },
+    { id: "doc", metric: "total_docentes", titulo: "Docentes", chartHint: "kpi", size: "sm" },
+    { id: "car", metric: "total_carreras", titulo: "Carreras", chartHint: "kpi", size: "sm" },
+    { id: "mat", metric: "total_matriculas", titulo: "Matrículas", chartHint: "kpi", size: "sm" },
+    { id: "prom", metric: "promedio_calificaciones", titulo: "Promedio de calificaciones", chartHint: "kpi", size: "sm" },
+    { id: "asig", metric: "total_asignaturas", titulo: "Asignaturas", chartHint: "kpi", size: "sm" },
+    { id: "sec", metric: "total_secciones", titulo: "Secciones", chartHint: "kpi", size: "sm" },
+    { id: "aul", metric: "total_aulas_virtuales", titulo: "Aulas virtuales", chartHint: "kpi", size: "sm" },
     // Panel que hoy NO existe como tarjeta: distribución que cross-filtra al hacer clic
-    { id: "porcarrera", metric: "total_estudiantes", dimensions: ["carrera"], chartHint: "bar_h", size: "lg" },
+    { id: "porcarrera", metric: "total_estudiantes", titulo: "Estudiantes por carrera", dimensions: ["carrera"], chartHint: "bar_h", size: "lg" },
   ],
 };
 
