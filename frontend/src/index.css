@@ -11,3 +11,9 @@ body {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
 }
+
+/* Entrada de página — Yachay Deep · motion (respeta prefers-reduced-motion) */
+@media (prefers-reduced-motion: no-preference){
+  #root{ animation: ydPageIn .5s cubic-bezier(.22,.61,.36,1) both; }
+  @keyframes ydPageIn{ from{opacity:0} to{opacity:1} }
+}
