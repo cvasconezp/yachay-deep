@@ -38,7 +38,7 @@ jobs:
           curl -sI --max-time 10 https://avac.ups.edu.ec/grado68/login/index.php | head -5 || true
 
       - name: Configurar Python 3.11
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.11"
           cache: "pip"
