@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 <html lang="es">
   <head>
+  <!-- yd-consent-mode: Consent Mode v2 (denegado por defecto; se concede si el usuario aceptó) -->
+  <script>(function(){window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}window.gtag=window.gtag||gtag;gtag('consent','default',{ad_storage:'denied',ad_user_data:'denied',ad_personalization:'denied',analytics_storage:'denied'});try{if(localStorage.getItem('yd-consent')==='granted'){gtag('consent','update',{analytics_storage:'granted'});}}catch(e){}})();</script>
+
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Yachay Deep — Monitoreo Académico</title>
@@ -41,5 +44,16 @@
   },true);
   })();
   </script>
+  <!-- yd-cookies: banner de consentimiento (marca) -->
+  <div id="yd-cookies" role="dialog" aria-label="Aviso de cookies" style="position:fixed;left:0;right:0;bottom:0;z-index:2147483000;background:#0F2444;color:#fff;font-family:'Instrument Sans',system-ui,-apple-system,'Segoe UI',sans-serif;box-shadow:0 -6px 24px rgba(0,0,0,.25)">
+    <div style="max-width:1080px;margin:0 auto;padding:14px 18px;display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+      <p style="margin:0;font-size:13.5px;line-height:1.5;flex:1;min-width:240px;color:#dfe8f5">Usamos cookies de analítica (Google Analytics) para entender el uso del sitio y mejorarlo. Puedes aceptarlas o rechazarlas. Más informacion en <a href="https://www.yachaydeep.com/privacidad" style="color:#F5C563;text-decoration:underline">Privacidad</a>.</p>
+      <div style="display:flex;gap:8px">
+        <button type="button" id="yd-ck-no" style="cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;padding:8px 14px;border-radius:9px;border:1px solid rgba(255,255,255,.3);background:transparent;color:#fff">Rechazar</button>
+        <button type="button" id="yd-ck-yes" style="cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;padding:8px 16px;border-radius:9px;border:none;background:#E8A838;color:#0F2444">Aceptar</button>
+      </div>
+    </div>
+  </div>
+  <script>(function(){var el=document.getElementById('yd-cookies');if(!el)return;var s;try{s=localStorage.getItem('yd-consent');}catch(e){}if(s){el.remove();return;}function upd(v){if(window.gtag)gtag('consent','update',{analytics_storage:v?'granted':'denied'});}function choose(v){try{localStorage.setItem('yd-consent',v?'granted':'denied');}catch(e){}upd(v);if(v&&window.gtag){gtag('event','page_view',{page_path:location.pathname+location.search,page_location:location.href,page_title:document.title});}el.remove();}var y=document.getElementById('yd-ck-yes'),n=document.getElementById('yd-ck-no');y&&y.addEventListener('click',function(){choose(true);});n&&n.addEventListener('click',function(){choose(false);});})();</script>
 </body>
 </html>
