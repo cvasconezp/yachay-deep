@@ -14,9 +14,32 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
-  </head>
+    <!-- Google Analytics (GA4) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-V9TPGQYX2Z"></script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-V9TPGQYX2Z');</script>
+</head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
-  </body>
+    <!-- yd-analytics-enhancer: page_view SPA + eventos de clic -->
+  <script>
+  (function(){
+  function g(){return (typeof window!=='undefined'&&typeof window.gtag==='function')?window.gtag:null;}
+  var last=location.pathname+location.search;
+  function pv(){var p=location.pathname+location.search;if(p===last)return;last=p;var fn=g();if(!fn)return;setTimeout(function(){fn('event','page_view',{page_path:p,page_location:location.href,page_title:document.title});},0);}
+  var _p=history.pushState,_r=history.replaceState;
+  history.pushState=function(){var x=_p.apply(this,arguments);pv();return x;};
+  history.replaceState=function(){var x=_r.apply(this,arguments);pv();return x;};
+  window.addEventListener('popstate',pv);
+  document.addEventListener('click',function(e){
+    var a=e.target&&e.target.closest?e.target.closest('a[href]'):null; if(!a)return; var fn=g(); if(!fn)return;
+    var href=a.getAttribute('href')||''; var h=href.toLowerCase();
+    if(h.indexOf('wa.me')>-1||h.indexOf('api.whatsapp')>-1||h.indexOf('whatsapp')>-1){fn('event','contact_whatsapp',{link_url:href});return;}
+    if(h.indexOf('mailto:')===0){fn('event','contact_email',{link_url:href});return;}
+    if(h.indexOf('tel:')===0){fn('event','contact_phone',{link_url:href});return;}
+    try{var u=new URL(a.href,location.href); if(u.host&&u.host!==location.host){fn('event','click_outbound',{link_url:a.href,link_domain:u.host,link_text:(a.textContent||'').trim().slice(0,80)});}}catch(_){}
+  },true);
+  })();
+  </script>
+</body>
 </html>
