@@ -18,7 +18,7 @@ on:
 jobs:
   scraping:
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    timeout-minutes: 330   # 5h30m (antes 240): el scraping full de 725 cursos superaba las 4h. Tope duro de runner alojado = 6h.
 
     steps:
       - name: Checkout código
