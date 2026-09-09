@@ -1,17 +1,22 @@
 """
 Módulo: Analítica de Grupos.
 
-Pivotea la tabla de calificaciones (Grade) para presentar, dentro de un
-grupo académico (período + carrera + nivel), una fila por estudiante y una
-columna por asignatura, con la nota final (Grade.nota_final) en cada celda.
+Vista pivote de un grupo académico (período · carrera · nivel): una fila por
+estudiante y una columna por asignatura, con la nota final (Grade.nota_final)
+en cada celda.
 
-Sigue las convenciones del módulo Asignaturas:
+Diseño robusto para datos reales (Sigue convenciones del módulo Asignaturas):
 - La carrera se filtra vía Student (Grade.carrera suele venir vacío).
-- Cuando no hay calificaciones para el período (p. ej. semestre vigente en
-  curso), usa Enrollment como fallback y muestra el listado matriculado sin
-  notas (mismas materias, celdas vacías).
+- El roster y las columnas del grupo se toman de Enrollment (matrícula
+  institucional), que tiene nivel/carrera confiables.
+- Las notas se RELLENAN desde Grade emparejando por (estudiante, asignatura),
+  sin depender de que Grade tenga nivel, período etiquetado o la asignatura con
+  tildes idénticas — así aparecen también las notas cargadas desde AVAC.
+- Si el período no tiene matrículas (períodos antiguos), cae a un pivote directo
+  desde Grade.
 Solo accesible para el rol admin (require_admin).
 """
+import unicodedata
 from typing import Optional
 from fastapi import APIRouter, Depends
 from sqlalchemy import func
@@ -27,11 +32,20 @@ from ._helpers import apply_periodo_filter, get_umbrales, normalize_riesgo
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 
+def _norm_asig(s: Optional[str]) -> str:
+    """Normaliza el nombre de asignatura para emparejar Enrollment↔Grade:
+    quita tildes, espacios extremos y pasa a mayúsculas."""
+    if not s:
+        return ""
+    s = unicodedata.normalize("NFKD", s)
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    return s.strip().upper()
+
+
 class GrupoEstudiante(BaseModel):
     student_id: int
     nombre: Optional[str] = None
     nivel_riesgo: Optional[str] = None
-    # notas por asignatura: {asignatura: nota_final | None}
     notas: dict[str, Optional[float]] = {}
     promedio: Optional[float] = None
 
@@ -48,8 +62,8 @@ class GrupoAnalytics(BaseModel):
     carrera: Optional[str] = None
     nivel: Optional[int] = None
     nota_aprobacion: float = 70.0
-    fuente: Optional[str] = None          # "grades" | "enrollment"
-    asignaturas: list[str] = []           # orden de columnas (A-Z)
+    fuente: Optional[str] = None          # "grades" | "enrollment" | "enrollment+grades"
+    asignaturas: list[str] = []
     estudiantes: list[GrupoEstudiante] = []
     kpis: GrupoKPIs = GrupoKPIs()
 
@@ -61,9 +75,9 @@ def _build_response(
     db: Session, rows, periodo_norm: Optional[str], carrera: Optional[str],
     nivel: Optional[int], nota_aprob: float, fuente: str,
 ) -> GrupoAnalytics:
-    """Construye la matriz estudiante × asignatura a partir de una lista de
-    filas (student_id, asignatura, nota_final|None)."""
-    # Pivote: (student_id, asignatura) → mejor nota no nula.
+    """Construye la matriz estudiante × asignatura desde filas
+    (student_id, asignatura_display, nota|None). Dedup por (estudiante,
+    asignatura) quedándose con la nota más alta no nula."""
     asignaturas_set: set[str] = set()
     pivot: dict[int, dict[str, Optional[float]]] = {}
     for student_id, asignatura, nota in rows:
@@ -73,11 +87,10 @@ def _build_response(
         est = pivot.setdefault(student_id, {})
         if asignatura not in est or est[asignatura] is None:
             est[asignatura] = nota
-        elif nota is not None and nota > est[asignatura]:
+        elif nota is not None and (est[asignatura] is None or nota > est[asignatura]):
             est[asignatura] = nota
 
     asignaturas = sorted(asignaturas_set)
-
     if not pivot:
         return GrupoAnalytics(
             periodo=periodo_norm, carrera=carrera, nivel=nivel,
@@ -95,11 +108,14 @@ def _build_response(
     suma_promedios = 0.0
     n_con_promedio = 0
     riesgo_alto = 0
+    hay_notas = False
 
     for sid in student_ids:
         notas_est = pivot.get(sid, {})
         notas_full = {asig: notas_est.get(asig) for asig in asignaturas}
         valores = [v for v in notas_full.values() if v is not None]
+        if valores:
+            hay_notas = True
         promedio = round(sum(valores) / len(valores), 1) if valores else None
         if promedio is not None:
             suma_promedios += promedio
@@ -111,15 +127,16 @@ def _build_response(
             riesgo_alto += 1
 
         estudiantes.append(GrupoEstudiante(
-            student_id=sid,
-            nombre=s.nombre if s else None,
-            nivel_riesgo=nr,
-            notas=notas_full,
-            promedio=promedio,
+            student_id=sid, nombre=s.nombre if s else None, nivel_riesgo=nr,
+            notas=notas_full, promedio=promedio,
         ))
 
     estudiantes.sort(key=lambda e: (e.nombre or "").lower())
     promedio_grupo = round(suma_promedios / n_con_promedio, 1) if n_con_promedio else None
+
+    # Afina la etiqueta de fuente según si se llenaron notas.
+    if fuente == "enrollment" and hay_notas:
+        fuente = "enrollment+grades"
 
     kpis = GrupoKPIs(
         total_estudiantes=len(estudiantes),
@@ -127,12 +144,29 @@ def _build_response(
         promedio_grupo=promedio_grupo,
         estudiantes_riesgo_alto=riesgo_alto,
     )
-
     return GrupoAnalytics(
         periodo=periodo_norm, carrera=carrera, nivel=nivel,
         nota_aprobacion=nota_aprob, fuente=fuente,
         asignaturas=asignaturas, estudiantes=estudiantes, kpis=kpis,
     )
+
+
+def _grade_map_for(db: Session, roster_sids: list[int], periodo: Optional[str]) -> dict:
+    """Notas por (student_id, asignatura normalizada) para un conjunto de
+    estudiantes. Incluye grades con período NULL (legacy/AVAC sin etiqueta) y
+    empareja por nombre normalizado (tildes/mayúsculas no importan)."""
+    if not roster_sids:
+        return {}
+    gq = db.query(Grade.student_id, Grade.asignatura, Grade.nota_final)
+    gq, _ = apply_periodo_filter(gq, periodo, include_null=True)
+    gq = gq.filter(Grade.student_id.in_(roster_sids))
+    gmap: dict[tuple, Optional[float]] = {}
+    for sid, asig, nota in gq.all():
+        key = (sid, _norm_asig(asig))
+        cur = gmap.get(key)
+        if key not in gmap or cur is None or (nota is not None and nota > cur):
+            gmap[key] = nota
+    return gmap
 
 
 @router.get("/grupos", response_model=GrupoAnalytics)
@@ -143,16 +177,10 @@ def get_grupos_analytics(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    """Vista pivote de un grupo académico (período · carrera · nivel).
-
-    Pivotea desde Grade; si no hay calificaciones para ese grupo, cae a
-    Enrollment y muestra el listado matriculado con celdas de nota vacías.
-    """
+    """Vista pivote de un grupo académico (período · carrera · nivel)."""
     umbrales = get_umbrales(db)
     nota_aprob = umbrales["nota_aprobacion"]
 
-    # La carrera vive en Student (Grade.carrera suele venir vacío): resolvemos
-    # los student_ids de la carrera y filtramos las notas por ellos.
     carrera_sids: Optional[list[int]] = None
     if carrera:
         carrera_sids = [
@@ -160,41 +188,42 @@ def get_grupos_analytics(
                 func.lower(Student.carrera).contains(carrera.lower())
             ).all()
         ]
-
-    # ── Camino principal: calificaciones ────────────────────────────────
-    gq = db.query(Grade.student_id, Grade.asignatura, Grade.nota_final)
-    gq, periodo_norm = apply_periodo_filter(gq, periodo)
-    if carrera_sids is not None:
         if not carrera_sids:
-            # Ningún estudiante en esa carrera → sin datos.
+            _, periodo_norm = apply_periodo_filter(db.query(Grade.id), periodo)
             return GrupoAnalytics(
                 periodo=periodo_norm, carrera=carrera, nivel=nivel,
-                nota_aprobacion=nota_aprob, fuente="grades",
+                nota_aprobacion=nota_aprob, fuente="enrollment",
             )
-        gq = gq.filter(Grade.student_id.in_(carrera_sids))
-    if nivel is not None:
-        gq = gq.filter(Grade.nivel == nivel)
 
-    grade_rows = gq.all()
-
-    if grade_rows:
-        return _build_response(
-            db, grade_rows, periodo_norm, carrera, nivel, nota_aprob, "grades"
-        )
-
-    # ── Fallback: matrículas (sin notas aún) ────────────────────────────
-    # Filtra por los estudiantes de la carrera (vía Student), NO por el texto
-    # de Enrollment.carrera: ese campo puede venir con tildes/ortografía
-    # distinta a Student.carrera (origen del desplegable) y la coincidencia de
-    # texto fallaba (p. ej. "COMUNICACIÓN" vs "COMUNICACION").
+    # ── Roster + columnas desde Enrollment (nivel/carrera confiables) ────
     eq = db.query(Enrollment.student_id, Enrollment.asignatura)
-    eq, _ = apply_periodo_filter(eq, periodo, column=Enrollment.periodo)
+    eq, periodo_norm = apply_periodo_filter(eq, periodo, column=Enrollment.periodo)
     if carrera_sids is not None:
         eq = eq.filter(Enrollment.student_id.in_(carrera_sids))
     if nivel is not None:
         eq = eq.filter(Enrollment.nivel == nivel)
-    enroll_rows = [(sid, asig, None) for (sid, asig) in eq.all()]
+    enroll_pairs = eq.all()
+
+    if enroll_pairs:
+        roster_sids = list({sid for sid, _ in enroll_pairs})
+        gmap = _grade_map_for(db, roster_sids, periodo)
+        rows = [
+            (sid, asig, gmap.get((sid, _norm_asig(asig))))
+            for sid, asig in enroll_pairs
+        ]
+        return _build_response(
+            db, rows, periodo_norm, carrera, nivel, nota_aprob, "enrollment"
+        )
+
+    # ── Fallback: pivote directo desde Grade (períodos sin matrícula) ────
+    gq = db.query(Grade.student_id, Grade.asignatura, Grade.nota_final)
+    gq, periodo_norm = apply_periodo_filter(gq, periodo)
+    if carrera_sids is not None:
+        gq = gq.filter(Grade.student_id.in_(carrera_sids))
+    if nivel is not None:
+        gq = gq.filter(Grade.nivel == nivel)
+    grade_rows = gq.all()
 
     return _build_response(
-        db, enroll_rows, periodo_norm, carrera, nivel, nota_aprob, "enrollment"
+        db, grade_rows, periodo_norm, carrera, nivel, nota_aprob, "grades"
     )
