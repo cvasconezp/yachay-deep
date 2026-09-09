@@ -237,6 +237,10 @@ class ApiClient {
     const qs = params.toString();
     return this.get(`/analytics/asignaturas/${encodeURIComponent(asignatura)}/detalle${qs ? "?" + qs : ""}`);
   }
+  getGruposAnalytics(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.get(`/analytics/grupos${qs ? "?" + qs : ""}`);
+  }
   getDocentesAnalytics(params = {}) {
     const qs = new URLSearchParams(params).toString();
     return this.get(`/analytics/docentes${qs ? "?" + qs : ""}`);

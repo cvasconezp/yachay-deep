@@ -14,6 +14,7 @@ const NAV_ITEMS = [
   { path: "/intervenciones", label: "Intervenciones",         icon: "🤝" },
   { path: "/ficha",          label: "Ficha Estudiante",       icon: "🔍" },
   // ── Académico ──
+  { path: "/grupos",         label: "Grupos",                 icon: "👥" },
   { path: "/asignaturas",    label: "Asignaturas",            icon: "📚" },
   { path: "/entregas",       label: "Entregas",               icon: "📝" },
   { path: "/docentes",       label: "Docentes",               icon: "👨‍🏫" },

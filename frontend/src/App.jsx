@@ -12,6 +12,7 @@ import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import FichaEstudiante from "./pages/FichaEstudiante";
+import Grupos from "./pages/Grupos";
 import Asignaturas from "./pages/Asignaturas";
 import Docentes from "./pages/Docentes";
 import Tutorias from "./pages/Tutorias";
@@ -187,6 +188,14 @@ export default function App() {
               element={
                 <PrivateRoute allowDuringEnrollment>
                   <Seguridad2FA />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/grupos"
+              element={
+                <PrivateRoute adminOnly>
+                  <Grupos />
                 </PrivateRoute>
               }
             />

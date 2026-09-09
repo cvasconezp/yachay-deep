@@ -7,6 +7,7 @@ Uso en main.py (sin cambios necesarios):
 """
 from fastapi import APIRouter
 from .asignaturas import router as asig_router
+from .grupos import router as grupos_router
 from .docentes import router as doc_router
 from .tutorias import router as tut_router
 from .resumen import router as res_router
@@ -22,6 +23,7 @@ from .monthly_report import router as monthly_router
 
 router = APIRouter()
 router.include_router(asig_router)
+router.include_router(grupos_router)
 router.include_router(doc_router)
 router.include_router(tut_router)
 router.include_router(res_router)
