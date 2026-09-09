@@ -183,10 +183,14 @@ def get_grupos_analytics(
         )
 
     # ── Fallback: matrículas (sin notas aún) ────────────────────────────
+    # Filtra por los estudiantes de la carrera (vía Student), NO por el texto
+    # de Enrollment.carrera: ese campo puede venir con tildes/ortografía
+    # distinta a Student.carrera (origen del desplegable) y la coincidencia de
+    # texto fallaba (p. ej. "COMUNICACIÓN" vs "COMUNICACION").
     eq = db.query(Enrollment.student_id, Enrollment.asignatura)
     eq, _ = apply_periodo_filter(eq, periodo, column=Enrollment.periodo)
-    if carrera:
-        eq = eq.filter(func.lower(Enrollment.carrera).contains(carrera.lower()))
+    if carrera_sids is not None:
+        eq = eq.filter(Enrollment.student_id.in_(carrera_sids))
     if nivel is not None:
         eq = eq.filter(Enrollment.nivel == nivel)
     enroll_rows = [(sid, asig, None) for (sid, asig) in eq.all()]
