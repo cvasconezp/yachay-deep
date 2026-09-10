@@ -6,7 +6,10 @@ riesgo**, y qué queda pendiente. Complementa la referencia técnica
 `docs/RIESGO_Y_COMPROMISO.md` (fórmulas exactas) y `docs/DATA_DICTIONARY.md`.
 
 Estado: refleja el código a **2026-09**, ya con la mejora **H1** (respaldo
-académico con `total_curso`) implementada.
+académico con `total_curso`) implementada. La §5.1 incorpora el análisis del paper
+completo: el motor de **3 capas** (índice → banda → estado), las **novedades**
+cualitativas como red de seguridad, la **compuerta administrativa** y el límite
+**conductual** del compromiso.
 
 ---
 
@@ -155,6 +158,58 @@ más honesto y más publicable que declarar una fórmula que el sistema ya no us
 > **re-validarse** con la distribución del próximo ETL y, si hay desenlaces reales
 > de fin de período, contra reprobación/deserción (sensibilidad/especificidad).
 
+### 5.1 Lo que el paper aporta al modelo conceptual: motor de 3 capas y "novedades"
+
+El paper describe un motor de decisión de **tres capas**. Core hoy implementa las
+dos primeras y **colapsa la tercera** en la segunda:
+
+1. **Índice de compromiso** (0–1) — cuantitativo. **Implementado** (v2, §2).
+2. **Banda de compromiso** — mapea el índice a un semáforo. **Implementado**
+   (Core usa 4 niveles en vez de 3, §3).
+3. **Estado de riesgo** — combina la banda con condiciones académicas,
+   administrativas (pagos) y **novedades**. **No implementado como capa propia:**
+   hoy Core deriva el `nivel_riesgo` *directamente* del índice (capa 2 = capa 3).
+
+La diferencia está en la tercera capa y en un concepto que Core no modela: las
+**novedades**. Son *banderas cualitativas* que registra el equipo —p. ej. "Bajas
+calificaciones", "Nota cero"— y que operan como **red de seguridad**: capturan
+situaciones contextuales que el índice cuantitativo puede no reflejar. En el paper,
+un estudiante con buen acceso pero calificaciones bajas obtiene índice alto y, aun
+así, la **novedad de notas lo reclasifica a "Riesgo Académico"** (escenario de
+"señales contradictorias"). La novedad, entonces, **puede anular** la banda.
+
+Dos decisiones de diseño que conviene resolver explícitamente para Core:
+
+- **Compuerta administrativa.** En el paper, la matrícula/pago pendiente actúa como
+  *compuerta*: fuerza el estado "En riesgo" **aunque el compromiso sea medio o
+  alto**. En la implementación vigente **no existe tal compuerta**: lo
+  administrativo es solo el **15 %** del índice (`puntaje_admin`), una señal que se
+  promedia y se diluye. Hay que decidir si Core adopta la compuerta dura del paper
+  o mantiene la ponderación suave actual. *Consecuencia práctica (importante para
+  leer el módulo Grupos): hoy un estudiante con matrícula pendiente pero buen
+  desempeño **no** cae a "Alto" solo por el pago. Si sale "Alto", el motivo está en
+  el índice —engagement bajo, o el respaldo académico de AVAC aún no recalculado
+  tras H1—, no en una compuerta administrativa.*
+- **Estado vs. nivel.** Adoptar la capa 3 significa que el `nivel_riesgo` dejaría
+  de ser un mapeo directo del índice y pasaría a ser un **estado** que las
+  novedades pueden sobrescribir (p. ej. "Riesgo Académico" por nota cero pese a
+  índice alto). Es el hogar conceptual del pendiente **P-DISC** (§6): la
+  discrepancia final ↔ AVAC no es un promedio a calcular, sino una **novedad** que
+  se levanta aunque el índice esté bien.
+
+**Límite declarado (honestidad metodológica).** El paper reconoce —citando a
+Bergdahl et al. (2024)— que el índice es **puramente conductual** (accesos +
+entregas) y **no captura las dimensiones cognitiva ni emocional** del compromiso.
+No es un defecto a "corregir" ahora, sino un **límite del modelo** que debe quedar
+declarado (aquí y en el paper) y que marca trabajo futuro.
+
+**Principio de diseño PD2 — visibilizar las razones, no solo la magnitud.** El
+paper insiste en que una etiqueta aislada informa menos que poder reconstruir *qué*
+señales intervienen y *cuál* determina el estado final. Core ya calcula los
+puntajes por componente (`puntaje_acceso`, `puntaje_tareas`, `puntaje_rendimiento`,
+`puntaje_admin`); el paso pendiente es **exponerlos en la UI** de Grupos/Ficha para
+que el gestor lea *por qué* un estudiante está en rojo, no solo *que* lo está.
+
 ---
 
 ## 6. Pendientes
@@ -175,6 +230,20 @@ regla `nota_final ?? total_curso` **elige una** y oculta el conflicto.
    estudiante.
 4. No cambia el índice de riesgo (H1 sigue como está); es una capa de **calidad de
    datos** y anticipación de reclamos.
+
+### Pendientes conceptuales derivados del paper (§5.1)
+- **Capa 3 — "estado de riesgo" + novedades.** Implementar la tercera capa del
+  motor: un `estado` que combine la banda del índice con **novedades** cualitativas
+  ("Nota cero", "Bajas calificaciones") que puedan **reclasificar** ("Riesgo
+  Académico") aunque el índice sea alto. P-DISC es la primera novedad concreta.
+- **Decisión: compuerta administrativa.** Definir si la matrícula/pago pendiente
+  pasa de ser 15 % del índice a **compuerta dura** ("En riesgo" forzado), como en
+  el paper, o se mantiene la ponderación suave vigente. Documentar la decisión.
+- **Declarar el límite conductual.** Dejar explícito (doc + paper) que el índice
+  mide solo la dimensión **conductual** (accesos/entregas), no la cognitiva ni la
+  emocional (Bergdahl et al., 2024).
+- **Exponer las razones (PD2).** Mostrar en Grupos/Ficha los puntajes por
+  componente para que el estado sea *explicable*, no solo una etiqueta.
 
 ### Otros pendientes
 - **Re-validar umbrales** del índice tras H1 (§5).

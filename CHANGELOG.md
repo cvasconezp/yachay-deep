@@ -29,7 +29,8 @@ Versionado semántico cuando aplique.
 - `docs/SECURITY_FRAMEWORK.md` (estaba deprecado) → eliminado; su reemplazo es `docs/SECURITY.md`. Contenido histórico en el historial de git.
 
 ### Pending (no incluido aún)
-- **P-DISC — Alerta de discrepancia nota final ↔ AVAC:** conservar ambas notas por (estudiante, asignatura) y alertar cuando difieren extremadamente (p. ej. AVAC 88 / final 0 por baja administrativa), para rectificar y anticipar reclamos. Diseño en `docs/MODELO_CONCEPTUAL_METRICAS.md` §6.
+- **Motor de riesgo de 3 capas + novedades (análisis del paper):** documentado en `docs/MODELO_CONCEPTUAL_METRICAS.md` §5.1. El paper articula índice → banda → **estado** con **novedades** cualitativas (red de seguridad) y **compuerta administrativa**; Core hoy colapsa la 3ª capa en la 2ª y trata la matrícula como 15 % (no compuerta). Pendiente decidir e implementar: capa "estado", novedades, decisión sobre la compuerta, declarar el límite conductual y exponer los puntajes por componente en la UI (PD2). Solo documentación por ahora.
+- **P-DISC — Alerta de discrepancia nota final ↔ AVAC:** conservar ambas notas por (estudiante, asignatura) y alertar cuando difieren extremadamente (p. ej. AVAC 88 / final 0 por baja administrativa), para rectificar y anticipar reclamos. Es la **primera novedad** concreta de la capa "estado". Diseño en `docs/MODELO_CONCEPTUAL_METRICAS.md` §6.
 - **Re-validar umbrales** del índice (0.80/0.65/0.35) con la distribución posterior a H1.
 - Alembic (retirar `create_all`/`upgrade_tables`), rate limiting con store persistente, versionado de modelos ML.
 - (Google OAuth queda **descartado en Core por diseño** — no es un pendiente.)

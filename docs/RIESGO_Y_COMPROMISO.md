@@ -123,6 +123,13 @@ es parte de la reproducibilidad.
 5. **Umbrales calibrables por período** (`SemesterConfig`): reproducibilidad y
    adaptación institucional; el paper puede reportar los valores usados y su
    sensibilidad.
+6. **Motor de 3 capas + novedades (red de seguridad)**: el paper articula
+   índice → banda → **estado**, donde banderas cualitativas ("Nota cero", "Bajas
+   calificaciones") pueden reclasificar a "Riesgo Académico" pese a un índice alto,
+   y la matrícula pendiente actúa como **compuerta**. Core hoy colapsa la 3ª capa
+   en la 2ª (deriva el nivel directo del índice) y trata lo administrativo como
+   15 % (no compuerta). Es una vía de mejora conceptual, no un defecto de cálculo.
+   Detalle y decisiones en `docs/MODELO_CONCEPTUAL_METRICAS.md` §5.1.
 
 ---
 
