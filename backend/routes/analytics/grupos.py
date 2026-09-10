@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
 from ...database import get_db
-from ...models import Student, Grade, Enrollment
+from ...models import Student, Grade, Enrollment, TaskSubmission
 from ...auth.jwt import require_admin
 from ...models.user import User
 from ._helpers import apply_periodo_filter, get_umbrales, normalize_riesgo
@@ -181,6 +181,33 @@ def _grades_by_student(db: Session, roster_sids: list[int], periodo: Optional[st
     return out
 
 
+def _total_curso_map(db: Session, roster_sids: list[int], periodo: Optional[str]) -> dict:
+    """{(student_id, codigo_curso): total_curso} desde TaskSubmission (nota
+    "Total del Curso" del AVAC), la MISMA fuente de respaldo que usa la Ficha
+    cuando aún no hay nota final en Grade. Toma el snapshot más reciente."""
+    if not roster_sids:
+        return {}
+    tq = db.query(
+        TaskSubmission.student_id, TaskSubmission.codigo_curso,
+        TaskSubmission.total_curso, TaskSubmission.snapshot_date,
+    )
+    tq, _ = apply_periodo_filter(tq, periodo, column=TaskSubmission.periodo, include_null=True)
+    tq = tq.filter(
+        TaskSubmission.student_id.in_(roster_sids),
+        TaskSubmission.total_curso.isnot(None),
+        TaskSubmission.codigo_curso.isnot(None),
+    )
+    out: dict[tuple, float] = {}
+    best_snap: dict[tuple, object] = {}
+    for sid, codigo, total, snap in tq.all():
+        key = (sid, str(codigo).strip())
+        prev = best_snap.get(key)
+        if key not in out or (snap is not None and (prev is None or snap > prev)):
+            out[key] = total
+            best_snap[key] = snap
+    return out
+
+
 def _match_nota(student_grades: dict, enr_key: str) -> Optional[float]:
     """Empareja la asignatura de matrícula (normalizada) con una nota del
     estudiante: match exacto y, si no, por subcadena (mayor solapamiento),
@@ -227,21 +254,26 @@ def get_grupos_analytics(
             )
 
     # ── Roster + columnas desde Enrollment (nivel/carrera confiables) ────
-    eq = db.query(Enrollment.student_id, Enrollment.asignatura)
+    eq = db.query(Enrollment.student_id, Enrollment.asignatura, Enrollment.codigo_grupo)
     eq, periodo_norm = apply_periodo_filter(eq, periodo, column=Enrollment.periodo)
     if carrera_sids is not None:
         eq = eq.filter(Enrollment.student_id.in_(carrera_sids))
     if nivel is not None:
         eq = eq.filter(Enrollment.nivel == nivel)
-    enroll_pairs = eq.all()
+    enroll_rows_raw = eq.all()
 
-    if enroll_pairs:
-        roster_sids = list({sid for sid, _ in enroll_pairs})
+    if enroll_rows_raw:
+        roster_sids = list({sid for sid, _, _ in enroll_rows_raw})
         grades_by_student = _grades_by_student(db, roster_sids, periodo)
-        rows = [
-            (sid, asig, _match_nota(grades_by_student.get(sid, {}), _norm_asig(asig)))
-            for sid, asig in enroll_pairs
-        ]
+        total_curso = _total_curso_map(db, roster_sids, periodo)
+        rows = []
+        for sid, asig, codigo in enroll_rows_raw:
+            # Igual que la Ficha: nota final de Grade y, si no hay, el
+            # "Total del Curso" de las tareas (AVAC), enlazado por codigo_curso.
+            nota = _match_nota(grades_by_student.get(sid, {}), _norm_asig(asig))
+            if nota is None and codigo:
+                nota = total_curso.get((sid, str(codigo).strip()))
+            rows.append((sid, asig, nota))
         return _build_response(
             db, rows, periodo_norm, carrera, nivel, nota_aprob, "enrollment"
         )
