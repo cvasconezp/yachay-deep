@@ -5,17 +5,20 @@ Vista pivote de un grupo académico (período · carrera · nivel): una fila por
 estudiante y una columna por asignatura, con la nota final (Grade.nota_final)
 en cada celda.
 
-Diseño robusto para datos reales (Sigue convenciones del módulo Asignaturas):
+Diseño robusto para datos reales (sigue convenciones del módulo Asignaturas y
+replica el cruce asignatura↔nota de la Ficha del estudiante):
 - La carrera se filtra vía Student (Grade.carrera suele venir vacío).
 - El roster y las columnas del grupo se toman de Enrollment (matrícula
   institucional), que tiene nivel/carrera confiables.
-- Las notas se RELLENAN desde Grade emparejando por (estudiante, asignatura),
-  sin depender de que Grade tenga nivel, período etiquetado o la asignatura con
-  tildes idénticas — así aparecen también las notas cargadas desde AVAC.
+- Las notas se RELLENAN desde Grade emparejando por nombre de asignatura
+  NORMALIZADO igual que la Ficha (quita artefactos de Excel, colapsa espacios y
+  tildes, mayúsculas) y, si no hay match exacto, por subcadena. Incluye grades
+  con período NULL (semestre actual, como en la Ficha).
 - Si el período no tiene matrículas (períodos antiguos), cae a un pivote directo
   desde Grade.
 Solo accesible para el rol admin (require_admin).
 """
+import re
 import unicodedata
 from typing import Optional
 from fastapi import APIRouter, Depends
@@ -32,14 +35,21 @@ from ._helpers import apply_periodo_filter, get_umbrales, normalize_riesgo
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 
-def _norm_asig(s: Optional[str]) -> str:
-    """Normaliza el nombre de asignatura para emparejar Enrollment↔Grade:
-    quita tildes, espacios extremos y pasa a mayúsculas."""
-    if not s:
+def _norm_asig(name: Optional[str]) -> str:
+    """Normaliza el nombre de asignatura para emparejar Enrollment↔Grade.
+
+    Igual que la Ficha (_normalize_asig en routes/students.py): elimina
+    artefactos de Excel (_x000d_/_x000a_), colapsa saltos de línea y espacios,
+    y pasa a mayúsculas; además quita tildes para tolerar diferencias de acentos.
+    """
+    if not name:
         return ""
-    s = unicodedata.normalize("NFKD", s)
-    s = "".join(c for c in s if not unicodedata.combining(c))
-    return s.strip().upper()
+    clean = re.sub(r"_x[0-9a-fA-F]{4}_", " ", name)   # artefactos Excel
+    clean = re.sub(r"[\r\n]+", " ", clean)             # saltos de línea
+    clean = re.sub(r"\s+", " ", clean).strip()
+    nfkd = unicodedata.normalize("NFKD", clean)
+    clean = "".join(c for c in nfkd if not unicodedata.combining(c))
+    return clean.upper()
 
 
 class GrupoEstudiante(BaseModel):
@@ -134,7 +144,6 @@ def _build_response(
     estudiantes.sort(key=lambda e: (e.nombre or "").lower())
     promedio_grupo = round(suma_promedios / n_con_promedio, 1) if n_con_promedio else None
 
-    # Afina la etiqueta de fuente según si se llenaron notas.
     if fuente == "enrollment" and hay_notas:
         fuente = "enrollment+grades"
 
@@ -151,22 +160,44 @@ def _build_response(
     )
 
 
-def _grade_map_for(db: Session, roster_sids: list[int], periodo: Optional[str]) -> dict:
-    """Notas por (student_id, asignatura normalizada) para un conjunto de
-    estudiantes. Incluye grades con período NULL (legacy/AVAC sin etiqueta) y
-    empareja por nombre normalizado (tildes/mayúsculas no importan)."""
+def _grades_by_student(db: Session, roster_sids: list[int], periodo: Optional[str]) -> dict:
+    """{student_id: {asignatura_normalizada: nota}} para el conjunto de
+    estudiantes. Incluye grades con período NULL (semestre actual, como la
+    Ficha) y guarda la mejor nota no nula por asignatura."""
     if not roster_sids:
         return {}
     gq = db.query(Grade.student_id, Grade.asignatura, Grade.nota_final)
     gq, _ = apply_periodo_filter(gq, periodo, include_null=True)
     gq = gq.filter(Grade.student_id.in_(roster_sids))
-    gmap: dict[tuple, Optional[float]] = {}
+    out: dict[int, dict[str, Optional[float]]] = {}
     for sid, asig, nota in gq.all():
-        key = (sid, _norm_asig(asig))
-        cur = gmap.get(key)
-        if key not in gmap or cur is None or (nota is not None and nota > cur):
-            gmap[key] = nota
-    return gmap
+        key = _norm_asig(asig)
+        if not key:
+            continue
+        d = out.setdefault(sid, {})
+        cur = d.get(key)
+        if key not in d or cur is None or (nota is not None and nota > cur):
+            d[key] = nota
+    return out
+
+
+def _match_nota(student_grades: dict, enr_key: str) -> Optional[float]:
+    """Empareja la asignatura de matrícula (normalizada) con una nota del
+    estudiante: match exacto y, si no, por subcadena (mayor solapamiento),
+    igual que _find_canon_key de la Ficha."""
+    if not student_grades or not enr_key:
+        return None
+    if enr_key in student_grades:
+        return student_grades[enr_key]
+    best_nota = None
+    best_len = 0
+    for gk, nota in student_grades.items():
+        if gk and (gk in enr_key or enr_key in gk):
+            overlap = min(len(gk), len(enr_key))
+            if overlap > best_len:
+                best_len = overlap
+                best_nota = nota
+    return best_nota
 
 
 @router.get("/grupos", response_model=GrupoAnalytics)
@@ -206,9 +237,9 @@ def get_grupos_analytics(
 
     if enroll_pairs:
         roster_sids = list({sid for sid, _ in enroll_pairs})
-        gmap = _grade_map_for(db, roster_sids, periodo)
+        grades_by_student = _grades_by_student(db, roster_sids, periodo)
         rows = [
-            (sid, asig, gmap.get((sid, _norm_asig(asig))))
+            (sid, asig, _match_nota(grades_by_student.get(sid, {}), _norm_asig(asig)))
             for sid, asig in enroll_pairs
         ]
         return _build_response(
