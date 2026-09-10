@@ -473,6 +473,7 @@ def calcular_indice_compromiso(
     promedio_calificaciones: Optional[float] = None,
     estado_matricula: Optional[str] = None,
     dias_desde_ultimo_acceso: Optional[float] = None,
+    promedio_total_curso: Optional[float] = None,   # respaldo AVAC (parcial) cuando no hay nota final
 ) -> dict:
     """
     Modelo de riesgo ponderado multinivel (Framework Capa 5) — v2 MEJORADO.
@@ -530,10 +531,25 @@ def calcular_indice_compromiso(
     # [P2-FIX] Sigmoide centrada en 70 (umbral de aprobación): f(x) = 0.25 / (1 + exp(-0.08*(x-70)))
     # Nota 50 → 0.04, Nota 60 → 0.08, Nota 70 → 0.125, Nota 80 → 0.19, Nota 90 → 0.23
     # Gradiente suave sin "agujeros" entre rangos
+    #
+    # [H1-FIX] Ante la AUSENCIA de nota final (típico en el bloque/semestre en curso),
+    # usa el parcial de AVAC (`total_curso`) como proxy académico. La nota final, cuando
+    # existe, MANDA (la reemplaza). Antes, sin nota final, se asignaba ~nota 50 a todos y
+    # el modelo sesgaba a "Alto" aunque el estudiante tuviera buenos parciales.
     if promedio_calificaciones is not None and promedio_calificaciones > 0:
-        puntaje_rendimiento = round(0.25 / (1 + math.exp(-0.08 * (promedio_calificaciones - 70))), 4)
+        _prom_academico = promedio_calificaciones
+        academico_fuente = "final"
+    elif promedio_total_curso is not None and promedio_total_curso > 0:
+        _prom_academico = promedio_total_curso
+        academico_fuente = "avac"
     else:
-        # [P3-FIX] Sin calificaciones = señal de alerta proporcional
+        _prom_academico = None
+        academico_fuente = None
+
+    if _prom_academico is not None:
+        puntaje_rendimiento = round(0.25 / (1 + math.exp(-0.08 * (_prom_academico - 70))), 4)
+    else:
+        # [P3-FIX] Sin ninguna señal académica = alerta proporcional
         puntaje_rendimiento = 0.04  # equivalente a ~nota 50
 
     # ── Componente administrativo (15%) ──
@@ -551,7 +567,7 @@ def calcular_indice_compromiso(
     data_points = sum([
         _dias_engagement is not None,
         tareas_totales > 0,
-        promedio_calificaciones is not None and promedio_calificaciones > 0,
+        _prom_academico is not None,   # [H1] nota final o, en su defecto, parcial AVAC
         estado_matricula is not None,
     ])
 
@@ -586,6 +602,7 @@ def calcular_indice_compromiso(
         "puntaje_tareas": round(puntaje_tareas, 4),
         "puntaje_rendimiento": round(puntaje_rendimiento, 4),
         "puntaje_admin": round(puntaje_admin, 4),
+        "academico_fuente": academico_fuente,   # "final" | "avac" | None
     }
 
 
@@ -1393,8 +1410,23 @@ def calcular_indicadores_estudiantes(
             .reset_index()
         )
         tareas_agg["porcentaje_tareas"] = tareas_agg["porcentaje_tareas"] * 100
+        # [H1] Promedio del "Total del Curso" (parcial AVAC) por estudiante: se
+        # deduplica por (correo, codigo_curso) para no ponderar por nº de unidades.
+        if "total_curso" in df_tareas.columns and "codigo_curso" in df_tareas.columns:
+            _tc = df_tareas.dropna(subset=["total_curso"])
+            if not _tc.empty:
+                _tc = (
+                    _tc.groupby(["correo", "codigo_curso"])["total_curso"].first()
+                    .reset_index()
+                    .groupby("correo")["total_curso"].mean()
+                    .reset_index()
+                    .rename(columns={"total_curso": "promedio_total_curso"})
+                )
+                tareas_agg = tareas_agg.merge(_tc, on="correo", how="left")
+        if "promedio_total_curso" not in tareas_agg.columns:
+            tareas_agg["promedio_total_curso"] = None
     else:
-        tareas_agg = pd.DataFrame(columns=["correo"])
+        tareas_agg = pd.DataFrame(columns=["correo", "promedio_total_curso"])
 
     # Agregar calificaciones por nombre estudiante
     if not df_calificaciones.empty and "nombre_estudiante" in df_calificaciones.columns:
@@ -1446,12 +1478,15 @@ def calcular_indicadores_estudiantes(
         else:
             promedio = None
 
+        _ptc = row.get("promedio_total_curso")
+        _ptc = float(_ptc) if (_ptc is not None and pd.notna(_ptc)) else None
         ind = calcular_indice_compromiso(
             dias_sin_acceso=row.get("dias_sin_acceso_max"),
             tareas_entregadas=_safe_int(row.get("total_entregas", 0)),
             tareas_totales=_safe_int(row.get("total_tareas", 0)),
             notas=[],
             promedio_calificaciones=promedio,
+            promedio_total_curso=_ptc,
         )
         indicadores.append(ind)
 

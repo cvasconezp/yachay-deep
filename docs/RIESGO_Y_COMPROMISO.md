@@ -18,12 +18,11 @@ Sí, hoy puede pasar, y se debe a **tres causas combinadas**, no a un error aisl
    riesgo es *inverso* al índice: índice bajo → riesgo alto. Las calificaciones
    pesan solo **25 %** del índice; el **60 %** es engagement (acceso AVAC 30 % +
    actividades 30 %) y **15 %** es administrativo.
-2. **El componente académico usa la NOTA FINAL (`nota_final`), no la nota parcial
-   de AVAC (`total_curso`).** En el bloque/semestre en curso las notas finales aún
-   **no están cargadas**, así que el modelo asigna el *default* de "sin notas"
-   ≈ **nota 50** (puntaje 0.04 de 0.25) **a casi todos** — aunque en el módulo
-   Grupos se vean promedios de 90 (esos vienen de `total_curso` de AVAC, que el
-   modelo de riesgo **no** consume).
+2. **[CORREGIDO 2026-09 — H1]** El componente académico usaba solo la NOTA FINAL
+   (`nota_final`); en el término en curso, al no haber finales, asignaba el
+   *default* ≈ **nota 50** a casi todos y sesgaba a "Alto". **Ahora usa
+   `nota_final ?? total_curso`**: si no hay nota final, toma el parcial de AVAC
+   (`total_curso`) como proxy; cuando llega la final, la reemplaza. Ver §5.
 3. **Bloques cerrados sin refresco** inflan la inactividad y el incumplimiento:
    durante un bloque, las materias del otro bloque dejan de rasparse, bajando el
    ratio de actividades y subiendo los días sin acceso → castiga el engagement.
@@ -42,7 +41,7 @@ El índice de compromiso ∈ [0, 1] es la suma de cuatro componentes continuos:
 |---|---:|---|---|---|
 | Acceso AVAC (engagement) | 30 % | `0.30 · e^(−d/10)` | `d` = **días desde el último acceso** (MÍN entre asignaturas) | 0.03 |
 | Actividades (cumplimiento) | 30 % | `(entregadas / totales) · 0.30` | tareas AVAC (todas las materias) | 0.05 |
-| Rendimiento académico | 25 % | `0.25 / (1 + e^(−0.08·(P−70)))` (sigmoide centrada en 70) | `P` = **media de `nota_final`** (archivo de calificaciones) | 0.04 (≈ nota 50) |
+| Rendimiento académico | 25 % | `0.25 / (1 + e^(−0.08·(P−70)))` (sigmoide centrada en 70) | `P` = **`nota_final ?? total_curso`** (media; la final manda, el parcial AVAC es respaldo) — [H1] | 0.04 (≈ nota 50) |
 | Administrativo | 15 % | matriculado → 0.15 · irregular → 0.05 | `estado_matricula` | 0.03 |
 
 `índice = acceso + actividades + rendimiento + administrativo` (máximo 1.00).
@@ -132,12 +131,21 @@ es parte de la reproducibilidad.
 Estas son observaciones honestas que fortalecen el paper (validez interna) y
 marcan trabajo futuro:
 
-- **H1 — Sesgo a "Alto" durante el término por notas finales ausentes.** El
-  componente académico usa `nota_final` (archivo de calificaciones), que en el
-  bloque en curso está vacío → default ≈ nota 50 para todos, aunque tengan buenos
-  **parciales de AVAC** (`total_curso`). *Propuesta:* usar `total_curso` como proxy
-  académico mientras no haya nota final, y que la nota final lo reemplace al
-  cargarse (misma regla `nota_final ?? total_curso` que ya usan Ficha y Grupos).
+- **H1 — [IMPLEMENTADO 2026-09] Sesgo a "Alto" por notas finales ausentes.** El
+  componente académico ahora usa `nota_final ?? total_curso`: si no hay nota final,
+  toma el parcial de AVAC como proxy; la final, cuando existe, manda. Aplicado en
+  `calcular_indice_compromiso` (param `promedio_total_curso`) y en los tres puntos
+  de cálculo (ETL `transformers.py`, `pipeline.py`, `services/recalculo.py`).
+  Efecto medido en el caso base: índice 0.676→0.838, de "Bajo" a "Sin riesgo".
+  *Pendiente asociado:* re-validar los umbrales (0.80/0.65/0.35) con la nueva
+  distribución tras el próximo ETL.
+- **P-DISC — [PENDIENTE] Alerta de discrepancia nota final vs AVAC.** Cuando la
+  nota final y el `total_curso` de AVAC **difieren extremadamente** (p. ej. AVAC 88
+  y final 0 por una baja administrativa), hay que **conservar ambas** y **emitir una
+  alerta** para revisar/rectificar y anticipar reclamos de estudiantes. No se
+  resuelve con `nota_final ?? total_curso` (eso elige una); requiere comparar las
+  dos y marcar la divergencia. Ver diseño propuesto en
+  `docs/MODELO_CONCEPTUAL_METRICAS.md` §Pendientes.
 - **H2 — Artefactos de bloque.** Durante un bloque, las materias del bloque cerrado
   no se refrescan; su inactividad/incumplimiento infla el riesgo. *Propuesta:*
   acotar días y ratio por ventana de bloque activo (ya existe `services/bloques.py`

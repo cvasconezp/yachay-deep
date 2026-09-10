@@ -282,6 +282,7 @@ class TestCalcularIndiceCompromiso:
             "indice_compromiso", "nivel_riesgo", "color_riesgo",
             "puntaje_acceso", "puntaje_tareas",
             "puntaje_rendimiento", "puntaje_admin",
+            "academico_fuente",   # [H1] fuente académica: "final" | "avac" | None
         }
         assert set(result.keys()) == expected_keys
 

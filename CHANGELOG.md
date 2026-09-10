@@ -16,6 +16,7 @@ Versionado semántico cuando aplique.
 - **Documentación:** `docs/PRODUCT.md`, `docs/ROADMAP.md`, `docs/SECURITY.md`, `docs/DEPLOYMENT.md`, `docs/USER_GUIDE.md`, `docs/ADMIN_GUIDE.md`, `docs/AUDITS/`, `LICENSE`, `CONTRIBUTING.md`, este `CHANGELOG.md`.
 
 ### Changed
+- **Modelo de riesgo/compromiso — respaldo académico con AVAC (H1):** el componente de rendimiento del índice de compromiso ahora usa `nota_final ?? total_curso`. Ante la ausencia de nota final (semestre en curso), toma el parcial de AVAC (`total_curso`) como proxy; la nota final, cuando existe, la reemplaza. Antes se asignaba ~nota 50 a todos y el modelo sesgaba a "Alto" pese a buenos parciales. Implementado en `backend/etl/transformers.py::calcular_indice_compromiso` (nuevo parámetro `promedio_total_curso`) y en los tres puntos de cálculo (`transformers.py`, `pipeline.py`, `services/recalculo.py`). Los nuevos valores de riesgo se reflejan tras el próximo ETL/recálculo. Docs: `docs/RIESGO_Y_COMPROMISO.md`, `docs/MODELO_CONCEPTUAL_METRICAS.md`.
 - **Ficha del estudiante — AVAC por curso:** los accesos y tareas ahora usan el **snapshot más reciente de cada curso** (antes solo el último snapshot global, que en pleno semestre solo trae el bloque activo). Así las materias de un bloque ya cerrado siguen mostrando su nota/actividad de AVAC en vez de "Sin AVAC / Cursando" (`backend/routes/students.py`).
 - **Manejo de errores:** el handler global devuelve `{"detail":"Error interno"}` al cliente; la traza queda solo en logs (`backend/main.py`).
 - **Correos enmascarados** en logs (`services/email.py`, `services/daily_digest.py`).
@@ -28,6 +29,8 @@ Versionado semántico cuando aplique.
 - `docs/SECURITY_FRAMEWORK.md` (estaba deprecado) → eliminado; su reemplazo es `docs/SECURITY.md`. Contenido histórico en el historial de git.
 
 ### Pending (no incluido aún)
+- **P-DISC — Alerta de discrepancia nota final ↔ AVAC:** conservar ambas notas por (estudiante, asignatura) y alertar cuando difieren extremadamente (p. ej. AVAC 88 / final 0 por baja administrativa), para rectificar y anticipar reclamos. Diseño en `docs/MODELO_CONCEPTUAL_METRICAS.md` §6.
+- **Re-validar umbrales** del índice (0.80/0.65/0.35) con la distribución posterior a H1.
 - Alembic (retirar `create_all`/`upgrade_tables`), rate limiting con store persistente, versionado de modelos ML.
 - (Google OAuth queda **descartado en Core por diseño** — no es un pendiente.)
 - 🔒 Contract 2.3b (drop del texto plano de PII) — requiere backup verificado + confirmación explícita.

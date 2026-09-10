@@ -1511,12 +1511,15 @@ class ETLPipeline:
             # El transformer no tiene acceso a estado_matricula; recalcular aquí
             _entregas = _nan_to_none(row.get("total_entregas"))
             _tot_tareas = _nan_to_none(row.get("total_tareas"))
+            _prom_tc = _nan_to_none(row.get("promedio_total_curso"))
             ind = calcular_indice_compromiso(
                 dias_sin_acceso=dias,
                 tareas_entregadas=int(_entregas) if _entregas is not None else 0,
                 tareas_totales=int(_tot_tareas) if _tot_tareas is not None else 0,
                 notas=[],
                 promedio_calificaciones=promedio_cal,
+                # [H1] Respaldo académico: parcial de AVAC cuando aún no hay nota final.
+                promedio_total_curso=float(_prom_tc) if _prom_tc is not None else None,
                 estado_matricula=student.estado_matricula,
                 bloque_actual=_bloque_num,
                 # El engagement con la plataforma es el ÚLTIMO acceso, no la materia más

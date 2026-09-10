@@ -122,6 +122,24 @@ def recalcular_indicadores(db: Session, periodo: str = None) -> dict:
             continue
         tareas.setdefault(sid, []).append(bool(entregada))
 
+    # ── Promedio del parcial de AVAC (total_curso) por estudiante [H1] ──
+    # Respaldo académico cuando aún no hay nota final. Un valor por curso
+    # (deduplicado), excluyendo cursos de bloque cerrado, promediado por estudiante.
+    avac_tc: dict = {}
+    aq = db.query(
+        TaskSubmission.student_id, TaskSubmission.codigo_curso, TaskSubmission.total_curso,
+    ).filter(TaskSubmission.periodo.in_(variantes), TaskSubmission.total_curso.isnot(None))
+    if snap_tar:
+        aq = aq.filter(TaskSubmission.snapshot_date == snap_tar)
+    for sid, cod, tc in aq.all():
+        if sid is None or cod is None:
+            continue
+        cod = str(cod).strip()
+        if cod in cerrados:
+            continue
+        avac_tc.setdefault(sid, {})[cod] = tc
+    avac_prom = {sid: (sum(v.values()) / len(v)) for sid, v in avac_tc.items() if v}
+
     # ── Recalcular por estudiante ──
     actualizados = 0
     cambios_nivel = 0
@@ -148,6 +166,7 @@ def recalcular_indicadores(db: Session, periodo: str = None) -> dict:
             notas=[],
             bloque_actual=bloque_num,
             promedio_calificaciones=student.promedio_calificaciones,
+            promedio_total_curso=avac_prom.get(student.id),   # [H1] respaldo AVAC
             estado_matricula=student.estado_matricula,
             dias_desde_ultimo_acceso=student.dias_desde_ultimo_acceso,
         )
