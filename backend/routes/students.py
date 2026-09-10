@@ -974,38 +974,43 @@ def get_ficha(
             return or_(match_expr, periodo_col.is_(None))
         return match_expr
 
-    # Obtener la fecha del snapshot más reciente para este estudiante+periodo
-    latest_avac_snap = (
-        db.query(func.max(AvacAccess.snapshot_date))
+    # Por curso, el snapshot más reciente que tenga datos de ESE curso (no solo el
+    # último snapshot global). Así una materia de un bloque ya cerrado (p. ej.
+    # Bloque 1) sigue mostrando su última actividad/nota de AVAC en vez de
+    # "Sin AVAC", igual que el módulo Grupos. Cuando el snapshot global solo trae
+    # el bloque activo, los cursos del bloque anterior conservan su último dato.
+    _avac_latest_by_course = dict(
+        db.query(AvacAccess.codigo_curso, func.max(AvacAccess.snapshot_date))
         .filter(AvacAccess.student_id == student_id, _avac_periodo_filter(AvacAccess.periodo))
-        .scalar()
-    )
-    avac_snap_filter = (
-        or_(AvacAccess.snapshot_date == latest_avac_snap, AvacAccess.snapshot_date.is_(None))
-        if latest_avac_snap else AvacAccess.snapshot_date.is_(None)  # legacy: NULL snapshot_date
-    )
-    accesos = (
-        db.query(AvacAccess)
-        .filter(AvacAccess.student_id == student_id, _avac_periodo_filter(AvacAccess.periodo), avac_snap_filter)
-        .order_by(AvacAccess.dias_sin_acceso)
+        .group_by(AvacAccess.codigo_curso)
         .all()
     )
+    accesos = [
+        a for a in (
+            db.query(AvacAccess)
+            .filter(AvacAccess.student_id == student_id, _avac_periodo_filter(AvacAccess.periodo))
+            .order_by(AvacAccess.dias_sin_acceso)
+            .all()
+        )
+        # None == None es True en Python: cursos con snapshot NULL (legacy) se conservan.
+        if a.snapshot_date == _avac_latest_by_course.get(a.codigo_curso)
+    ]
 
-    latest_task_snap = (
-        db.query(func.max(TaskSubmission.snapshot_date))
+    _task_latest_by_course = dict(
+        db.query(TaskSubmission.codigo_curso, func.max(TaskSubmission.snapshot_date))
         .filter(TaskSubmission.student_id == student_id, _avac_periodo_filter(TaskSubmission.periodo))
-        .scalar()
-    )
-    task_snap_filter = (
-        or_(TaskSubmission.snapshot_date == latest_task_snap, TaskSubmission.snapshot_date.is_(None))
-        if latest_task_snap else TaskSubmission.snapshot_date.is_(None)
-    )
-    tareas = (
-        db.query(TaskSubmission)
-        .filter(TaskSubmission.student_id == student_id, _avac_periodo_filter(TaskSubmission.periodo), task_snap_filter)
-        .order_by(TaskSubmission.codigo_curso, TaskSubmission.unidad)
+        .group_by(TaskSubmission.codigo_curso)
         .all()
     )
+    tareas = [
+        t for t in (
+            db.query(TaskSubmission)
+            .filter(TaskSubmission.student_id == student_id, _avac_periodo_filter(TaskSubmission.periodo))
+            .order_by(TaskSubmission.codigo_curso, TaskSubmission.unidad)
+            .all()
+        )
+        if t.snapshot_date == _task_latest_by_course.get(t.codigo_curso)
+    ]
 
     # ── Calificaciones ──
     if is_current:
