@@ -12,7 +12,7 @@ Yachay Deep implementa cinco capas funcionales de Learning Analytics, cada una c
 
 | Capa | Módulos | Estado |
 |---|---|---|
-| 1. Analítica descriptiva y diagnóstica | Dashboard, Ficha, Asignaturas, Docentes, Tutorías, Resumen | Operativo |
+| 1. Analítica descriptiva y diagnóstica | Dashboard, Ficha, **Grupos**, Asignaturas, Docentes, Tutorías, Resumen | Operativo |
 | 2. Analítica predictiva | Predicciones ML (deserción + reprobación) | Operativo |
 | 3. Explicabilidad (XAI) | Contribuciones de features, alertas conductuales | Operativo |
 | 4. Recomendaciones automáticas | Motor de recomendaciones (10 categorías) | Operativo |
@@ -138,6 +138,24 @@ Análisis de rendimiento y riesgo agrupado por asignatura.
 - Comparativa con otras asignaturas de la misma carrera
 
 **Datos:** Batch queries optimizadas sobre `grades`, `enrollments`, e `interventions` con índices compuestos.
+
+---
+
+## 7.1 Analítica de Grupos (vista pivote)
+
+**Página:** `Grupos.jsx` · **API:** `analytics/grupos.py` (`GET /analytics/grupos?periodo&carrera&nivel`)
+**Acceso:** Solo `admin` (`require_admin` en backend, `PrivateRoute adminOnly` en frontend). Ícono 👥 en el sidebar, antes de Asignaturas.
+
+Vista **pivote de un grupo académico** (período · carrera · nivel): una fila por estudiante y una columna por asignatura, con la nota final en cada celda. Pensada para revisar un paralelo completo de un vistazo.
+
+**Funcionalidades:**
+- **KPIs** (mismo estilo que Asignaturas): total de estudiantes del grupo, número de asignaturas, promedio del grupo y estudiantes en riesgo alto.
+- **Filtros:** Período, Carrera, Nivel, **Grupo** (paralelo), **Condición especial** (Repitentes 2da / Condicionados 3ra), **Riesgo** (Alto/Medio/Bajo) y buscador. Default: período vigente + "ADMINISTRACIÓN DE EMPRESAS" + Nivel 1.
+- **Tabla:** primera columna (nombre) **congelada** y **encabezados fijos** al hacer scroll; cada encabezado es **ordenable** (A-Z en nombres, mayor→menor en notas); notas con color aprobado/reprobado; columna de **promedio** por estudiante; distintivos 2da/3ra y riesgo bajo el nombre.
+- **Selección de filas** + barra para **Registrar Intervención** (reutiliza `BulkInterventionModal`, igual que Alertas).
+- **Exportación** a Excel con columnas dinámicas (una por asignatura) + grupo y condición.
+
+**Origen de la nota (regla clave, igual que la Ficha):** `nota = Grade.nota_final ?? total_curso`. El *roster* y las columnas se arman desde `enrollments` (nivel/carrera confiables); las notas se rellenan desde `grades` (emparejando por nombre normalizado de asignatura, ver §hallazgos) y, si no hay nota final aún, desde `TaskSubmission.total_curso` del AVAC (enlazado por `codigo_curso = enrollments.codigo_grupo`). Fallback a pivote directo de `grades` para períodos sin matrícula. Ver `docs/GUIA_MODULOS_Y_HALLAZGOS.md`.
 
 ---
 

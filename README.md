@@ -166,6 +166,7 @@ Punto de entrada: **[docs/PRODUCT.md](./docs/PRODUCT.md)** (qué es Core y a fut
 | [ARCHITECTURE.md](./docs/ARCHITECTURE.md) | Arquitectura, stack, esquema BD, decisiones | ✅ vigente |
 | [API.md](./docs/API.md) | Referencia de endpoints (métodos, rutas, roles) | ✅ vigente |
 | [MODULES.md](./docs/MODULES.md) | Módulos funcionales | ✅ vigente |
+| [GUIA_MODULOS_Y_HALLAZGOS.md](./docs/GUIA_MODULOS_Y_HALLAZGOS.md) | **Guía maestra**: patrones, convenciones y hallazgos de datos para construir módulos nuevos | ✅ vigente |
 | [DATA_DICTIONARY.md](./docs/DATA_DICTIONARY.md) | Tablas + §8 diccionario de métricas | ✅ vigente |
 | [SECURITY.md](./docs/SECURITY.md) | Seguridad, auth, cifrado, OWASP, LOPDP | ✅ vigente |
 | [SECURITY_INFRA_CHECKLIST.md](./docs/SECURITY_INFRA_CHECKLIST.md) | Checklist de infraestructura | ✅ vigente |
