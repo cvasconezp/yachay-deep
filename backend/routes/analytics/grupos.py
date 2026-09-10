@@ -56,6 +56,9 @@ class GrupoEstudiante(BaseModel):
     student_id: int
     nombre: Optional[str] = None
     nivel_riesgo: Optional[str] = None
+    grupo: Optional[str] = None           # paralelo (Student.grupo)
+    es_tercera_matricula: bool = False   # condicionado (3ra matrícula)
+    es_repitente: bool = False           # 2da matrícula (numero_repitencias > 1)
     notas: dict[str, Optional[float]] = {}
     promedio: Optional[float] = None
 
@@ -84,10 +87,12 @@ class GrupoAnalytics(BaseModel):
 def _build_response(
     db: Session, rows, periodo_norm: Optional[str], carrera: Optional[str],
     nivel: Optional[int], nota_aprob: float, fuente: str,
+    repitente_sids: Optional[set] = None,
 ) -> GrupoAnalytics:
     """Construye la matriz estudiante × asignatura desde filas
     (student_id, asignatura_display, nota|None). Dedup por (estudiante,
     asignatura) quedándose con la nota más alta no nula."""
+    repitente_sids = repitente_sids or set()
     asignaturas_set: set[str] = set()
     pivot: dict[int, dict[str, Optional[float]]] = {}
     for student_id, asignatura, nota in rows:
@@ -110,7 +115,8 @@ def _build_response(
 
     student_ids = list(pivot.keys())
     students = db.query(
-        Student.id, Student.nombre, Student.nivel_riesgo
+        Student.id, Student.nombre, Student.nivel_riesgo,
+        Student.grupo, Student.es_tercera_matricula
     ).filter(Student.id.in_(student_ids)).all()
     student_map = {s.id: s for s in students}
 
@@ -136,8 +142,12 @@ def _build_response(
         if nr == "Alto":
             riesgo_alto += 1
 
+        es_tercera = bool(s.es_tercera_matricula) if s else False
         estudiantes.append(GrupoEstudiante(
             student_id=sid, nombre=s.nombre if s else None, nivel_riesgo=nr,
+            grupo=(s.grupo if s else None),
+            es_tercera_matricula=es_tercera,
+            es_repitente=(sid in repitente_sids and not es_tercera),
             notas=notas_full, promedio=promedio,
         ))
 
@@ -254,7 +264,10 @@ def get_grupos_analytics(
             )
 
     # ── Roster + columnas desde Enrollment (nivel/carrera confiables) ────
-    eq = db.query(Enrollment.student_id, Enrollment.asignatura, Enrollment.codigo_grupo)
+    eq = db.query(
+        Enrollment.student_id, Enrollment.asignatura, Enrollment.codigo_grupo,
+        Enrollment.numero_repitencias,
+    )
     eq, periodo_norm = apply_periodo_filter(eq, periodo, column=Enrollment.periodo)
     if carrera_sids is not None:
         eq = eq.filter(Enrollment.student_id.in_(carrera_sids))
@@ -263,11 +276,15 @@ def get_grupos_analytics(
     enroll_rows_raw = eq.all()
 
     if enroll_rows_raw:
-        roster_sids = list({sid for sid, _, _ in enroll_rows_raw})
+        roster_sids = list({r[0] for r in enroll_rows_raw})
+        # Repitente = alguna matrícula del grupo con numero_repitencias > 1
+        repitente_sids = {
+            sid for sid, _, _, nrep in enroll_rows_raw if nrep and nrep > 1
+        }
         grades_by_student = _grades_by_student(db, roster_sids, periodo)
         total_curso = _total_curso_map(db, roster_sids, periodo)
         rows = []
-        for sid, asig, codigo in enroll_rows_raw:
+        for sid, asig, codigo, _nrep in enroll_rows_raw:
             # Igual que la Ficha: nota final de Grade y, si no hay, el
             # "Total del Curso" de las tareas (AVAC), enlazado por codigo_curso.
             nota = _match_nota(grades_by_student.get(sid, {}), _norm_asig(asig))
@@ -275,7 +292,8 @@ def get_grupos_analytics(
                 nota = total_curso.get((sid, str(codigo).strip()))
             rows.append((sid, asig, nota))
         return _build_response(
-            db, rows, periodo_norm, carrera, nivel, nota_aprob, "enrollment"
+            db, rows, periodo_norm, carrera, nivel, nota_aprob, "enrollment",
+            repitente_sids=repitente_sids,
         )
 
     # ── Fallback: pivote directo desde Grade (períodos sin matrícula) ────

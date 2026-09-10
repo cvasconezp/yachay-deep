@@ -4,6 +4,7 @@ import { api } from "../services/api";
 import { SummaryCard } from "../components/StatCard";
 import { PeriodSelector } from "../components/PeriodSelector";
 import ExportExcelButton from "../components/ExportExcelButton";
+import BulkInterventionModal from "../components/BulkInterventionModal";
 
 // Carrera preseleccionada por defecto (según convención del módulo).
 const DEFAULT_CARRERA = "ADMINISTRACIÓN DE EMPRESAS";
@@ -22,16 +23,27 @@ export default function Grupos() {
     carrera: DEFAULT_CARRERA,
     nivel: DEFAULT_NIVEL,
     periodo: "",
+    grupo: "",
+    condicion: "",   // "" | "repitentes" | "condicionados"
+    riesgo: "",      // "" | "Alto" | "Medio" | "Bajo"
   });
   const [search, setSearch] = useState("");
-  // Orden por defecto: nombre A-Z (asc). Notas/promedio arrancan mayor→menor (desc).
   const [sort, setSort] = useState({ key: SORT_NOMBRE, dir: "asc" });
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [bulkOpen, setBulkOpen] = useState(false);
   const navigate = useNavigate();
 
   const asignaturas = grupo?.asignaturas || [];
   const estudiantes = grupo?.estudiantes || [];
   const kpis = grupo?.kpis || {};
   const notaAprob = grupo?.nota_aprobacion ?? 70;
+
+  // Grupos (paralelos) disponibles en los datos cargados.
+  const gruposDisponibles = useMemo(() => {
+    const set = new Set();
+    estudiantes.forEach(e => { if (e.grupo) set.add(String(e.grupo)); });
+    return [...set].sort((a, b) => a.localeCompare(b, "es", { numeric: true }));
+  }, [estudiantes]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -48,18 +60,17 @@ export default function Grupos() {
       ]);
       setGrupo(data);
       setCarreras(carrerasData);
+      setSelectedIds(new Set());  // limpiar selección al recargar el grupo
     } catch (e) {
       setError("No se pudieron cargar los datos del grupo.");
     } finally {
       setLoading(false);
     }
-  }, [filtros]);
+  }, [filtros.periodo, filtros.carrera, filtros.nivel]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // Reconciliar la carrera por defecto con la lista real de carreras:
-  // si existe una coincidencia (exacta o por contenido), adoptar el texto exacto
-  // para que el <select> la muestre seleccionada.
+  // Reconciliar la carrera por defecto con la lista real de carreras.
   useEffect(() => {
     if (!carreras.length || !filtros.carrera) return;
     if (carreras.includes(filtros.carrera)) return;
@@ -72,30 +83,30 @@ export default function Grupos() {
     }
   }, [carreras]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Buscador: filtra por nombre de estudiante.
-  const searched = useMemo(() => {
-    if (!search.trim()) return estudiantes;
-    const q = search.toLowerCase();
-    return estudiantes.filter(e => (e.nombre || "").toLowerCase().includes(q));
-  }, [estudiantes, search]);
+  // Filtros del lado del cliente: buscador + grupo + condición + riesgo.
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return estudiantes.filter(e => {
+      if (q && !(e.nombre || "").toLowerCase().includes(q)) return false;
+      if (filtros.grupo && String(e.grupo || "") !== filtros.grupo) return false;
+      if (filtros.riesgo && e.nivel_riesgo !== filtros.riesgo) return false;
+      if (filtros.condicion === "condicionados" && !e.es_tercera_matricula) return false;
+      if (filtros.condicion === "repitentes" && !e.es_repitente) return false;
+      return true;
+    });
+  }, [estudiantes, search, filtros.grupo, filtros.riesgo, filtros.condicion]);
 
-  // Ordenamiento por columna.
   const sortedEstudiantes = useMemo(() => {
-    const list = [...searched];
+    const list = [...filtered];
     const { key, dir } = sort;
     const mult = dir === "asc" ? 1 : -1;
-
     list.sort((a, b) => {
       if (key === SORT_NOMBRE) {
         return mult * (a.nombre || "").localeCompare(b.nombre || "", "es", { sensitivity: "base" });
       }
       let va, vb;
-      if (key === SORT_PROMEDIO) {
-        va = a.promedio; vb = b.promedio;
-      } else {
-        va = a.notas?.[key]; vb = b.notas?.[key];
-      }
-      // Nulos siempre al final, sin importar la dirección.
+      if (key === SORT_PROMEDIO) { va = a.promedio; vb = b.promedio; }
+      else { va = a.notas?.[key]; vb = b.notas?.[key]; }
       const na = va == null, nb = vb == null;
       if (na && nb) return 0;
       if (na) return 1;
@@ -103,17 +114,12 @@ export default function Grupos() {
       return mult * (va - vb);
     });
     return list;
-  }, [searched, sort]);
+  }, [filtered, sort]);
 
-  // Al hacer clic en un encabezado: nombre alterna asc/desc empezando en A-Z;
-  // notas y promedio alternan empezando en mayor→menor (desc).
   const onSort = (key) => {
-    setSort(prev => {
-      if (prev.key === key) {
-        return { key, dir: prev.dir === "asc" ? "desc" : "asc" };
-      }
-      return { key, dir: key === SORT_NOMBRE ? "asc" : "desc" };
-    });
+    setSort(prev => prev.key === key
+      ? { key, dir: prev.dir === "asc" ? "desc" : "asc" }
+      : { key, dir: key === SORT_NOMBRE ? "asc" : "desc" });
   };
 
   const sortIcon = (key) => {
@@ -126,10 +132,36 @@ export default function Grupos() {
     return nota < notaAprob ? "text-red-600" : "text-green-600";
   };
 
-  // Exportación: nombre + una columna por asignatura + promedio.
+  // ── Selección de filas ──
+  const toggleSelect = (sid) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(sid) ? next.delete(sid) : next.add(sid);
+      return next;
+    });
+  };
+  const allVisibleSelected = sortedEstudiantes.length > 0 &&
+    sortedEstudiantes.every(e => selectedIds.has(e.student_id));
+  const toggleSelectAllVisible = () => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (allVisibleSelected) sortedEstudiantes.forEach(e => next.delete(e.student_id));
+      else sortedEstudiantes.forEach(e => next.add(e.student_id));
+      return next;
+    });
+  };
+  const selectedStudents = useMemo(() => (
+    estudiantes
+      .filter(e => selectedIds.has(e.student_id))
+      .map(e => ({ id: e.student_id, nombre: e.nombre, carrera: filtros.carrera || grupo?.carrera || "" }))
+  ), [estudiantes, selectedIds, filtros.carrera, grupo]);
+
+  // Exportación: nombre + grupo + condición + una columna por asignatura + promedio.
   const exportCols = useMemo(() => ([
     { key: "nombre", label: "Estudiante" },
+    { key: "grupo", label: "Grupo" },
     { key: "nivel_riesgo", label: "Nivel Riesgo" },
+    { key: "condicion", label: "Condición" },
     ...asignaturas.map(a => ({ key: a, label: a })),
     { key: "promedio", label: "Promedio" },
   ]), [asignaturas]);
@@ -137,11 +169,15 @@ export default function Grupos() {
   const exportData = useMemo(() => (
     sortedEstudiantes.map(e => ({
       nombre: e.nombre,
+      grupo: e.grupo || "",
       nivel_riesgo: e.nivel_riesgo || "",
+      condicion: e.es_tercera_matricula ? "3ra matrícula" : e.es_repitente ? "2da matrícula" : "",
       ...Object.fromEntries(asignaturas.map(a => [a, e.notas?.[a] ?? ""])),
       promedio: e.promedio ?? "",
     }))
   ), [sortedEstudiantes, asignaturas]);
+
+  const selectClass = "border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
 
   return (
     <div>
@@ -187,11 +223,10 @@ export default function Grupos() {
           <label className="text-xs font-medium text-gray-600 block mb-1">Carrera</label>
           <select
             value={filtros.carrera}
-            onChange={e => setFiltros(f => ({ ...f, carrera: e.target.value }))}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[240px]"
+            onChange={e => setFiltros(f => ({ ...f, carrera: e.target.value, grupo: "" }))}
+            className={`${selectClass} min-w-[220px]`}
           >
             <option value="">Todas las carreras</option>
-            {/* Si el valor por defecto aún no está en la lista, mostrarlo igual */}
             {filtros.carrera && !carreras.includes(filtros.carrera) && (
               <option value={filtros.carrera}>{filtros.carrera}</option>
             )}
@@ -203,11 +238,52 @@ export default function Grupos() {
           <label className="text-xs font-medium text-gray-600 block mb-1">Nivel</label>
           <select
             value={filtros.nivel}
-            onChange={e => setFiltros(f => ({ ...f, nivel: e.target.value }))}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            onChange={e => setFiltros(f => ({ ...f, nivel: e.target.value, grupo: "" }))}
+            className={selectClass}
           >
             <option value="">Todos</option>
             {[1,2,3,4,5,6,7,8].map(n => <option key={n} value={n}>Nivel {n}</option>)}
+          </select>
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-gray-600 block mb-1">Grupo</label>
+          <select
+            value={filtros.grupo}
+            onChange={e => setFiltros(f => ({ ...f, grupo: e.target.value }))}
+            className={selectClass}
+            disabled={gruposDisponibles.length === 0}
+            title={gruposDisponibles.length <= 1 ? "Esta carrera/nivel tiene un solo grupo" : "Filtrar por grupo (paralelo)"}
+          >
+            <option value="">Todos</option>
+            {gruposDisponibles.map(g => <option key={g} value={g}>Grupo {g}</option>)}
+          </select>
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-gray-600 block mb-1">Condición especial</label>
+          <select
+            value={filtros.condicion}
+            onChange={e => setFiltros(f => ({ ...f, condicion: e.target.value }))}
+            className={`${selectClass} ${filtros.condicion ? "border-purple-400 bg-purple-50 text-purple-700 font-medium" : ""}`}
+          >
+            <option value="">Todos</option>
+            <option value="repitentes">Repitentes (2da matrícula)</option>
+            <option value="condicionados">Condicionados (3ra matrícula)</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-gray-600 block mb-1">Riesgo</label>
+          <select
+            value={filtros.riesgo}
+            onChange={e => setFiltros(f => ({ ...f, riesgo: e.target.value }))}
+            className={selectClass}
+          >
+            <option value="">Todos</option>
+            <option value="Alto">Alto</option>
+            <option value="Medio">Medio</option>
+            <option value="Bajo">Bajo</option>
           </select>
         </div>
 
@@ -217,13 +293,34 @@ export default function Grupos() {
             placeholder="Buscar estudiante..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm w-56 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <span className="text-sm text-gray-500">
             {sortedEstudiantes.length} estudiantes
           </span>
         </div>
       </div>
+
+      {/* Barra de selección → registrar intervención */}
+      {selectedIds.size > 0 && (
+        <div className="bg-purple-50 border border-purple-200 rounded-xl px-4 py-3 mb-3 flex items-center gap-4 flex-wrap">
+          <span className="text-sm text-purple-800 font-medium">
+            {selectedIds.size} estudiante{selectedIds.size !== 1 ? "s" : ""} seleccionado{selectedIds.size !== 1 ? "s" : ""}
+          </span>
+          <button
+            onClick={() => setBulkOpen(true)}
+            className="bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium px-4 py-1.5 rounded-lg transition-colors"
+          >
+            🤝 Registrar Intervención ({selectedIds.size})
+          </button>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            className="text-sm text-purple-700 hover:text-purple-900 underline ml-auto"
+          >
+            Limpiar selección
+          </button>
+        </div>
+      )}
 
       {/* Tabla pivote */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -236,23 +333,36 @@ export default function Grupos() {
             <p className="text-xs text-gray-300 mt-1">Ajusta período, carrera o nivel. Los datos aparecerán cuando se carguen calificaciones.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-auto max-h-[65vh]">
             <table className="text-sm border-collapse">
-              <thead className="bg-gray-50 border-b border-gray-200">
+              <thead>
                 <tr>
-                  {/* Primera columna congelada */}
+                  {/* Primera columna congelada (arriba e izquierda) */}
                   <th
-                    onClick={() => onSort(SORT_NOMBRE)}
-                    className="sticky left-0 z-20 bg-gray-50 text-left px-4 py-3 font-semibold text-gray-700 cursor-pointer select-none whitespace-nowrap border-r border-gray-200 min-w-[220px] hover:bg-gray-100"
-                    title="Ordenar por nombre (A-Z / Z-A)"
+                    className="sticky left-0 top-0 z-30 bg-gray-50 text-left px-3 py-3 font-semibold text-gray-700 whitespace-nowrap border-r border-b border-gray-200 min-w-[260px]"
                   >
-                    Estudiante {sortIcon(SORT_NOMBRE)}
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={allVisibleSelected}
+                        onChange={toggleSelectAllVisible}
+                        className="rounded cursor-pointer"
+                        title="Seleccionar todos los visibles"
+                      />
+                      <span
+                        onClick={() => onSort(SORT_NOMBRE)}
+                        className="cursor-pointer select-none hover:text-brand-dark"
+                        title="Ordenar por nombre (A-Z / Z-A)"
+                      >
+                        Estudiante {sortIcon(SORT_NOMBRE)}
+                      </span>
+                    </div>
                   </th>
                   {asignaturas.map(a => (
                     <th
                       key={a}
                       onClick={() => onSort(a)}
-                      className="px-3 py-3 font-semibold text-gray-700 cursor-pointer select-none text-center whitespace-nowrap hover:bg-gray-100 min-w-[110px] max-w-[180px]"
+                      className="sticky top-0 z-20 bg-gray-50 px-3 py-3 font-semibold text-gray-700 cursor-pointer select-none text-center whitespace-nowrap hover:bg-gray-100 border-b border-gray-200 min-w-[110px] max-w-[180px]"
                       title={`${a} — ordenar por nota (mayor→menor / menor→mayor)`}
                     >
                       <span className="block truncate max-w-[160px] mx-auto">{a}</span>
@@ -261,7 +371,7 @@ export default function Grupos() {
                   ))}
                   <th
                     onClick={() => onSort(SORT_PROMEDIO)}
-                    className="px-3 py-3 font-semibold text-gray-700 cursor-pointer select-none text-center whitespace-nowrap hover:bg-gray-100 min-w-[110px] border-l border-gray-200 bg-gray-50"
+                    className="sticky top-0 z-20 bg-gray-50 px-3 py-3 font-semibold text-gray-700 cursor-pointer select-none text-center whitespace-nowrap hover:bg-gray-100 border-b border-l border-gray-200 min-w-[110px]"
                     title="Ordenar por promedio (mayor→menor / menor→mayor)"
                   >
                     Promedio {sortIcon(SORT_PROMEDIO)}
@@ -269,41 +379,76 @@ export default function Grupos() {
                 </tr>
               </thead>
               <tbody>
-                {sortedEstudiantes.map((e) => (
-                  <tr
-                    key={e.student_id}
-                    onClick={() => navigate(`/ficha/${e.student_id}`)}
-                    className="border-b border-gray-100 cursor-pointer hover:bg-blue-50 transition-colors group"
-                  >
-                    {/* Nombre — congelado */}
-                    <td className="sticky left-0 z-10 bg-white group-hover:bg-blue-50 px-4 py-2.5 border-r border-gray-200 min-w-[220px]">
-                      <div className="font-medium text-gray-900 truncate max-w-[220px]">{e.nombre || "—"}</div>
-                      {e.nivel_riesgo === "Alto" && (
-                        <span className="text-[10px] text-red-600 font-semibold">riesgo alto</span>
-                      )}
-                    </td>
-                    {asignaturas.map(a => {
-                      const nota = e.notas?.[a];
-                      return (
-                        <td key={a} className="px-3 py-2.5 text-center">
-                          <span className={`font-mono font-semibold ${notaClass(nota)}`}>
-                            {nota != null ? nota : "—"}
-                          </span>
-                        </td>
-                      );
-                    })}
-                    <td className="px-3 py-2.5 text-center border-l border-gray-100">
-                      <span className={`font-mono font-bold ${notaClass(e.promedio)}`}>
-                        {e.promedio != null ? e.promedio : "—"}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                {sortedEstudiantes.map((e) => {
+                  const isSel = selectedIds.has(e.student_id);
+                  return (
+                    <tr
+                      key={e.student_id}
+                      className={`border-b border-gray-100 transition-colors group ${isSel ? "bg-purple-50/60" : "hover:bg-blue-50"}`}
+                    >
+                      {/* Nombre — congelado, con checkbox */}
+                      <td className={`sticky left-0 z-10 px-3 py-2.5 border-r border-gray-200 min-w-[260px] ${isSel ? "bg-purple-50" : "bg-white group-hover:bg-blue-50"}`}>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={isSel}
+                            onChange={(ev) => { ev.stopPropagation(); toggleSelect(e.student_id); }}
+                            onClick={(ev) => ev.stopPropagation()}
+                            className="rounded cursor-pointer flex-shrink-0"
+                          />
+                          <div
+                            className="cursor-pointer min-w-0"
+                            onClick={() => navigate(`/ficha/${e.student_id}`)}
+                            title="Abrir ficha del estudiante"
+                          >
+                            <div className="font-medium text-gray-900 truncate max-w-[210px]">{e.nombre || "—"}</div>
+                            <div className="flex items-center gap-1 mt-0.5">
+                              {e.grupo && <span className="text-[10px] text-gray-400">G{e.grupo}</span>}
+                              {e.es_tercera_matricula && (
+                                <span className="text-[10px] bg-purple-100 text-purple-700 px-1 rounded font-semibold">3ra</span>
+                              )}
+                              {e.es_repitente && (
+                                <span className="text-[10px] bg-orange-100 text-orange-700 px-1 rounded font-semibold">2da</span>
+                              )}
+                              {e.nivel_riesgo === "Alto" && (
+                                <span className="text-[10px] text-red-600 font-semibold">riesgo alto</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      {asignaturas.map(a => {
+                        const nota = e.notas?.[a];
+                        return (
+                          <td key={a} className="px-3 py-2.5 text-center">
+                            <span className={`font-mono font-semibold ${notaClass(nota)}`}>
+                              {nota != null ? nota : "—"}
+                            </span>
+                          </td>
+                        );
+                      })}
+                      <td className="px-3 py-2.5 text-center border-l border-gray-100">
+                        <span className={`font-mono font-bold ${notaClass(e.promedio)}`}>
+                          {e.promedio != null ? e.promedio : "—"}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
       </div>
+
+      {bulkOpen && selectedStudents.length > 0 && (
+        <BulkInterventionModal
+          selectedStudents={selectedStudents}
+          periodo={filtros.periodo}
+          onClose={() => setBulkOpen(false)}
+          onSaved={() => { setBulkOpen(false); setSelectedIds(new Set()); }}
+        />
+      )}
     </div>
   );
 }
