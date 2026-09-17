@@ -1434,9 +1434,14 @@ function FichaEstudianteInner() {
                         const avac = cursosAvac[codigo] || null;
                         const acceso = avac?.acceso;
                         const ts = avac?.tareas || [];
-                        const matchedCal = matchNota(enr.asignatura, ficha.calificaciones);
+                        // La nota final puede venir en el período actual o en el histórico
+                        // (los archivos "Detalle de Calificaciones" se cargan como histórico,
+                        // aun siendo del período vigente). Buscar en ambos, como la malla.
+                        const matchedCal = matchNota(enr.asignatura, ficha.calificaciones)
+                          || matchNota(enr.asignatura, ficha.calificaciones_historicas);
                         const notaTableau = matchedCal?.nota_final ?? null;
                         const totalCurso = ts.find(t => t.total_curso != null)?.total_curso ?? null;
+                        // La nota final MANDA sobre el parcial de AVAC cuando ya existe.
                         const nota = notaTableau ?? totalCurso;
                         const noteStyle = getNoteStyleHistorico(nota);
                         const sortedTasks = [...ts].sort((a, b) =>

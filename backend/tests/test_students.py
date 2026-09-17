@@ -305,3 +305,37 @@ class TestEdgeCases:
     def test_comparativa_not_found(self, client, admin_token, semester_config):
         r = client.get("/students/0/comparativa", headers=auth(admin_token))
         assert r.status_code == 404
+
+
+class TestMallaCompletaConEnrollments:
+    """Regresión: en carreras sin malla de referencia, los niveles superiores
+    matriculados (sin nota aún) no aparecían en la malla porque la inferencia por
+    enrollments solo corría si el canónico estaba vacío. Ahora se fusionan siempre.
+    """
+
+    def test_canonico_incluye_nivel_2_desde_enrollments(self, db):
+        from backend.routes.students import _get_canonical_for_career, _canonical_cache
+        _canonical_cache.clear()
+        carrera = "MARKETING E INTELIGENCIA DE MERCADOS"
+
+        s = Student(nombre="ALUMNO MKT", carrera=carrera)
+        db.add(s)
+        db.flush()
+
+        # Nivel 1: con NOTA (entra por Estrategia A)
+        db.add(Grade(student_id=s.id, asignatura="MATEMATICAS", carrera=carrera,
+                     nivel=1, nota_final=80.0, periodo="P68"))
+        # Nivel 2: solo MATRICULADO, sin nota (antes se perdía)
+        db.add(Enrollment(student_id=s.id, asignatura="ETICA", carrera=carrera,
+                          nivel=2, codigo_grupo="G1", periodo="P68"))
+        db.add(Enrollment(student_id=s.id, asignatura="FUNDAMENTOS DE MARKETING",
+                          carrera=carrera, nivel=2, codigo_grupo="G2", periodo="P68"))
+        db.commit()
+
+        canonical = _get_canonical_for_career(db, carrera)
+        _canonical_cache.clear()
+
+        assert canonical.get("MATEMATICAS") == 1
+        assert canonical.get("ETICA") == 2, "el nivel 2 matriculado debe entrar en la malla"
+        assert canonical.get("FUNDAMENTOS DE MARKETING") == 2
+        assert max(canonical.values()) == 2
