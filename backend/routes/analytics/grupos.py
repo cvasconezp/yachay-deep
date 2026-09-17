@@ -242,10 +242,20 @@ def get_grupos_analytics(
     periodo: Optional[str] = None,
     carrera: Optional[str] = None,
     nivel: Optional[int] = None,
+    fuente_nota: str = "mixta",
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    """Vista pivote de un grupo académico (período · carrera · nivel)."""
+    """Vista pivote de un grupo académico (período · carrera · nivel).
+
+    fuente_nota controla de dónde sale la nota de cada celda:
+      - "mixta" (por defecto): nota final del Tableau y, si no hay, el parcial de AVAC.
+      - "final": SOLO la nota final del ETL/Tableau (Grade.nota_final); vacío si no existe.
+      - "avac":  SOLO el "Total del Curso" de AVAC (TaskSubmission.total_curso).
+    """
+    fuente_nota = (fuente_nota or "mixta").strip().lower()
+    if fuente_nota not in ("mixta", "final", "avac"):
+        fuente_nota = "mixta"
     umbrales = get_umbrales(db)
     nota_aprob = umbrales["nota_aprobacion"]
 
@@ -285,11 +295,16 @@ def get_grupos_analytics(
         total_curso = _total_curso_map(db, roster_sids, periodo)
         rows = []
         for sid, asig, codigo, _nrep in enroll_rows_raw:
-            # Igual que la Ficha: nota final de Grade y, si no hay, el
-            # "Total del Curso" de las tareas (AVAC), enlazado por codigo_curso.
-            nota = _match_nota(grades_by_student.get(sid, {}), _norm_asig(asig))
-            if nota is None and codigo:
-                nota = total_curso.get((sid, str(codigo).strip()))
+            # Nota final del Tableau (Grade) y el "Total del Curso" de AVAC
+            # (TaskSubmission), enlazado por codigo_curso — como la Ficha.
+            final_nota = _match_nota(grades_by_student.get(sid, {}), _norm_asig(asig))
+            avac_nota = total_curso.get((sid, str(codigo).strip())) if codigo else None
+            if fuente_nota == "final":
+                nota = final_nota
+            elif fuente_nota == "avac":
+                nota = avac_nota
+            else:  # mixta: la final manda; si no hay, el parcial de AVAC
+                nota = final_nota if final_nota is not None else avac_nota
             rows.append((sid, asig, nota))
         return _build_response(
             db, rows, periodo_norm, carrera, nivel, nota_aprob, "enrollment",
@@ -304,6 +319,10 @@ def get_grupos_analytics(
     if nivel is not None:
         gq = gq.filter(Grade.nivel == nivel)
     grade_rows = gq.all()
+    # Esta ruta solo tiene la nota final (Grade). En modo "avac" no hay parcial
+    # que mostrar aquí, así que se deja la celda vacía en vez de la final.
+    if fuente_nota == "avac":
+        grade_rows = [(sid, asig, None) for sid, asig, _ in grade_rows]
 
     return _build_response(
         db, grade_rows, periodo_norm, carrera, nivel, nota_aprob, "grades"

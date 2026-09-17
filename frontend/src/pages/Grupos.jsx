@@ -26,6 +26,7 @@ export default function Grupos() {
     grupo: "",
     condicion: "",   // "" | "repitentes" | "condicionados"
     riesgo: "",      // "" | "Alto" | "Medio" | "Bajo"
+    fuente_nota: "mixta",  // "mixta" | "final" | "avac"
   });
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState({ key: SORT_NOMBRE, dir: "asc" });
@@ -53,6 +54,7 @@ export default function Grupos() {
       if (filtros.periodo) params.periodo = filtros.periodo;
       if (filtros.carrera) params.carrera = filtros.carrera;
       if (filtros.nivel) params.nivel = filtros.nivel;
+      if (filtros.fuente_nota) params.fuente_nota = filtros.fuente_nota;
 
       const [data, carrerasData] = await Promise.all([
         api.getGruposAnalytics(params),
@@ -66,7 +68,7 @@ export default function Grupos() {
     } finally {
       setLoading(false);
     }
-  }, [filtros.periodo, filtros.carrera, filtros.nivel]);
+  }, [filtros.periodo, filtros.carrera, filtros.nivel, filtros.fuente_nota]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -285,6 +287,31 @@ export default function Grupos() {
             <option value="Medio">Medio</option>
             <option value="Bajo">Bajo</option>
           </select>
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-gray-600 block mb-1">Fuente de la nota</label>
+          <div className="inline-flex rounded-lg border border-gray-300 overflow-hidden text-sm" role="group">
+            {[
+              { v: "mixta", label: "Mixta", title: "Nota final (Tableau) y, si no hay, el parcial de AVAC" },
+              { v: "final", label: "Solo final", title: "Solo la nota final del ETL / Tableau" },
+              { v: "avac",  label: "Solo AVAC", title: "Solo el Total del Curso de AVAC" },
+            ].map((opt, i) => (
+              <button
+                key={opt.v}
+                type="button"
+                title={opt.title}
+                onClick={() => setFiltros(f => ({ ...f, fuente_nota: opt.v }))}
+                className={`px-3 py-2 transition-colors ${i > 0 ? "border-l border-gray-300" : ""} ${
+                  filtros.fuente_nota === opt.v
+                    ? "bg-blue-600 text-white font-medium"
+                    : "bg-white text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="ml-auto flex items-center gap-3">
