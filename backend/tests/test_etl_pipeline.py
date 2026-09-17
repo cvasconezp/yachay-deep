@@ -345,3 +345,68 @@ class TestETLConfig:
         codigos = pipeline._get_codigos_for_bloque(semester_config)
         assert "111" in codigos
         assert "222" not in codigos
+
+
+class TestDedupOrdenTokens:
+    """Regresión: el mismo estudiante se partía en dos por el orden de nombre/apellido.
+
+    El CSV de calificaciones trae a veces "NOMBRES APELLIDOS" (GLENDY OSWALDO TAPUY LANZA)
+    mientras el reporte/AVAC guarda "APELLIDOS NOMBRES" (TAPUY LANZA GLENDY OSWALDO). Antes
+    no cruzaban → se creaba un huérfano con solo las notas de P68. Ahora el match y el merge
+    son insensibles al orden de tokens (>=3 tokens).
+    """
+
+    def test_find_student_by_name_orden_invertido(self, db):
+        bueno = Student(
+            nombre="TAPUY LANZA GLENDY OSWALDO",
+            carrera="EDUCACION INTERCULTURAL BILINGUE",
+            correo_institucional="gtapuyl@est.ups.edu.ec",
+        )
+        db.add(bueno)
+        db.commit()
+
+        pipeline = ETLPipeline(db)
+        encontrado = pipeline._find_student_by_name("GLENDY OSWALDO TAPUY LANZA")
+        assert encontrado is not None
+        assert encontrado.id == bueno.id
+        # NO renombra al canónico existente
+        assert encontrado.nombre == "TAPUY LANZA GLENDY OSWALDO"
+
+    def test_merge_absorbe_huerfano_orden_invertido(self, db):
+        bueno = Student(
+            nombre="TAPUY LANZA GLENDY OSWALDO",
+            carrera="EDUCACION INTERCULTURAL BILINGUE",
+            correo_institucional="gtapuyl@est.ups.edu.ec",
+        )
+        db.add(bueno)
+        db.flush()
+        huerfano = Student(
+            nombre="GLENDY OSWALDO TAPUY LANZA",
+            carrera="EDUCACION INTERCULTURAL BILINGUE",
+        )
+        db.add(huerfano)
+        db.flush()
+        db.add(Grade(student_id=huerfano.id, asignatura="BILINGUISMO Y REVITALIZACION",
+                     nota_final=92.0, periodo="P68"))
+        db.commit()
+        huerfano_id = huerfano.id
+        bueno_id = bueno.id
+
+        pipeline = ETLPipeline(db)
+        merged = pipeline._merge_duplicate_students()
+        assert merged >= 1
+        # el huérfano ya no existe
+        assert db.query(Student).filter(Student.id == huerfano_id).first() is None
+        # su nota P68 quedó en el estudiante bueno (con email/historial)
+        notas = db.query(Grade).filter(Grade.student_id == bueno_id).all()
+        assert any(g.asignatura == "BILINGUISMO Y REVITALIZACION" and g.periodo == "P68" for g in notas)
+
+    def test_no_fusiona_dos_tokens_ambiguos(self, db):
+        # "MARIA JOSE" vs "JOSE MARIA": 2 tokens → NO se deben fusionar (personas distintas)
+        a = Student(nombre="JOSE MARIA", correo_institucional="a@est.ups.edu.ec")
+        b = Student(nombre="MARIA JOSE")  # huérfano
+        db.add_all([a, b])
+        db.commit()
+        pipeline = ETLPipeline(db)
+        pipeline._merge_duplicate_students()
+        assert db.query(Student).filter(Student.nombre == "MARIA JOSE").first() is not None

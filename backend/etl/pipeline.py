@@ -82,6 +82,25 @@ def _normalize_name(nombre: str) -> str:
     return s
 
 
+def _name_key_sorted(nombre: str) -> Optional[str]:
+    """Clave de nombre INSENSIBLE AL ORDEN de los tokens.
+
+    Los apellidos y nombres llegan en distinto orden según la fuente: el reporte/AVAC
+    guarda "APELLIDOS NOMBRES" (TAPUY LANZA GLENDY OSWALDO) y el CSV de calificaciones a
+    veces trae "NOMBRES APELLIDOS" (GLENDY OSWALDO TAPUY LANZA). El match exacto falla y
+    se crea un estudiante duplicado. Esta clave ordena los tokens normalizados (sin
+    tildes, mayúsculas) para que ambas variantes coincidan.
+
+    Solo se usa con >= 3 tokens: con 2 hay ambigüedad real ("MARIA JOSE" vs "JOSE MARIA"
+    pueden ser dos personas), así que ahí devuelve None y no se arriesga un falso positivo.
+    """
+    base = _normalize_name(nombre)
+    toks = [t for t in base.split() if t]
+    if len(toks) < 3:
+        return None
+    return " ".join(sorted(toks))
+
+
 class ETLPipeline:
     def __init__(self, db: Session):
         self.db = db
@@ -1125,7 +1144,10 @@ class ETLPipeline:
             return student
 
         # Nivel 3: búsqueda sin tildes (ACHIÑA == ACHINA)
+        # Nivel 4: orden de tokens (GLENDY OSWALDO TAPUY LANZA == TAPUY LANZA GLENDY OSWALDO)
         nombre_sin_tildes = _normalize_name(nombre)
+        clave_orden = _name_key_sorted(nombre)
+        match_orden = None
         all_candidates = self.db.query(Student).filter(Student.nombre.isnot(None)).all()
         for candidate in all_candidates:
             if _normalize_name(candidate.nombre) == nombre_sin_tildes:
@@ -1136,6 +1158,17 @@ class ETLPipeline:
                     logger.info(f"  Nombre corregido: '{candidate.nombre}' → '{nombre_limpio}' (tildes eliminadas)")
                     candidate.nombre = nombre_limpio
                 return candidate
+            # Fallback débil: mismo conjunto de tokens en distinto orden. No renombra al
+            # canónico (conserva el nombre existente); solo se usa si no hubo match por tildes.
+            if clave_orden and match_orden is None and _name_key_sorted(candidate.nombre) == clave_orden:
+                match_orden = candidate
+
+        if match_orden is not None:
+            logger.info(
+                f"  Nombre emparejado por orden de tokens: '{nombre}' ≈ "
+                f"'{match_orden.nombre}' (id={match_orden.id})"
+            )
+            return match_orden
 
         return None
 
@@ -1170,23 +1203,41 @@ class ETLPipeline:
             .all()
         )
 
+        # Índice de estudiantes CON correo (los "buenos"), por nombre exacto y por
+        # clave insensible al orden de tokens. Se construye una sola vez (antes se hacía
+        # una query por huérfano y solo por nombre exacto, que no cruzaba el orden invertido).
+        con_correo = (
+            self.db.query(Student)
+            .filter(
+                Student.correo_institucional.isnot(None),
+                Student.correo_institucional != "",
+                Student.nombre.isnot(None),
+            )
+            .order_by(Student.id.asc())
+            .all()
+        )
+        good_por_nombre: dict[str, "Student"] = {}
+        good_por_orden: dict[str, "Student"] = {}
+        for s in con_correo:
+            nkey = re.sub(r"\s+", " ", s.nombre.strip().upper())
+            good_por_nombre.setdefault(nkey, s)
+            okey = _name_key_sorted(s.nombre)
+            if okey:
+                good_por_orden.setdefault(okey, s)
+
         for orphan in orphans:
             if not orphan.nombre:
                 continue
 
             nombre_norm = re.sub(r"\s+", " ", orphan.nombre.strip().upper())
 
-            good = (
-                self.db.query(Student)
-                .filter(
-                    Student.id != orphan.id,
-                    Student.correo_institucional.isnot(None),
-                    Student.correo_institucional != "",
-                    func.replace(Student.nombre, "  ", " ") == nombre_norm,
-                )
-                .first()
-            )
+            # 1) match exacto por nombre; 2) fallback por orden de tokens (apellidos<->nombres)
+            good = good_por_nombre.get(nombre_norm)
             if not good:
+                okey = _name_key_sorted(orphan.nombre)
+                if okey:
+                    good = good_por_orden.get(okey)
+            if not good or good.id == orphan.id:
                 continue
 
             merged += self._absorb_student(good, orphan)
