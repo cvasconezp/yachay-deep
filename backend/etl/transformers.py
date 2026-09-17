@@ -13,6 +13,48 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _leer_csv_robusto(ruta, **kwargs):
+    """Lee un CSV probando varias codificaciones antes de rendirse.
+
+    Los exports institucionales/Tableau (p. ej. "Detalle de Calificaciones _data(P68).csv")
+    suelen venir en Windows-1252 / Latin-1, no en UTF-8: el byte 0xD3 es la 'Ó'. Antes se
+    leía SOLO con `utf-8-sig`, de modo que un CSV Latin-1 lanzaba `UnicodeDecodeError`, el
+    caller lo capturaba y devolvía un DataFrame vacío → el ETL cargaba 0 registros sin decir
+    por qué. Ahora se intenta `utf-8-sig` y, si la decodificación falla, `cp1252` y `latin-1`
+    (este último decodifica cualquier byte, así que nunca falla por codificación). Otros
+    errores (separador, archivo corrupto) se propagan al caller, que ya los registra.
+    """
+    ultimo_error = None
+    for enc in ("utf-8-sig", "cp1252", "latin-1"):
+        try:
+            df = pd.read_csv(ruta, encoding=enc, **kwargs)
+            if enc != "utf-8-sig":
+                logger.warning(
+                    "%s no es UTF-8; leído con '%s' (export institucional Latin-1/Windows-1252)",
+                    getattr(ruta, "name", ruta), enc,
+                )
+            return df
+        except UnicodeDecodeError as e:
+            ultimo_error = e
+            continue
+    # Ninguna codificación decodificó (muy raro: latin-1 casi siempre funciona).
+    raise ultimo_error if ultimo_error else RuntimeError(f"No se pudo leer {ruta}")
+
+
+def _nota_a_float(serie):
+    """Convierte una columna de notas a float tolerando la coma decimal (88,5 → 88.5).
+
+    Los exports institucionales usan ';' como separador de campo y ',' como decimal.
+    `pd.to_numeric("88,5")` daba NaN, así que los registros se cargaban con la nota vacía
+    aunque el CSV sí traía la calificación. Las notas son 0–100 (sin separador de miles),
+    de modo que basta con reemplazar ',' por '.'. Un valor ya con punto ("88.5") o entero
+    ("88") queda igual.
+    """
+    s = serie.astype(str).str.strip().str.replace(",", ".", regex=False)
+    s = s.replace({"": None, "nan": None, "None": None, "-": None})
+    return pd.to_numeric(s, errors="coerce")
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # UTILIDADES
 # ─────────────────────────────────────────────────────────────────────────────
@@ -222,7 +264,7 @@ def transform_ingresos_avac(carpeta: str, codigos_activos=None) -> pd.DataFrame:
     dfs = []
     for archivo in archivos:
         try:
-            df = pd.read_csv(archivo, encoding="utf-8-sig")
+            df = _leer_csv_robusto(archivo)
             dfs.append(df)
         except Exception as e:
             logger.error(f"Error leyendo {archivo.name}: {e}")
@@ -297,7 +339,7 @@ def transform_estado_tareas(carpeta: str, codigos_activos=None) -> pd.DataFrame:
     for archivo in archivos:
         try:
             # Los CSVs de tareas usan separador ";"
-            df = pd.read_csv(archivo, encoding="utf-8-sig", sep=";", low_memory=False)
+            df = _leer_csv_robusto(archivo, sep=";", low_memory=False)
             dfs.append(df)
         except Exception as e:
             logger.error(f"Error leyendo {archivo.name}: {e}")
@@ -392,7 +434,7 @@ def transform_calificaciones(ruta_csv: str) -> pd.DataFrame:
     El nombre del estudiante viene invertido: 'APELLIDO NOMBRE'.
     """
     try:
-        df = pd.read_csv(ruta_csv, encoding="utf-8-sig", sep=";")
+        df = _leer_csv_robusto(ruta_csv, sep=";")
     except Exception as e:
         logger.error(f"Error leyendo calificaciones: {e}")
         return pd.DataFrame()
@@ -423,7 +465,7 @@ def transform_calificaciones(ruta_csv: str) -> pd.DataFrame:
 
     # Nota final a float
     if "nota_final" in df.columns:
-        df["nota_final"] = pd.to_numeric(df["nota_final"], errors="coerce")
+        df["nota_final"] = _nota_a_float(df["nota_final"])
 
     # Número de repitencias a int
     if "numero_repitencias" in df.columns:
@@ -962,9 +1004,9 @@ def transform_resumen_general(carpeta_o_archivos) -> pd.DataFrame:
         try:
             # Intentar ambos separadores
             try:
-                df = pd.read_csv(archivo, encoding="utf-8-sig", sep=";")
+                df = _leer_csv_robusto(archivo, sep=";")
             except Exception:
-                df = pd.read_csv(archivo, encoding="utf-8-sig")
+                df = _leer_csv_robusto(archivo)
             df.columns = [c.strip().lower().replace(" ", "_") for c in df.columns]
             df["_fuente"] = archivo.name
 
@@ -1248,7 +1290,7 @@ def transform_calificaciones_historico(carpeta: str) -> pd.DataFrame:
             m = re.search(r'\(P(\d+)\)', archivo.name, re.IGNORECASE)
             periodo = f"P{m.group(1)}" if m else archivo.stem
 
-            df = pd.read_csv(archivo, sep=";", encoding="utf-8-sig", low_memory=False)
+            df = _leer_csv_robusto(archivo, sep=";", low_memory=False)
             df.columns = [c.strip() for c in df.columns]
 
             # Renombrar columnas al estándar interno (case-insensitive)
@@ -1273,7 +1315,7 @@ def transform_calificaciones_historico(carpeta: str) -> pd.DataFrame:
 
             # Nota final a float (escala 0–100)
             if "nota_final" in df.columns:
-                df["nota_final"] = pd.to_numeric(df["nota_final"], errors="coerce")
+                df["nota_final"] = _nota_a_float(df["nota_final"])
 
             # Eliminar filas sin estudiante o sin asignatura
             if "nombre_estudiante" in df.columns:

@@ -5,6 +5,7 @@ No database or API fixtures needed.
 import math
 import pytest
 import numpy as np
+import pandas as pd
 
 from backend.etl.transformers import (
     normalizar_nombre,
@@ -15,6 +16,9 @@ from backend.etl.transformers import (
     extraer_grupo_numero,
     parse_nivel_academico,
     calcular_indice_compromiso,
+    transform_calificaciones,
+    transform_calificaciones_historico,
+    _nota_a_float,
 )
 
 
@@ -302,3 +306,48 @@ class TestCalcularIndiceCompromiso:
         assert result["puntaje_rendimiento"] >= 0
         assert result["puntaje_admin"] >= 0
         assert result["indice_compromiso"] <= 1.0
+
+
+class TestLecturaCalificacionesRobusta:
+    """Regresion: el ETL cargaba 0 registros cuando el CSV institucional no era UTF-8.
+
+    "Detalle de Calificaciones _data(P68).csv" viene en Windows-1252/Latin-1 (byte 0xD3 = 'O')
+    y con coma decimal (88,5). Antes se leia solo con utf-8-sig -> UnicodeDecodeError -> vacio,
+    y to_numeric dejaba las notas en NaN. Ahora se detecta la codificacion y la coma.
+    """
+
+    CSV = (
+        "Sede;Campus;Carrera;Asignatura;Grupo;Estudiante;Docente;Nota Final\n"
+        "MATRIZ;NORTE;ADMINISTRACION DE EMPRESAS;COMUNICACION;Grupo - 6;PEREZ OSCAR;GOMEZ ANDRES;88,5\n"
+        "MATRIZ;NORTE;ADMINISTRACION DE EMPRESAS;MATEMATICAS;Grupo - 6;LOPEZ MARIA;NUNEZ JOSE;72\n"
+    )
+
+    def _escribir(self, tmp_path, encoding):
+        p = tmp_path / "Detalle de Calificaciones _data(P68).csv"
+        p.write_bytes(self.CSV.encode(encoding))
+        return p
+
+    def test_lee_csv_latin1_con_coma_decimal(self, tmp_path):
+        p = self._escribir(tmp_path, "cp1252")
+        df = transform_calificaciones(str(p))
+        assert len(df) == 2
+        assert sorted(df["nota_final"].tolist()) == [72.0, 88.5]
+
+    def test_lee_csv_utf8_sigue_funcionando(self, tmp_path):
+        p = self._escribir(tmp_path, "utf-8-sig")
+        df = transform_calificaciones(str(p))
+        assert len(df) == 2
+        assert sorted(df["nota_final"].tolist()) == [72.0, 88.5]
+
+    def test_historico_latin1_extrae_periodo(self, tmp_path):
+        self._escribir(tmp_path, "cp1252")
+        df = transform_calificaciones_historico(str(tmp_path))
+        assert len(df) == 2
+        assert df["periodo"].unique().tolist() == ["P68"]
+        assert sorted(df["nota_final"].tolist()) == [72.0, 88.5]
+
+    def test_nota_a_float_coma_y_punto(self):
+        out = _nota_a_float(pd.Series(["88,5", "72", "90.0", "", "-", "nan"]))
+        vals = out.tolist()
+        assert vals[0] == 88.5 and vals[1] == 72.0 and vals[2] == 90.0
+        assert pd.isna(vals[3]) and pd.isna(vals[4]) and pd.isna(vals[5])
