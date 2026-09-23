@@ -1,0 +1,69 @@
+{
+  "carrera": "Gestión Ambiental",
+  "modalidad": "En Línea",
+  "sede": "Matriz Cuenca",
+  "total_niveles": 8,
+  "total_asignaturas": 43,
+  "fuente": "Malla curricular oficial UPS - Gestión Ambiental (ENL)",
+  "niveles": {
+    "1": [
+      "Matemática",
+      "Biología",
+      "Física",
+      "Antropología Filosófico-Teológica",
+      "Ecología y Ecosistemas",
+      "Comunicación Oral y Escrita"
+    ],
+    "2": [
+      "Química",
+      "Ética",
+      "Ciencias del Suelo",
+      "Ciencias Atmosféricas",
+      "Botánica",
+      "Zoología"
+    ],
+    "3": [
+      "Vida y Trascendencia",
+      "Sociología, Ambiente y Cultura",
+      "Investigación Participativa",
+      "Ciencias del Agua",
+      "Cambio Climático y Huella de Carbono"
+    ],
+    "4": [
+      "Economía Circular y Ecoeficiencia",
+      "Estadística Básica",
+      "Gestión Ambiental",
+      "Pensamiento Social de la Iglesia",
+      "Evaluación de Impactos Ambientales",
+      "Liderazgo y Gestión de Personas en Proyectos Ambientales"
+    ],
+    "5": [
+      "Política y Legislación Ambiental",
+      "Diseño Experimental",
+      "Sistemas de Información Geográfica",
+      "Certificaciones Ambientales y Normativas Internacionales",
+      "Gestión Integral de Residuos Urbanos",
+      "Contabilidad"
+    ],
+    "6": [
+      "Prácticas de Servicio Comunitario",
+      "Teledetección Aérea y Levantamiento de Datos con Drones",
+      "Ordenamiento Territorial y Urbanismo",
+      "Manejo de Cuencas Hidrográficas",
+      "Gestión Integral de Residuos Rurales"
+    ],
+    "7": [
+      "Fundamentos y Técnicas de Investigación Científica",
+      "Prácticas Laborales",
+      "Gestión de Riesgos",
+      "Planificación del Monitoreo Ambiental",
+      "Comunicación y Educación Ambiental"
+    ],
+    "8": [
+      "Integración Curricular",
+      "Administración y Gestión Pública de Recursos Naturales",
+      "Formulación y Evaluación de Proyectos",
+      "Restauración Ecológica"
+    ]
+  }
+}

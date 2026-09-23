@@ -1,0 +1,67 @@
+{
+  "carrera": "Marketing e Inteligencia de Mercados",
+  "modalidad": "En Línea",
+  "sede": "Matriz Cuenca",
+  "total_niveles": 8,
+  "total_asignaturas": 41,
+  "fuente": "Malla curricular oficial UPS - Marketing e Inteligencia de Mercados (ENL)",
+  "niveles": {
+    "1": [
+      "Antropología Filosófico-Teológica",
+      "Comunicación Oral y Escrita",
+      "Fundamentos de Administración",
+      "Fundamentos Contables",
+      "Matemáticas",
+      "Metodología de la Investigación"
+    ],
+    "2": [
+      "Ética",
+      "Fundamentos de Marketing",
+      "Fundamentos de Costos",
+      "Matemáticas Financieras",
+      "Informática Aplicada",
+      "Microeconomía"
+    ],
+    "3": [
+      "Vida y Trascendencia",
+      "Analítica de Marketing",
+      "Gestión de Precios y Distribución",
+      "Estadística",
+      "Derecho Empresarial"
+    ],
+    "4": [
+      "Pensamiento Social de la Iglesia",
+      "Macroeconomía",
+      "Marketing para Emprendedores",
+      "Marketing Político y Deportivo",
+      "Finanzas I"
+    ],
+    "5": [
+      "Pensamiento Crítico",
+      "Sistemas de Análisis para la Inteligencia de los Negocios",
+      "Inteligencia Artificial Aplicada al Marketing",
+      "Investigación de Mercados",
+      "Finanzas Aplicadas al Marketing"
+    ],
+    "6": [
+      "Prácticas de Servicio Comunitario",
+      "Dirección de Ventas y Smarketing",
+      "Branding y Desarrollo de Productos",
+      "Diseño Digital y Publicidad",
+      "Marketing Sostenible"
+    ],
+    "7": [
+      "Proyectos",
+      "Prácticas Preprofesionales",
+      "Neuromarketing",
+      "Marketing de Servicios",
+      "Marketing Digital"
+    ],
+    "8": [
+      "Trabajo de Integración Curricular",
+      "Marketing Estratégico",
+      "Experiencia del Cliente",
+      "Ecommerce e Internacionalización de Negocios"
+    ]
+  }
+}

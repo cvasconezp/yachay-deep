@@ -1,0 +1,41 @@
+{
+  "carrera": "Gastronomía",
+  "modalidad": "Híbrida",
+  "sede": "Matriz Cuenca-Quito-Guayaquil",
+  "total_niveles": 4,
+  "total_asignaturas": 23,
+  "fuente": "Malla curricular oficial UPS - Tecnología Superior en Gastronomía (HIB)",
+  "niveles": {
+    "1": [
+      "Técnicas Aplicadas I",
+      "Panadería Básica",
+      "Servicios en Empresa HORECA",
+      "Matemáticas Aplicadas",
+      "Comunicación Oral y Escrita",
+      "Herramientas Colaborativas"
+    ],
+    "2": [
+      "Técnicas Aplicadas II",
+      "Repostería de Restaurante",
+      "Costos y Gestión de Bodegas",
+      "Cultura Gastronómica",
+      "Mixología y Enología",
+      "Humanismo Cristiano, Sociedad y Tecnología"
+    ],
+    "3": [
+      "Técnicas Aplicadas III",
+      "Pastelería Aplicada",
+      "Alta Cocina Aplicada",
+      "Cocina Internacional",
+      "Dietética y Nutrición",
+      "Prácticas de Servicio Comunitario"
+    ],
+    "4": [
+      "Alta Cocina Ecuatoriana",
+      "Gestión de Eventos Gastronómicos",
+      "Operación en Empresas HORECA",
+      "Integración Curricular",
+      "Prácticas Laborales"
+    ]
+  }
+}

@@ -46,10 +46,14 @@ def _strip_accents(text: str) -> str:
 
 
 def _normalize_asig(name: str) -> str:
-    """Normaliza nombre de asignatura: upper, colapsa whitespace/newlines,
-    elimina artefactos de Excel (_x000d_, _x000a_)."""
+    """Normaliza nombre de asignatura para EMPAREJAR (no para mostrar): quita
+    artefactos de Excel (_x000d_, _x000a_), colapsa saltos/espacios, mayúsculas y
+    SIN TILDES. Sin tildes es clave: la malla oficial trae 'MATEMÁTICAS' pero el
+    scraping a veces la manda como 'MATEMATICAS'; sin normalizar acentos, la
+    asignatura cursada no se encendería en la malla."""
     clean = re.sub(r"_x[0-9a-fA-F]{4}_", " ", name)  # artefactos Excel
     clean = re.sub(r"[\r\n]+", " ", clean)              # newlines
+    clean = _strip_accents(clean)                       # tildes/diéresis
     return re.sub(r"\s+", " ", clean.strip().upper())
 
 

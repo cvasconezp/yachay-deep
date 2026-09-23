@@ -316,7 +316,9 @@ class TestMallaCompletaConEnrollments:
     def test_canonico_incluye_nivel_2_desde_enrollments(self, db):
         from backend.routes.students import _get_canonical_for_career, _canonical_cache
         _canonical_cache.clear()
-        carrera = "MARKETING E INTELIGENCIA DE MERCADOS"
+        # Carrera SIN malla de referencia (JSON), para ejercer la inferencia +
+        # fusión de enrollments. No usar una carrera que ya tenga JSON oficial.
+        carrera = "CARRERA FICTICIA SIN MALLA DE REFERENCIA"
 
         s = Student(nombre="ALUMNO MKT", carrera=carrera)
         db.add(s)
@@ -339,3 +341,29 @@ class TestMallaCompletaConEnrollments:
         assert canonical.get("ETICA") == 2, "el nivel 2 matriculado debe entrar en la malla"
         assert canonical.get("FUNDAMENTOS DE MARKETING") == 2
         assert max(canonical.values()) == 2
+
+
+class TestMallasDeReferenciaNuevas:
+    """Las mallas oficiales cargadas por PDF deben resolverse por nombre de carrera."""
+
+    @pytest.mark.parametrize("carrera,niveles,asigs", [
+        ("GESTIÓN AMBIENTAL", 8, 43),
+        ("MARKETING E INTELIGENCIA DE MERCADOS", 8, 41),
+        ("GASTRONOMÍA", 4, 23),
+        ("TECNOLOGÍA SUPERIOR EN GASTRONOMÍA", 4, 23),  # alias
+    ])
+    def test_carga_malla_referencia(self, carrera, niveles, asigs):
+        from backend.routes.students import _load_reference_malla, _canonical_cache
+        _canonical_cache.clear()
+        m = _load_reference_malla(carrera)
+        assert m is not None, f"no cargó malla para {carrera}"
+        assert len(m) == asigs
+        assert max(m.values()) == niveles
+
+    def test_asignatura_sin_tilde_matchea(self):
+        # La nota del scraping puede venir sin tildes: debe encender la asignatura.
+        from backend.routes.students import _load_reference_malla, _normalize_asig, _canonical_cache
+        _canonical_cache.clear()
+        m = _load_reference_malla("GESTIÓN AMBIENTAL")
+        assert _normalize_asig("Matematica") in m
+        assert _normalize_asig("BIOLOGIA") in m
