@@ -1183,9 +1183,14 @@ def get_ficha(
     ultima_intervencion = intervenciones[0].created_at if intervenciones else None
 
     # ── Asignaturas matriculadas desde el reporte institucional ──
-    enroll_q = db.query(Enrollment).filter(Enrollment.student_id == student_id)
-    if not is_current:
-        enroll_q = enroll_q.filter(_periodo_match(Enrollment.periodo, req_periodo))
+    # Filtrar SIEMPRE por período. Antes, en la vista del período vigente NO se
+    # filtraba y se mezclaban las matrículas de P68 y P69 en "Datos Académicos"
+    # (p. ej. 3er nivel de P68 junto al 4to de P69). Las matrículas se etiquetan con
+    # su período en el ETL, así que req_periodo (el activo, o el solicitado) las acota.
+    enroll_q = db.query(Enrollment).filter(
+        Enrollment.student_id == student_id,
+        _periodo_match(Enrollment.periodo, req_periodo),
+    )
     enrollments_raw = enroll_q.order_by(Enrollment.nivel, Enrollment.asignatura).all()
     enrollments_out = [
         EnrollmentOut(

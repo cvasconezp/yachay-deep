@@ -252,6 +252,23 @@ class TestFichaEstudiante:
         r = client.get("/students/1/ficha")
         assert r.status_code == 401
 
+    def test_matriculas_solo_del_periodo_vigente(self, client, admin_token, db):
+        """Regresión: en vista vigente no se mezclan matrículas de P68 y P69."""
+        db.add(SemesterConfig(semestre="P69", activo=True, bloque_actual="1"))
+        s = Student(id=777, nombre="CHAVARRIA GUAJAN KIMBERLY", carrera="EDUCACION BASICA",
+                    correo_institucional="kchavarria@est.test.edu")
+        db.add(s)
+        db.add(Enrollment(student_id=777, asignatura="DIDACTICA GENERAL",
+                          carrera="EDUCACION BASICA", nivel=3, periodo="68", codigo_grupo="G1"))
+        db.add(Enrollment(student_id=777, asignatura="PLANIFICACION CURRICULAR",
+                          carrera="EDUCACION BASICA", nivel=4, periodo="69", codigo_grupo="G1"))
+        db.commit()
+        r = client.get("/students/777/ficha", headers=auth(admin_token))
+        assert r.status_code == 200
+        asigs = {e["asignatura"] for e in r.json()["enrollments"]}
+        assert "PLANIFICACION CURRICULAR" in asigs       # P69 (vigente) sí
+        assert "DIDACTICA GENERAL" not in asigs           # P68 no se mezcla
+
 
 # ─── Endpoint tests: comparativa ─────────────────────────────────────────────
 
