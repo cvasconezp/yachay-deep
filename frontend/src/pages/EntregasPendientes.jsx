@@ -3,9 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../services/api";
 import BulkInterventionModal from "../components/BulkInterventionModal";
 import { useStudentListModal } from "../components/StudentListModal";
-
-const AVAC_BASE = "https://avac.ups.edu.ec/grado68";
-const avacCourseUrl = (codigo) => `${AVAC_BASE}/course/search.php?areaids=core_course-course&q=${encodeURIComponent(codigo)}`;
+import { avacCourseUrl } from "../utils/avac";
 
 /* ── Generador de mensaje personalizado para WhatsApp / correo ── */
 function generarMensaje(nombre, asignatura, unidad) {

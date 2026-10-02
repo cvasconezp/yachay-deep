@@ -6,9 +6,7 @@ import { SummaryCard } from "../components/StatCard";
 import { PeriodSelector } from "../components/PeriodSelector";
 import ExportExcelButton from "../components/ExportExcelButton";
 import SeguimientoDocente from "./SeguimientoDocente";
-
-const AVAC_BASE = "https://avac.ups.edu.ec/grado68";
-const avacCourseUrl = (codigo) => `${AVAC_BASE}/course/search.php?areaids=core_course-course&q=${encodeURIComponent(codigo)}`;
+import { avacCourseUrl } from "../utils/avac";
 
 const DOC_EXPORT_COLS = [
   { key: "docente", label: "Docente" },
@@ -301,7 +299,7 @@ export default function Docentes() {
                       {asig.nivel && <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">Nivel {asig.nivel}</span>}
                       {asig.codigo_avac && (
                         <a
-                          href={avacCourseUrl(asig.codigo_avac)}
+                          href={avacCourseUrl(asig.codigo_avac, filtros.periodo)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-xs text-blue-500 hover:text-blue-700 underline"

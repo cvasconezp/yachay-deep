@@ -5,6 +5,7 @@ import { RiskBadge } from "../components/RiskBadge";
 import { PeriodSelector } from "../components/PeriodSelector";
 import EcuadorMap from "../components/EcuadorMap";
 import InterventionForm from "./InterventionForm";
+import { avacCourseUrl } from "../utils/avac";
 
 // Componentes extraídos (Épica 1.5)
 import {
@@ -652,13 +653,8 @@ function FichaEstudianteInner() {
     }
   };
 
-  // Derivar la base URL de AVAC desde el periodo consultado (grado67, grado68, etc.)
-  const gradoNum = (() => {
-    const p = ficha?.periodo_consulta || selectedPeriodo || "";
-    const m = p.match(/\d+/);
-    return m ? m[0] : "68"; // fallback a 68
-  })();
-  const avacBaseUrl = `https://avac.ups.edu.ec/grado${gradoNum}/course/search.php`;
+  // Período para derivar el enlace de AVAC (grado67, grado68, grado69, ...)
+  const periodoAvac = ficha?.periodo_consulta || selectedPeriodo || "";
 
   // Construir mapa de cursos AVAC (todos, sin filtrar — se cruzan luego por enrollment)
   const cursosAvac = {};
@@ -1511,7 +1507,7 @@ function FichaEstudianteInner() {
                             </td>
                             <td className="px-2 py-1 border border-gray-200 text-center">
                               {codigo ? (
-                                <a href={`${avacBaseUrl}?areaids=core_course-course&q=${codigo}`}
+                                <a href={avacCourseUrl(codigo, periodoAvac)}
                                    target="_blank" rel="noreferrer"
                                    className="text-blue-500 hover:text-blue-700 font-mono text-[11px]">
                                   {codigo}
@@ -1567,7 +1563,7 @@ function FichaEstudianteInner() {
                             <td className="px-2 py-1 border border-gray-200 text-center text-[11px] text-gray-500">{matchedCal?.numero_repitencias != null ? <span className={`px-1 rounded text-[10px] font-semibold ${matchedCal.numero_repitencias > 1 ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-gray-700"}`}>{matchedCal.numero_repitencias}</span> : "—"}</td>
                             <td className="px-2 py-1 border border-gray-200 text-center"><span className={`font-mono text-[11px] ${diasColor}`}>{diasInt != null ? `${diasInt}d` : "—"}</span>{acceso?.ultimo_acceso_texto && <div className="text-[10px] text-gray-400 leading-tight whitespace-nowrap">{compactarAcceso(acceso.ultimo_acceso_texto)}</div>}</td>
                             <td className="px-2 py-1 border border-gray-200"><div className="flex gap-0.5 justify-center flex-wrap">{sortedTasks.slice(0, 8).map((t, i) => <TaskCell key={i} entregada={t.entregada} calificada={t.calificada} retrasada={t.retrasada} title={`Unidad ${t.unidad}: ${t.entregada ? (t.calificada ? "Entregada ✓" : "Entregada (sin calificar)") : t.retrasada ? "Retrasada" : "Pendiente"}`} />)}{sortedTasks.length > 8 && <span className="text-[10px] text-gray-400 self-center">+{sortedTasks.length - 8}</span>}{sortedTasks.length === 0 && <span className="text-[10px] text-gray-300 italic">Sin tareas</span>}</div></td>
-                            <td className="px-2 py-1 border border-gray-200 text-center"><a href={`${avacBaseUrl}?areaids=core_course-course&q=${codigo}`} target="_blank" rel="noreferrer" className="text-blue-500 hover:text-blue-700 font-mono text-[11px]">{codigo}</a></td>
+                            <td className="px-2 py-1 border border-gray-200 text-center"><a href={avacCourseUrl(codigo, periodoAvac)} target="_blank" rel="noreferrer" className="text-blue-500 hover:text-blue-700 font-mono text-[11px]">{codigo}</a></td>
                             <td className="px-2 py-1 border border-gray-200 text-gray-600 text-[11px]">{toTitleCase(acceso?.docente || ts[0]?.docente || matchedCal?.docente) || <span className="text-gray-300 italic">—</span>}</td>
                           </tr>
                         );

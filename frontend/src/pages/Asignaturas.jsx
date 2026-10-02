@@ -5,6 +5,7 @@ import { RiskBadge, CompromisoBar } from "../components/RiskBadge";
 import { SummaryCard } from "../components/StatCard";
 import { PeriodSelector } from "../components/PeriodSelector";
 import ExportExcelButton from "../components/ExportExcelButton";
+import { avacCourseUrl } from "../utils/avac";
 
 const ASIG_EXPORT_COLS = [
   { key: "asignatura", label: "Asignatura" },
@@ -21,10 +22,6 @@ const ASIG_EXPORT_COLS = [
   { key: "promedio_compromiso", label: "Compromiso promedio" },
   { key: "total_intervenciones", label: "Intervenciones" },
 ];
-
-const AVAC_BASE = "https://avac.ups.edu.ec/grado68";
-const avacCourseUrl = (codigo) =>
-  `${AVAC_BASE}/course/search.php?areaids=core_course-course&q=${encodeURIComponent(codigo)}`;
 
 export default function Asignaturas() {
   const [asignaturas, setAsignaturas] = useState([]);
@@ -272,7 +269,7 @@ export default function Asignaturas() {
                     <td className="px-4 py-3 text-center">
                       {a.codigo_avac ? (
                         <a
-                          href={avacCourseUrl(a.codigo_avac)}
+                          href={avacCourseUrl(a.codigo_avac, filtros.periodo)}
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={e => e.stopPropagation()}
@@ -350,7 +347,7 @@ export default function Asignaturas() {
                       <span className="text-xs text-gray-500">({grp.total_estudiantes} estudiantes)</span>
                       {grp.codigo_avac && (
                         <a
-                          href={avacCourseUrl(grp.codigo_avac)}
+                          href={avacCourseUrl(grp.codigo_avac, filtros.periodo)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-xs text-blue-500 hover:text-blue-700 underline"
