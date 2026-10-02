@@ -410,3 +410,29 @@ class TestDedupOrdenTokens:
         pipeline = ETLPipeline(db)
         pipeline._merge_duplicate_students()
         assert db.query(Student).filter(Student.nombre == "MARIA JOSE").first() is not None
+
+
+class TestSyncCourseConfigsNA:
+    """Regresión: _sync_course_configs reventaba con 'boolean value of NA is ambiguous'
+    cuando nivel/bloque/grupo venían como enteros nullable de pandas (pd.NA)."""
+
+    def test_no_revienta_con_pd_na(self, db):
+        pipeline = ETLPipeline(db)
+        df = pd.DataFrame({
+            "codigo_avac": ["401999", "402000"],
+            "nombre_asignatura": ["MATEMÁTICAS", "ÉTICA"],
+            "carrera": ["MARKETING E INTELIGENCIA DE MERCADOS", None],
+            "docente": ["GARCIA JUAN", None],
+            "correo_docente": [None, None],
+            "nivel": pd.array([1, pd.NA], dtype="Int64"),
+            "grupo": pd.array([pd.NA, 2], dtype="Int64"),
+            "bloque": pd.array([pd.NA, pd.NA], dtype="Int64"),
+        })
+        n = pipeline._sync_course_configs(df, "P69")   # no debe lanzar
+        assert n == 2
+        from backend.models.course_config import CourseConfig
+        cc = db.query(CourseConfig).filter(CourseConfig.codigo_avac == "401999").first()
+        assert cc is not None
+        assert cc.nivel == 1
+        cc2 = db.query(CourseConfig).filter(CourseConfig.codigo_avac == "402000").first()
+        assert cc2 is not None and cc2.grupo == "2" and cc2.nivel is None

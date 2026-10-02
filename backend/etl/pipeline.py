@@ -51,6 +51,12 @@ def _nan_to_none(val):
     import math
     if val is None:
         return None
+    # pandas.NA (enteros/booleanos nullable) rompe float() y bool(): tratarlo como None.
+    try:
+        if pd.isna(val):
+            return None
+    except (TypeError, ValueError):
+        pass
     try:
         f = float(val)
         if math.isnan(f) or math.isinf(f):
@@ -404,6 +410,7 @@ class ETLPipeline:
                 if not df_enrollments.empty:
                     logs.append(f"[{datetime.now().strftime('%H:%M:%S')}] Cargando asignaturas matriculadas ({len(df_enrollments)} registros)...")
                     n_enrollments = self._upsert_enrollments(df_enrollments)
+                    total_registros += n_enrollments   # que el contador refleje matrículas
                     logs.append(f"  → {n_enrollments} asignaturas matriculadas cargadas")
 
                     # Auto-detectar y activar nuevo período desde el reporte
@@ -1941,6 +1948,19 @@ class ETLPipeline:
         if df_courses.empty:
             return 0
 
+        def _ok(v):
+            """True si v es un valor usable (no None, no NaN/pd.NA, no cadena vacía).
+
+            Antes se hacía `if row.get(col) and pd.notna(row[col])`, pero `bool(pd.NA)`
+            (columnas enteras nullable como nivel/bloque/grupo) lanza "boolean value of
+            NA is ambiguous" y reventaba todo _sync_course_configs."""
+            v = _nan_to_none(v)
+            if v is None:
+                return False
+            if isinstance(v, str) and not v.strip():
+                return False
+            return True
+
         count_new = 0
         count_updated = 0
         for _, row in df_courses.iterrows():
@@ -1954,23 +1974,23 @@ class ETLPipeline:
 
             if existing:
                 # Actualizar datos si hay nueva info
-                if row.get("nombre_asignatura") and pd.notna(row["nombre_asignatura"]):
+                if _ok(row.get("nombre_asignatura")):
                     existing.asignatura = str(row["nombre_asignatura"]).strip()
-                if row.get("carrera") and pd.notna(row["carrera"]):
+                if _ok(row.get("carrera")):
                     existing.carrera = str(row["carrera"]).strip()
-                if row.get("docente") and pd.notna(row["docente"]):
+                if _ok(row.get("docente")):
                     existing.docente = str(row["docente"]).strip()
-                if row.get("correo_docente") and pd.notna(row["correo_docente"]):
+                if _ok(row.get("correo_docente")):
                     existing.correo_docente = str(row["correo_docente"]).strip()
-                if row.get("nivel") and pd.notna(row["nivel"]):
+                if _ok(row.get("nivel")):
                     try:
                         existing.nivel = int(row["nivel"])
                     except (ValueError, TypeError):
                         pass
-                if row.get("grupo") and pd.notna(row["grupo"]):
+                if _ok(row.get("grupo")):
                     existing.grupo = str(row["grupo"]).strip()
                 # Propagar bloque del reporte (1, 2) → CourseConfig
-                if row.get("bloque") and pd.notna(row["bloque"]):
+                if _ok(row.get("bloque")):
                     existing.bloque = str(int(row["bloque"]))
                 if semestre:
                     existing.semestre = semestre
@@ -1986,15 +2006,15 @@ class ETLPipeline:
                     semestre=semestre,
                     activo=True,
                 )
-                if row.get("nivel") and pd.notna(row["nivel"]):
+                if _ok(row.get("nivel")):
                     try:
                         cc.nivel = int(row["nivel"])
                     except (ValueError, TypeError):
                         pass
-                if row.get("grupo") and pd.notna(row["grupo"]):
+                if _ok(row.get("grupo")):
                     cc.grupo = str(row["grupo"]).strip()
                 # Propagar bloque del reporte (1, 2) → CourseConfig
-                if row.get("bloque") and pd.notna(row["bloque"]):
+                if _ok(row.get("bloque")):
                     cc.bloque = str(int(row["bloque"]))
                 self.db.add(cc)
                 count_new += 1
