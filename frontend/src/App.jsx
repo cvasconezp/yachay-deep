@@ -13,6 +13,7 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import FichaEstudiante from "./pages/FichaEstudiante";
 import Grupos from "./pages/Grupos";
+import Reprobados from "./pages/Reprobados";
 import Asignaturas from "./pages/Asignaturas";
 import Docentes from "./pages/Docentes";
 import Tutorias from "./pages/Tutorias";
@@ -196,6 +197,14 @@ export default function App() {
               element={
                 <PrivateRoute adminOnly>
                   <Grupos />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/reprobados"
+              element={
+                <PrivateRoute adminOnly>
+                  <Reprobados />
                 </PrivateRoute>
               }
             />

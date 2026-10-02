@@ -241,6 +241,10 @@ class ApiClient {
     const qs = new URLSearchParams(params).toString();
     return this.get(`/analytics/grupos${qs ? "?" + qs : ""}`);
   }
+  getReprobadosAnalytics(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.get(`/analytics/reprobados${qs ? "?" + qs : ""}`);
+  }
   getDocentesAnalytics(params = {}) {
     const qs = new URLSearchParams(params).toString();
     return this.get(`/analytics/docentes${qs ? "?" + qs : ""}`);
