@@ -374,6 +374,71 @@ def _lectura(a: "ReprobadosAnalytics") -> list[str]:
     return L
 
 
+_MESES_ES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
+             "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+
+
+def _leeme_lines(report_title: str, num_rows: int, num_cols: int) -> list[str]:
+    """Contenido de la hoja LÉEME (autoría, licencia y cita), igual que el export del front."""
+    from datetime import datetime
+    now = datetime.now()
+    fecha = f"{now.day} de {_MESES_ES[now.month - 1]} de {now.year}"
+    anio = now.year
+    return [
+        "════════════════════════════════════════════════════════════════",
+        "           DOCUMENTACIÓN Y TÉRMINOS DE USO DE DATOS",
+        "════════════════════════════════════════════════════════════════",
+        "",
+        "1. INFORMACIÓN DE AUTORÍA Y PROPIEDAD INTELECTUAL",
+        "────────────────────────────────────────────────────────────────",
+        "• Desarrollado por:     Carlos Vásconez-Paredes",
+        "• Cargo/Función:        Gestor de Analítica del Aprendizaje",
+        "• Institución:          Universidad Politécnica Salesiana",
+        f"• Fecha de generación:  {fecha}",
+        "• Versión del dataset:  v1.0 (Estructurado y Procesado)",
+        f"• Reporte:              {report_title}",
+        "",
+        "2. CONDICIONES DE USO Y RECONOCIMIENTO (LICENCIA)",
+        "────────────────────────────────────────────────────────────────",
+        "Este conjunto de datos, métricas e interpretaciones analíticas son el resultado",
+        "de un desarrollo metodológico y técnico específico. Se autoriza su uso para",
+        "fines académicos, artículos científicos, ponencias y conferencias, bajo la",
+        "condición estricta de otorgar el crédito correspondiente al autor.",
+        "",
+        "De acuerdo con las políticas de integridad científica, la omisión de la fuente",
+        "se considerará una falta a la ética académica.",
+        "",
+        "3. FORMA SUGERIDA DE CITA / REFERENCIA",
+        "────────────────────────────────────────────────────────────────",
+        "• Estilo APA (7ma ed.):",
+        f"  Vásconez-Paredes, C. ({anio}). {report_title}",
+        "  (Versión 1.0) [Conjunto de datos/Métricas analíticas]. Gestión de Analítica",
+        "  del Aprendizaje, Universidad Politécnica Salesiana.",
+        "",
+        "• Estilo Vancouver / Nota al pie:",
+        "  Datos analíticos y procesamiento metodológico provistos por Carlos",
+        "  Vásconez-Paredes, Gestión de Analítica del Aprendizaje, Universidad",
+        f"  Politécnica Salesiana, {anio}.",
+        "",
+        "4. CONTACTO Y COLABORACIÓN",
+        "────────────────────────────────────────────────────────────────",
+        "Si su investigación requiere modificaciones metodológicas en los datos, cruces",
+        "de variables avanzados o una interpretación analítica conjunta que impacte la",
+        "sección de \"Metodología\" o \"Resultados\" del artículo, por favor tome contacto",
+        "para estructurar una participación formal bajo la figura de coautoría.",
+        "",
+        "Contacto: cvasconez@ups.edu.ec",
+        "",
+        "5. INFORMACIÓN DE ESTA EXPORTACIÓN",
+        "────────────────────────────────────────────────────────────────",
+        f"• Filas de datos:   {num_rows}",
+        f"• Columnas:         {num_cols}",
+        f"• Fecha/hora:       {now.strftime('%d/%m/%Y %H:%M:%S')}",
+        "• Plataforma:       YachayDeep — Sistema de Analítica del Aprendizaje",
+        "════════════════════════════════════════════════════════════════",
+    ]
+
+
 @router.get("/reprobados/export")
 def export_reprobados_excel(
     periodo: Optional[str] = None,
@@ -404,8 +469,16 @@ def export_reprobados_excel(
     WRAP = Alignment(wrap_text=True, vertical="top")
 
     wb = Workbook()
-    ws = wb.active
-    ws.title = "Análisis"
+
+    # ── Hoja LÉEME (autoría, licencia y cita) ──
+    ws_leeme = wb.active
+    ws_leeme.title = "LÉEME"
+    ws_leeme.sheet_view.showGridLines = False
+    ws_leeme.column_dimensions["A"].width = 82
+    for i, line in enumerate(_leeme_lines("Informe de Reprobados", len(est), 20), start=1):
+        ws_leeme.cell(i, 1, line)
+
+    ws = wb.create_sheet("Análisis")
     ws.sheet_view.showGridLines = False
     ws.column_dimensions["A"].width = 26
     for c in "BCD":

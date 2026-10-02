@@ -88,7 +88,9 @@ def test_export_excel_con_graficas(client, admin_token, semester_config, data_re
     assert r.status_code == 200
     assert "spreadsheetml" in r.headers["content-type"]
     wb = load_workbook(io.BytesIO(r.content))
+    assert wb.sheetnames[:1] == ["LÉEME"]
     assert "Análisis" in wb.sheetnames and "Detalle" in wb.sheetnames
+    assert "Vásconez" in str(wb["LÉEME"]["A7"].value)
     ws = wb["Análisis"]
     assert ws["A1"].value == "Informe de Reprobados"
     # al menos una gráfica embebida
