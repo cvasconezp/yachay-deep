@@ -79,3 +79,20 @@ def test_sin_resultados_carrera_inexistente(client, admin_token, semester_config
     r = client.get("/analytics/reprobados?periodo=P68&carrera=NOEXISTE", headers=auth(admin_token))
     assert r.status_code == 200
     assert r.json()["estudiantes"] == []
+
+
+def test_export_excel_con_graficas(client, admin_token, semester_config, data_reprobados):
+    import io
+    from openpyxl import load_workbook
+    r = client.get("/analytics/reprobados/export?periodo=P68&carrera=MARKETING", headers=auth(admin_token))
+    assert r.status_code == 200
+    assert "spreadsheetml" in r.headers["content-type"]
+    wb = load_workbook(io.BytesIO(r.content))
+    assert "Análisis" in wb.sheetnames and "Detalle" in wb.sheetnames
+    ws = wb["Análisis"]
+    assert ws["A1"].value == "Informe de Reprobados"
+    # al menos una gráfica embebida
+    assert len(ws._charts) >= 1
+    # el detalle tiene las 2 filas de reprobados + encabezado
+    det = wb["Detalle"]
+    assert det.max_row >= 3

@@ -245,6 +245,10 @@ class ApiClient {
     const qs = new URLSearchParams(params).toString();
     return this.get(`/analytics/reprobados${qs ? "?" + qs : ""}`);
   }
+  exportReprobadosExcel(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.getBlob(`/analytics/reprobados/export${qs ? "?" + qs : ""}`);
+  }
   getDocentesAnalytics(params = {}) {
     const qs = new URLSearchParams(params).toString();
     return this.get(`/analytics/docentes${qs ? "?" + qs : ""}`);

@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../services/api";
 import { SummaryCard } from "../components/StatCard";
 import { PeriodSelector } from "../components/PeriodSelector";
-import ExportExcelButton from "../components/ExportExcelButton";
 
 const CAUSA_STYLE = {
   "Desconexión": "bg-orange-100 text-orange-700",
@@ -80,53 +79,27 @@ export default function Reprobados() {
     });
   }, [estudiantes, search, filtros]);
 
-  const exportCols = useMemo(() => ([
-    { key: "nombre", label: "Estudiante" },
-    { key: "carrera", label: "Carrera" },
-    { key: "nivel", label: "Nivel" },
-    { key: "grupo", label: "Grupo" },
-    { key: "num_reprobadas", label: "N° reprobadas" },
-    { key: "reprobadas", label: "Asignaturas reprobadas" },
-    { key: "promedio", label: "Promedio período" },
-    { key: "condicion", label: "Condición" },
-    { key: "nivel_riesgo", label: "Riesgo" },
-    { key: "indice_compromiso", label: "Compromiso" },
-    { key: "dias_sin_acceso", label: "Días sin acceso AVAC" },
-    { key: "porcentaje_tareas", label: "% Tareas" },
-    { key: "estado_matricula", label: "Matrícula" },
-    { key: "num_intervenciones", label: "N° intervenciones" },
-    { key: "ultima_intervencion", label: "Última intervención" },
-    { key: "intervencion_sin_respuesta", label: "Sin respuesta" },
-    { key: "prob_reprobacion", label: "Prob. reprobación" },
-    { key: "prob_desercion", label: "Prob. deserción" },
-    { key: "score_recuperabilidad", label: "Recuperabilidad" },
-    { key: "causa_probable", label: "Causa probable" },
-  ]), []);
-
-  const exportData = useMemo(() => (
-    filtered.map(e => ({
-      nombre: e.nombre,
-      carrera: e.carrera || "",
-      nivel: e.nivel ?? "",
-      grupo: e.grupo || "",
-      num_reprobadas: e.num_reprobadas,
-      reprobadas: (e.reprobadas || []).map(r => `${r.asignatura} (${r.nota})`).join("; "),
-      promedio: e.promedio ?? "",
-      condicion: e.es_tercera_matricula ? "3ra matrícula" : e.es_repitente ? "2da matrícula" : "",
-      nivel_riesgo: e.nivel_riesgo || "",
-      indice_compromiso: e.indice_compromiso ?? "",
-      dias_sin_acceso: e.dias_sin_acceso ?? "",
-      porcentaje_tareas: e.porcentaje_tareas ?? "",
-      estado_matricula: e.estado_matricula || "",
-      num_intervenciones: e.num_intervenciones,
-      ultima_intervencion: e.ultima_intervencion || "",
-      intervencion_sin_respuesta: e.intervencion_sin_respuesta ? "Sí" : "",
-      prob_reprobacion: e.prob_reprobacion ?? "",
-      prob_desercion: e.prob_desercion ?? "",
-      score_recuperabilidad: e.score_recuperabilidad ?? "",
-      causa_probable: e.causa_probable || "",
-    }))
-  ), [filtered]);
+  const [exporting, setExporting] = useState(false);
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const params = {};
+      if (filtros.periodo) params.periodo = filtros.periodo;
+      if (filtros.carrera) params.carrera = filtros.carrera;
+      if (filtros.nivel) params.nivel = filtros.nivel;
+      const blob = await api.exportReprobadosExcel(params);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `informe_reprobados_${filtros.periodo || "actual"}.xlsx`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert("No se pudo exportar: " + (e.message || "error"));
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const selectClass = "border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
   const causaChip = (c) => (
@@ -142,12 +115,14 @@ export default function Reprobados() {
             Estudiantes que reprobaron ≥1 asignatura (período · carrera · nivel), con indicadores de posible causa y abandono
           </p>
         </div>
-        <ExportExcelButton
-          data={exportData}
-          columns={exportCols}
-          filename="informe_reprobados"
-          reportTitle="Informe de Reprobados"
-        />
+        <button
+          onClick={handleExport}
+          disabled={exporting || loading}
+          className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white text-sm font-medium px-4 py-2 rounded-lg"
+          title="Descarga un Excel con gráficas y una lectura automática de los datos"
+        >
+          {exporting ? "Generando…" : "📊 Exportar Excel (con análisis)"}
+        </button>
       </div>
 
       {error && (
