@@ -743,9 +743,36 @@ def transform_personales(carpeta_o_archivos) -> pd.DataFrame:
 
     df["telefono"] = df.apply(_telefono, axis=1)
 
-    # ── Carrera ───────────────────────────────────────────────────────────────
+    # ── Carrera (CARRERA → moda por estudiante) ───────────────────────────────
+    # El reporte tiene una fila por asignatura; un estudiante puede tener filas
+    # bajo más de una carrera (materias compartidas/nivelación o registros
+    # espurios). El groupby().first() de más abajo tomaba la carrera de la PRIMERA
+    # fila, que es arbitraria: así un antropólogo con 6 materias de Antropología y
+    # 1 fila suelta de otra carrera podía salir mal clasificado (caso real:
+    # RODRIGUEZ CHASIN DAVID ISRAEL salía como "Ciencia de Datos"). Tomamos la
+    # carrera MÁS FRECUENTE por estudiante, igual que ya se hace con grupo y nivel.
     if "CARRERA" in df.columns:
         df["carrera"] = df["CARRERA"].apply(normalizar_carrera)
+        _carr = df[df["carrera"].notna() & (df["carrera"].astype(str).str.strip() != "")]
+        if not _carr.empty:
+            _carrera_agg = (
+                _carr.groupby("correo_institucional")["carrera"]
+                .agg(lambda s: s.mode().iloc[0] if not s.mode().empty else s.iloc[0])
+            )
+            # Diagnóstico: cuántos estudiantes tenían una carrera "primera fila"
+            # distinta de su carrera mayoritaria (los que este arreglo corrige).
+            try:
+                _primera = _carr.groupby("correo_institucional")["carrera"].first()
+                _discrepantes = int((_primera != _carrera_agg).sum())
+                if _discrepantes:
+                    logger.info(
+                        "Carrera por moda: %d estudiante(s) tenían carrera mal asignada "
+                        "por .first() (ahora se usa la mayoritaria).",
+                        _discrepantes,
+                    )
+            except Exception:
+                pass
+            df["carrera"] = df["correo_institucional"].map(_carrera_agg).fillna(df["carrera"])
     else:
         df["carrera"] = None
 

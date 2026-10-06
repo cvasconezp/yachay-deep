@@ -351,3 +351,50 @@ class TestLecturaCalificacionesRobusta:
         vals = out.tolist()
         assert vals[0] == 88.5 and vals[1] == 72.0 and vals[2] == 90.0
         assert pd.isna(vals[3]) and pd.isna(vals[4]) and pd.isna(vals[5])
+
+
+class TestTransformPersonalesCarreraModa:
+    """La carrera del estudiante debe ser la MAYORITARIA entre sus matrículas,
+    no la de la primera fila (bug: un antropólogo salía como 'Ciencia de Datos')."""
+
+    def _escribir_reporte(self, tmp_path, filas):
+        import pandas as pd
+        df = pd.DataFrame(filas)
+        p = tmp_path / "65187_reporte.xlsx"
+        df.to_excel(p, index=False, engine="openpyxl")
+        return tmp_path
+
+    def test_carrera_es_la_moda_no_la_primera_fila(self, tmp_path):
+        from backend.etl.transformers import transform_personales
+        # Primera fila: Ciencia de Datos (espuria); 3 filas reales: Antropología.
+        filas = [
+            {"CORREO_INSTITUCIONAL": "drodriguezc25@est.ups.edu.ec",
+             "ESTUDIANTES": "RODRIGUEZ CHASIN DAVID ISRAEL", "CARRERA": "Ciencia de Datos",
+             "NIVEL": 1, "NOMBRE_GRUPO": "G1"},
+            {"CORREO_INSTITUCIONAL": "drodriguezc25@est.ups.edu.ec",
+             "ESTUDIANTES": "RODRIGUEZ CHASIN DAVID ISRAEL", "CARRERA": "Antropologia",
+             "NIVEL": 1, "NOMBRE_GRUPO": "G1"},
+            {"CORREO_INSTITUCIONAL": "drodriguezc25@est.ups.edu.ec",
+             "ESTUDIANTES": "RODRIGUEZ CHASIN DAVID ISRAEL", "CARRERA": "Antropologia",
+             "NIVEL": 1, "NOMBRE_GRUPO": "G1"},
+            {"CORREO_INSTITUCIONAL": "drodriguezc25@est.ups.edu.ec",
+             "ESTUDIANTES": "RODRIGUEZ CHASIN DAVID ISRAEL", "CARRERA": "Antropologia",
+             "NIVEL": 1, "NOMBRE_GRUPO": "G1"},
+        ]
+        carpeta = self._escribir_reporte(tmp_path, filas)
+        out = transform_personales(str(carpeta))
+        assert len(out) == 1
+        assert out.iloc[0]["carrera"].upper().startswith("ANTROPOLOG")
+
+    def test_carrera_unica_se_conserva(self, tmp_path):
+        from backend.etl.transformers import transform_personales
+        filas = [
+            {"CORREO_INSTITUCIONAL": "a@est.ups.edu.ec", "ESTUDIANTES": "ALA BETA",
+             "CARRERA": "Gastronomia", "NIVEL": 2, "NOMBRE_GRUPO": "G3"},
+            {"CORREO_INSTITUCIONAL": "a@est.ups.edu.ec", "ESTUDIANTES": "ALA BETA",
+             "CARRERA": "Gastronomia", "NIVEL": 2, "NOMBRE_GRUPO": "G3"},
+        ]
+        carpeta = self._escribir_reporte(tmp_path, filas)
+        out = transform_personales(str(carpeta))
+        assert len(out) == 1
+        assert out.iloc[0]["carrera"].upper().startswith("GASTRONOM")
