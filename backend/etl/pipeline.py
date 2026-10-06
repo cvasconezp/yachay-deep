@@ -1060,13 +1060,24 @@ class ETLPipeline:
             if tel and not student.telefono:
                 student.telefono = tel
 
-            carrera = str(pr.get("carrera", "") or "").strip()
-            if carrera and not student.carrera:
-                student.carrera = carrera
-
             estado = str(pr.get("estado_matricula", "") or "").strip()
             if estado and not student.estado_matricula:
                 student.estado_matricula = estado
+
+            # ── Carrera — SIEMPRE actualizar desde el reporte (fuente de verdad) ──
+            # Antes era `if carrera and not student.carrera`, así que un estudiante
+            # con una carrera previa EQUIVOCADA nunca se corregía si no tenía
+            # actividad en AVAC: la otra ruta que sobreescribe la carrera
+            # (_upsert_students) solo recorre estudiantes presentes en el master de
+            # AVAC. Un matriculado "Sin AVAC" se quedaba con la carrera que se le
+            # sembró la primera vez (p.ej. desde una calificación suelta o un reporte
+            # anterior) para siempre. Caso real: RODRIGUEZ CHASIN DAVID ISRAEL seguía
+            # en "Ciencia de Datos" pese a tener sus 6 matrículas en Antropología, y
+            # ninguna recarga del reporte P69 (que lo trae como ANTROPOLOGÍA) lo
+            # corregía. El reporte es la fuente de verdad de la carrera vigente.
+            carrera = str(pr.get("carrera", "") or "").strip()
+            if carrera and carrera.lower() not in ("nan", "none"):
+                student.carrera = carrera
 
             # ── Datos personales del reporte institucional ──────────────
             # Estos SIEMPRE se actualizan (no solo para nuevos) porque el

@@ -436,3 +436,51 @@ class TestSyncCourseConfigsNA:
         assert cc.nivel == 1
         cc2 = db.query(CourseConfig).filter(CourseConfig.codigo_avac == "402000").first()
         assert cc2 is not None and cc2.grupo == "2" and cc2.nivel is None
+
+
+class TestSeedCarreraFuenteDeVerdad:
+    """El reporte es la fuente de verdad de la carrera: _seed_students_from_personales
+    debe SOBREESCRIBIR una carrera previa equivocada, incluso para estudiantes sin
+    actividad en AVAC (caso RODRIGUEZ CHASIN: 'Ciencia de Datos' → 'Antropología')."""
+
+    def test_carrera_equivocada_se_corrige_desde_reporte(self, db):
+        est = Student(
+            correo_institucional="drodriguezc25@est.ups.edu.ec",
+            nombre="RODRIGUEZ CHASIN DAVID ISRAEL",
+            carrera="CIENCIA DE DATOS",
+        )
+        db.add(est)
+        db.commit()
+        sid = est.id
+
+        df = pd.DataFrame([{
+            "correo_institucional": "drodriguezc25@est.ups.edu.ec",
+            "carrera": "ANTROPOLOGÍA",
+        }])
+
+        pipeline = ETLPipeline(db)
+        pipeline._seed_students_from_personales(df)
+
+        db.refresh(est)
+        assert est.id == sid  # mismo registro, no se duplicó
+        assert est.carrera == "ANTROPOLOGÍA"
+
+    def test_reporte_sin_carrera_no_borra_la_existente(self, db):
+        est = Student(
+            correo_institucional="x@est.ups.edu.ec",
+            nombre="ALA BETA",
+            carrera="GASTRONOMÍA",
+        )
+        db.add(est)
+        db.commit()
+
+        df = pd.DataFrame([{
+            "correo_institucional": "x@est.ups.edu.ec",
+            "carrera": "",
+        }])
+
+        pipeline = ETLPipeline(db)
+        pipeline._seed_students_from_personales(df)
+
+        db.refresh(est)
+        assert est.carrera == "GASTRONOMÍA"
