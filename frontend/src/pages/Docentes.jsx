@@ -21,6 +21,26 @@ const DOC_EXPORT_COLS = [
   { key: "total_intervenciones", label: "Intervenciones" },
 ];
 
+// Listado PLANO: una fila por docente × asignatura × grupo. Para añadir columnas,
+// basta agregar aquí {key,label} (el backend ya devuelve estos campos). El usuario
+// además puede elegir qué columnas exportar en el propio botón.
+const DOC_LISTADO_COLS = [
+  { key: "docente", label: "Docente" },
+  { key: "correo_docente", label: "Correo" },
+  { key: "carrera", label: "Carrera" },
+  { key: "asignatura", label: "Asignatura" },
+  { key: "nivel", label: "Nivel" },
+  { key: "grupo", label: "Grupo" },
+  { key: "bloque", label: "Bloque" },
+  { key: "periodo", label: "Período" },
+  { key: "codigo_avac", label: "Código AVAC" },
+  { key: "enlace_avac", label: "Enlace AVAC" },
+  { key: "total_estudiantes", label: "N° estudiantes" },
+  { key: "riesgo_alto", label: "Riesgo alto" },
+  { key: "promedio", label: "Promedio" },
+  { key: "porcentaje_aprobacion", label: "% Aprobación" },
+];
+
 const TABS = [
   { id: "analitica", label: "Analítica Docente", icon: "📊" },
   { id: "calificaciones", label: "Seguimiento Calificaciones", icon: "📝" },
@@ -37,6 +57,7 @@ export default function Docentes() {
   const [search, setSearch] = useState("");
   const [detalle, setDetalle] = useState(null);
   const [loadingDetalle, setLoadingDetalle] = useState(false);
+  const [listado, setListado] = useState([]);
   const navigate = useNavigate();
 
   const filteredDocentes = useMemo(() => {
@@ -48,6 +69,15 @@ export default function Docentes() {
     );
   }, [docentes, search]);
 
+  const filteredListado = useMemo(() => {
+    if (!search) return listado;
+    const q = search.toLowerCase();
+    return listado.filter(r =>
+      r.docente?.toLowerCase().includes(q) ||
+      r.asignatura?.toLowerCase().includes(q)
+    );
+  }, [listado, search]);
+
   const loadData = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -56,12 +86,18 @@ export default function Docentes() {
       if (filtros.carrera) params.carrera = filtros.carrera;
       if (filtros.periodo) params.periodo = filtros.periodo;
 
-      const [data, carrerasData] = await Promise.all([
+      const [data, carrerasData, listadoData] = await Promise.all([
         api.getDocentesAnalytics(params),
         api.getCarreras(),
+        api.getDocentesListado(params).catch(() => []),
       ]);
       setDocentes(data);
       setCarreras(carrerasData);
+      // Enriquecer con el enlace al aula AVAC (derivado del período de cada sección)
+      setListado((listadoData || []).map(r => ({
+        ...r,
+        enlace_avac: avacCourseUrl(r.codigo_avac, r.periodo),
+      })));
     } catch (e) {
       setError("No se pudieron cargar los datos de docentes.");
     } finally {
@@ -93,7 +129,16 @@ export default function Docentes() {
           <p className="text-gray-500 text-sm">Analítica, rendimiento y seguimiento de calificaciones docentes</p>
         </div>
         {activeTab === "analitica" && (
-          <ExportExcelButton data={filteredDocentes} columns={DOC_EXPORT_COLS} filename="analitica_docentes" reportTitle="Analítica de Docentes" />
+          <div className="flex items-center gap-2">
+            <ExportExcelButton
+              data={filteredListado}
+              columns={DOC_LISTADO_COLS}
+              filename={`listado_docentes${filtros.carrera ? "_" + filtros.carrera.replace(/\s+/g, "_") : ""}`}
+              reportTitle={`Listado de docentes${filtros.carrera ? " — " + filtros.carrera : ""} (docente·asignatura·grupo)`}
+              label="Exportar listado"
+            />
+            <ExportExcelButton data={filteredDocentes} columns={DOC_EXPORT_COLS} filename="analitica_docentes" reportTitle="Analítica de Docentes" label="Exportar resumen" />
+          </div>
         )}
       </div>
 

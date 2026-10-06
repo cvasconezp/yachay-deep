@@ -253,6 +253,10 @@ class ApiClient {
     const qs = new URLSearchParams(params).toString();
     return this.get(`/analytics/docentes${qs ? "?" + qs : ""}`);
   }
+  getDocentesListado(params = {}) {
+    const qs = new URLSearchParams(params).toString();
+    return this.get(`/analytics/docentes/listado${qs ? "?" + qs : ""}`);
+  }
   getDocenteDetalle(docenteNombre, periodo) {
     const params = new URLSearchParams();
     if (periodo) params.set("periodo", periodo);

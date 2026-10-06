@@ -16,7 +16,7 @@ from ...models import Student, Grade, Intervention, Enrollment, TaskSubmission
 from ...models.course_config import CourseConfig, SemesterConfig
 from ...auth.jwt import get_current_user
 from ...models.user import User
-from ._helpers import apply_periodo_filter, get_umbrales, build_risk_map
+from ._helpers import apply_periodo_filter, get_umbrales, build_risk_map, normalize_riesgo
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
@@ -255,6 +255,146 @@ def get_docentes_analytics(
 
     output.sort(key=lambda x: x.estudiantes_riesgo_alto, reverse=True)
     return output
+
+
+class DocenteListadoRow(BaseModel):
+    """Fila plana: un docente × asignatura × grupo (una sección)."""
+    docente: Optional[str] = None
+    correo_docente: Optional[str] = None
+    carrera: Optional[str] = None
+    asignatura: Optional[str] = None
+    nivel: Optional[int] = None
+    grupo: Optional[str] = None
+    bloque: Optional[str] = None
+    codigo_avac: Optional[str] = None
+    periodo: Optional[str] = None
+    total_estudiantes: int = 0
+    riesgo_alto: int = 0
+    promedio: Optional[float] = None
+    porcentaje_aprobacion: Optional[float] = None
+
+    class Config:
+        from_attributes = True
+
+
+def _norm_asig(s: Optional[str]) -> str:
+    """Normaliza nombre de asignatura para emparejar notas (sin tildes, mayúsculas)."""
+    if not s:
+        return ""
+    import unicodedata
+    base = unicodedata.normalize("NFKD", str(s))
+    base = "".join(c for c in base if not unicodedata.combining(c))
+    return " ".join(base.upper().split())
+
+
+@router.get("/docentes/listado", response_model=list[DocenteListadoRow])
+def get_docentes_listado(
+    carrera: Optional[str] = None,
+    periodo: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Listado PLANO de docentes por sección (docente × asignatura × grupo) para
+    exportar. Una fila por sección con correo, carrera, asignatura, nivel, grupo,
+    bloque, código AVAC, período, nº de estudiantes matriculados, estudiantes en
+    riesgo alto e indicadores de notas (promedio, % aprobación) cuando existen.
+
+    Se arma desde CourseConfig (fuente de los cursos/secciones del período) y se
+    enriquece con matrículas (Enrollment) y notas (Grade). Filtrable por carrera y
+    período; sin período usa el semestre activo."""
+    from collections import defaultdict
+
+    active_sem = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()  # noqa: E712
+    req_p = periodo if periodo else (active_sem.semestre if active_sem else None)
+
+    # ── Secciones desde CourseConfig ──
+    q = db.query(CourseConfig).filter(
+        CourseConfig.activo == True,  # noqa: E712
+        CourseConfig.docente.isnot(None),
+        CourseConfig.docente != "",
+    )
+    if carrera:
+        q = q.filter(func.lower(CourseConfig.carrera).contains(carrera.lower()))
+    if req_p:
+        raw_p = req_p[1:] if req_p.startswith("P") else req_p
+        q = q.filter(or_(
+            CourseConfig.semestre == req_p,
+            CourseConfig.semestre == raw_p,
+            CourseConfig.semestre.is_(None),
+        ))
+    secciones = q.all()
+    if not secciones:
+        return []
+
+    codigos = [c.codigo_avac for c in secciones if c.codigo_avac]
+
+    # ── Matrículas por sección (Enrollment.codigo_grupo == CourseConfig.codigo_avac) ──
+    sids_por_codigo: dict[str, set] = defaultdict(set)
+    all_sids: set = set()
+    if codigos:
+        enr_q = db.query(Enrollment.codigo_grupo, Enrollment.student_id).filter(
+            Enrollment.codigo_grupo.in_(codigos)
+        )
+        enr_q, _ = apply_periodo_filter(enr_q, req_p, column=Enrollment.periodo)
+        for cod, sid in enr_q.all():
+            if sid:
+                sids_por_codigo[cod].add(sid)
+                all_sids.add(sid)
+
+    # ── Riesgo por estudiante ──
+    risk_by_sid: dict[int, Optional[str]] = {}
+    if all_sids:
+        for sid, riesgo in db.query(Student.id, Student.nivel_riesgo).filter(
+            Student.id.in_(all_sids)
+        ).all():
+            risk_by_sid[sid] = normalize_riesgo(riesgo)
+
+    # ── Notas por (estudiante, asignatura) del período ──
+    notas_idx: dict[tuple, list] = defaultdict(list)
+    if all_sids:
+        gq = db.query(Grade.student_id, Grade.asignatura, Grade.nota_final).filter(
+            Grade.student_id.in_(all_sids)
+        )
+        gq, _ = apply_periodo_filter(gq, req_p, include_null=True)
+        for sid, asig, nota in gq.all():
+            if nota is not None:
+                notas_idx[(sid, _norm_asig(asig))].append(nota)
+
+    umbrales = get_umbrales(db)
+    nota_aprob = umbrales["nota_aprobacion"]
+
+    rows: list[DocenteListadoRow] = []
+    for cc in secciones:
+        sids = sids_por_codigo.get(cc.codigo_avac, set())
+        total_est = len(sids)
+        riesgo_alto = sum(1 for sid in sids if risk_by_sid.get(sid) == "Alto")
+        asig_norm = _norm_asig(cc.asignatura)
+        notas = []
+        for sid in sids:
+            notas.extend(notas_idx.get((sid, asig_norm), []))
+        promedio = round(sum(notas) / len(notas), 1) if notas else None
+        pct_aprob = (
+            round(sum(1 for n in notas if n >= nota_aprob) / len(notas) * 100, 1)
+            if notas else None
+        )
+        rows.append(DocenteListadoRow(
+            docente=cc.docente,
+            correo_docente=cc.correo_docente,
+            carrera=cc.carrera,
+            asignatura=cc.asignatura,
+            nivel=cc.nivel,
+            grupo=cc.grupo,
+            bloque=cc.bloque,
+            codigo_avac=cc.codigo_avac,
+            periodo=cc.semestre or req_p,
+            total_estudiantes=total_est,
+            riesgo_alto=riesgo_alto,
+            promedio=promedio,
+            porcentaje_aprobacion=pct_aprob,
+        ))
+
+    rows.sort(key=lambda r: ((r.docente or "").upper(), (r.asignatura or ""), (r.grupo or "")))
+    return rows
 
 
 @router.get("/docentes/{docente_nombre}/detalle")

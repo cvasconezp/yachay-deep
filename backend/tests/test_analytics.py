@@ -302,3 +302,56 @@ class TestEdgeCases:
             resp = client.get(url, headers=auth(admin_token))
             assert resp.status_code == 200
             assert resp.json() == []
+
+
+class TestDocentesListado:
+    """Listado PLANO de docentes por sección (docente × asignatura × grupo)."""
+
+    @pytest.fixture
+    def sample_sections(self, db, sample_students):
+        from backend.models.course_config import CourseConfig
+        secs = [
+            CourseConfig(codigo_avac="419338", asignatura="DERECHO CIVIL",
+                         carrera="DERECHO", docente="PEREZ MORALES ANA",
+                         correo_docente="ana.perez@ups.edu.ec", nivel=5, grupo="2",
+                         bloque="1", semestre="P68", activo=True),
+            CourseConfig(codigo_avac="LEN-001", asignatura="LENGUA",
+                         carrera="EDUCACION BASICA", docente="RUIZ VEGA MARIA",
+                         correo_docente="maria.ruiz@ups.edu.ec", nivel=3, grupo="1",
+                         bloque="1", semestre="P68", activo=True),
+        ]
+        db.add_all(secs)
+        # Matrícula del estudiante 3 en la sección de Derecho + su nota
+        db.add(Enrollment(student_id=3, asignatura="DERECHO CIVIL", carrera="DERECHO",
+                          nivel=5, periodo="P68", codigo_grupo="419338"))
+        db.add(Grade(student_id=3, asignatura="DERECHO CIVIL", docente="PEREZ MORALES ANA",
+                     carrera="DERECHO", nivel=5, nota_final=90, periodo="P68"))
+        db.commit()
+        return secs
+
+    def test_listado_plano_por_seccion_con_correo(self, client, admin_token, semester_config, sample_sections):
+        r = client.get("/analytics/docentes/listado?periodo=P68&carrera=DERECHO",
+                        headers=auth(admin_token))
+        assert r.status_code == 200
+        rows = r.json()
+        # Solo la sección de Derecho (la de Básica se filtra por carrera)
+        assert len(rows) == 1
+        row = rows[0]
+        assert row["docente"] == "PEREZ MORALES ANA"
+        assert row["correo_docente"] == "ana.perez@ups.edu.ec"
+        assert row["asignatura"] == "DERECHO CIVIL"
+        assert row["nivel"] == 5
+        assert row["grupo"] == "2"
+        assert row["codigo_avac"] == "419338"
+        assert row["total_estudiantes"] == 1          # matrícula enlazada por codigo_avac
+        assert row["promedio"] == 90.0                 # nota del estudiante matriculado
+
+    def test_listado_sin_carrera_incluye_todas(self, client, admin_token, semester_config, sample_sections):
+        r = client.get("/analytics/docentes/listado?periodo=P68", headers=auth(admin_token))
+        assert r.status_code == 200
+        carreras = {row["carrera"] for row in r.json()}
+        assert "DERECHO" in carreras and "EDUCACION BASICA" in carreras
+
+    def test_listado_requiere_auth(self, client, sample_sections):
+        r = client.get("/analytics/docentes/listado")
+        assert r.status_code == 401
