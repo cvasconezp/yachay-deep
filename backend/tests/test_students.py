@@ -269,6 +269,34 @@ class TestFichaEstudiante:
         assert "PLANIFICACION CURRICULAR" in asigs       # P69 (vigente) sí
         assert "DIDACTICA GENERAL" not in asigs           # P68 no se mezcla
 
+    def test_nota_de_periodo_anterior_no_cuenta_como_actual(self, client, admin_token, db):
+        """Regresión (FARINANGO): una nota de un período ANTERIOR, con la misma
+        asignatura que una matrícula vigente, NO debe contarse como del período
+        vigente. En vista vigente: 'calificaciones' = período activo; una nota de un
+        período anterior va solo a 'calificaciones_historicas'."""
+        db.add(SemesterConfig(semestre="P69", activo=True, bloque_actual="1"))
+        s = Student(id=778, nombre="FARINANGO MALDONADO KARINA RUBI", carrera="DERECHO",
+                    correo_institucional="kfarinango@est.test.edu")
+        db.add(s)
+        # Nota de un período ANTERIOR (P68) para una asignatura que ahora matricula.
+        db.add(Grade(student_id=778, asignatura="DERECHO EMPRESARIAL II", carrera="DERECHO",
+                     nivel=7, nota_final=92.0, periodo="P68"))
+        # Nota del período VIGENTE (P69).
+        db.add(Grade(student_id=778, asignatura="DERECHO TRIBUTARIO", carrera="DERECHO",
+                     nivel=7, nota_final=85.0, periodo="P69"))
+        db.commit()
+
+        body = client.get("/students/778/ficha", headers=auth(admin_token)).json()
+        actuales = {g["asignatura"] for g in body["calificaciones"]}
+        historicas = {g["asignatura"] for g in body["calificaciones_historicas"]}
+
+        # La del período vigente cuenta como actual; la anterior NO.
+        assert "DERECHO TRIBUTARIO" in actuales
+        assert "DERECHO EMPRESARIAL II" not in actuales
+        # La anterior aparece en el histórico (no se pierde).
+        assert "DERECHO EMPRESARIAL II" in historicas
+        assert "DERECHO TRIBUTARIO" not in historicas
+
 
 # ─── Endpoint tests: comparativa ─────────────────────────────────────────────
 

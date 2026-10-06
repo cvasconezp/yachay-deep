@@ -1024,19 +1024,35 @@ def get_ficha(
 
     # ── Calificaciones ──
     if is_current:
-        # Semestre activo: calificaciones sin periodo = actuales
+        # Semestre activo: "actuales" = calificaciones del PERÍODO ACTIVO (o sin
+        # período, dato legado). Antes 'calificaciones' era SOLO periodo IS NULL y
+        # TODO lo etiquetado por período —incluido el período activo y los
+        # anteriores— caía en 'calificaciones_historicas'. Como la nota de cada
+        # matrícula se busca por nombre de asignatura también en 'historicas', una
+        # nota de un período ANTERIOR (misma asignatura) se mostraba junto a una
+        # materia recién matriculada este período. Caso real: FARINANGO MALDONADO
+        # KARINA RUBI aparecía con notas en materias que recién matriculó en P69.
+        # Ahora el período activo va en 'calificaciones' y 'historicas' son
+        # ESTRICTAMENTE períodos anteriores (así una matrícula vigente solo puede
+        # tomar su nota del período vigente; si no hay, queda "Cursando").
         calificaciones = (
             db.query(Grade)
-            .filter(Grade.student_id == student_id, Grade.periodo.is_(None))
+            .filter(
+                Grade.student_id == student_id,
+                or_(_periodo_match(Grade.periodo, active_norm), Grade.periodo.is_(None)),
+            )
             .order_by(Grade.asignatura)
             .all()
         )
-        calificaciones_historicas = (
-            db.query(Grade)
-            .filter(Grade.student_id == student_id, Grade.periodo.isnot(None))
-            .order_by(Grade.periodo, Grade.asignatura)
-            .all()
+        raw_a = active_norm[1:] if active_norm and active_norm.startswith("P") else active_norm
+        hist_excl = [p for p in (active_norm, raw_a) if p]
+        hist_q = db.query(Grade).filter(
+            Grade.student_id == student_id,
+            Grade.periodo.isnot(None),
         )
+        if hist_excl:
+            hist_q = hist_q.filter(~Grade.periodo.in_(hist_excl))
+        calificaciones_historicas = hist_q.order_by(Grade.periodo, Grade.asignatura).all()
     else:
         # Período histórico: calificaciones de ese periodo = principales
         calificaciones = (

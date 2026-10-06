@@ -1430,11 +1430,13 @@ function FichaEstudianteInner() {
                         const avac = cursosAvac[codigo] || null;
                         const acceso = avac?.acceso;
                         const ts = avac?.tareas || [];
-                        // La nota final puede venir en el período actual o en el histórico
-                        // (los archivos "Detalle de Calificaciones" se cargan como histórico,
-                        // aun siendo del período vigente). Buscar en ambos, como la malla.
-                        const matchedCal = matchNota(enr.asignatura, ficha.calificaciones)
-                          || matchNota(enr.asignatura, ficha.calificaciones_historicas);
+                        // La nota de una matrícula vigente SOLO puede salir del período
+                        // vigente (ficha.calificaciones ya trae el período activo desde el
+                        // backend). No se cae al histórico: antes, una nota de un período
+                        // ANTERIOR con la misma asignatura se mostraba junto a una materia
+                        // recién matriculada (caso FARINANGO MALDONADO KARINA RUBI). Si no
+                        // hay nota del período vigente, la materia queda "Cursando".
+                        const matchedCal = matchNota(enr.asignatura, ficha.calificaciones);
                         const notaTableau = matchedCal?.nota_final ?? null;
                         const totalCurso = ts.find(t => t.total_curso != null)?.total_curso ?? null;
                         // La nota final MANDA sobre el parcial de AVAC cuando ya existe.
