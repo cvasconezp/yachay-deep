@@ -1,3 +1,4 @@
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -5,17 +6,31 @@ from .config import settings
 
 _is_sqlite = "sqlite" in settings.DATABASE_URL
 
+
+def _int_env(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, default))
+    except (TypeError, ValueError):
+        return default
+
+
 _engine_kwargs = dict(
     pool_pre_ping=True,
     connect_args={"check_same_thread": False} if _is_sqlite else {},
 )
 if not _is_sqlite:
-    # Pool más robusto para Railway PostgreSQL (límite de conexiones bajo)
+    # Tamaño del pool. Antes era 3+5=8, pero el servidor corre un solo worker de
+    # uvicorn y FastAPI atiende los endpoints sync en un threadpool (~40 hilos), así
+    # que bajo carga (polling del panel admin + endpoints ML) se agotaban las 8
+    # conexiones y las peticiones daban 500: "QueuePool limit ... connection timed
+    # out". Se sube a 10+20=30 (configurable por entorno por si el límite de
+    # conexiones de Postgres fuera menor). pool_pre_ping evita usar conexiones
+    # muertas; pool_recycle las renueva antes de que Railway las cierre por inactivas.
     _engine_kwargs.update(
-        pool_size=3,
-        max_overflow=5,
-        pool_recycle=300,        # reciclar conexiones cada 5 min
-        pool_timeout=20,         # timeout más corto para detectar problemas
+        pool_size=_int_env("DB_POOL_SIZE", 10),
+        max_overflow=_int_env("DB_MAX_OVERFLOW", 20),
+        pool_recycle=_int_env("DB_POOL_RECYCLE", 300),
+        pool_timeout=_int_env("DB_POOL_TIMEOUT", 30),
     )
 
 engine = create_engine(settings.DATABASE_URL, **_engine_kwargs)

@@ -42,6 +42,9 @@ Versionado semántico cuando aplique.
 - **`docentes/listado`** ya no incluye secciones con `CourseConfig.semestre` NULL en todos los períodos (arrastraba secciones viejas al listado del período pedido).
 - **`_upsert_enrollments`** etiqueta el período por **moda** (no por la primera fila), coherente con la auto-activación del semestre.
 
+**Estabilidad — pool de conexiones a la BD**
+- El panel de Administración mostraba de forma intermitente "Error: No se pudo cargar el estado del sistema" (y 500 en `/admin/etl/scraping-progress`, `/admin/system/avac-cookie`, predicciones). Causa: `QueuePool limit of size 3 overflow 5 reached, connection timed out` — el pool (máx 8) se agotaba porque el servidor corre un solo worker de uvicorn y FastAPI atiende los endpoints sync en un threadpool (~40), que bajo el polling del panel + endpoints ML superaba las 8 conexiones. Se sube el pool a **10+20=30** (configurable por entorno: `DB_POOL_SIZE`, `DB_MAX_OVERFLOW`, `DB_POOL_TIMEOUT`, `DB_POOL_RECYCLE`) en `backend/database.py`.
+
 **AVAC por período — auto-derivado también en el scraping**
 - Nuevo `backend/services/avac.py::avac_base_url(db)`: deriva el grado del **período activo** (P69→grado69). Lo usan la verificación de cookie (`admin.py`, refactorizado) y el **scraping** (`ingresos_avac.py`, `estado_tareas.py`). Antes el scraping corría en GitHub Actions con `AVAC_BASE_URL` fijo en grado68 (secret/entorno distinto al de Railway), así que al pasar a P69 la cookie "no abría". Ahora el scraping se auto-corrige desde la BD sin depender de esa variable; el default del workflow se actualizó a grado69.
 
