@@ -4,7 +4,7 @@ sqlalchemy==2.0.50
 pydantic[email]==2.13.4
 pydantic-settings==2.14.2  # [sec] fix GHSA-4xgf-cpjx-pc3j
 python-jose[cryptography]==3.5.0
-cryptography==48.0.1  # [Cifrado en reposo] Fernet + blind index (Fase 2) · [sec] fix PYSEC-2026-35/1284, CVE-2026-26007, GHSA-537c-gmf6-5ccf
+cryptography==50.0.2  # [Cifrado en reposo] Fernet + blind index (Fase 2) · [sec] fix PYSEC-2026-35/1284, CVE-2026-26007, GHSA-537c-gmf6-5ccf; bump 48.0.1→50.0.2 por PYSEC-2026-3552/3553/3554
 passlib[argon2]==1.7.4
 argon2-cffi==23.1.0
 bcrypt==3.2.2

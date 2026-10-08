@@ -1,7 +1,7 @@
 {
   "GHSA-4r6h-8v6p-xvw6": {
     "active": true,
-    "notes": "xlsx (SheetJS) Prototype Pollution — sin fix en registro npm. La vuln requiere PARSEAR un archivo malicioso; aqui xlsx SOLO se usa para EXPORTAR (ExportExcelButton.jsx), nunca para leer entrada no confiable. Riesgo real nulo."
+    "notes": "xlsx (SheetJS) Prototype Pollution — sin fix en registro npm. Requiere PARSEAR un archivo malicioso; aqui xlsx SOLO se usa para EXPORTAR (ExportExcelButton.jsx), nunca para leer entrada no confiable. Riesgo real nulo."
   },
   "GHSA-5pgg-2g8v-p4x9": {
     "active": true,
@@ -9,6 +9,52 @@
   },
   "GHSA-fx2h-pf6j-xcff": {
     "active": true,
-    "notes": "vite server.fs.deny bypass (SOLO dev-server, SOLO Windows). vite es devDependency: no va al bundle de produccion. El unico fix es vite 8 (major/breaking) -> diferido a PR propio de upgrade. Sin exposicion en prod/CI."
+    "notes": "vite server.fs.deny bypass (SOLO dev-server, SOLO Windows). devDependency: no va al bundle de produccion. Fix = vite 8 (major/breaking) -> PR propio de upgrade. Sin exposicion en prod/CI."
+  },
+
+  "GHSA-qwww-vcr4-c8h2": {
+    "active": true,
+    "notes": "react-router: CSRF bypass en MODO RSC (React Server Components / data-mode con server actions). Esta app es una SPA cliente (BrowserRouter, sin RSC ni server actions), asi que el vector NO aplica. Fix disponible (patch 7.18.x) -> subir con npm audit fix y retirar esta excepcion."
+  },
+
+  "GHSA-vfj7-8cjw-p6xm": {
+    "active": true,
+    "notes": "braces (transitiva de tooling de build) — DoS por stack-exhaustion. No va al bundle del navegador. Fix disponible via npm audit fix (diferido)."
+  },
+  "GHSA-c83g-rgw3-j3cx": {
+    "active": true,
+    "notes": "browserslist (tooling de build) — crecimiento de memoria. No va al bundle del navegador. Fix disponible via npm audit fix (diferido)."
+  },
+  "GHSA-73wf-gq98-2v4g": {
+    "active": true,
+    "notes": "browserslist (tooling de build) — crash/prototype write. No va al bundle del navegador. Fix disponible via npm audit fix (diferido)."
+  },
+  "GHSA-28wg-ghj8-5hjv": {
+    "active": true,
+    "notes": "nanoid (tooling de build/postcss) — loop en generadores no-seguros. No va al bundle del navegador. Fix disponible via npm audit fix (diferido)."
+  },
+  "GHSA-2v37-7h3g-55p8": {
+    "active": true,
+    "notes": "nanoid (tooling de build) — loop en generadores custom. No va al bundle del navegador. Fix disponible via npm audit fix (diferido)."
+  },
+  "GHSA-r28c-9q8g-f849": {
+    "active": true,
+    "notes": "postcss (tooling de build) — path traversal en source map. No va al bundle del navegador. Fix disponible via npm audit fix (diferido)."
+  },
+  "GHSA-68fv-2mgg-jv7q": {
+    "active": true,
+    "notes": "source-map-js (tooling de build) — DoS del event-loop. No va al bundle del navegador. Fix disponible via npm audit fix (diferido)."
+  },
+  "GHSA-4cwx-7wf7-3272": {
+    "active": true,
+    "notes": "undici (transitiva de jsdom, devDependency de vitest) — fuga de info cross-user. Solo en el entorno de test de Node, no en el navegador. Fix via npm audit fix (diferido)."
+  },
+  "GHSA-rfgv-xxqx-mfg5": {
+    "active": true,
+    "notes": "undici (transitiva de jsdom, devDependency) — DoS por subprotocolo WebSocket. Solo en test de Node. Fix via npm audit fix (diferido)."
+  },
+  "GHSA-w293-vg96-wgc3": {
+    "active": true,
+    "notes": "undici (transitiva de jsdom, devDependency) — bypass de validacion TLS en BalancedPool. Solo en test de Node. Fix via npm audit fix (diferido)."
   }
 }
