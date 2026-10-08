@@ -366,7 +366,7 @@ export default function Asignaturas() {
                         data={exportData}
                         columns={exportCols}
                         filename={exportFilename}
-                        reportTitle={`Asignatura: ${asig.asignatura} — ${asig.docente}`}
+                        reportTitle={`Asignatura: ${detalle.asignatura} — ${detalle.docente}`}
                         label="Excel"
                         small
                       />

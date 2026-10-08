@@ -32,7 +32,10 @@ class Settings(BaseSettings):
     AVAC_PASSWORD: Optional[str] = None
     AVAC_TOTP_SECRET: Optional[str] = None   # secret base32 de la app autenticadora
     AVAC_SESSION_COOKIE: Optional[str] = None  # MoodleSession cookie for direct access (bypasses SSO)
-    AVAC_BASE_URL: str = "https://avac.ups.edu.ec/grado68"
+    # Nota: el nº de 'grado' sigue al período (P69→grado69). La verificación de
+    # cookie deriva el grado del período activo; el scraping usa este valor (o la
+    # variable de entorno AVAC_BASE_URL). Mantener el host; el grado debe ir al día.
+    AVAC_BASE_URL: str = "https://avac.ups.edu.ec/grado69"
 
     # Data paths (for ETL pipeline - where CSVs are stored)
     DATA_PATH_INGRESOS: str = "./data/IngresosAVAC"

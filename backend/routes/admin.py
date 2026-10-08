@@ -701,6 +701,31 @@ async def get_scraping_progress(
 class CookieUpdate(BaseModel):
     cookie: str
 
+def _avac_base_url(db: Session) -> str:
+    """URL base de AVAC con el grado del PERÍODO ACTIVO.
+
+    El nº de 'grado' en AVAC sigue al nº de período: P68→grado68, P69→grado69, etc.
+    Antes se usaba settings.AVAC_BASE_URL fijo (grado68), así que al cambiar de
+    período la verificación de cookie y el scraping seguían apuntando al grado viejo
+    y la sesión 'no abría' (redirigía a login). Ahora el grado se deriva del
+    SemesterConfig activo; el host se conserva de settings.AVAC_BASE_URL. Si no hay
+    período activo, cae a settings.AVAC_BASE_URL tal cual."""
+    import re
+    from ..config import settings
+    base = (settings.AVAC_BASE_URL or "https://avac.ups.edu.ec/grado68").rstrip("/")
+    host = re.sub(r"/grado\d+$", "", base)  # host sin el segmento /gradoNN
+    try:
+        from ..models.course_config import SemesterConfig
+        sc = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()  # noqa: E712
+        if sc and sc.semestre:
+            m = re.search(r"(\d+)", str(sc.semestre))
+            if m:
+                return f"{host}/grado{m.group(1)}"
+    except Exception:
+        pass
+    return base
+
+
 @router.put("/system/avac-cookie")
 async def update_avac_cookie(
     body: CookieUpdate,
@@ -727,18 +752,20 @@ async def update_avac_cookie(
     cookies = {"MoodleSession": cookie_val}
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/125.0.0.0"}
 
+    base_url = _avac_base_url(db)
+    grado_path = base_url.rstrip("/").rsplit("/", 1)[-1]  # "grado69"
     try:
         async with httpx.AsyncClient(cookies=cookies, headers=headers, follow_redirects=True, timeout=15) as client:
-            resp = await client.get(f"{settings.AVAC_BASE_URL}/my/")
+            resp = await client.get(f"{base_url}/my/")
             if "login/index.php" in str(resp.url):
                 raise HTTPException(
                     status_code=400,
                     detail=(
-                        f"La cookie no abre una sesión válida en {settings.AVAC_BASE_URL}/my/ "
-                        f"(redirigió a {resp.url}). Pasos: 1) abre {settings.AVAC_BASE_URL}/my/ "
+                        f"La cookie no abre una sesión válida en {base_url}/my/ "
+                        f"(redirigió a {resp.url}). Pasos: 1) abre {base_url}/my/ "
                         "en tu navegador e inicia sesión (Usuarios de la UPS); 2) confirma que "
                         "carga tu tablero; 3) copia la cookie MoodleSession de ESA pestaña "
-                        "(F12 > Application > Cookies, Path /grado68) y guárdala enseguida, "
+                        f"(F12 > Application > Cookies, Path /{grado_path}) y guárdala enseguida, "
                         "porque las sesiones caducan rápido."
                     ),
                 )
@@ -784,7 +811,7 @@ async def check_avac_cookie(
 
     try:
         async with httpx.AsyncClient(cookies=cookies, headers=headers, follow_redirects=True, timeout=15) as client:
-            resp = await client.get(f"{settings.AVAC_BASE_URL}/my/")
+            resp = await client.get(f"{_avac_base_url(db)}/my/")
             is_valid = "login/index.php" not in str(resp.url)
         return {
             "configured": True,
