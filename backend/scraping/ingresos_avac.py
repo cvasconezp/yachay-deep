@@ -885,8 +885,11 @@ def scrape_ingresos(output_dir: str, codigos: list = None,
                     base_url: str = None, db=None) -> dict:
     """Scraping principal de ingresos AVAC."""
     from ..config import settings
+    from ..services.avac import avac_base_url
 
-    base_url = base_url or settings.AVAC_BASE_URL
+    # Grado derivado del período activo (self-corrige cada semestre, sin depender de
+    # AVAC_BASE_URL en GitHub Actions/Railway). Cae a settings si no hay BD/período.
+    base_url = base_url or avac_base_url(db=db, fallback=settings.AVAC_BASE_URL)
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 

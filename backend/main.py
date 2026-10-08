@@ -448,9 +448,11 @@ def health_check():
         db.close()
         return {"status": "ok", "database": "connected", "version": CODE_VERSION}
     except Exception as e:
+        # No exponer el detalle del error de BD a un llamador no autenticado; solo a logs.
+        logger.error("Healthcheck DB error: %s", e)
         return JSONResponse(
             status_code=503,
-            content={"status": "degraded", "database": "error", "detail": str(e), "version": CODE_VERSION},
+            content={"status": "degraded", "database": "error", "version": CODE_VERSION},
         )
 
 

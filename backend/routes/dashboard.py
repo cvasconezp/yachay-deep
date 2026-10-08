@@ -16,6 +16,7 @@ from ..models.course_config import SemesterConfig, CourseConfig
 from ..auth.jwt import get_current_user
 from ..models.user import User
 from ..services.retiro import filtrar_activos
+from ..services.scope import asegurar_acceso_carrera, filtrar_carrera
 
 
 def _active_bloque_courses(db: Session, semconfig) -> set[str] | None:
@@ -317,6 +318,11 @@ def get_student_inactivity_by_course(
     """Desglose de inactividad por asignatura para un estudiante."""
     from datetime import datetime, timezone
     from ..models.course_config import CourseConfig
+
+    # Ámbito por carrera (IDOR): no exponer la inactividad de un estudiante fuera de alcance.
+    _stu = db.query(Student.carrera).filter(Student.id == student_id).first()
+    if _stu is not None:
+        asegurar_acceso_carrera(current_user, _stu[0])
 
     # Resolver periodo
     semconfig = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()

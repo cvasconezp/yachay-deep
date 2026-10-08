@@ -15,6 +15,7 @@ from ..models.enrollment import Enrollment
 from ..auth.jwt import get_current_user
 from ..models.user import User
 from ..services.retiro import filtrar_activos
+from ..services.scope import filtrar_carrera, asegurar_acceso_carrera
 
 router = APIRouter(prefix="/export", tags=["export"])
 
@@ -334,6 +335,7 @@ def export_estudiantes_excel(
 
     if enrollment_mode:
         eq = db.query(Enrollment, Student).join(Student, Enrollment.student_id == Student.id)
+        eq = filtrar_carrera(eq, current_user)  # ámbito por carrera (admin = sin filtro)
         if carrera:
             eq = eq.filter(func.lower(Student.carrera).contains(carrera.lower()))
         if nivel:
@@ -353,7 +355,7 @@ def export_estudiantes_excel(
         eq = eq.order_by(Student.carrera, Enrollment.asignatura, Student.nombre)
         export_rows = [(s, e.asignatura, e.docente) for (e, s) in eq.all()]
     else:
-        query = filtrar_activos(db.query(Student))
+        query = filtrar_carrera(filtrar_activos(db.query(Student)), current_user)  # ámbito por carrera
         if carrera:
             query = query.filter(func.lower(Student.carrera).contains(carrera.lower()))
         if nivel:
@@ -541,6 +543,7 @@ def export_intervenciones_excel(
 
     # Query con los mismos filtros que el dashboard
     query = db.query(Intervention).join(Student, Intervention.student_id == Student.id)
+    query = filtrar_carrera(query, current_user)  # ámbito por carrera (admin = sin filtro)
     if carrera:
         query = query.filter(Student.carrera == carrera)
     if motivo:
@@ -702,6 +705,7 @@ def export_ficha_pdf(
     student = db.query(Student).filter(Student.id == student_id).first()
     if not student:
         raise HTTPException(status_code=404, detail="Estudiante no encontrado")
+    asegurar_acceso_carrera(current_user, student.carrera)  # misma barrera que /students/{id}/ficha
 
     tareas = db.query(TaskSubmission).filter(TaskSubmission.student_id == student_id).all()
     accesos = db.query(AvacAccess).filter(AvacAccess.student_id == student_id).all()

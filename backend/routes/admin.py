@@ -425,10 +425,15 @@ async def upload_practicas_files(
                 detail=f"Solo se aceptan archivos .xlsx. Archivo rechazado: {f.filename}",
             )
         content = await f.read()
-        dest = os.path.join(practicas_dir, f.filename)
+        # Path traversal: usar SOLO el nombre base del filename (controlado por el
+        # cliente) y confirmar que el destino queda dentro de practicas_dir.
+        safe_name = os.path.basename(f.filename)
+        dest = os.path.join(practicas_dir, safe_name)
+        if not os.path.abspath(dest).startswith(os.path.abspath(practicas_dir) + os.sep):
+            raise HTTPException(status_code=400, detail=f"Nombre de archivo inválido: {f.filename}")
         with open(dest, "wb") as dst:
             dst.write(content)
-        saved_files.append(f.filename)
+        saved_files.append(safe_name)
 
     # Ejecutar ETL de prácticas en background con registro en historial
     files_desc = ", ".join(saved_files)
@@ -702,28 +707,9 @@ class CookieUpdate(BaseModel):
     cookie: str
 
 def _avac_base_url(db: Session) -> str:
-    """URL base de AVAC con el grado del PERÍODO ACTIVO.
-
-    El nº de 'grado' en AVAC sigue al nº de período: P68→grado68, P69→grado69, etc.
-    Antes se usaba settings.AVAC_BASE_URL fijo (grado68), así que al cambiar de
-    período la verificación de cookie y el scraping seguían apuntando al grado viejo
-    y la sesión 'no abría' (redirigía a login). Ahora el grado se deriva del
-    SemesterConfig activo; el host se conserva de settings.AVAC_BASE_URL. Si no hay
-    período activo, cae a settings.AVAC_BASE_URL tal cual."""
-    import re
-    from ..config import settings
-    base = (settings.AVAC_BASE_URL or "https://avac.ups.edu.ec/grado68").rstrip("/")
-    host = re.sub(r"/grado\d+$", "", base)  # host sin el segmento /gradoNN
-    try:
-        from ..models.course_config import SemesterConfig
-        sc = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()  # noqa: E712
-        if sc and sc.semestre:
-            m = re.search(r"(\d+)", str(sc.semestre))
-            if m:
-                return f"{host}/grado{m.group(1)}"
-    except Exception:
-        pass
-    return base
+    """URL base de AVAC con el grado del PERÍODO ACTIVO (delega en services.avac)."""
+    from ..services.avac import avac_base_url
+    return avac_base_url(db=db)
 
 
 @router.put("/system/avac-cookie")

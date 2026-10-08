@@ -35,7 +35,7 @@ jobs:
           echo "🔍 Test de resolución DNS:"
           nslookup avac.ups.edu.ec 8.8.8.8 || true
           echo "🔍 Test de conectividad HTTP:"
-          curl -sI --max-time 10 https://avac.ups.edu.ec/grado68/login/index.php | head -5 || true
+          curl -sI --max-time 10 https://avac.ups.edu.ec/grado69/login/index.php | head -5 || true
 
       - name: Configurar Python 3.11
         uses: actions/setup-python@v6
@@ -83,7 +83,7 @@ jobs:
           AVAC_PASSWORD: ${{ secrets.AVAC_PASSWORD }}
           AVAC_TOTP_SECRET: ${{ secrets.AVAC_TOTP_SECRET }}
           # AVAC_SESSION_COOKIE: leída desde BD (admin panel) — ya no se usa GitHub Secret
-          AVAC_BASE_URL: ${{ secrets.AVAC_BASE_URL || 'https://avac.ups.edu.ec/grado68' }}
+          AVAC_BASE_URL: ${{ secrets.AVAC_BASE_URL || 'https://avac.ups.edu.ec/grado69' }}
 
           # Base de datos Railway
           DATABASE_URL: ${{ secrets.DATABASE_URL }}

@@ -18,6 +18,7 @@ from ..models.intervention import Intervention
 from ..auth.jwt import get_current_user
 from ..models.user import User
 from ..services.retiro import filtrar_activos
+from ..services.scope import filtrar_carrera, asegurar_acceso_carrera, carreras_permitidas_o_none
 from .analytics._helpers import get_umbrales
 
 
@@ -150,6 +151,7 @@ def get_pending_alerts(
         .outerjoin(Student, AlertEvent.student_id == Student.id)
         .filter(AlertEvent.leido == False)
     )
+    q = filtrar_carrera(q, current_user)  # ámbito por carrera (admin = sin filtro)
 
     # Filtrar solo estudiantes del periodo
     if period_sids:
@@ -301,6 +303,17 @@ def get_alert_count(
     base_filters = [unread]
     if period_sids:
         base_filters.append(AlertEvent.student_id.in_(period_sids))
+
+    # Ámbito por carrera del usuario (admin = sin restricción). Antes este conteo
+    # ignoraba el alcance: un usuario de una carrera veía los totales de todas.
+    _permitidas = carreras_permitidas_o_none(current_user)
+    if _permitidas is not None:
+        if not _permitidas:
+            return AlertCountResponse(total=0, alto=0, medio=0, bajo=0, por_tipo={})
+        scope_sids = set(r[0] for r in db.query(Student.id).filter(
+            Student.carrera.in_(_permitidas),
+        ).all())
+        base_filters.append(AlertEvent.student_id.in_(scope_sids))
 
     # Carrera filter: restrict to students of that carrera
     if carrera:
@@ -651,6 +664,11 @@ def get_student_tasks_detail(
     """
     from ..models import TaskSubmission
     from ..models.course_config import CourseConfig
+
+    # Ámbito por carrera: no permitir leer el detalle de un estudiante fuera de alcance.
+    _stu = db.query(Student.carrera).filter(Student.id == student_id).first()
+    if _stu is not None:
+        asegurar_acceso_carrera(current_user, _stu[0])
 
     semconfig, pf, periodo_variants = None, None, ()
     sem = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()

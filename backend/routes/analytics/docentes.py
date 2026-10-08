@@ -317,10 +317,13 @@ def get_docentes_listado(
         q = q.filter(func.lower(CourseConfig.carrera).contains(carrera.lower()))
     if req_p:
         raw_p = req_p[1:] if req_p.startswith("P") else req_p
+        # Solo secciones del período pedido. Antes se incluía `semestre IS NULL`, lo
+        # que arrastraba secciones viejas/sin etiquetar a TODOS los períodos (filas
+        # obsoletas y duplicadas en el listado). Si una sección vigente quedara sin
+        # semestre, es un problema de datos a corregir en el ETL, no a tapar aquí.
         q = q.filter(or_(
             CourseConfig.semestre == req_p,
             CourseConfig.semestre == raw_p,
-            CourseConfig.semestre.is_(None),
         ))
     secciones = q.all()
     if not secciones:

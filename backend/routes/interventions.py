@@ -14,6 +14,7 @@ from ..models.enrollment import Enrollment
 from ..models.user import User
 from ..auth.jwt import get_current_user
 from ..services.retiro import es_estado_de_retiro, marcar_retirado
+from ..services.scope import asegurar_acceso_carrera, filtrar_carrera
 
 router = APIRouter(prefix="/interventions", tags=["interventions"])
 
@@ -146,6 +147,7 @@ def create_intervention(
     student = db.query(Student).filter(Student.id == payload.student_id).first()
     if not student:
         raise HTTPException(status_code=404, detail="Estudiante no encontrado")
+    asegurar_acceso_carrera(current_user, student.carrera)  # ámbito por carrera
 
     # Auto-poblar periodo desde SemesterConfig si no se envía
     _periodo = payload.periodo
@@ -259,6 +261,11 @@ def bulk_create_interventions(
         student = db.query(Student).filter(Student.id == student_id).first()
         if not student:
             errors.append({"student_id": student_id, "detail": "Estudiante no encontrado"})
+            continue
+        # Ámbito por carrera: saltar (no crear) estudiantes fuera de alcance.
+        from ..services.scope import puede_ver_carrera
+        if not puede_ver_carrera(current_user, student.carrera):
+            errors.append({"student_id": student_id, "detail": "Fuera de su ámbito de carrera"})
             continue
 
         try:
@@ -458,7 +465,7 @@ def list_interventions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    query = db.query(Intervention)
+    query = filtrar_carrera(db.query(Intervention), current_user, columna=Intervention.carrera)
     if student_id:
         query = query.filter(Intervention.student_id == student_id)
     if monitor_id:

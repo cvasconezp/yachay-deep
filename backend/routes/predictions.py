@@ -17,6 +17,16 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/predictions", tags=["predictions"])
 
+
+def _guard_carrera(db, user, student_id):
+    """403 si el usuario (no admin) no puede ver la carrera de ese estudiante.
+    Cierra el IDOR: estos endpoints exponen riesgo/XAI por student_id."""
+    from ..models.student import Student
+    from ..services.scope import asegurar_acceso_carrera
+    row = db.query(Student.carrera).filter(Student.id == student_id).first()
+    if row is not None:
+        asegurar_acceso_carrera(user, row[0])
+
 # ── Estado de tareas en background (train/predict) ──
 _bg_task: dict = {"running": False, "type": None, "started": None, "result": None, "error": None}
 
@@ -146,6 +156,7 @@ def predict_student(
     current_user: User = Depends(get_current_user),
 ):
     """Prediccion individual con features detalladas."""
+    _guard_carrera(db, current_user, student_id)
     from ..ml.predict import Predictor
     predictor = Predictor.get_instance()
     result = predictor.predict_single(db, student_id)
@@ -161,6 +172,7 @@ def get_recommendations(
     current_user: User = Depends(get_current_user),
 ):
     """Genera recomendaciones automáticas de intervención (Fase 4)."""
+    _guard_carrera(db, current_user, student_id)
     from ..ml.predict import Predictor
     from ..ml.recommendations import generate_recommendations
 
@@ -196,6 +208,7 @@ def get_counterfactual(
         target: "desercion" o "reprobacion"
         target_prob: probabilidad objetivo (default 0.30)
     """
+    _guard_carrera(db, current_user, student_id)
     from ..ml.predict import Predictor
     from ..ml.counterfactual import generate_counterfactual
 
@@ -259,6 +272,7 @@ def what_if_analysis(
     Body: {"promedio_notas": 75.0, "num_reprobadas": 1, ...}
     Solo enviar las features que se quieren modificar.
     """
+    _guard_carrera(db, current_user, student_id)
     from ..ml.predict import Predictor
     from ..ml.features import FEATURE_COLUMNS
     import numpy as np

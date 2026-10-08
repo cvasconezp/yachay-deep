@@ -204,7 +204,10 @@ class TestUpdateIntervention:
         assert resp.status_code == 403
 
     @patch(MOCK_EMAIL, return_value=True)
-    def test_admin_can_update_anyone(self, mock_email, client, admin_token, admin_user, monitor_token, monitor_user, sample_student, semester_config):
+    def test_admin_can_update_anyone(self, mock_email, client, db, admin_token, admin_user, monitor_token, monitor_user, sample_student, semester_config):
+        # El monitor necesita alcance a la carrera del estudiante para crear (scope).
+        monitor_user.carreras = [sample_student.carrera]
+        db.commit()
         # Monitor creates intervention
         create_resp = client.post("/interventions/", json=_payload(), headers=auth(monitor_token))
         inv_id = create_resp.json()["id"]
@@ -251,7 +254,10 @@ class TestDeleteIntervention:
         assert resp.status_code == 403
 
     @patch(MOCK_EMAIL, return_value=True)
-    def test_admin_can_delete_anyone(self, mock_email, client, admin_token, admin_user, monitor_token, monitor_user, sample_student, semester_config):
+    def test_admin_can_delete_anyone(self, mock_email, client, db, admin_token, admin_user, monitor_token, monitor_user, sample_student, semester_config):
+        # El monitor necesita alcance a la carrera del estudiante para crear (scope).
+        monitor_user.carreras = [sample_student.carrera]
+        db.commit()
         create_resp = client.post("/interventions/", json=_payload(), headers=auth(monitor_token))
         inv_id = create_resp.json()["id"]
 

@@ -17,6 +17,7 @@ from ...models.course_config import CourseConfig, SemesterConfig
 from ...auth.jwt import get_current_user
 from ...models.user import User
 from ...services.retiro import filtrar_activos
+from ...services.scope import filtrar_carrera
 from ._helpers import apply_periodo_filter, get_umbrales
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
@@ -194,7 +195,7 @@ def get_resumen_datos(
 
     # Los retirados quedan fuera del análisis institucional: sus indicadores
     # congelados falsearían promedios y distribuciones de riesgo.
-    base_q = filtrar_activos(db.query(Student))
+    base_q = filtrar_carrera(filtrar_activos(db.query(Student)), current_user)  # ámbito por carrera
     if carrera:
         base_q = base_q.filter(func.lower(Student.carrera).contains(carrera.lower()))
     if periodo_filter != "todos":
@@ -404,7 +405,7 @@ def get_resumen_datos(
     global_stats["total_aulas_virtuales"] = aulas_q.scalar() or 0
 
     # Intervenciones
-    interv_base_q = db.query(Intervention)
+    interv_base_q = filtrar_carrera(db.query(Intervention), current_user, columna=Intervention.carrera)
     if carrera:
         interv_base_q = interv_base_q.filter(func.lower(Intervention.carrera).contains(carrera.lower()))
     if periodo_filter != "todos":
@@ -498,7 +499,7 @@ def get_estudiantes_listado(
 
     # Los retirados quedan fuera del análisis institucional: sus indicadores
     # congelados falsearían promedios y distribuciones de riesgo.
-    base_q = filtrar_activos(db.query(Student))
+    base_q = filtrar_carrera(filtrar_activos(db.query(Student)), current_user)  # ámbito por carrera
     if carrera:
         base_q = base_q.filter(func.lower(Student.carrera).contains(carrera.lower()))
     if periodo_filter != "todos":

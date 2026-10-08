@@ -27,6 +27,7 @@ from pydantic import BaseModel
 
 from ...database import get_db
 from ...models import Student, Grade, Enrollment, Intervention
+from ...models.course_config import SemesterConfig
 from ...auth.jwt import require_admin
 from ...models.user import User
 from ._helpers import apply_periodo_filter, get_umbrales, normalize_riesgo
@@ -136,6 +137,14 @@ def _compute_reprobados(
     """Núcleo del informe (lo comparten el endpoint JSON y la exportación Excel)."""
     nota_aprob = umbrales["nota_aprobacion"]
 
+    # Sin período explícito → período ACTIVO. No se usa "actual" (periodo IS NULL):
+    # tras la migración que etiqueta los grades NULL como P67, ya no quedan grades sin
+    # período, así que "actual" devolvía un informe vacío aunque hubiera reprobados.
+    if not periodo:
+        _sc = db.query(SemesterConfig).filter(SemesterConfig.activo == True).first()  # noqa: E712
+        if _sc and _sc.semestre:
+            periodo = _sc.semestre
+
     # ── Carrera vía Student (Grade.carrera suele venir vacío), igual que Grupos ──
     carrera_sids: Optional[list[int]] = None
     if carrera:
@@ -159,8 +168,9 @@ def _compute_reprobados(
     gq, periodo_norm = apply_periodo_filter(gq, periodo, include_null=True)
     if carrera_sids is not None:
         gq = gq.filter(Grade.student_id.in_(carrera_sids))
-    if nivel is not None:
-        gq = gq.filter(Grade.nivel == nivel)
+    # OJO: NO se filtra por Grade.nivel aquí. Grade.nivel suele venir NULL y el filtro
+    # excluía estudiantes y, peor, dejaba agregados parciales (promedio/reprobadas mal).
+    # El filtro por nivel se aplica más abajo con el nivel CONFIABLE de la matrícula.
     grade_rows = gq.all()
 
     # ── Agregar por estudiante: notas, reprobadas, nivel, repitencia ──
@@ -206,6 +216,17 @@ def _compute_reprobados(
             nivel_by_sid[sid] = int(e_niv)
         if nrep and int(nrep) > 1 and sid in agg:
             agg[sid]["repitente"] = True
+
+    # ── Filtro por nivel con el nivel CONFIABLE (matrícula > Grade.nivel) ──
+    if nivel is not None:
+        def _nivel_resuelto(_sid):
+            return agg[_sid]["nivel"] if agg[_sid]["nivel"] is not None else nivel_by_sid.get(_sid)
+        reprobado_sids = [sid for sid in reprobado_sids if _nivel_resuelto(sid) == nivel]
+        if not reprobado_sids:
+            return ReprobadosAnalytics(
+                periodo=periodo_norm, carrera=carrera, nivel=nivel,
+                nota_aprobacion=nota_aprob,
+            )
 
     # ── Intervenciones (bulk): conteo, última y si quedó sin respuesta ──
     interv: dict[int, dict] = {}

@@ -16,6 +16,7 @@ from slowapi.util import get_remote_address
 
 from ..config import settings
 from ..database import get_db, get_prod_db
+from ..services.logsafe import mask_email
 from ..models.user import User, UserRole
 from .jwt import (verify_password, create_access_token, create_refresh_token, decode_token,
                   hash_password, needs_rehash, get_current_user, require_admin,
@@ -144,7 +145,7 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), co
     user = db.query(User).filter(User.email == form_data.username.lower()).first()
     if not user or not verify_password(form_data.password, user.hashed_password):
         safe_email = form_data.username.lower().replace('\n', '').replace('\r', '')[:100]
-        logger.warning("Login fallido para email: %s", safe_email)
+        logger.warning("Login fallido para email: %s", mask_email(safe_email))
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Email o contraseña incorrectos",
@@ -634,5 +635,5 @@ def change_email(payload: ChangeEmailRequest, current_user: User = Depends(get_c
     old = current_user.email
     current_user.email = new_email
     db.commit()
-    logger.info("Cambio de correo: %s -> %s (user_id=%s)", old, new_email, current_user.id)
+    logger.info("Cambio de correo: %s -> %s (user_id=%s)", mask_email(old), mask_email(new_email), current_user.id)
     return {"detail": "Correo actualizado", "email": new_email}

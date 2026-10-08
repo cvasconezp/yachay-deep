@@ -98,3 +98,33 @@ def test_export_excel_con_graficas(client, admin_token, semester_config, data_re
     # el detalle tiene las 2 filas de reprobados + encabezado
     det = wb["Detalle"]
     assert det.max_row >= 3
+
+
+def test_periodo_por_defecto_usa_activo(client, admin_token, semester_config, data_reprobados):
+    """Sin ?periodo debe usar el período ACTIVO (P68), no 'actual' (IS NULL) que
+    daría un informe vacío tras la migración P67."""
+    r = client.get("/analytics/reprobados?carrera=MARKETING", headers=auth(admin_token))
+    assert r.status_code == 200
+    ids = {e["student_id"] for e in r.json()["estudiantes"]}
+    assert ids == {1, 2}  # no vacío
+
+
+def test_nivel_desde_matricula_no_grade(client, admin_token, semester_config, db):
+    """Filtro ?nivel debe usar el nivel de la MATRÍCULA. Un reprobado con
+    Grade.nivel NULL pero Enrollment.nivel=1 debe incluirse en ?nivel=1 (antes se
+    excluía por filtrar Grade.nivel == 1)."""
+    carrera = "DERECHO"
+    s = Student(id=50, nombre="REP SIN NIVEL EN GRADE", carrera=carrera,
+                nivel_academico=1, estado_matricula="Matriculado")
+    db.add(s)
+    db.add(Grade(student_id=50, asignatura="HISTORIA DEL DERECHO", carrera=carrera,
+                 nivel=None, nota_final=40.0, periodo="P68"))  # nivel NULL a propósito
+    db.add(Enrollment(student_id=50, asignatura="HISTORIA DEL DERECHO", carrera=carrera,
+                      nivel=1, periodo="P68", codigo_grupo="G1"))
+    db.commit()
+
+    r = client.get("/analytics/reprobados?periodo=P68&carrera=DERECHO&nivel=1",
+                   headers=auth(admin_token))
+    assert r.status_code == 200
+    ids = {e["student_id"] for e in r.json()["estudiantes"]}
+    assert 50 in ids  # incluido pese a Grade.nivel NULL

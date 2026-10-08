@@ -2124,9 +2124,15 @@ class ETLPipeline:
         if df_enrollments.empty:
             return 0
 
-        # Determinar periodo del reporte (tomar el más frecuente)
-        periodo_vals = df_enrollments["periodo"].dropna().unique()
-        periodo = str(periodo_vals[0]) if len(periodo_vals) > 0 else None
+        # Determinar periodo del reporte (el MÁS FRECUENTE, no el primero que aparezca).
+        # Coincide con la auto-activación del semestre (que usa .mode()); si el archivo
+        # trae filas de dos períodos, se queda con el mayoritario en vez de con el
+        # primero en orden de aparición.
+        _periodos = df_enrollments["periodo"].dropna()
+        _moda = _periodos.mode()
+        periodo = str(_moda.iloc[0]) if not _moda.empty else (
+            str(_periodos.iloc[0]) if not _periodos.empty else None
+        )
 
         # Full-refresh del periodo actual
         if periodo:

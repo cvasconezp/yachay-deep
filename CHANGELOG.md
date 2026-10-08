@@ -32,6 +32,19 @@ Versionado semántico cuando aplique.
 **Security**
 - **Dependencias — CVEs nuevos (CI `security-audit`):** `cryptography` 48.0.1 → **50.0.2** (cierra PYSEC-2026-3552/3553/3554; JWT y Fernet verificados). `python-jose` 3.5.0 sin fix para CVE-2026-85394 → allowlist del CI (se elimina al migrar a PyJWT). Frontend `.nsprc`: excepciones documentadas (react-router modo-RSC no usado; tooling de build/test — braces, browserslist, nanoid, postcss, source-map-js, undici vía jsdom — que no llega al bundle del navegador). TODO: `npm audit fix` donde resuelvan las deps privadas para subir de versión y retirar excepciones.
 
+**Hardening de control de acceso por carrera (revisión con agentes)**
+- Varios endpoints devolvían datos de estudiantes **sin aplicar el ámbito por carrera** (`services/scope.py`), así que un usuario no-admin acotado a una carrera podía leer PII (cédula, correo, notas, intervenciones) o indicadores de riesgo de **cualquier** estudiante por ID (IDOR) o por volcados de listado/exportación. Se cerró aplicando `filtrar_carrera` / `asegurar_acceso_carrera` (el admin sigue sin restricción) en: `export.py` (ficha PDF, Excel de estudiantes e intervenciones), `analytics/resumen.py` (listado y stats), `alerts.py` (pendientes, conteo, detalle por estudiante), `predictions.py` (student/recommendations/counterfactual/what-if), `ml_advanced.py` (adaptive/explain), `dashboard.py` (inactividad por curso) e `interventions.py` (crear/bulk/listar).
+- **Path traversal** en la subida de prácticas (`admin.py`): se usa `basename` del filename y se confirma que el destino queda dentro de la carpeta.
+- **PII en logs:** se enmascaran correos en login fallido y cambio de correo (`mask_email`); `/health` ya no expone el detalle del error de BD a llamadores no autenticados.
+
+**Correcciones de correctitud**
+- **Reprobados sin `?periodo`** usaba `periodo IS NULL` ("actual") y, tras la migración que etiqueta los grades NULL como P67, devolvía el informe **vacío**; ahora cae al período **activo**. El filtro `?nivel` usa el nivel **de la matrícula** (Enrollment), no `Grade.nivel` (que suele venir NULL y excluía estudiantes / corrompía promedios).
+- **`docentes/listado`** ya no incluye secciones con `CourseConfig.semestre` NULL en todos los períodos (arrastraba secciones viejas al listado del período pedido).
+- **`_upsert_enrollments`** etiqueta el período por **moda** (no por la primera fila), coherente con la auto-activación del semestre.
+
+**AVAC por período — auto-derivado también en el scraping**
+- Nuevo `backend/services/avac.py::avac_base_url(db)`: deriva el grado del **período activo** (P69→grado69). Lo usan la verificación de cookie (`admin.py`, refactorizado) y el **scraping** (`ingresos_avac.py`, `estado_tareas.py`). Antes el scraping corría en GitHub Actions con `AVAC_BASE_URL` fijo en grado68 (secret/entorno distinto al de Railway), así que al pasar a P69 la cookie "no abría". Ahora el scraping se auto-corrige desde la BD sin depender de esa variable; el default del workflow se actualizó a grado69.
+
 <!-- ───────────────────────────────────────────────────────────────────── -->
 ### Added
 - **Módulo Grupos** (vista pivote estudiante × asignatura). Endpoint `GET /analytics/grupos?periodo&carrera&nivel` (`backend/routes/analytics/grupos.py`, `require_admin`) y página `frontend/src/pages/Grupos.jsx` (sidebar antes de Asignaturas, ícono 👥, `adminOnly`). KPIs estilo Asignaturas; filtros Período/Carrera/Nivel/**Grupo**/**Condición especial**/**Riesgo** + buscador; primera columna congelada y **encabezados fijos**; encabezados ordenables; nota con color aprobado/reprobado y promedio por estudiante; **selección de filas + Registrar Intervención** (reutiliza `BulkInterventionModal`); export a Excel con columnas dinámicas. La nota sale de `Grade.nota_final ?? TaskSubmission.total_curso` (AVAC), igual que la Ficha.

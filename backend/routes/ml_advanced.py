@@ -13,6 +13,7 @@ from typing import Optional
 from ..database import get_db
 from ..models.student import Student
 from ..auth.jwt import get_current_user
+from ..services.scope import asegurar_acceso_carrera
 
 router = APIRouter(prefix="/ml", tags=["ml-advanced"])
 
@@ -48,6 +49,7 @@ def adaptive_predict(
     if not student:
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Estudiante no encontrado")
+    asegurar_acceso_carrera(current_user, student.carrera)  # ámbito por carrera (IDOR)
     from ..ml.adaptive_recommendations import predict_best_intervention
     return predict_best_intervention(student, db)
 
@@ -63,6 +65,7 @@ def explain_prediction(
     if not student:
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Estudiante no encontrado")
+    asegurar_acceso_carrera(current_user, student.carrera)  # ámbito por carrera (IDOR)
 
     # Cargar modelo y features
     import numpy as np

@@ -187,8 +187,10 @@ def scrape_tareas(output_dir: str, codigos=None, base_url: str = None, db=None):
     """
     from .ingresos_avac import get_active_codigos, get_session_headless, get_session_cookie, get_session_login
     from ..config import settings as _settings
+    from ..services.avac import avac_base_url
 
-    base_url = base_url or _settings.AVAC_BASE_URL
+    # Grado derivado del período activo (self-corrige cada semestre).
+    base_url = base_url or avac_base_url(db=db, fallback=_settings.AVAC_BASE_URL)
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 

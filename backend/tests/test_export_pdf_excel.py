@@ -16,6 +16,15 @@ from backend.tests.conftest import auth
 # ── Fixtures ──────────────────────────────────────────────────────────────
 
 
+@pytest.fixture(autouse=True)
+def _monitor_con_carrera(db, monitor_user):
+    """Estos tests exportan como monitor; para respetar el ámbito por carrera, el
+    monitor debe tener la carrera de los estudiantes de prueba (EDUCACION BASICA)."""
+    monitor_user.carreras = ["EDUCACION BASICA"]
+    db.commit()
+    return monitor_user
+
+
 @pytest.fixture
 def semester_config(db):
     sc = SemesterConfig(semestre="P68", activo=True, bloque_actual="1")
@@ -178,8 +187,9 @@ class TestExportExcel:
                 break
         assert found, "Student data not found in Excel"
 
-    def test_excel_filter_by_carrera(self, client, monitor_token, db, semester_config):
-        """Filtro por carrera funciona."""
+    def test_excel_filter_by_carrera(self, client, admin_token, admin_user, db, semester_config):
+        """Filtro por carrera funciona. (Como admin: filtrar entre carreras cruza el
+        ámbito; un monitor acotado no podría, por diseño.)"""
         # Crear estudiantes de 2 carreras
         s1 = Student(nombre="ALUMNO EDU", carrera="EDUCACION BASICA", estado_matricula="Matriculado")
         s2 = Student(nombre="ALUMNO DER", carrera="DERECHO", estado_matricula="Matriculado")
@@ -190,7 +200,7 @@ class TestExportExcel:
 
         r = client.get(
             "/export/estudiantes/excel?carrera=DERECHO&columnas=nombre,carrera",
-            headers=auth(monitor_token),
+            headers=auth(admin_token),
         )
         assert r.status_code == 200
 
