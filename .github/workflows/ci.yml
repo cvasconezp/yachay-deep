@@ -50,7 +50,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: "20"
       - name: Permitir clonar dep pública @yachaydeep/brand por HTTPS (npm ci la pide por ssh)
@@ -69,7 +69,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: "20"
       # [SEC-09] pip-audit — BLOQUEANTE (chore/estandar-casa punto 4).
