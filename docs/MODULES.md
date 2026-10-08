@@ -159,6 +159,23 @@ Vista **pivote de un grupo académico** (período · carrera · nivel): una fila
 
 ---
 
+## 7.2 Reprobación y Abandono (informe)
+
+**Página:** `Reprobados.jsx` (ruta `/reprobados`) · **API:** `analytics/reprobados.py` (`GET /analytics/reprobados` y `GET /analytics/reprobados/export`)
+**Acceso:** Solo `admin` (`require_admin` / `adminOnly`). Ícono 📉 en el sidebar.
+
+Responde a **"¿qué estudiantes reprobaron y por qué?"**. Lista los estudiantes con ≥1 asignatura reprobada (`nota_final < umbral`) en el período·carrera y, por cada uno, reúne señales de **riesgo de abandono** (reprobación ≠ abandono; ver `docs/MARCO_ABANDONO_REPROBACION.md`).
+
+**Indicadores por estudiante:** asignaturas reprobadas (con nota), promedio del período, repitencia/3ª matrícula; índice de compromiso, días sin AVAC, % tareas; estado de matrícula; nº de intervenciones, última fecha, "sin respuesta"/"sin intervención"; prob. reprobación/deserción y recuperabilidad. `causa_probable` por heurística (**Administrativa > Desconexión > Académica**). El nivel se completa desde la matrícula cuando `Grade.nivel` es NULL.
+
+**Filtros:** Período, Carrera, Nivel, Grupo, Riesgo, Causa, Condición + "sin intervención" + buscador. **KPIs:** total reprobados, asignaturas reprobadas, promedio, riesgo alto, sin intervención y desglose por causa.
+
+**Exportación (Excel generado en backend, openpyxl):** hoja **LÉEME** (autoría/licencia/cita), hoja **Análisis** (KPIs + lectura automática en español + gráficas nativas: pastel por causa, barras por riesgo y por seguimiento) y hoja **Detalle** (todos los indicadores). El cálculo se comparte entre el JSON y el export (`_compute_reprobados()`).
+
+> Nota de nombre: el módulo se rotula "Reprobación y Abandono" (evita etiquetar al sujeto como "reprobado"); la ruta `/reprobados` y el endpoint se conservan por compatibilidad.
+
+---
+
 ## 8. Analítica Docente
 
 **Página:** `Docentes.jsx` (19 KB) + `SeguimientoDocente.jsx` (25 KB) · **API:** `analytics/docentes.py`
@@ -166,12 +183,16 @@ Vista **pivote de un grupo académico** (período · carrera · nivel): una fila
 
 Análisis de indicadores agrupados por docente, y seguimiento de actividad docente.
 
-**Métricas por docente:**
+**Métricas por docente (vista resumen):**
 - Promedio de notas de sus cursos
 - Tasa de reprobación
 - Promedio de compromiso de sus estudiantes
 - Tiempo de calificación de tareas
 - Comparativa con otros docentes de la misma carrera
+
+**Dos exportaciones (botones en la página):**
+- **Exportar resumen** — una fila por docente (agregado: nº asignaturas, estudiantes, promedio, aprobación, riesgo, compromiso, intervenciones).
+- **Exportar listado** — **una fila por docente × asignatura × grupo** (`GET /analytics/docentes/listado?carrera&periodo`, desde `CourseConfig` enriquecido con matrículas y notas): docente, **correo**, carrera, asignatura, nivel, grupo, bloque, código AVAC (+ enlace al aula), período, nº estudiantes, riesgo alto, promedio, % aprobación. Pensado para sacar, p. ej., "los docentes de Derecho con su correo y sus asignaturas/niveles/grupos". Columnas ampliables en `DOC_LISTADO_COLS` y seleccionables en el propio botón. Filtrable por carrera/período.
 
 ---
 
@@ -314,7 +335,7 @@ Exportación de datos en múltiples formatos:
 - PDF con encabezado institucional
 - CSV para análisis externo
 
-Disponible en: Dashboard, Asignaturas, Docentes, Tutorías, Ficha del Estudiante.
+Disponible en: Dashboard, Asignaturas, Grupos, Docentes (resumen y **listado docente·asignatura·grupo**), **Reprobación y Abandono** (Excel con LÉEME + análisis con gráficas), Tutorías, Ficha del Estudiante.
 
 ---
 
